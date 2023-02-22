@@ -48,9 +48,45 @@ void UpdateConfigAction::handle(HttpRequest* req) {
     LOG(INFO) << req->debug_string();
 
     std::call_once(_once_flag, [&]() {
+<<<<<<< HEAD
         _config_callback.emplace("doris_scanner_thread_pool_thread_num", [&]() {
             LOG(INFO) << "set doris_scanner_thread_pool_thread_num:" << config::doris_scanner_thread_pool_thread_num;
             _exec_env->thread_pool()->set_num_thread(config::doris_scanner_thread_pool_thread_num);
+=======
+        _config_callback.emplace("scanner_thread_pool_thread_num", [&]() {
+            LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;
+            _exec_env->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
+        });
+        _config_callback.emplace("storage_page_cache_limit", [&]() {
+            int64_t cache_limit = _exec_env->get_storage_page_cache_size();
+            cache_limit = _exec_env->check_storage_page_cache_size(cache_limit);
+            StoragePageCache::instance()->set_capacity(cache_limit);
+        });
+        _config_callback.emplace("disable_storage_page_cache", [&]() {
+            if (config::disable_storage_page_cache) {
+                StoragePageCache::instance()->set_capacity(0);
+            } else {
+                int64_t cache_limit = _exec_env->get_storage_page_cache_size();
+                cache_limit = _exec_env->check_storage_page_cache_size(cache_limit);
+                StoragePageCache::instance()->set_capacity(cache_limit);
+            }
+        });
+        _config_callback.emplace("max_compaction_concurrency", [&]() {
+            StorageEngine::instance()->compaction_manager()->update_max_threads(config::max_compaction_concurrency);
+        });
+        _config_callback.emplace("flush_thread_num_per_store", [&]() {
+            const size_t dir_cnt = StorageEngine::instance()->get_stores().size();
+            StorageEngine::instance()->memtable_flush_executor()->update_max_threads(
+                    config::flush_thread_num_per_store * dir_cnt);
+            StorageEngine::instance()->segment_replicate_executor()->update_max_threads(
+                    config::flush_thread_num_per_store * dir_cnt);
+            StorageEngine::instance()->segment_flush_executor()->update_max_threads(config::flush_thread_num_per_store *
+                                                                                    dir_cnt);
+        });
+        _config_callback.emplace("update_compaction_num_threads_per_disk", [&]() {
+            StorageEngine::instance()->increase_update_compaction_thread(
+                    config::update_compaction_num_threads_per_disk);
+>>>>>>> ca8ff4162 ([Enhancement] Support pagecache dynamically enabled or disabled (#18101))
         });
     });
 

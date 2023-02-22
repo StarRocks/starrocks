@@ -247,7 +247,11 @@ CONF_Int64(index_stream_cache_capacity, "10737418240");
 // Cache for stoage page size
 CONF_String(storage_page_cache_limit, "0");
 // whether to disable page cache feature in storage
+<<<<<<< HEAD
 CONF_Bool(disable_storage_page_cache, "true");
+=======
+CONF_mBool(disable_storage_page_cache, "false");
+>>>>>>> ca8ff4162 ([Enhancement] Support pagecache dynamically enabled or disabled (#18101))
 // whether to disable column pool
 CONF_Bool(disable_column_pool, "false");
 
