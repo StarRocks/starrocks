@@ -164,7 +164,7 @@ LakeDataSource::~LakeDataSource() {
 Status LakeDataSource::open(RuntimeState* state) {
     _runtime_state = state;
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
-    const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
+    TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
     _slots = &tuple_desc->slots();
 
     _runtime_profile->add_info_string("Table", tuple_desc->table_desc()->name());
@@ -179,6 +179,10 @@ Status LakeDataSource::open(RuntimeState* state) {
 
     // eval const conjuncts
     RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
+
+    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
+    DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, thrift_lake_scan_node.dict_string_id_to_int_ids,
+                                           &(tuple_desc->decoded_slots()));
 
     // Init _conjuncts_manager.
     OlapScanConjunctsManager& cm = _conjuncts_manager;
