@@ -24,11 +24,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
->>>>>>> 65563d518 ([BugFix] Use rollup not table to check UnUsedOutputColumns (#18208))
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -282,26 +278,15 @@ public class PlanFragmentBuilder {
             // so the columns in complex pred, it useful for the stage after scan
             Set<Integer> singlePredColumnIds = new HashSet<Integer>();
             Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-<<<<<<< HEAD
             Set<String> aggAndPrimaryKeyTableValueColumnNames = new HashSet<String>();
-            if (referenceTable.getKeysType().isAggregationFamily() ||
-                    referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                List<Column> fullColumn = referenceTable.getFullSchema();
+            if (materializedIndexMeta.getKeysType().isAggregationFamily() ||
+                    materializedIndexMeta.getKeysType() == KeysType.PRIMARY_KEYS) {
+                List<Column> fullColumn = materializedIndexMeta.getSchema();
                 for (Column col : fullColumn) {
                     if (!col.isKey()) {
                         aggAndPrimaryKeyTableValueColumnNames.add(col.getName());
                     }
                 }
-=======
-            Set<String> aggOrPrimaryKeyTableValueColumnNames = new HashSet<String>();
-            if (materializedIndexMeta.getKeysType().isAggregationFamily() ||
-                    materializedIndexMeta.getKeysType() == KeysType.PRIMARY_KEYS) {
-                aggOrPrimaryKeyTableValueColumnNames =
-                        materializedIndexMeta.getSchema().stream()
-                                .filter(col -> !col.isKey())
-                                .map(Column::getName)
-                                .collect(Collectors.toSet());
->>>>>>> 65563d518 ([BugFix] Use rollup not table to check UnUsedOutputColumns (#18208))
             }
 
             for (ScalarOperator predicate : predicates) {
