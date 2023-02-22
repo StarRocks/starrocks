@@ -36,6 +36,7 @@ RUN apt-get install -yq tzdata && \
 
 # Install perf tool for low-level performance debug
 RUN apt-get install -yq linux-tools-common linux-tools-generic
+RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc
 
 RUN rm -rf /var/lib/apt/lists/*
 
@@ -49,7 +50,7 @@ WORKDIR $STARROCKS_ROOT
 COPY --from=artifacts /release/fe_artifacts/ $STARROCKS_ROOT/
 
 # Copy fe k8s scripts to the runtime container image
-COPY docker/bin/fe_* $STARROCKS_ROOT/
+COPY docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
 
 # Create directory for FE metadata
 RUN mkdir -p /opt/starrocks/fe/meta

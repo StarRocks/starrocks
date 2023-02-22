@@ -39,6 +39,7 @@ RUN apt-get install -yq tzdata && \
 
 # Install perf tool for low-level performance debug
 RUN apt-get install -yq linux-tools-common linux-tools-generic
+RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc
 
 RUN rm -rf /var/lib/apt/lists/*
 
@@ -60,6 +61,7 @@ RUN mkdir -p $DEPLOYDIR/starrocks/fe/meta && mkdir -p $DEPLOYDIR/starrocks/be/st
 COPY *.sh $DEPLOYDIR
 RUN chmod +x *.sh
 
+# Copy config files
 COPY *.conf $DEPLOYDIR
 RUN cat be.conf >> $DEPLOYDIR/starrocks/be/conf/be.conf && \
     cat fe.conf >> $DEPLOYDIR/starrocks/fe/conf/fe.conf
