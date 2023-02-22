@@ -16,10 +16,16 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 public class UnsupportedStmt extends StatementBase {
 
     public UnsupportedStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public UnsupportedStmt(NodePosition pos) {
+        super(pos);
     }
 
     @Override

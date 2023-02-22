@@ -15,10 +15,12 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 /**
  * Show charset statement
@@ -43,14 +45,17 @@ public class ShowCharsetStmt extends ShowStmt {
     private String pattern;
     private Expr where;
 
+    @VisibleForTesting
     public ShowCharsetStmt() {
-    }
-
-    public ShowCharsetStmt(String pattern) {
-        this.pattern = pattern;
+        super(NodePosition.ZERO);
     }
 
     public ShowCharsetStmt(String pattern, Expr where) {
+        this(pattern, where, NodePosition.ZERO);
+    }
+
+    public ShowCharsetStmt(String pattern, Expr where, NodePosition pos) {
+        super(pos);
         this.pattern = pattern;
         this.where = where;
     }

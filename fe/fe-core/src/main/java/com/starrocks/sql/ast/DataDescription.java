@@ -27,6 +27,7 @@ import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -45,6 +46,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -80,7 +82,7 @@ import java.util.TreeSet;
  * The transform after the keyword named SET is the old ways which only supports the hadoop function.
  * It old way of transform will be removed gradually. It
  */
-public class DataDescription {
+public class DataDescription implements ParseNode {
     private static final Logger LOG = LogManager.getLogger(DataDescription.class);
     // function isn't built-in function, hll_hash is not built-in function in hadoop load.
     private static final List<String> HADOOP_SUPPORT_FUNCTION_NAMES = Arrays.asList(
@@ -134,6 +136,8 @@ public class DataDescription {
 
     private boolean isHadoopLoad = false;
 
+    private final NodePosition pos;
+
     public DataDescription(String tableName,
                            PartitionNames partitionNames,
                            List<String> filePaths,
@@ -159,6 +163,23 @@ public class DataDescription {
                            List<Expr> columnMappingList,
                            Expr whereExpr,
                            CsvFormat csvFormat) {
+        this(tableName, partitionNames, filePaths, columns, columnSeparator, rowDelimiter, fileFormat, columnsFromPath,
+                isNegative, columnMappingList, whereExpr, csvFormat, NodePosition.ZERO);
+    }
+
+    public DataDescription(String tableName,
+                           PartitionNames partitionNames,
+                           List<String> filePaths,
+                           List<String> columns,
+                           ColumnSeparator columnSeparator,
+                           RowDelimiter rowDelimiter,
+                           String fileFormat,
+                           List<String> columnsFromPath,
+                           boolean isNegative,
+                           List<Expr> columnMappingList,
+                           Expr whereExpr,
+                           CsvFormat csvFormat, NodePosition pos) {
+        this.pos = pos;
         this.tableName = tableName;
         this.partitionNames = partitionNames;
         this.filePaths = filePaths;
@@ -181,6 +202,16 @@ public class DataDescription {
                            boolean isNegative,
                            List<Expr> columnMappingList,
                            Expr whereExpr) {
+        this(tableName, partitionNames, srcTableName, isNegative, columnMappingList, whereExpr, NodePosition.ZERO);
+    }
+
+    public DataDescription(String tableName,
+                           PartitionNames partitionNames,
+                           String srcTableName,
+                           boolean isNegative,
+                           List<Expr> columnMappingList,
+                           Expr whereExpr, NodePosition pos) {
+        this.pos = pos;
         this.tableName = tableName;
         this.partitionNames = partitionNames;
         this.filePaths = null;
@@ -717,5 +748,10 @@ public class DataDescription {
             Joiner.on(", ").appendTo(sb, Lists.transform(columnMappingList, (Function<Expr, Object>) Expr::toSql)).append(")");
         }
         return sb.toString();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

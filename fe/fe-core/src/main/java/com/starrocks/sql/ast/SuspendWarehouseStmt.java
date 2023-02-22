@@ -14,10 +14,17 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class SuspendWarehouseStmt extends DdlStmt {
     private String whName;
 
     public SuspendWarehouseStmt(String whName) {
+        this(whName, NodePosition.ZERO);
+    }
+
+    public SuspendWarehouseStmt(String whName, NodePosition pos) {
+        super(pos);
         this.whName = whName;
     }
 

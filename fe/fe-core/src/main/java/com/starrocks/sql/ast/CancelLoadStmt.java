@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.sql.parser.NodePosition;
 
 public class CancelLoadStmt extends DdlStmt {
 
@@ -45,6 +46,11 @@ public class CancelLoadStmt extends DdlStmt {
     }
 
     public CancelLoadStmt(String dbName, Expr whereClause) {
+        this(dbName, whereClause, NodePosition.ZERO);
+    }
+
+    public CancelLoadStmt(String dbName, Expr whereClause, NodePosition pos) {
+        super(pos);
         this.dbName = dbName;
         this.whereClause = whereClause;
     }

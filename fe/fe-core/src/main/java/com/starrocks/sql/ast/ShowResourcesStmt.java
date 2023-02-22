@@ -21,8 +21,17 @@ import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowResourcesStmt extends ShowStmt {
+
+    public ShowResourcesStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowResourcesStmt(NodePosition pos) {
+        super(pos);
+    }
 
     @Override
     public ShowResultSetMetaData getMetaData() {

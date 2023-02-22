@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
@@ -28,7 +29,12 @@ public class DropPartitionClause extends AlterTableClause {
     private final boolean forceDrop;
 
     public DropPartitionClause(boolean ifExists, String partitionName, boolean isTempPartition, boolean forceDrop) {
-        super(AlterOpType.DROP_PARTITION);
+        this(ifExists, partitionName, isTempPartition, forceDrop, NodePosition.ZERO);
+    }
+
+    public DropPartitionClause(boolean ifExists, String partitionName, boolean isTempPartition,
+                               boolean forceDrop, NodePosition pos) {
+        super(AlterOpType.DROP_PARTITION, pos);
         this.ifExists = ifExists;
         this.partitionName = partitionName;
         this.isTempPartition = isTempPartition;

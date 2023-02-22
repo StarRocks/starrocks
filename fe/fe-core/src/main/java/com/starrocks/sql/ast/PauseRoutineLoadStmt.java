@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.LabelName;
+import com.starrocks.sql.parser.NodePosition;
 
 /*
   Pause routine load by name
@@ -28,6 +29,11 @@ public class PauseRoutineLoadStmt extends DdlStmt {
     private LabelName labelName;
 
     public PauseRoutineLoadStmt(LabelName labelName) {
+        this(labelName, NodePosition.ZERO);
+    }
+
+    public PauseRoutineLoadStmt(LabelName labelName, NodePosition pos) {
+        super(pos);
         this.labelName = labelName;
     }
 

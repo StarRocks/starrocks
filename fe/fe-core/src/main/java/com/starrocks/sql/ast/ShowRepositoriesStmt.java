@@ -19,12 +19,22 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowRepositoriesStmt extends ShowStmt {
+
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("RepoId").add("RepoName").add("CreateTime").add("IsReadOnly").add("Location")
             .add("Broker").add("ErrMsg")
             .build();
+
+    public ShowRepositoriesStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowRepositoriesStmt(NodePosition pos) {
+        super(pos);
+    }
 
     @Override
     public ShowResultSetMetaData getMetaData() {

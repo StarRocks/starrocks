@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.List;
 
 // GrantRoleStmt and RevokeRoleStmt share the same parameter and check logic with GrantRoleStmt
@@ -26,17 +28,27 @@ public abstract class BaseGrantRevokeRoleStmt extends DdlStmt {
     protected String role;
 
     protected BaseGrantRevokeRoleStmt(List<String> granteeRole, UserIdentity userIdentity) {
+        this(granteeRole, userIdentity, NodePosition.ZERO);
+    }
+
+    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, UserIdentity userIdentity, NodePosition pos) {
+        super(pos);
         this.granteeRole = granteeRole;
         this.userIdentity = userIdentity;
         this.role = null;
     }
 
     protected BaseGrantRevokeRoleStmt(List<String> granteeRole, String role) {
+        this(granteeRole, role, NodePosition.ZERO);
+
+    }
+
+    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, String role, NodePosition pos) {
+        super(pos);
         this.granteeRole = granteeRole;
         this.userIdentity = null;
         this.role = role;
     }
-
     public UserIdentity getUserIdentity() {
         return userIdentity;
     }
