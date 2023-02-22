@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
@@ -57,8 +56,12 @@ public class UserIdentity implements Writable, GsonPostProcessable, GsonPreProce
     private String host;
     @SerializedName("isDomain")
     private boolean isDomain;
+
+    // This code has been deleted in 3.0. In order to ensure the correctness of code rollback,
+    // set isAnalyze to true and delete the precondition check of isAnalyze
+    @Deprecated
     @SerializedName("isAnalyzed")
-    private boolean isAnalyzed = false;
+    private boolean isAnalyzed = true;
 
     public static final UserIdentity ROOT;
 
@@ -105,7 +108,6 @@ public class UserIdentity implements Writable, GsonPostProcessable, GsonPreProce
     }
 
     public String getQualifiedUser() {
-        Preconditions.checkState(isAnalyzed);
         return realUser;
     }
 
@@ -122,9 +124,6 @@ public class UserIdentity implements Writable, GsonPostProcessable, GsonPreProce
     }
 
     public void analyze() throws AnalysisException {
-        if (isAnalyzed) {
-            return;
-        }
         if (Strings.isNullOrEmpty(realUser)) {
             throw new AnalysisException("Does not support anonymous user");
         }
@@ -168,7 +167,6 @@ public class UserIdentity implements Writable, GsonPostProcessable, GsonPreProce
     }
 
     public TUserIdentity toThrift() {
-        Preconditions.checkState(isAnalyzed);
         TUserIdentity tUserIdent = new TUserIdentity();
         tUserIdent.setHost(host);
         tUserIdent.setUsername(realUser);
@@ -222,7 +220,6 @@ public class UserIdentity implements Writable, GsonPostProcessable, GsonPreProce
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Preconditions.checkState(isAnalyzed);
         Text.writeString(out, ClusterNamespace.getFullName(realUser));
         Text.writeString(out, host);
         out.writeBoolean(isDomain);
