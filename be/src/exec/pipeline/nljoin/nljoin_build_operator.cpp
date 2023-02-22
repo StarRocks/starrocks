@@ -56,7 +56,7 @@ Status NLJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& chun
     return Status::OK();
 }
 
-size_t NLJoinBuildOperator::output_amplification() const {
+size_t NLJoinBuildOperator::output_amplification_factor() const {
     return _num_rows;
 }
 
