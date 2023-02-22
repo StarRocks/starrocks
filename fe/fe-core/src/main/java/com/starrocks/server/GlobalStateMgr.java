@@ -116,6 +116,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.RunMode;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
@@ -488,6 +489,20 @@ public class GlobalStateMgr {
 
     private ConfigRefreshDaemon configRefreshDaemon;
 
+    private RunMode runMode = RunMode.SHARED_NOTHING;
+
+    public boolean isSharedNothingMode() {
+        return runMode.equals(RunMode.SHARED_NOTHING);
+    }
+
+    public boolean isSharedDataMode() {
+        return runMode.equals(RunMode.SHARED_DATA);
+    }
+
+    public void setRunMode(RunMode runmode) {
+        this.runMode = runmode;
+    }
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -646,8 +661,14 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
 
-        if (Config.use_staros) {
+        if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_DATA.name())) {
+            runMode = RunMode.SHARED_DATA;
             this.starOSAgent = new StarOSAgent();
+        } else if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_NOTHING.name())) {
+            runMode = RunMode.SHARED_NOTHING;
+        } else {
+            LOG.error("Invalid run_mode config: {}, should be shared_data or shared_nothing", Config.run_mode);
+            System.exit(-1);
         }
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
@@ -969,7 +990,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (Config.use_staros && !starOSAgent.init(null)) {
+        if (isSharedDataMode() && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -1168,7 +1189,7 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
-        if (Config.integrate_starmgr) {
+        if (isSharedDataMode()) {
             // register service to starMgr
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
@@ -1235,7 +1256,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
         taskRunStateSynchronizer.start();
 
-        if (Config.use_staros) {
+        if (isSharedDataMode()) {
             shardDeleter.start();
         }
     }
@@ -1259,7 +1280,7 @@ public class GlobalStateMgr {
 
         // domain resolver
         domainResolver.start();
-        if (Config.use_staros) {
+        if (isSharedDataMode()) {
             compactionManager.start();
         }
         configRefreshDaemon.start();
