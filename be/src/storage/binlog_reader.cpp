@@ -24,8 +24,6 @@
 
 namespace starrocks {
 
-std::unordered_set<std::string_view> BINLOG_META_SET{BINLOG_OP, BINLOG_VERSION, BINLOG_SEQ_ID, BINLOG_TIMESTAMP};
-
 BinlogReader::BinlogReader(TabletSharedPtr tablet, BinlogReaderParams reader_params)
         : _tablet(std::move(tablet)), _reader_params(std::move(reader_params)) {}
 
@@ -48,11 +46,6 @@ Status BinlogReader::init() {
     Schema& schema = _reader_params.output_schema;
     for (uint32_t i = 0; i < schema.num_fields(); i++) {
         std::string_view cname = schema.field(i)->name();
-        if (BINLOG_META_SET.count(cname) == 0) {
-            _data_column_index.emplace_back(i);
-            continue;
-        }
-
         if (cname == BINLOG_OP) {
             _binlog_op_column_index = i;
         } else if (cname == BINLOG_VERSION) {
@@ -61,6 +54,8 @@ Status BinlogReader::init() {
             _binlog_seq_id_column_index = i;
         } else if (cname == BINLOG_TIMESTAMP) {
             _binlog_timestamp_column_index = i;
+        } else {
+            _data_column_index.emplace_back(i);
         }
     }
     _data_schema = Schema(&_reader_params.output_schema, _data_column_index);
@@ -254,6 +249,15 @@ Status BinlogReader::_init_segment_iterator() {
     }
 
     int segment_index = _log_entry_info->file_id->segment_index();
+    if (segment_index < 0 || segment_index >= _rowset->num_segments()) {
+        std::string errMsg = fmt::format(
+                "Invalid segment index for reader: {}, tablet: {}, rowset: {}, "
+                "number segments: {}, segment index: {}",
+                _reader_id, _tablet->full_name(), _rowset->rowset_id().to_string(), _rowset->num_segments(),
+                segment_index);
+        LOG(ERROR) << errMsg;
+        return Status::InternalError(errMsg);
+    }
     SegmentSharedPtr seg_ptr = _rowset->segments()[segment_index];
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset->rowset_path()))
@@ -266,11 +270,7 @@ Status BinlogReader::_init_segment_iterator() {
         SparseRange range(start_row_id, seg_ptr->num_rows());
         seg_options.rowid_range_option = std::make_shared<RowidRangeOption>(_rowset->rowset_id(), segment_index, range);
     }
-    auto res = seg_ptr->new_iterator(_data_schema, seg_options);
-    if (!res.ok()) {
-        return res.status();
-    }
-    _segment_iterator = res.value();
+    ASSIGN_OR_RETURN(_segment_iterator, seg_ptr->new_iterator(_data_schema, seg_options));
     VLOG(3) << "Create segment iterator for reader: " << _reader_id << ", tablet: " << _tablet->full_name()
             << ", rowset: " << _rowset->rowset_id() << ", version: " << _rowset->version()
             << ", segment index: " << segment_index;
@@ -289,15 +289,7 @@ void BinlogReader::_release_segment_iterator(bool release_rowset) {
 }
 
 void BinlogReader::_reset() {
-    if (_segment_iterator != nullptr) {
-        _segment_iterator->close();
-        _segment_iterator.reset();
-    }
-
-    if (_rowset != nullptr) {
-        _rowset->release();
-        _rowset.reset();
-    }
+    _release_segment_iterator(true);
 
     if (_binlog_file_reader != nullptr) {
         _binlog_file_reader.reset();

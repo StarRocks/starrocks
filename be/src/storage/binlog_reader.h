@@ -33,10 +33,10 @@ struct BinlogReaderParams {
 };
 
 // Column names for metas
-const std::string BINLOG_OP = "_binlog_op";
-const std::string BINLOG_VERSION = "_binlog_version";
-const std::string BINLOG_SEQ_ID = "_binlog_seq_id";
-const std::string BINLOG_TIMESTAMP = "_binlog_timestamp";
+constexpr const char* BINLOG_OP = "_binlog_op";
+constexpr const char* BINLOG_VERSION = "_binlog_version";
+constexpr const char* BINLOG_SEQ_ID = "_binlog_seq_id";
+constexpr const char* BINLOG_TIMESTAMP = "_binlog_timestamp";
 
 class Tablet;
 class BinlogManager;
