@@ -16,6 +16,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.sql.parser.NodePosition;
 
 // change one variable.
 public class SystemVariable extends SetListItem {
@@ -24,7 +25,16 @@ public class SystemVariable extends SetListItem {
     private final Expr unResolvedExpression;
     private LiteralExpr resolvedExpression;
 
+    public SystemVariable(String variable, Expr unResolvedExpression) {
+        this(SetType.SESSION, variable, unResolvedExpression);
+    }
+
     public SystemVariable(SetType type, String variable, Expr expression) {
+        this(type, variable, expression, NodePosition.ZERO);
+    }
+
+    public SystemVariable(SetType type, String variable, Expr expression, NodePosition pos) {
+        super(pos);
         this.type = type;
         this.variable = variable;
         this.unResolvedExpression = expression;
@@ -33,9 +43,7 @@ public class SystemVariable extends SetListItem {
         }
     }
 
-    public SystemVariable(String variable, Expr unResolvedExpression) {
-        this(SetType.SESSION, variable, unResolvedExpression);
-    }
+
 
     public String getVariable() {
         return variable;

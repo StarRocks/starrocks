@@ -16,9 +16,15 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.sql.parser.NodePosition;
 
 public class AddObserverClause extends FrontendClause {
+
     public AddObserverClause(String hostPort) {
-        super(hostPort, FrontendNodeType.OBSERVER);
+        this(hostPort, NodePosition.ZERO);
+    }
+
+    public AddObserverClause(String hostPort, NodePosition pos) {
+        super(hostPort, FrontendNodeType.OBSERVER, pos);
     }
 }

@@ -38,8 +38,15 @@ import com.google.common.base.Preconditions;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.sql.parser.NodePosition;
 
 public abstract class StatementBase implements ParseNode {
+
+    private final NodePosition pos;
+
+    protected StatementBase(NodePosition pos) {
+        this.pos = pos;
+    }
 
     public enum ExplainLevel {
         NORMAL,
@@ -90,5 +97,10 @@ public abstract class StatementBase implements ParseNode {
     // if the stmt contains some information which need to be encrypted in audit log
     public boolean needAuditEncryption() {
         return false;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

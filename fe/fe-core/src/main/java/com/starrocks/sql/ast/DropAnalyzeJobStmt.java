@@ -15,10 +15,17 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class DropAnalyzeJobStmt extends DdlStmt {
     private final long id;
 
     public DropAnalyzeJobStmt(long id) {
+        this(id, NodePosition.ZERO);
+    }
+
+    public DropAnalyzeJobStmt(long id, NodePosition pos) {
+        super(pos);
         this.id = id;
     }
 

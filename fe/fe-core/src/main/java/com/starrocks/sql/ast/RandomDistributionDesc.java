@@ -39,6 +39,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -51,10 +52,15 @@ public class RandomDistributionDesc extends DistributionDesc {
     int numBucket;
 
     public RandomDistributionDesc() {
-        type = DistributionInfoType.RANDOM;
+        this(0, NodePosition.ZERO);
     }
 
     public RandomDistributionDesc(int numBucket) {
+        this(numBucket, NodePosition.ZERO);
+    }
+
+    public RandomDistributionDesc(int numBucket, NodePosition pos) {
+        super(pos);
         type = DistributionInfoType.RANDOM;
         this.numBucket = numBucket;
     }

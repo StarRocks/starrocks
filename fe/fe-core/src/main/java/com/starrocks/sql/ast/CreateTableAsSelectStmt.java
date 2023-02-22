@@ -19,6 +19,7 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -37,6 +38,13 @@ public class CreateTableAsSelectStmt extends StatementBase {
     public CreateTableAsSelectStmt(CreateTableStmt createTableStmt,
                                    List<String> columnNames,
                                    QueryStatement queryStatement) {
+        this(createTableStmt, columnNames, queryStatement, NodePosition.ZERO);
+    }
+
+    public CreateTableAsSelectStmt(CreateTableStmt createTableStmt,
+                                   List<String> columnNames,
+                                   QueryStatement queryStatement, NodePosition pos) {
+        super(pos);
         this.createTableStmt = createTableStmt;
         this.columnNames = columnNames;
         this.queryStatement = queryStatement;

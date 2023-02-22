@@ -395,6 +395,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
@@ -429,7 +430,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (parts.size() == 2) {
             return new UseDbStmt(parts.get(0), parts.get(1));
         } else {
-            throw new ParsingException("error catalog.database");
+            throw new ParsingException(PARSER_ERROR_MSG.invalidDbFormat(qualifiedName.toString()),
+                    qualifiedName.getPos());
         }
     }
 
@@ -1103,7 +1105,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 IndexDef.IndexType.BITMAP,
                 comment);
 
-        CreateIndexClause createIndexClause = new CreateIndexClause(null, indexDef, false);
+        CreateIndexClause createIndexClause = new CreateIndexClause(indexDef);
 
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
@@ -1113,7 +1115,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDropIndexStatement(StarRocksParser.DropIndexStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
-        DropIndexClause dropIndexClause = new DropIndexClause(identifier.getValue(), null, false);
+        DropIndexClause dropIndexClause = new DropIndexClause(identifier.getValue());
 
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
@@ -1162,7 +1164,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new SubmitTaskStmt(qualifiedName.getParts().get(0),
                     qualifiedName.getParts().get(1), properties, startIndex, createTableAsSelectStmt);
         } else {
-            throw new ParsingException("error task name ");
+            throw new ParsingException(PARSER_ERROR_MSG.invalidTaskFormat(qualifiedName.toString()),
+                    qualifiedName.getPos());
         }
     }
 
@@ -2452,9 +2455,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowProcedureStatement(StarRocksParser.ShowProcedureStatementContext context) {
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            return new ShowProcedureStmt(stringLiteral.getValue());
+            return new ShowProcedureStmt(stringLiteral.getValue(), null);
         } else if (context.expression() != null) {
-            return new ShowProcedureStmt((Expr) visit(context.expression()));
+            return new ShowProcedureStmt(null, (Expr) visit(context.expression()));
         } else {
             return new ShowProcedureStmt();
         }
@@ -3078,13 +3081,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 IndexDef.IndexType.BITMAP,
                 comment);
 
-        return new CreateIndexClause(null, indexDef, true);
+        return new CreateIndexClause(indexDef);
     }
 
     @Override
     public ParseNode visitDropIndexClause(StarRocksParser.DropIndexClauseContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
-        return new DropIndexClause(identifier.getValue(), null, true);
+        return new DropIndexClause(identifier.getValue());
     }
 
     @Override
@@ -3120,7 +3123,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.FIRST() != null) {
             columnPosition = ColumnPosition.FIRST;
         } else if (context.AFTER() != null) {
-            String afterColumnName = getIdentifierName(context.identifier(0));
+            StarRocksParser.IdentifierContext identifier = context.identifier(0);
+            String afterColumnName = getIdentifierName(identifier);
             columnPosition = new ColumnPosition(afterColumnName);
         }
         String rollupName = null;
@@ -3167,7 +3171,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.FIRST() != null) {
             columnPosition = ColumnPosition.FIRST;
         } else if (context.AFTER() != null) {
-            String afterColumnName = getIdentifierName(context.identifier(0));
+            StarRocksParser.IdentifierContext identifier = context.identifier(0);
+            String afterColumnName = getIdentifierName(identifier);
             columnPosition = new ColumnPosition(afterColumnName);
         }
         String rollupName = null;
@@ -3411,7 +3416,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 Iterator<Relation> iterator = relations.iterator();
                 Relation relation = iterator.next();
                 while (iterator.hasNext()) {
-                    relation = new JoinRelation(null, relation, iterator.next(), null, false);
+                    Relation next = iterator.next();
+                    relation = new JoinRelation(null, relation, next, null, false);
                 }
                 from = relation;
             }
@@ -5659,6 +5665,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     private QualifiedName getQualifiedName(StarRocksParser.QualifiedNameContext context) {
         List<String> parts = new ArrayList<>();
+        NodePosition pos = createNodePosition(context.start, context.stop);
         for (ParseTree c : context.children) {
             if (c instanceof TerminalNode) {
                 TerminalNode t = (TerminalNode) c;
@@ -5672,7 +5679,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return QualifiedName.of(parts);
+        return QualifiedName.of(parts, pos);
     }
 
     private TableName qualifiedNameToTableName(QualifiedName qualifiedName) {
@@ -5927,6 +5934,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return null;
         }
+    }
+
+    private NodePosition createNodePosition(Token start, Token stop) {
+        if (start == null) {
+            return NodePosition.ZERO;
+        }
+
+        if (stop == null) {
+            return new NodePosition(start.getLine(), start.getCharPositionInLine());
+        }
+
+        return new NodePosition(start, stop);
     }
 }
 
