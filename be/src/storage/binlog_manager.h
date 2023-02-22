@@ -74,6 +74,7 @@ class Rowset;
 // Fetch rowsets
 class RowsetFetcher {
 public:
+    virtual ~RowsetFetcher() = default;
     virtual std::shared_ptr<Rowset> get_rowset(int64_t rowset_id) = 0;
 };
 
