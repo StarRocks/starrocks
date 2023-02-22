@@ -16,7 +16,6 @@ package com.starrocks.sql.parser;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
@@ -408,10 +407,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     FunctionSet.DATE_ADD, FunctionSet.DATE_SUB,
                     FunctionSet.SUBDATE,
                     FunctionSet.DAYS_SUB);
-
-    private static final ImmutableSet<String> WINDOW_FUNCTION_SET = ImmutableSet.of(
-            FunctionSet.ROW_NUMBER, FunctionSet.RANK, FunctionSet.DENSE_RANK, FunctionSet.NTILE, FunctionSet.LEAD,
-            FunctionSet.LAG, FunctionSet.FIRST_VALUE, FunctionSet.LAST_VALUE);
 
 
     public AstBuilder(long sqlMode) {
@@ -1702,14 +1697,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitPauseRoutineLoadStatement(StarRocksParser.PauseRoutineLoadStatementContext context) {
-        String database = null;
-        if (context.db != null) {
-            database = getQualifiedName(context.db).toString();
-        }
-        String name = null;
-        if (context.name != null) {
-            name = getIdentifierName(context.name);
-        }
         return new PauseRoutineLoadStmt(createLabelName(context.db, context.name), createPos(context));
     }
 
@@ -5788,7 +5775,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     public Type getType(StarRocksParser.TypeContext context) {
-        NodePosition pos = createPos(context);
         if (context.baseType() != null) {
             return getBaseType(context.baseType());
         } else if (context.decimalType() != null) {

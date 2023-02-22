@@ -52,7 +52,7 @@ public class InformationFunction extends Expr {
     }
 
     public InformationFunction(String funcType, NodePosition pos) {
-        this(funcType, null, 0, NodePosition.ZERO);
+        this(funcType, null, 0, pos);
     }
 
     public InformationFunction(String funcType, String strValue, long intValue) {

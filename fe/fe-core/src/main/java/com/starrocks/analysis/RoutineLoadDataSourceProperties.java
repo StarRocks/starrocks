@@ -238,6 +238,6 @@ public class RoutineLoadDataSourceProperties implements ParseNode {
 
     @Override
     public NodePosition getPos() {
-        return null;
+        return pos;
     }
 }

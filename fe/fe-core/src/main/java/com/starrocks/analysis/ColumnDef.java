@@ -426,6 +426,7 @@ public class ColumnDef implements ParseNode {
         }
     }
 
+    @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("`").append(name).append("` ");
@@ -456,7 +457,7 @@ public class ColumnDef implements ParseNode {
 
     @Override
     public NodePosition getPos() {
-        return null;
+        return pos;
     }
 
     public Column toColumn() {

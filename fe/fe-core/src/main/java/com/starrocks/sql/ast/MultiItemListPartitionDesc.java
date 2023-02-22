@@ -58,6 +58,7 @@ public class MultiItemListPartitionDesc extends PartitionDesc {
 
     public MultiItemListPartitionDesc(boolean ifNotExists, String partitionName, List<List<String>> multiValues,
                                       Map<String, String> partitionProperties, NodePosition pos) {
+        super(pos);
         this.type = PartitionType.LIST;
         this.partitionName = partitionName;
         this.ifNotExists = ifNotExists;
