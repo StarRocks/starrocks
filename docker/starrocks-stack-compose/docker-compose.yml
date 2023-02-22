@@ -57,6 +57,25 @@ services:
       MINIO_ROOT_PASSWORD: rootroot
     command: server /data --console-address ":9001"
 
+
+# Azure emulator service: https://github.com/Azure/Azurite
+  azurite:
+    container_name: azurite
+    platform: "linux/amd64"
+    hostname: azurite.local.com
+    image: mcr.microsoft.com/azure-storage/azurite
+    restart: unless-stopped
+    environment:
+      AZURITE_ACCOUNTS: "root:rootroot" # TODO: customize your own account credential
+    ports:
+      - "10000:10000" # blob service
+      - "10001:10001" # queue service
+      - "10002:10002" # table service
+    volumes: # volume mapping format "[host volume directory]:[container volume directory]", can be configured to your preferred mount point
+      - ${HOME}/dv/azurite/data:/data
+    networks: # network config, can be configured to your preferred port and ip address, if not specified, it will use default network and assign a dynamic ip
+      starrocks-stack-network:
+
   zeppelin:
     container_name: zeppelin
     platform: "linux/amd64"
