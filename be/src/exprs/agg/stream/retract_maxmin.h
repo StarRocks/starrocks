@@ -209,11 +209,11 @@ public:
         }
     }
 
-    void restore_detail(FunctionContext* ctx, size_t num_row, const std::vector<const Column*>& columns,
-                        AggDataPtr __restrict state) const override {
-        T value = get_row_value(columns[0], num_row);
-        DCHECK((*columns[1]).is_numeric());
-        int64_t count = columns[1]->get(0).get_int64();
+    void restore_detail(FunctionContext* ctx, const Column* agg_column, size_t agg_row_idx, const Column* count_column,
+                        size_t count_row_idx, AggDataPtr __restrict state) const override {
+        T value = get_row_value(agg_column, agg_row_idx);
+        DCHECK(count_column->is_numeric());
+        int64_t count = count_column->get(count_row_idx).get_int64();
         // If the incremenatal already had the data, ignore.
         (this->data(state)).template update_rows<true>(value, count);
     }

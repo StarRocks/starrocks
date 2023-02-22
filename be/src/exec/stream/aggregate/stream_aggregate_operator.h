@@ -22,7 +22,6 @@
 #include "exec/aggregator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/stream/aggregate/stream_aggregator.h"
-#include "exec/stream/stream_fdw.h"
 
 namespace starrocks::stream {
 using StreamAggregatorPtr = std::shared_ptr<StreamAggregator>;

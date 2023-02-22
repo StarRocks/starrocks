@@ -231,8 +231,8 @@ public:
     // 1. use `restore_detail` to only restore details for the specific input group_by_keys+agg_key.
     // 2. then `restore_all_details` to restore details for the speicif input group_by_keys for
     //  all need `detail_sync` group_by_keys;
-    virtual void restore_detail(FunctionContext* ctx, size_t row_idx, const std::vector<const Column*>& columns,
-                                AggDataPtr __restrict state) const {
+    virtual void restore_detail(FunctionContext* ctx, const Column* agg_column, size_t agg_row_idx,
+                                const Column* count_column, size_t count_row_idx, AggDataPtr __restrict state) const {
         throw std::runtime_error("restore_detail function in aggregate is not supported for now.");
     }
 

@@ -233,6 +233,10 @@ public:
         }
     }
 
+    AggStateTableKind agg_state_table_kind(bool is_append_only) const override {
+        return nested_function->agg_state_table_kind(is_append_only);
+    }
+
 protected:
     NestedAggregateFunctionPtr nested_function;
 };
@@ -245,9 +249,25 @@ public:
             : NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull>(
                       nested_function) {}
 
+    // NOTE: In stream MV, need handle input row by row, so need support single update.
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        CHECK(false) << "unsupported update in NullableAggregateFunctionUnary";
+        DCHECK_EQ(1, ctx->get_num_args());
+        // This container stores the columns we really pass to the nested function.
+        const Column* data_columns[1];
+
+        if (columns[0]->is_nullable()) {
+            if (columns[0]->is_null(row_num)) {
+                // Always ingore nulls.
+                return;
+            }
+            const auto* column = down_cast<const NullableColumn*>(columns[0]);
+            data_columns[0] = &column->data_column_ref();
+        } else {
+            data_columns[0] = columns[0];
+        }
+        this->data(state).is_null = false;
+        this->nested_function->update(ctx, data_columns, this->data(state).mutable_nest_state(), row_num);
     }
 
     // TODO(kks): abstract the AVX2 filter process later
@@ -856,6 +876,28 @@ public:
             this->nested_function->convert_to_serialize_format(ctx, data_columns, chunk_size,
                                                                &dst_nullable_column->data_column());
         }
+    }
+
+    void retract(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                 size_t row_num) const override {
+        auto column_size = ctx->get_num_args();
+        // This container stores the columns we really pass to the nested function.
+        const Column* data_columns[column_size];
+
+        for (size_t i = 0; i < column_size; i++) {
+            if (columns[i]->is_nullable()) {
+                if (columns[i]->is_null(row_num)) {
+                    // Always ingore nulls.
+                    return;
+                }
+                const auto* column = down_cast<const NullableColumn*>(columns[i]);
+                data_columns[i] = &column->data_column_ref();
+            } else {
+                data_columns[i] = columns[i];
+            }
+        }
+        this->data(state).is_null = false;
+        this->nested_function->retract(ctx, data_columns, this->data(state).mutable_nest_state(), row_num);
     }
 };
 

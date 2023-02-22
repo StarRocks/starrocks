@@ -20,7 +20,6 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/stream/aggregate/stream_aggregate_operator.h"
 #include "exec/stream/aggregate/stream_aggregator.h"
-#include "exec/stream/stream_fdw.h"
 #include "exec/stream/stream_pipeline_test.h"
 #include "exec/stream/stream_test.h"
 
