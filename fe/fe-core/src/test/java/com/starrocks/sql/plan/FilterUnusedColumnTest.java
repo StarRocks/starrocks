@@ -133,7 +133,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
 
     @Test
     public void testFilterAggMV() throws Exception {
-        boolean prevEnable = connectContext.getSessionVariable().isEnableFilterUnusedColumnsInScanStage();
+        boolean prevEnable = connectContext.getSessionVariable().isAbleFilterUnusedColumnsInScanStage();
 
         try {
             connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
