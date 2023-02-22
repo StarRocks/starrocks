@@ -203,6 +203,7 @@ import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
@@ -3209,7 +3210,7 @@ public class GlobalStateMgr {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
         if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+                !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
         }
         ctx.setCurrentCatalog(newCatalogName);
@@ -3233,7 +3234,7 @@ public class GlobalStateMgr {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }
             if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                    !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+                    !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
             }
             ctx.setCurrentCatalog(newCatalogName);
@@ -3249,7 +3250,7 @@ public class GlobalStateMgr {
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(ctx, dbName)) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, dbName)) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                             ctx.getQualifiedUser(), dbName);
                 }

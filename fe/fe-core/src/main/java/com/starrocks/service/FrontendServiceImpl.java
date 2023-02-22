@@ -96,7 +96,7 @@ import com.starrocks.mysql.privilege.TablePrivEntry;
 import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.StreamLoadPlanner;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
@@ -270,7 +270,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (String fullName : dbNames) {
             if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, fullName)) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
                     continue;
                 }
             } else {
@@ -288,20 +288,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         result.setDbs(dbs);
         return result;
-    }
-
-    private boolean checkAnyActionOnTableLikeObject(UserIdentity currentUser, String dbName, Table tbl) {
-        Table.TableType type = tbl.getType();
-        switch (type) {
-            case OLAP:
-                return PrivilegeManager.checkAnyActionOnTable(currentUser, dbName, tbl.getName());
-            case MATERIALIZED_VIEW:
-                return PrivilegeManager.checkAnyActionOnMaterializedView(currentUser, dbName, tbl.getName());
-            case VIEW:
-                return PrivilegeManager.checkAnyActionOnView(currentUser, dbName, tbl.getName());
-            default:
-                return false;
-        }
     }
 
     @Override
@@ -333,7 +319,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 LOG.debug("get table: {}, wait to check", tableName);
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                     Table tbl = db.getTable(tableName);
-                    if (!checkAnyActionOnTableLikeObject(currentUser, params.db, tbl)) {
+                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, tbl)) {
                         continue;
                     }
                 } else {
@@ -389,7 +375,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
                 for (Table table : tables) {
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!checkAnyActionOnTableLikeObject(currentUser, params.db, table)) {
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, table)) {
                             continue;
                         }
                     } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
@@ -413,7 +399,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         for (TableName tableName : allTables.keySet()) {
                             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                                 Table tbl = db.getTable(tableName.getTbl());
-                                if (!checkAnyActionOnTableLikeObject(currentUser, tableName.getDb(), tbl)) {
+                                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
+                                        tableName.getDb(), tbl)) {
                                     break;
                                 }
                             } else {
@@ -440,7 +427,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     // list MaterializedView table match pattern
-    public void listMaterializedViewStatus(List<TTableStatus> tablesResult, long limit, PatternMatcher matcher,
+    public void listMaterializedViewStatus(List<TTableStatus> tablesResult, long limit, PatternMatcher
+            matcher,
                                            UserIdentity currentUser, String dbName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
@@ -451,7 +439,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             for (MaterializedView mvTable : db.getMaterializedViews()) {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!checkAnyActionOnTableLikeObject(currentUser, dbName, mvTable)) {
+                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, dbName, mvTable)) {
                         continue;
                     }
                 } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
@@ -552,7 +540,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         for (Task task : taskList) {
             if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, task.getDbName())) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, task.getDbName())) {
                     continue;
                 }
             } else if (!globalStateMgr.getAuth().checkDbPriv(currentUser, task.getDbName(), PrivPredicate.SHOW)) {
@@ -596,7 +584,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         for (TaskRunStatus status : taskRunList) {
             if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, status.getDbName())) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, status.getDbName())) {
                     continue;
                 }
             } else {
@@ -803,7 +791,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         if (db != null) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!checkAnyActionOnTableLikeObject(currentUser, params.db, db.getTable(params.getTable_name()))) {
+                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db,
+                        db.getTable(params.getTable_name()))) {
                     return result;
                 }
             } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
@@ -824,13 +813,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     // get describeTable without db name and table name parameter, so we need iterate over
     // dbs and tables, when reach limit, we break;
-    private void describeWithoutDbAndTable(UserIdentity currentUser, List<TColumnDef> columns, long limit) {
+    private void describeWithoutDbAndTable(UserIdentity currentUser, List<TColumnDef> columns,
+                                           long limit) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<String> dbNames = globalStateMgr.getDbNames();
         boolean reachLimit;
         for (String fullName : dbNames) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, fullName)) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
                     continue;
                 }
             } else {
@@ -844,7 +834,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 for (String tableName : db.getTableNamesViewWithLock()) {
                     LOG.debug("get table: {}, wait to check", tableName);
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!checkAnyActionOnTableLikeObject(currentUser, fullName, db.getTable(tableName))) {
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
+                                fullName, db.getTable(tableName))) {
                             continue;
                         }
                     } else {
@@ -949,12 +940,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TReportExecStatusResult reportExecStatus(TReportExecStatusParams params) throws TException {
+    public TReportExecStatusResult reportExecStatus(TReportExecStatusParams params) throws
+            TException {
         return QeProcessorImpl.INSTANCE.reportExecStatus(params, getClientAddr());
     }
 
     @Override
-    public TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams params) throws TException {
+    public TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams
+                                                                      params) throws TException {
         return QeProcessorImpl.INSTANCE.batchReportExecStatus(params, getClientAddr());
     }
 
@@ -1017,7 +1010,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
             }
             // check INSERT action on table
-            if (!PrivilegeManager.checkTableAction(currentUser, db, tbl, PrivilegeType.INSERT)) {
+            if (!PrivilegeActions.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT)) {
                 throw new AuthenticationException(
                         "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
             }
@@ -1079,7 +1072,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
-    private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws UserException {
+    private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws
+            UserException {
         checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                 request.getTbl(), request.getUser_ip());
 
@@ -1142,7 +1136,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     // return true if commit success and publish success, return false if publish timeout
-    private void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException {
+    private void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws
+            UserException {
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
@@ -1275,7 +1270,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TLoadTxnRollbackResult loadTxnRollback(TLoadTxnRollbackRequest request) throws TException {
+    public TLoadTxnRollbackResult loadTxnRollback(TLoadTxnRollbackRequest request) throws
+            TException {
         String clientAddr = getClientAddrAsString();
         LOG.info("receive txn rollback request. db: {}, tbl: {}, txn_id: {}, reason: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), request.getReason(), clientAddr);
@@ -1356,7 +1352,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
-    private TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws UserException {
+    private TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws
+            UserException {
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
             cluster = SystemInfoService.DEFAULT_CLUSTER;
@@ -1492,7 +1489,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!PrivilegeManager.checkTableAction(userIdentity, dbName,
+                    if (!PrivilegeActions.checkTableAction(userIdentity, null, dbName,
                             tableName, PrivilegeType.INSERT)) {
                         throw new UnauthorizedException(String.format(
                                 "Access denied; user '%s'@'%s' need INSERT action on %s.%s for this operation",
@@ -1517,7 +1514,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
+    public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws
+            TException {
         TStatus status = checkPasswordAndLoadPrivilege(request.getAuth_info());
         if (status.getStatus_code() != TStatusCode.OK) {
             TBeginRemoteTxnResponse response = new TBeginRemoteTxnResponse();
@@ -1528,12 +1526,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TCommitRemoteTxnResponse commitRemoteTxn(TCommitRemoteTxnRequest request) throws TException {
+    public TCommitRemoteTxnResponse commitRemoteTxn(TCommitRemoteTxnRequest request) throws
+            TException {
         return leaderImpl.commitRemoteTxn(request);
     }
 
     @Override
-    public TAbortRemoteTxnResponse abortRemoteTxn(TAbortRemoteTxnRequest request) throws TException {
+    public TAbortRemoteTxnResponse abortRemoteTxn(TAbortRemoteTxnRequest request) throws
+            TException {
         return leaderImpl.abortRemoteTxn(request);
     }
 
@@ -1555,7 +1555,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
     }
 
-    public TAllocateAutoIncrementIdResult allocAutoIncrementId(TAllocateAutoIncrementIdParam request) throws TException {
+    public TAllocateAutoIncrementIdResult allocAutoIncrementId(TAllocateAutoIncrementIdParam
+                                                                       request) throws TException {
         TAllocateAutoIncrementIdResult result = new TAllocateAutoIncrementIdResult();
         long rows = Math.max(request.rows, Config.auto_increment_cache_size);
         Long nextId = GlobalStateMgr.getCurrentState().allocateAutoIncrementId(request.table_id, rows);
@@ -1584,7 +1585,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TCreatePartitionResult createPartition(TCreatePartitionRequest request) throws TException {
+    public TCreatePartitionResult createPartition(TCreatePartitionRequest request) throws
+            TException {
 
         LOG.info("Recieve create partition: {}", request);
 
@@ -1646,7 +1648,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
         String fnName = functionCallExpr.getFnName().getFunction();
-        long interval =  1;
+        long interval = 1;
         String granularity;
         if (fnName.equals(FunctionSet.DATE_TRUNC)) {
             List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
@@ -1788,18 +1790,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TGetTablesConfigResponse getTablesConfig(TGetTablesConfigRequest request) throws TException {
+    public TGetTablesConfigResponse getTablesConfig(TGetTablesConfigRequest request) throws
+            TException {
         return InformationSchemaDataSource.generateTablesConfigResponse(request);
     }
 
     @Override
-    public TGetTablesInfoResponse getTablesInfo(TGetTablesInfoRequest request) throws TException {
+    public TGetTablesInfoResponse getTablesInfo(TGetTablesInfoRequest request) throws
+            TException {
 
         return InformationSchemaDataSource.generateTablesInfoResponse(request);
     }
 
     @Override
-    public TUpdateResourceUsageResponse updateResourceUsage(TUpdateResourceUsageRequest request) throws TException {
+    public TUpdateResourceUsageResponse updateResourceUsage(TUpdateResourceUsageRequest request) throws
+            TException {
         TResourceUsage usage = request.getResource_usage();
         QueryQueueManager.getInstance().updateResourceUsage(request.getBackend_id(),
                 usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
