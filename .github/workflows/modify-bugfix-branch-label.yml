@@ -26,7 +26,7 @@ jobs:
         if: contains(toJson(github.event.pull_request.body), '[x] 3.0')
         uses: actions-ecosystem/action-add-labels@v1
         with:
-          labels: 3.0 
+          labels: 3.0
 
       - name: add branch-2.5 label
         if: contains(toJson(github.event.pull_request.body), '[x] 2.5')
