@@ -25,6 +25,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.RolePrivilegeCollection;
@@ -161,7 +162,7 @@ public class ResourceGroupMgr implements Writable {
 
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             try {
-                PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+                PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
                 List<String> validRoles = new ArrayList<>();
 
                 Set<Long> activeRoles = ctx.getCurrentRoleIds();
@@ -177,7 +178,7 @@ public class ResourceGroupMgr implements Writable {
                     }
                 }
 
-                return validRoles.stream().filter(r -> !PrivilegeManager.BUILT_IN_ROLE_NAMES.contains(r))
+                return validRoles.stream().filter(r -> !PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(r))
                         .collect(Collectors.toList());
             } catch (PrivilegeException e) {
                 LOG.info("getUnqualifiedRole failed for resource group, error message: " + e.getMessage());

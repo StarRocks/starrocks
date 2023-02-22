@@ -14,7 +14,7 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.InformationFunction;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -109,7 +109,8 @@ public class RBACExecutorTest {
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
         Assert.assertEquals("[[r0, null, GRANT 'r1', 'r2' TO  ROLE r0]," +
-                " [r0, default, GRANT SELECT ON TABLE db.tbl0 TO ROLE 'r0']]", resultSet.getResultRows().toString());
+                " [r0, default_catalog, GRANT SELECT ON TABLE db.tbl0 TO ROLE 'r0']]",
+                resultSet.getResultRows().toString());
     }
 
     @Test
@@ -189,17 +190,17 @@ public class RBACExecutorTest {
         ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
         SetRoleExecutor.execute((SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                 "set role r1", ctx), ctx);
-        Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, "db", "tbl0", PrivilegeType.SELECT));
-        Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, "db", "tbl1", PrivilegeType.SELECT));
+        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, "db", "tbl0", PrivilegeType.SELECT));
+        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, "db", "tbl1", PrivilegeType.SELECT));
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke r2 from role r1", ctx), ctx);
-        Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, "db", "tbl0", PrivilegeType.SELECT));
-        Assert.assertFalse(PrivilegeManager.checkTableAction(ctx, "db", "tbl1", PrivilegeType.SELECT));
+        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, "db", "tbl0", PrivilegeType.SELECT));
+        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx, "db", "tbl1", PrivilegeType.SELECT));
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke r1 from u1", ctx), ctx);
-        Assert.assertFalse(PrivilegeManager.checkTableAction(ctx, "db", "tbl0", PrivilegeType.SELECT));
-        Assert.assertFalse(PrivilegeManager.checkTableAction(ctx, "db", "tbl1", PrivilegeType.SELECT));
+        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx, "db", "tbl0", PrivilegeType.SELECT));
+        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx, "db", "tbl1", PrivilegeType.SELECT));
     }
 }

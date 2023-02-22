@@ -40,7 +40,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -613,7 +613,7 @@ public class DataDescription {
         }
 
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            if (!PrivilegeManager.checkTableAction(ConnectContext.get(), fullDbName,
+            if (!PrivilegeActions.checkTableAction(ConnectContext.get(), fullDbName,
                     tableName, PrivilegeType.INSERT)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "INSERT",
                         ConnectContext.get().getQualifiedUser(),
@@ -631,7 +631,7 @@ public class DataDescription {
         // check hive table auth
         if (isLoadFromTable()) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkTableAction(ConnectContext.get(), fullDbName,
+                if (!PrivilegeActions.checkTableAction(ConnectContext.get(), fullDbName,
                         srcTableName, PrivilegeType.SELECT)) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
                             ConnectContext.get().getQualifiedUser(),

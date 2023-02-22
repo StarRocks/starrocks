@@ -113,11 +113,14 @@ import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.CatalogPEntryObject;
+import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeCollection;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -211,6 +214,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
@@ -445,7 +449,7 @@ public class ShowExecutor {
                         mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
                             Table baseTable = baseTableInfo.getTable();
                             // TODO: external table should check table action after PrivilegeManager support it.
-                            if (baseTable != null && baseTable.isLocalTable() && !PrivilegeManager.
+                            if (baseTable != null && baseTable.isLocalTable() && !PrivilegeActions.
                                     checkTableAction(connectContext, baseTableInfo.getDbName(),
                                             baseTableInfo.getTableName(),
                                             PrivilegeType.SELECT)) {
@@ -455,7 +459,7 @@ public class ShowExecutor {
                         if (!baseTableHasPrivilege.get()) {
                             continue;
                         }
-                        if (!PrivilegeManager.checkAnyActionOnMaterializedView(connectContext, db.getFullName(),
+                        if (!PrivilegeActions.checkAnyActionOnMaterializedView(connectContext, db.getFullName(),
                                 mvTable.getName())) {
                             continue;
                         }
@@ -732,7 +736,7 @@ public class ShowExecutor {
 
             if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
                 if (CatalogMgr.isInternalCatalog(catalogName) &&
-                        !PrivilegeManager.checkAnyActionOnOrInDb(connectContext, dbName)) {
+                        !PrivilegeActions.checkAnyActionOnOrInDb(connectContext, dbName)) {
                     continue;
                 }
             } else {
@@ -779,7 +783,7 @@ public class ShowExecutor {
                     }
                     // check tbl privs
                     if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        if (!PrivilegeManager.checkAnyActionOnTable(connectContext, db.getFullName(), tbl.getName())) {
+                        if (!PrivilegeActions.checkAnyActionOnTable(connectContext, db.getFullName(), tbl.getName())) {
                             continue;
                         }
                     } else {
@@ -831,7 +835,7 @@ public class ShowExecutor {
 
                     // check tbl privs
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeManager.checkAnyActionOnTable(connectContext, db.getFullName(), table.getName())) {
+                        if (!PrivilegeActions.checkAnyActionOnTable(connectContext, db.getFullName(), table.getName())) {
                             continue;
                         }
                     } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
@@ -1264,7 +1268,7 @@ public class ShowExecutor {
             while (iterator.hasNext()) {
                 RoutineLoadJob routineLoadJob = iterator.next();
                 try {
-                    if (!PrivilegeManager.checkAnyActionOnTable(connectContext,
+                    if (!PrivilegeActions.checkAnyActionOnTable(connectContext,
                             routineLoadJob.getDbFullName(),
                             routineLoadJob.getTableName())) {
                         iterator.remove();
@@ -1326,7 +1330,7 @@ public class ShowExecutor {
         }
         // In new privilege framework(RBAC), user needs any action on the table to show routine load job on it.
         if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-            if (!PrivilegeManager.checkAnyActionOnTable(connectContext, dbFullName, tableName)) {
+            if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbFullName, tableName)) {
                 // if we have no privilege, return an empty result set
                 resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
                 return;
@@ -1483,7 +1487,7 @@ public class ShowExecutor {
 
                 for (Table table : tables) {
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeManager.checkAnyActionOnTable(connectContext, dbName, table.getName())) {
+                        if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbName, table.getName())) {
                             continue;
                         }
                     } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
@@ -1539,7 +1543,7 @@ public class ShowExecutor {
                 totalRows.add(leftRow);
             } else {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!PrivilegeManager.checkAnyActionOnTable(connectContext, dbName, tableName)) {
+                    if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbName, tableName)) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
                                 connectContext.getQualifiedUser(),
                                 connectContext.getRemoteIP(),
@@ -1912,7 +1916,7 @@ public class ShowExecutor {
                 AtomicBoolean privilegeDeny = new AtomicBoolean(false);
                 tableRefs.forEach(tableRef -> {
                     TableName tableName = tableRef.getName();
-                    if (!PrivilegeManager.checkTableAction(connectContext, tableName.getDb(), tableName.getTbl(),
+                    if (!PrivilegeActions.checkTableAction(connectContext, tableName.getDb(), tableName.getTbl(),
                             PrivilegeType.EXPORT)) {
                         privilegeDeny.set(true);
                     }
@@ -1952,6 +1956,46 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
+    private String getCatalogNameById(long catalogId) {
+        if (CatalogMgr.isInternalCatalog(catalogId)) {
+            return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        }
+
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        Optional<Catalog> catalogOptional = catalogMgr.getCatalogById(catalogId);
+        if (!catalogOptional.isPresent()) {
+            throw new SemanticException("cannot find catalog");
+        }
+
+        return catalogOptional.get().getName();
+    }
+
+    private String getCatalogNameFromPEntry(ObjectType objectType, PrivilegeCollection.PrivilegeEntry privilegeEntry) {
+        if (objectType.equals(ObjectType.CATALOG)) {
+            CatalogPEntryObject catalogPEntryObject =
+                    (CatalogPEntryObject) privilegeEntry.getObject();
+            if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOGS_ID) {
+                return null;
+            } else {
+                return getCatalogNameById(catalogPEntryObject.getId());
+            }
+        } else if (objectType.equals(ObjectType.DATABASE)) {
+            DbPEntryObject dbPEntryObject = (DbPEntryObject) privilegeEntry.getObject();
+            if (dbPEntryObject.getCatalogId() == DbPEntryObject.ALL_CATALOGS_ID) {
+                return null;
+            }
+            return getCatalogNameById(dbPEntryObject.getCatalogId());
+        } else if (objectType.equals(ObjectType.TABLE)) {
+            TablePEntryObject tablePEntryObject = (TablePEntryObject) privilegeEntry.getObject();
+            if (tablePEntryObject.getCatalogId() == TablePEntryObject.ALL_CATALOGS_ID) {
+                return null;
+            }
+            return getCatalogNameById(tablePEntryObject.getCatalogId());
+        } else {
+            return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        }
+    }
+
     private List<List<String>> privilegeToRowString(PrivilegeManager privilegeManager, GrantRevokeClause userOrRoleName,
                                                     Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>>
                                                             typeToPrivilegeEntryList) throws PrivilegeException {
@@ -1964,16 +2008,7 @@ public class ShowExecutor {
                         userOrRoleName.getRoleName() : userOrRoleName.getUserIdentity().toString());
 
                 ObjectType objectType = typeToPrivilegeEntry.getKey();
-                if (objectType.equals(ObjectType.CATALOG)) {
-                    CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
-                    if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOG_ID) {
-                        info.add(null);
-                    } else {
-                        info.add(catalogPEntryObject.toString());
-                    }
-                } else {
-                    info.add("default");
-                }
+                info.add(getCatalogNameFromPEntry(objectType, privilegeEntry));
 
                 GrantPrivilegeStmt grantPrivilegeStmt = new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(),
                         userOrRoleName, null, privilegeEntry.isWithGrantOption());
@@ -2142,7 +2177,7 @@ public class ShowExecutor {
                         continue;
                     }
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeManager.checkAnyActionOnTable(ConnectContext.get(),
+                        if (!PrivilegeActions.checkAnyActionOnTable(ConnectContext.get(),
                                 db.getFullName(), olapTable.getName())) {
                             continue;
                         }
@@ -2307,7 +2342,7 @@ public class ShowExecutor {
         List<List<String>> rowSet = catalogMgr.getCatalogsInfo().stream()
                 .filter(row -> {
                             if (globalStateMgr.isUsingNewPrivilege()) {
-                                return PrivilegeManager.checkAnyActionOnCatalog(connectContext, row.get(0));
+                                return PrivilegeActions.checkAnyActionOnCatalog(connectContext, row.get(0));
                             } else {
                                 return true;
                             }
