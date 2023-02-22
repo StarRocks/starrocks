@@ -22,7 +22,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.OperationType;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -440,18 +440,18 @@ public class AuthUpgraderTest {
                 replayUpgrade(image);
             }
             ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("globalUsageResourceUser", "%"));
-            Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
+            Assert.assertTrue(PrivilegeActions.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
             ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("globalUsageResourceUser1", "%"));
-            Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
+            Assert.assertTrue(PrivilegeActions.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
             ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("oneUsageResourceUser", "%"));
-            Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
+            Assert.assertTrue(PrivilegeActions.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
 
             ctx.setCurrentUserIdentity(createUserByRole("globalUsageResourceRole"));
-            Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
+            Assert.assertTrue(PrivilegeActions.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
             ctx.setCurrentUserIdentity(createUserByRole("globalUsageResourceRole1"));
-            Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
+            Assert.assertTrue(PrivilegeActions.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
             ctx.setCurrentUserIdentity(createUserByRole("oneUsageResourceRole"));
-            Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
+            Assert.assertTrue(PrivilegeActions.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
         }
     }
 
@@ -490,37 +490,37 @@ public class AuthUpgraderTest {
             for (String user : users) {
                 UserIdentity uid = UserIdentity.createAnalyzedUserIdentWithIp(user, "%");
                 ctx.setCurrentUserIdentity(uid);
-                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.CREATE_TABLE));
-                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.CREATE_VIEW));
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.CREATE_FUNCTION));
-                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.CREATE_TABLE));
-                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1",
+                Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.CREATE_TABLE));
+                Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.CREATE_VIEW));
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.CREATE_FUNCTION));
+                Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.CREATE_TABLE));
+                Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1",
                         PrivilegeType.CREATE_MATERIALIZED_VIEW));
                 // should have CREATE_DATABASE privilege on default_catalog
-                Assert.assertTrue(PrivilegeManager.checkCatalogAction(ctx, "default_catalog",
+                Assert.assertTrue(PrivilegeActions.checkCatalogAction(ctx, "default_catalog",
                         PrivilegeType.CREATE_DATABASE));
             }
             ctx.setCurrentUserIdentity(createUserByRole("userWithGlobalCreate"));
-            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.CREATE_TABLE));
-            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
-            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.CREATE_FUNCTION));
-            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.CREATE_TABLE));
-            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0",
+            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
+            Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.CREATE_FUNCTION));
+            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db0",
                     PrivilegeType.CREATE_MATERIALIZED_VIEW));
 
             // check: grant create_priv on db1.*
             ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("userWithDbCreate", "%"));
-            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.CREATE_TABLE));
-            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
-            Assert.assertFalse(PrivilegeManager.checkCatalogAction(ctx, "default_catalog",
+            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
+            Assert.assertFalse(PrivilegeActions.checkCatalogAction(ctx, "default_catalog",
                     PrivilegeType.CREATE_DATABASE));
-            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.CREATE_TABLE));
-            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.CREATE_VIEW));
+            Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.CREATE_TABLE));
+            Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.CREATE_VIEW));
             ctx.setCurrentUserIdentity(createUserByRole("userWithDbCreate"));
-            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.CREATE_TABLE));
-            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
-            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.CREATE_TABLE));
-            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.CREATE_VIEW));
+            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
+            Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.CREATE_TABLE));
+            Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.CREATE_VIEW));
 
             // can't create view or table anymore
             for (UserIdentity userIdentity : Arrays.asList(
@@ -529,8 +529,8 @@ public class AuthUpgraderTest {
                     UserIdentity.createAnalyzedUserIdentWithIp("viewCreate", "%"),
                     createUserByRole("viewCreate"))) {
                 ctx.setCurrentUserIdentity(userIdentity);
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.CREATE_TABLE));
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.CREATE_VIEW));
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.CREATE_TABLE));
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.CREATE_VIEW));
             }
         }
     }
@@ -570,27 +570,27 @@ public class AuthUpgraderTest {
             for (String user : users) {
                 UserIdentity uid = UserIdentity.createAnalyzedUserIdentWithIp(user, "%");
                 ctx.setCurrentUserIdentity(uid);
-                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DROP));
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
+                Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.DROP));
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
             }
             ctx.setCurrentUserIdentity(createUserByRole("userWithGlobalDrop"));
-            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DROP));
-            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
+            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.DROP));
+            Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
 
             // check: grant drop_priv on db1.*
             for (UserIdentity userIdentity : Arrays.asList(
                     UserIdentity.createAnalyzedUserIdentWithIp("userWithDbDrop", "%"),
                     createUserByRole("userWithDbDrop"))) {
                 ctx.setCurrentUserIdentity(userIdentity);
-                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DROP));
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DROP));
-                Assert.assertTrue(PrivilegeManager.checkTableAction(
+                Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.DROP));
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.DROP));
+                Assert.assertTrue(PrivilegeActions.checkTableAction(
                         ctx, "db1", "tbl0", PrivilegeType.DROP));
-                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                Assert.assertFalse(PrivilegeActions.checkTableAction(
                         ctx, "db0", "tbl0", PrivilegeType.DROP));
-                Assert.assertTrue(PrivilegeManager.checkViewAction(
+                Assert.assertTrue(PrivilegeActions.checkViewAction(
                         ctx, "db1", "view", PrivilegeType.DROP));
-                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                Assert.assertFalse(PrivilegeActions.checkViewAction(
                         ctx, "db0", "view", PrivilegeType.DROP));
             }
 
@@ -599,15 +599,15 @@ public class AuthUpgraderTest {
                     UserIdentity.createAnalyzedUserIdentWithIp("tableDrop", "%"),
                     createUserByRole("tableDrop"))) {
                 ctx.setCurrentUserIdentity(userIdentity);
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DROP));
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DROP));
-                Assert.assertTrue(PrivilegeManager.checkTableAction(
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.DROP));
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.DROP));
+                Assert.assertTrue(PrivilegeActions.checkTableAction(
                         ctx, "db0", "tbl0", PrivilegeType.DROP));
-                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                Assert.assertFalse(PrivilegeActions.checkTableAction(
                         ctx, "db0", "tbl1", PrivilegeType.DROP));
-                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                Assert.assertFalse(PrivilegeActions.checkViewAction(
                         ctx, "db0", "view", PrivilegeType.DROP));
-                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                Assert.assertFalse(PrivilegeActions.checkViewAction(
                         ctx, "db1", "view", PrivilegeType.DROP));
             }
 
@@ -616,15 +616,15 @@ public class AuthUpgraderTest {
                     UserIdentity.createAnalyzedUserIdentWithIp("viewDrop", "%"),
                     createUserByRole("viewDrop"))) {
                 ctx.setCurrentUserIdentity(userIdentity);
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DROP));
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DROP));
-                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.DROP));
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.DROP));
+                Assert.assertFalse(PrivilegeActions.checkTableAction(
                         ctx, "db0", "tbl0", PrivilegeType.DROP));
-                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                Assert.assertFalse(PrivilegeActions.checkTableAction(
                         ctx, "db0", "tbl1", PrivilegeType.DROP));
-                Assert.assertTrue(PrivilegeManager.checkViewAction(
+                Assert.assertTrue(PrivilegeActions.checkViewAction(
                         ctx, "db0", "view", PrivilegeType.DROP));
-                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                Assert.assertFalse(PrivilegeActions.checkViewAction(
                         ctx, "db1", "view", PrivilegeType.DROP));
             }
         }
@@ -666,27 +666,27 @@ public class AuthUpgraderTest {
             for (String user : users) {
                 UserIdentity uid = UserIdentity.createAnalyzedUserIdentWithIp(user, "%");
                 ctx.setCurrentUserIdentity(uid);
-                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.ALTER));
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
+                Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.ALTER));
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
             }
             ctx.setCurrentUserIdentity(createUserByRole("userWithGlobalAlter"));
-            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.ALTER));
-            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
+            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.ALTER));
+            Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.CREATE_VIEW));
 
             // check: grant alter_priv on db1.*
             for (UserIdentity userIdentity : Arrays.asList(
                     UserIdentity.createAnalyzedUserIdentWithIp("userWithDbAlter", "%"),
                     createUserByRole("userWithDbAlter"))) {
                 ctx.setCurrentUserIdentity(userIdentity);
-                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.ALTER));
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.ALTER));
-                Assert.assertTrue(PrivilegeManager.checkTableAction(
+                Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.ALTER));
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.ALTER));
+                Assert.assertTrue(PrivilegeActions.checkTableAction(
                         ctx, "db1", "tbl0", PrivilegeType.ALTER));
-                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                Assert.assertFalse(PrivilegeActions.checkTableAction(
                         ctx, "db0", "tbl0", PrivilegeType.ALTER));
-                Assert.assertTrue(PrivilegeManager.checkViewAction(
+                Assert.assertTrue(PrivilegeActions.checkViewAction(
                         ctx, "db1", "view", PrivilegeType.ALTER));
-                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                Assert.assertFalse(PrivilegeActions.checkViewAction(
                         ctx, "db0", "view", PrivilegeType.ALTER));
             }
 
@@ -695,15 +695,15 @@ public class AuthUpgraderTest {
                     UserIdentity.createAnalyzedUserIdentWithIp("tableAlter", "%"),
                     createUserByRole("tableAlter"))) {
                 ctx.setCurrentUserIdentity(userIdentity);
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.ALTER));
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.ALTER));
-                Assert.assertTrue(PrivilegeManager.checkTableAction(
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.ALTER));
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.ALTER));
+                Assert.assertTrue(PrivilegeActions.checkTableAction(
                         ctx, "db0", "tbl0", PrivilegeType.ALTER));
-                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                Assert.assertFalse(PrivilegeActions.checkTableAction(
                         ctx, "db0", "tbl1", PrivilegeType.ALTER));
-                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                Assert.assertFalse(PrivilegeActions.checkViewAction(
                         ctx, "db0", "view", PrivilegeType.ALTER));
-                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                Assert.assertFalse(PrivilegeActions.checkViewAction(
                         ctx, "db1", "view", PrivilegeType.ALTER));
             }
 
@@ -712,15 +712,15 @@ public class AuthUpgraderTest {
                     UserIdentity.createAnalyzedUserIdentWithIp("viewAlter", "%"),
                     createUserByRole("viewAlter"))) {
                 ctx.setCurrentUserIdentity(userIdentity);
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.ALTER));
-                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.ALTER));
-                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db1", PrivilegeType.ALTER));
+                Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db0", PrivilegeType.ALTER));
+                Assert.assertFalse(PrivilegeActions.checkTableAction(
                         ctx, "db0", "tbl0", PrivilegeType.ALTER));
-                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                Assert.assertFalse(PrivilegeActions.checkTableAction(
                         ctx, "db0", "tbl1", PrivilegeType.ALTER));
-                Assert.assertTrue(PrivilegeManager.checkViewAction(
+                Assert.assertTrue(PrivilegeActions.checkViewAction(
                         ctx, "db0", "view", PrivilegeType.ALTER));
-                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                Assert.assertFalse(PrivilegeActions.checkViewAction(
                         ctx, "db1", "view", PrivilegeType.ALTER));
             }
         }
@@ -749,9 +749,9 @@ public class AuthUpgraderTest {
             }
             for (String name : Arrays.asList("node", "noderesource")) {
                 ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(name + "user", "%"));
-                Assert.assertTrue(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.NODE));
+                Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.NODE));
                 ctx.setCurrentUserIdentity(createUserByRole(name + "role"));
-                Assert.assertTrue(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.NODE));
+                Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.NODE));
             }
 
             UserIdentity user = createUserByRole("adminrole");
@@ -838,7 +838,7 @@ public class AuthUpgraderTest {
                         "SELECT command denied to user '" + user.getQualifiedUser());
                 ctx.setCurrentUserIdentity(user);
                 Assert.assertTrue(
-                        PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
+                        PrivilegeActions.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
 
                 for (String sql : allowGrantSQLs) {
                     checkPrivilegeAsUser(user, sql);

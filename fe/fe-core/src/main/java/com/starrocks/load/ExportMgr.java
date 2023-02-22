@@ -52,7 +52,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CancelExportStmt;
@@ -230,7 +230,7 @@ public class ExportMgr {
                         continue;
                     }
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeManager.checkAnyActionOnOrInDb(ConnectContext.get(), db.getFullName())) {
+                        if (!PrivilegeActions.checkAnyActionOnOrInDb(ConnectContext.get(), db.getFullName())) {
                             continue;
                         }
                     } else {
@@ -241,7 +241,7 @@ public class ExportMgr {
                     }
                 } else {
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeManager.checkAnyActionOnTable(ConnectContext.get(),
+                        if (!PrivilegeActions.checkAnyActionOnTable(ConnectContext.get(),
                                 tableName.getDb(),
                                 tableName.getTbl())) {
                             continue;

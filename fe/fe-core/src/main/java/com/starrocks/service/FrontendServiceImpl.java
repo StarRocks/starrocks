@@ -96,7 +96,7 @@ import com.starrocks.mysql.privilege.TablePrivEntry;
 import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.StreamLoadPlanner;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
@@ -273,7 +273,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (String fullName : dbNames) {
             if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, fullName)) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
                     continue;
                 }
             } else {
@@ -292,7 +292,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setDbs(dbs);
         return result;
     }
-
 
 
     @Override
@@ -324,7 +323,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 LOG.debug("get table: {}, wait to check", tableName);
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                     Table tbl = db.getTable(tableName);
-                    if (!PrivilegeManager.checkAnyActionOnTableLikeObject(currentUser, params.db, tbl)) {
+                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, tbl)) {
                         continue;
                     }
                 } else {
@@ -376,7 +375,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
                 for (Table table : tables) {
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeManager.checkAnyActionOnTableLikeObject(currentUser, params.db, table)) {
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, table)) {
                             continue;
                         }
                     } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
@@ -400,7 +399,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         for (TableName tableName : allTables.keySet()) {
                             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                                 Table tbl = db.getTable(tableName.getTbl());
-                                if (!PrivilegeManager.checkAnyActionOnTableLikeObject(currentUser, tableName.getDb(), tbl)) {
+                                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
+                                        tableName.getDb(), tbl)) {
                                     break;
                                 }
                             } else {
@@ -492,7 +492,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (Table.TableType.MATERIALIZED_VIEW == table.getType()) {
                     MaterializedView mvTable = (MaterializedView) table;
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeManager.checkAnyActionOnTableLikeObject(currentUser, dbName, mvTable)) {
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, dbName, mvTable)) {
                             continue;
                         }
                     } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
@@ -548,7 +548,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         for (Task task : taskList) {
             if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, task.getDbName())) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, task.getDbName())) {
                     continue;
                 }
             } else if (!globalStateMgr.getAuth().checkDbPriv(currentUser, task.getDbName(), PrivPredicate.SHOW)) {
@@ -592,7 +592,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         for (TaskRunStatus status : taskRunList) {
             if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, status.getDbName())) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, status.getDbName())) {
                     continue;
                 }
             } else {
@@ -799,7 +799,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         if (db != null) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnTableLikeObject(currentUser, params.db,
+                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db,
                         db.getTable(params.getTable_name()))) {
                     return result;
                 }
@@ -827,7 +827,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         boolean reachLimit;
         for (String fullName : dbNames) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, fullName)) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
                     continue;
                 }
             } else {
@@ -841,7 +841,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 for (String tableName : db.getTableNamesViewWithLock()) {
                     LOG.debug("get table: {}, wait to check", tableName);
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeManager.checkAnyActionOnTableLikeObject(currentUser, fullName, db.getTable(tableName))) {
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
+                                fullName, db.getTable(tableName))) {
                             continue;
                         }
                     } else {
@@ -1014,7 +1015,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
             }
             // check INSERT action on table
-            if (!PrivilegeManager.checkTableAction(currentUser, db, tbl, PrivilegeType.INSERT)) {
+            if (!PrivilegeActions.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT)) {
                 throw new AuthenticationException(
                         "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
             }
@@ -1489,7 +1490,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!PrivilegeManager.checkTableAction(userIdentity, dbName,
+                    if (!PrivilegeActions.checkTableAction(userIdentity, null, dbName,
                             tableName, PrivilegeType.INSERT)) {
                         throw new UnauthorizedException(String.format(
                                 "Access denied; user '%s'@'%s' need INSERT action on %s.%s for this operation",
@@ -1643,7 +1644,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
         String fnName = functionCallExpr.getFnName().getFunction();
-        long interval =  1;
+        long interval = 1;
         String granularity;
         if (fnName.equals(FunctionSet.DATE_TRUNC)) {
             List<Expr> paramsExprs = functionCallExpr.getParams().exprs();

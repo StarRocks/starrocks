@@ -24,8 +24,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -162,7 +162,7 @@ public class ResourceGroupMgr implements Writable {
                 List<String> roleNameList = GlobalStateMgr.getCurrentState().getPrivilegeManager()
                         .getRoleNamesByUser(ctx.getCurrentUserIdentity());
                 roleNameList =
-                        roleNameList.stream().filter(r -> !PrivilegeManager.BUILT_IN_ROLE_NAMES.contains(r))
+                        roleNameList.stream().filter(r -> !PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(r))
                                 .collect(Collectors.toList());
                 if (roleNameList.isEmpty()) {
                     return null;
@@ -513,7 +513,7 @@ public class ResourceGroupMgr implements Writable {
             if (shortQueryResourceGroup != null) {
                 List<ResourceGroupClassifier> shortQueryClassifierList =
                         shortQueryResourceGroup.classifiers.stream().filter(
-                                f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
+                                        f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
                                 .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
                                 .collect(Collectors.toList());
                 if (!shortQueryClassifierList.isEmpty()) {
