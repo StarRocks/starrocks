@@ -24,11 +24,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
->>>>>>> 65563d518 ([BugFix] Use rollup not table to check UnUsedOutputColumns (#18208))
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
