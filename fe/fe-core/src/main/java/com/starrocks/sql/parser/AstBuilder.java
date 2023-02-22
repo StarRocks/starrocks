@@ -828,6 +828,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitCreateTemporaryTableStatement(StarRocksParser.CreateTemporaryTableStatementContext context) {
+        CreateTableStmt createTableStmt = new CreateTableStmt(
+                false,
+                false,
+                qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
+                null,
+                EngineType.defaultEngine().name(),
+                null,
+                null,
+                null,
+                new HashMap<>(),
+                null,
+                null);
+
+        return new CreateTableAsSelectStmt(
+                createTableStmt,
+                null,
+                (QueryStatement) visit(context.queryStatement()));
+    }
+
+    @Override
     public ParseNode visitCreateTableAsSelectStatement(StarRocksParser.CreateTableAsSelectStatementContext context) {
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {

@@ -55,6 +55,7 @@ statement
     // Table Statement
     | createTableStatement
     | createTableAsSelectStatement
+    | createTemporaryTableStatement
     | createTableLikeStatement
     | showCreateTableStatement
     | dropTableStatement
@@ -382,6 +383,11 @@ fromRollup
     : FROM identifier
     ;
 
+createTemporaryTableStatement
+    : CREATE TEMPORARY TABLE qualifiedName
+        queryStatement
+    ;
+
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
         ('(' identifier (',' identifier)* ')')?
@@ -394,7 +400,7 @@ createTableAsSelectStatement
         ;
 
 dropTableStatement
-    : DROP TABLE (IF EXISTS)? qualifiedName FORCE?
+    : DROP TEMPORARY? TABLE (IF EXISTS)? qualifiedName FORCE?
     ;
 
 alterTableStatement
