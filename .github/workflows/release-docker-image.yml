@@ -32,11 +32,11 @@ jobs:
 
       - name: build artifact docker image
         run: |
-          DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/artifact-ubuntu.Dockerfile -t artifact-ubuntu:${RELEASE_VERSION} .
+          DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/artifacts/artifact-ubuntu.Dockerfile -t artifact-ubuntu:${RELEASE_VERSION} .
 
       - name: build and publish fe docker image
         run: |
-          DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACTIMAGE=artifact-ubuntu:${RELEASE_VERSION} -f docker/dockerfiles/fe-ubuntu.Dockerfile -t ${REGISTRY}/fe-ubuntu:${RELEASE_VERSION} .
+          DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACTIMAGE=artifact-ubuntu:${RELEASE_VERSION} -f docker/dockerfiles/fe/fe-ubuntu.Dockerfile -t ${REGISTRY}/fe-ubuntu:${RELEASE_VERSION} .
           # Pushing to the GitHub packages docker registry regularly fails with "unknown blob" errors. The "fix" suggested by GitHub is looping.
           until docker push ${REGISTRY}/fe-ubuntu:${RELEASE_VERSION}
           do
@@ -44,7 +44,7 @@ jobs:
           done
       - name: build and publish be docker image
         run: |
-          DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACTIMAGE=artifact-ubuntu:${RELEASE_VERSION} -f docker/dockerfiles/be-ubuntu.Dockerfile -t ${REGISTRY}/be-ubuntu:${RELEASE_VERSION} .
+          DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACTIMAGE=artifact-ubuntu:${RELEASE_VERSION} -f docker/dockerfiles/be/be-ubuntu.Dockerfile -t ${REGISTRY}/be-ubuntu:${RELEASE_VERSION} .
           # Pushing to the GitHub packages docker registry regularly fails with "unknown blob" errors. The "fix" suggested by GitHub is looping.
           until docker push ${REGISTRY}/be-ubuntu:${RELEASE_VERSION}
           do
