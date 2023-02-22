@@ -149,7 +149,8 @@ public class ColumnRewriter {
                     }
                 }
                 if (!found) {
-                    LOG.warn("can not find column ref:{} in target relation:{}", columnRef, targetRelationId);
+                    LOG.warn("can not find column ref id:{} name:{} in target relation:{}",
+                            columnRef.getId(), columnRef.getName(), targetRelationId);
                 }
             }
             if (enableEquivalenceClassesRewrite && equivalenceClasses != null) {

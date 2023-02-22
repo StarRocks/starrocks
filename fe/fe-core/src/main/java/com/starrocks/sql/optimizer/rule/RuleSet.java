@@ -363,14 +363,14 @@ public class RuleSet {
         ));
 
         REWRITE_RULES.put(RuleSetType.SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
-                OnlyScanRule.getInstance(),
+                AggregateAggregateScanRule.getInstance(),
                 AggregateScanRule.getInstance(),
-                AggregateAggregateScanRule.getInstance()
+                OnlyScanRule.getInstance()
         ));
 
         REWRITE_RULES.put(RuleSetType.MULTI_TABLE_MV_REWRITE, ImmutableList.of(
-                OnlyJoinRule.getInstance(),
-                AggregateJoinRule.getInstance()
+                AggregateJoinRule.getInstance(),
+                OnlyJoinRule.getInstance()
         ));
     }
 
