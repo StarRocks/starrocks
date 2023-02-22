@@ -523,6 +523,16 @@ public class SchemaTable extends Table {
                                     .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .build()))
+                    .put("be_metrics", new SchemaTable(
+                            SystemId.BE_METRICS_ID,
+                            "be_metrics",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("LABELS", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("VALUE", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .build()))
                     .build();
 
     public static class Builder {
@@ -611,7 +621,8 @@ public class SchemaTable extends Table {
                 TSchemaTableType.SCH_VERBOSE_SESSION_VARIABLES),
         SCH_BE_TABLETS("BE_TABLETS", "BE_TABLETS",
                 TSchemaTableType.SCH_BE_TABLETS),
-        SCH_INVALID("NULL", "NULL", TSchemaTableType.SCH_INVALID);
+        SCH_BE_METRICS("BE_METRICS", "BE_METRICS",
+                TSchemaTableType.SCH_BE_METRICS);
 
         private final String description;
         private final String tableName;
