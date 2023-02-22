@@ -766,7 +766,7 @@ public class ShowExecutorTest {
             }
         };
 
-        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHARED_DATA);
+        globalStateMgr.setRunMode(RunMode.SHARED_DATA);
 
         ShowBackendsStmt stmt = new ShowBackendsStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -784,6 +784,8 @@ public class ShowExecutorTest {
         Assert.assertEquals("1", resultSet.getString(0));
         Assert.assertEquals("0", resultSet.getString(23));
         Assert.assertEquals("5", resultSet.getString(27));
+
+        globalStateMgr.setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
@@ -814,7 +816,7 @@ public class ShowExecutorTest {
         };
 
 
-        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHARED_DATA);
+        globalStateMgr.setRunMode(RunMode.SHARED_DATA);
 
         ShowComputeNodesStmt stmt = new ShowComputeNodesStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -831,6 +833,8 @@ public class ShowExecutorTest {
         Assert.assertEquals("10", resultSet.getString(14));
         Assert.assertEquals("1.00 %", resultSet.getString(15));
         Assert.assertEquals("3.0 %", resultSet.getString(16));
+
+        globalStateMgr.setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test

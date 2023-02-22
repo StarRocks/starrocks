@@ -42,7 +42,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.RunMode;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -275,7 +274,7 @@ public class SystemInfoServiceTest {
         }
 
         // test removeWorker
-        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHARED_DATA);
+        globalStateMgr.setRunMode(RunMode.SHARED_DATA);
 
         StarOSAgent starosAgent = new StarOSAgent();
         new Expectations(starosAgent) {
@@ -322,6 +321,8 @@ public class SystemInfoServiceTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }
+
+        globalStateMgr.setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test

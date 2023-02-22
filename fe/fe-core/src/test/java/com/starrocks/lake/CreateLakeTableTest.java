@@ -56,12 +56,12 @@ public class CreateLakeTableTest {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
 
-        Config.run_mode = RunMode.SHARED_DATA.name();
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
     }
 
     @AfterClass
     public static void afterClass() {
-        Config.run_mode = RunMode.SHARED_NOTHING.name();
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 
     private static void createTable(String sql) throws Exception {

@@ -502,6 +502,10 @@ public class GlobalStateMgr {
         return runMode.equals(RunMode.SHARED_DATA);
     }
 
+    public void setRunMode(RunMode runmode) {
+        this.runMode = runmode;
+    }
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
