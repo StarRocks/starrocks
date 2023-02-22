@@ -29,7 +29,7 @@ Hive Catalog 是一种 External Catalog。通过 Hive Catalog，您不需要执�
 - Assumed Role
 - IAM User
 
-有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作).
+有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作)。
 
 ### HDFS
 
