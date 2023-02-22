@@ -1112,12 +1112,28 @@ public class PlanFragmentBuilder {
                                 case "TABLE_NAME":
                                     scanNode.setSchemaTable(constantOperator.getVarchar());
                                     break;
+                                case "BE_ID":
+                                    scanNode.setBeId(constantOperator.getBigint());
+                                    break;
+                                case "TABLE_ID":
+                                    scanNode.setTableId(constantOperator.getBigint());
+                                    break;
+                                case "PARTITION_ID":
+                                    scanNode.setPartitionId(constantOperator.getBigint());
+                                    break;
+                                case "TABLET_ID":
+                                    scanNode.setTabletId(constantOperator.getBigint());
+                                    break;
                                 default:
                                     break;
                             }
                         }
                     }
                 }
+            }
+
+            if (scanNode.isBeSchemaTable()) {
+                scanNode.computeBeScanRanges();
             }
 
             context.getScanNodes().add(scanNode);

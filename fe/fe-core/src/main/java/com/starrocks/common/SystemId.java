@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.common;
 
 // used for system table.
@@ -69,4 +68,5 @@ public class SystemId {
 
     public static final long VERBOSE_SESSION_VARIABLES_ID = 25L;
 
+    public static final long BE_TABLETS_ID = 26L;
 }

@@ -503,6 +503,26 @@ public class SchemaTable extends Table {
                                             .column("SORT_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("PROPERTIES", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .build()))
+                    .put("be_tablets", new SchemaTable(
+                            SystemId.BE_TABLETS_ID,
+                            "be_tablets",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TABLE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("PARTITION_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TABLET_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NUM_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("MAX_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("MIN_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NUM_ROWSET", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NUM_ROW", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("DATA_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("INDEX_MEM", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CREATE_TIME", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
                     .build();
 
     public static class Builder {
@@ -589,6 +609,8 @@ public class SchemaTable extends Table {
         SCH_TASK_RUNS("TASK_RUNS", "TASK_RUNS", TSchemaTableType.SCH_TASK_RUNS),
         SCH_VERBOSE_SESSION_VARIABLES("VERBOSE_SESSION_VARIABLES", "VERBOSE_SESSION_VARIABLES",
                 TSchemaTableType.SCH_VERBOSE_SESSION_VARIABLES),
+        SCH_BE_TABLETS("BE_TABLETS", "BE_TABLETS",
+                TSchemaTableType.SCH_BE_TABLETS),
         SCH_INVALID("NULL", "NULL", TSchemaTableType.SCH_INVALID);
 
         private final String description;

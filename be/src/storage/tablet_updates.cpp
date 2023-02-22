@@ -20,6 +20,7 @@
 
 #include "common/status.h"
 #include "common/tracer.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/stl_util.h"
@@ -3073,6 +3074,44 @@ Status TabletUpdates::check_and_remove_rowset() {
         return Status::InternalError(msg);
     }
     return Status::OK();
+}
+
+void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
+    vector<uint32_t> rowsets;
+    {
+        std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            LOG(WARNING) << "tablet delete when get_tablet_info_extra tablet:" << _tablet.tablet_id();
+            return;
+        }
+        info.num_version = _edit_version_infos.size();
+        info.min_version = _edit_version_infos[0]->version.major();
+        auto& v = _edit_version_infos[_edit_version_infos.size() - 1];
+        info.max_version = v->version.major();
+        info.num_rowset = v->rowsets.size();
+        rowsets = v->rowsets;
+    }
+    int64_t total_row = 0;
+    int64_t total_size = 0;
+    {
+        std::lock_guard lg(_rowset_stats_lock);
+        for (uint32_t rowsetid : rowsets) {
+            auto itr = _rowset_stats.find(rowsetid);
+            if (itr != _rowset_stats.end()) {
+                // TODO(cbl): also report num deletes
+                total_row += itr->second->num_rows;
+                total_size += itr->second->byte_size;
+            }
+        }
+    }
+    info.num_row = total_row;
+    info.data_size = total_size;
+    auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
+    auto index_entry = index_cache.get(_tablet.tablet_id());
+    if (index_entry != nullptr) {
+        info.index_mem = index_entry->size();
+        index_cache.release(index_entry);
+    }
 }
 
 void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
