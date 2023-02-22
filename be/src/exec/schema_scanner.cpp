@@ -15,6 +15,7 @@
 #include "exec/schema_scanner.h"
 
 #include "column/type_traits.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "exec/schema_scanner/schema_charsets_scanner.h"
 #include "exec/schema_scanner/schema_collations_scanner.h"
 #include "exec/schema_scanner/schema_columns_scanner.h"
@@ -114,6 +115,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaTablesConfigScanner>();
     case TSchemaTableType::SCH_VERBOSE_SESSION_VARIABLES:
         return std::make_unique<SchemaVariablesScanner>(TVarType::VERBOSE);
+    case TSchemaTableType::SCH_BE_TABLETS:
+        return std::make_unique<SchemaBeTabletsScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

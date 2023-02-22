@@ -44,6 +44,7 @@
 #include <utility>
 
 #include "common/tracer.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -1339,6 +1340,26 @@ void Tablet::reset_compaction() {
 bool Tablet::enable_compaction() {
     std::lock_guard lock(_compaction_task_lock);
     return _enable_compaction;
+}
+
+void Tablet::get_basic_info(TabletBasicInfo& info) {
+    std::shared_lock rdlock(_meta_lock);
+    info.table_id = _tablet_meta->table_id();
+    info.partition_id = _tablet_meta->partition_id();
+    info.tablet_id = _tablet_meta->tablet_id();
+    info.create_time = _tablet_meta->creation_time();
+    info.state = _state;
+    info.type = keys_type();
+    if (_updates != nullptr) {
+        _updates->get_basic_info_extra(info);
+    } else {
+        info.num_version = _tablet_meta->version_count();
+        info.max_version = _timestamped_version_tracker.get_max_continuous_version();
+        info.min_version = _timestamped_version_tracker.get_min_readable_version();
+        info.num_rowset = _tablet_meta->version_count();
+        info.num_row = _tablet_meta->num_rows();
+        info.data_size = _tablet_meta->tablet_footprint();
+    }
 }
 
 } // namespace starrocks
