@@ -60,6 +60,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.RunMode;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
@@ -965,7 +966,6 @@ public class AlterTest {
 
     @Test
     public void testAddPartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
-        Config.use_staros = true;
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
@@ -1000,6 +1000,7 @@ public class AlterTest {
         };
 
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_lake_partition";
@@ -1044,12 +1045,11 @@ public class AlterTest {
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
 
-        Config.use_staros = false;
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
     public void testMultiRangePartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
-        Config.use_staros = true;
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
@@ -1087,6 +1087,7 @@ public class AlterTest {
         };
 
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists site_access";
@@ -1133,7 +1134,8 @@ public class AlterTest {
         dropSQL = "drop table site_access";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-        Config.use_staros = false;
+
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
@@ -1442,7 +1444,6 @@ public class AlterTest {
 
     @Test
     public void testCatalogAddPartitionsAtomicRange() throws Exception {
-
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -1790,7 +1791,6 @@ public class AlterTest {
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-
     }
 
     @Test
@@ -1996,8 +1996,6 @@ public class AlterTest {
 
     @Test
     public void testSingleRangePartitionPersistInfo(@Mocked StarOSAgent agent) throws Exception {
-        Config.use_staros = true;
-
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
 
@@ -2030,6 +2028,7 @@ public class AlterTest {
         };
 
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.new_table (\n" +
@@ -2099,7 +2098,8 @@ public class AlterTest {
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         file.delete();
-        Config.use_staros = false;
+
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test(expected = DdlException.class)
