@@ -103,7 +103,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 return;
             }
 
-            if (!Config.use_staros) {
+            if (GlobalStateMgr.getCurrentState().isSharedNothingMode()) {
                 publishVersionForOlapTable(readyTransactionStates);
                 return;
             }
