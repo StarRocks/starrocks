@@ -74,6 +74,15 @@ void UpdateConfigAction::handle(HttpRequest* req) {
             cache_limit = _exec_env->check_storage_page_cache_size(cache_limit);
             StoragePageCache::instance()->set_capacity(cache_limit);
         });
+        _config_callback.emplace("disable_storage_page_cache", [&]() {
+            if (config::disable_storage_page_cache) {
+                StoragePageCache::instance()->set_capacity(0);
+            } else {
+                int64_t cache_limit = _exec_env->get_storage_page_cache_size();
+                cache_limit = _exec_env->check_storage_page_cache_size(cache_limit);
+                StoragePageCache::instance()->set_capacity(cache_limit);
+            }
+        });
         _config_callback.emplace("max_compaction_concurrency", [&]() {
             StorageEngine::instance()->compaction_manager()->update_max_threads(config::max_compaction_concurrency);
         });
