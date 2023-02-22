@@ -1233,11 +1233,11 @@ executeAsStatement
     ;
 
 createRoleStatement
-    : CREATE ROLE (IF NOT EXISTS)? identifierOrString
+    : CREATE ROLE (IF NOT EXISTS)? roleList
     ;
 
 dropRoleStatement
-    : DROP ROLE (IF EXISTS)? identifierOrString
+    : DROP ROLE (IF EXISTS)? roleList
     ;
 
 showRolesStatement
