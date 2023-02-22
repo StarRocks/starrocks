@@ -22,6 +22,7 @@ applications, and to alter it and redistribute it freely, subject to the followi
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <functional>
 #include <iterator>
@@ -465,11 +466,11 @@ inline Iter partition_left(Iter begin, Iter end, Compare comp) {
 }
 
 template <class Iter, class Compare, bool Branchless>
-inline void pdqsort_loop(const bool& is_canceled, Iter begin, Iter end, Compare comp, int bad_allowed,
+inline void pdqsort_loop(const std::atomic<bool>& is_canceled, Iter begin, Iter end, Compare comp, int bad_allowed,
                          bool leftmost = true) {
     typedef typename std::iterator_traits<Iter>::difference_type diff_t;
 
-    if (UNLIKELY(is_canceled)) {
+    if (UNLIKELY(is_canceled.load())) {
         return;
     }
 
@@ -568,7 +569,7 @@ inline void pdqsort_loop(const bool& is_canceled, Iter begin, Iter end, Compare 
 } // namespace pdqsort_detail
 
 template <class Iter, class Compare>
-inline void pdqsort(const bool& is_cancelled, Iter begin, Iter end, Compare comp) {
+inline void pdqsort(const std::atomic<bool>& is_cancelled, Iter begin, Iter end, Compare comp) {
     if (begin == end) return;
 
 #if __cplusplus >= 201103L
@@ -583,20 +584,20 @@ inline void pdqsort(const bool& is_cancelled, Iter begin, Iter end, Compare comp
 }
 
 template <class Iter>
-inline void pdqsort(const bool& is_cancelled, Iter begin, Iter end) {
+inline void pdqsort(const std::atomic<bool>& is_cancelled, Iter begin, Iter end) {
     typedef typename std::iterator_traits<Iter>::value_type T;
     pdqsort(is_cancelled, begin, end, std::less<T>());
 }
 
 template <class Iter, class Compare>
-inline void pdqsort_branchless(const bool& is_cancelled, Iter begin, Iter end, Compare comp) {
+inline void pdqsort_branchless(const std::atomic<bool>& is_cancelled, Iter begin, Iter end, Compare comp) {
     if (begin == end) return;
     pdqsort_detail::pdqsort_loop<Iter, Compare, true>(is_cancelled, begin, end, comp,
                                                       pdqsort_detail::log2(end - begin));
 }
 
 template <class Iter>
-inline void pdqsort_branchless(const bool& is_cancelled, Iter begin, Iter end) {
+inline void pdqsort_branchless(const std::atomic<bool>& is_cancelled, Iter begin, Iter end) {
     typedef typename std::iterator_traits<Iter>::value_type T;
     pdqsort_branchless(is_cancelled, begin, end, std::less<T>());
 }
