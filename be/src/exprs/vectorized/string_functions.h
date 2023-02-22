@@ -293,18 +293,27 @@ public:
                                starrocks_udf::FunctionContext::FunctionStateScope scope);
 
     /**
-     * @param: [string_value, pattern_value, index_value
+     * @param: [string_value, pattern_value, index_value]
      * @paramType: [BinaryColumn, BinaryColumn, Int64Column]
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(regexp_extract);
 
     /**
-     * @param: [string_value, pattern_value, replace_value
+     * @param: [string_value, pattern_value, replace_value]
      * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(regexp_replace);
+
+    /**
+     * @param: [string_value, pattern_value, replace_value]
+     * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(replace);
+    static Status replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status replace_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [DOUBLE]

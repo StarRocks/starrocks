@@ -2914,8 +2914,121 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
     return regexp_replace_general(context, options, columns);
 }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/string_functions.cpp
 StatusOr<ColumnPtr> StringFunctions::money_format_double(FunctionContext* context,
                                                          const starrocks::vectorized::Columns& columns) {
+=======
+struct ReplaceState {
+    bool only_null{false};
+
+    bool const_pattern{false};
+    bool const_repl{false};
+
+    std::string pattern;
+    std::string repl;
+};
+
+Status StringFunctions::replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new ReplaceState();
+    context->set_function_state(scope, state);
+
+    if (!context->is_constant_column(1)) {
+        return Status::OK();
+    }
+
+    const auto pattern_col = context->get_constant_column(1);
+    if (pattern_col->only_null()) {
+        state->only_null = true;
+        return Status::OK();
+    }
+
+    state->const_pattern = true;
+    const auto pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(pattern_col);
+    state->pattern = pattern.to_string();
+
+    if (!context->is_constant_column(2)) {
+        return Status::OK();
+    }
+
+    const auto replace_col = context->get_constant_column(2);
+    if (replace_col->only_null()) {
+        state->only_null = true;
+        return Status::OK();
+    }
+
+    state->const_repl = true;
+    const auto repl = ColumnHelper::get_const_value<TYPE_VARCHAR>(replace_col);
+    state->repl = repl.to_string();
+
+    return Status::OK();
+}
+
+Status StringFunctions::replace_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = reinterpret_cast<ReplaceState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    delete state;
+
+    return Status::OK();
+}
+
+static void replace_all(std::string& str, const std::string& ptn, const std::string& rpl) {
+    if (ptn.empty()) {
+        return;
+    }
+
+    for (auto found = str.find(ptn); found != std::string::npos; found = str.find(ptn, found + rpl.length())) {
+        str.replace(found, ptn.length(), rpl);
+    }
+}
+
+StatusOr<ColumnPtr> StringFunctions::replace(FunctionContext* context, const Columns& columns) {
+    const auto state =
+            reinterpret_cast<const ReplaceState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (state->const_pattern && state->pattern.empty()) {
+        return columns[0];
+    }
+
+    const auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    const auto size = str_viewer.size();
+    if (state->only_null) {
+        return NullableColumn::create(str_viewer.column(), NullColumn::create(size, 1));
+    }
+
+    const auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    const auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row) || (!state->const_pattern && ptn_viewer.is_null(row)) ||
+            (!state->const_repl && rpl_viewer.is_null(row))) {
+            result.append_null();
+            continue;
+        }
+
+        const auto str_slice = str_viewer.value(row);
+        if (str_slice.empty()) {
+            result.append(str_slice);
+            continue;
+        }
+
+        std::string str = str_slice.to_string();
+        replace_all(str, state->const_pattern ? state->pattern : ptn_viewer.value(row).to_string(),
+                    state->const_repl ? state->repl : rpl_viewer.value(row).to_string());
+        result.append(Slice(str.data(), str.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> StringFunctions::money_format_double(FunctionContext* context, const starrocks::Columns& columns) {
+>>>>>>> 1d708efdc ([Feature] Add String Function 'replace' (#18088)):be/src/exprs/string_functions.cpp
     auto money_viewer = ColumnViewer<TYPE_DOUBLE>(columns[0]);
 
     auto size = columns[0]->size();

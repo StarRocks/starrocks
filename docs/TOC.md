@@ -569,6 +569,7 @@
       + [null_or_empty](./sql-reference/sql-functions/string-functions/null_or_empty.md)
       + [parse_url](./sql-reference/sql-functions/string-functions/parse_url.md)
       + [repeat](./sql-reference/sql-functions/string-functions/repeat.md)
+      + [replace](./sql-reference/sql-functions/string-functions/replace.md)
       + [reverse](./sql-reference/sql-functions/string-functions/reverse.md)
       + [right](./sql-reference/sql-functions/string-functions/right.md)
       + [rpad](./sql-reference/sql-functions/string-functions/rpad.md)
