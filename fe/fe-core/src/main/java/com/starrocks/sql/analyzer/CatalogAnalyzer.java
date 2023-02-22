@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UseCatalogStmt;
 
 import java.util.Map;
 
@@ -77,6 +78,26 @@ public class CatalogAnalyzer {
             if (isResourceMappingCatalog(name)) {
                 throw new SemanticException("Can't drop the resource mapping catalog");
             }
+
+            return null;
+        }
+
+        @Override
+        public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+            if (Strings.isNullOrEmpty(statement.getCatalogAndItsName())) {
+                throw new SemanticException("'catalog name' can not be null or empty");
+            }
+
+            String[] catalogAndItsName = statement.getCatalogAndItsName().split("\\s+");
+            if (catalogAndItsName.length == 0 || !catalogAndItsName[0].equalsIgnoreCase("CATALOG")) {
+                throw new SemanticException("'catalog name' should start with 'catalog'");
+            }
+
+            if (catalogAndItsName.length != 2) {
+                throw new SemanticException("'catalog name' should end with a catalog name");
+            }
+
+            FeNameFormat.checkCatalogName(catalogAndItsName[1]);
 
             return null;
         }
