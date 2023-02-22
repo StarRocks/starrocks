@@ -795,6 +795,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableFilterUnusedColumnsInScanStage;
     }
 
+    public void setEnableFilterUnusedColumnsInScanStage(boolean enableFilterUnusedColumnsInScanStage) {
+        this.enableFilterUnusedColumnsInScanStage = enableFilterUnusedColumnsInScanStage;
+    }
+
     public void disableTrimOnlyFilteredColumnsInScanStage() {
         this.enableFilterUnusedColumnsInScanStage = false;
     }
