@@ -50,6 +50,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggT
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.SingleTableMvRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
@@ -324,10 +325,13 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
         ruleRewriteIterative(tree, rootTaskContext, new RewriteMinMaxAggToMetaScanRule());
 
+        // if mv has multi table sources, we will process it in memo to support view delta join rewrite
         if (!optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
                 && sessionVariable.isEnableMaterializedViewRewrite()
                 && sessionVariable.isEnableRuleBasedMaterializedViewRewrite()
-                && !rootTaskContext.getOptimizerContext().getCandidateMvs().isEmpty()) {
+                && !rootTaskContext.getOptimizerContext().getCandidateMvs().isEmpty()
+                && rootTaskContext.getOptimizerContext().getCandidateMvs()
+                .stream().allMatch(context -> !context.hasMultiTables())) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
@@ -411,6 +415,10 @@ public class Optimizer {
 
         if (!context.getCandidateMvs().isEmpty()
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()) {
+            if (rootTaskContext.getOptimizerContext().getCandidateMvs()
+                    .stream().anyMatch(context -> context.hasMultiTables())) {
+                new SingleTableMvRewriteRule().transform(tree, context);
+            }
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
 

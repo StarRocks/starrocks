@@ -1706,8 +1706,6 @@ public class CreateMaterializedViewTest {
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("You have an error in your SQL syntax; check the manual that " +
                     "corresponds to your MySQL server version for the right syntax to use near '(' at line 1"));
-        } finally {
-            dropMv("testAsSelectItemAlias1");
         }
     }
 

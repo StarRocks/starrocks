@@ -104,6 +104,226 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 .withTable(empsTable)
                 .withTable(locationsTable)
                 .withTable(ependentsTable);
+
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer` (\n" +
+                "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
+                "    `c_address` varchar(41) NOT NULL COMMENT \"\",\n" +
+                "    `c_city` varchar(11) NOT NULL COMMENT \"\",\n" +
+                "    `c_nation` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `c_region` varchar(13) NOT NULL COMMENT \"\",\n" +
+                "    `c_phone` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `c_mktsegment` varchar(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c_custkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa2\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"unique_constraints\" = \"c_custkey\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")\n");
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `dates` (\n" +
+                "    `d_datekey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_date` varchar(20) NOT NULL COMMENT \"\",\n" +
+                "    `d_dayofweek` varchar(10) NOT NULL COMMENT \"\",\n" +
+                "    `d_month` varchar(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_year` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_yearmonthnum` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_yearmonth` varchar(9) NOT NULL COMMENT \"\",\n" +
+                "    `d_daynuminweek` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_daynuminmonth` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_daynuminyear` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_monthnuminyear` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_weeknuminyear` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_sellingseason` varchar(14) NOT NULL COMMENT \"\",\n" +
+                "    `d_lastdayinweekfl` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_lastdayinmonthfl` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_holidayfl` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_weekdayfl` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`d_datekey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`d_datekey`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"colocate_with\" = \"groupa3\",\n" +
+                "    \"unique_constraints\" = \"d_datekey\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `part` (\n" +
+                "    `p_partkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `p_name` varchar(23) NOT NULL COMMENT \"\",\n" +
+                "    `p_mfgr` varchar(7) NOT NULL COMMENT \"\",\n" +
+                "    `p_category` varchar(8) NOT NULL COMMENT \"\",\n" +
+                "    `p_brand` varchar(10) NOT NULL COMMENT \"\",\n" +
+                "    `p_color` varchar(12) NOT NULL COMMENT \"\",\n" +
+                "    `p_type` varchar(26) NOT NULL COMMENT \"\",\n" +
+                "    `p_size` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `p_container` varchar(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`p_partkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa5\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"unique_constraints\" = \"p_partkey\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+        starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `supplier` (\n" +
+                "    `s_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `s_name` varchar(26) NOT NULL COMMENT \"\",\n" +
+                "    `s_address` varchar(26) NOT NULL COMMENT \"\",\n" +
+                "    `s_city` varchar(11) NOT NULL COMMENT \"\",\n" +
+                "    `s_nation` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `s_region` varchar(13) NOT NULL COMMENT \"\",\n" +
+                "    `s_phone` varchar(16) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`s_suppkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa4\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"unique_constraints\" = \"s_suppkey\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder` (\n" +
+                "    `lo_orderkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_linenumber` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_custkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_partkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_orderdate` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_orderpriority` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `lo_shippriority` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_quantity` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_extendedprice` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_ordtotalprice` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_discount` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_revenue` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_supplycost` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_tax` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_commitdate` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_shipmode` varchar(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`lo_orderkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`lo_orderdate`)\n" +
+                "(\n" +
+                "    PARTITION p1 VALUES [(\"-2147483648\"), (\"19930101\")),\n" +
+                "    PARTITION p2 VALUES [(\"19930101\"), (\"19940101\")),\n" +
+                "    PARTITION p3 VALUES [(\"19940101\"), (\"19950101\")),\n" +
+                "    PARTITION p4 VALUES [(\"19950101\"), (\"19960101\")),\n" +
+                "    PARTITION p5 VALUES [(\"19960101\"), (\"19970101\")),\n" +
+                "    PARTITION p6 VALUES [(\"19970101\"), (\"19980101\")),\n" +
+                "    PARTITION p7 VALUES [(\"19980101\"), (\"19990101\")))\n" +
+                "DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa1\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"foreign_key_constraints\" = \"(lo_custkey) REFERENCES customer(c_custkey);" +
+                " (lo_partkey) REFERENCES part(p_partkey);  (lo_suppkey) REFERENCES supplier(s_suppkey);" +
+                "  (lo_orderdate) REFERENCES dates(d_datekey)\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder_null` (\n" +
+                "    `lo_orderkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_linenumber` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_custkey` int(11) COMMENT \"\",\n" +
+                "    `lo_partkey` int(11) COMMENT \"\",\n" +
+                "    `lo_suppkey` int(11) COMMENT \"\",\n" +
+                "    `lo_orderdate` int(11) COMMENT \"\",\n" +
+                "    `lo_orderpriority` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `lo_shippriority` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_quantity` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_extendedprice` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_ordtotalprice` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_discount` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_revenue` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_supplycost` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_tax` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_commitdate` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_shipmode` varchar(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`lo_orderkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`lo_orderdate`)\n" +
+                "(\n" +
+                "    PARTITION p1 VALUES [(\"-2147483648\"), (\"19930101\")),\n" +
+                "    PARTITION p2 VALUES [(\"19930101\"), (\"19940101\")),\n" +
+                "    PARTITION p3 VALUES [(\"19940101\"), (\"19950101\")),\n" +
+                "    PARTITION p4 VALUES [(\"19950101\"), (\"19960101\")),\n" +
+                "    PARTITION p5 VALUES [(\"19960101\"), (\"19970101\")),\n" +
+                "    PARTITION p6 VALUES [(\"19970101\"), (\"19980101\")),\n" +
+                "    PARTITION p7 VALUES [(\"19980101\"), (\"19990101\")))\n" +
+                "DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa1\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"foreign_key_constraints\" = \"(lo_custkey) REFERENCES customer(c_custkey);" +
+                " (lo_partkey) REFERENCES part(p_partkey);  (lo_suppkey) REFERENCES supplier(s_suppkey);" +
+                "  (lo_orderdate) REFERENCES dates(d_datekey)\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+
+        starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t2` (\n" +
+                "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c5`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa4\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"unique_constraints\" = \"c5\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+
+        starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t3` (\n" +
+                "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c5`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa4\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"unique_constraints\" = \"c5\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+
+        starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t1` (\n" +
+                "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c2` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c3` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa4\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"foreign_key_constraints\" = \"(c2) REFERENCES t2(c5);(c3) REFERENCES t2(c5)\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
     }
 
     @AfterClass
@@ -171,7 +391,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String mv = "select emps.deptno as col1, empid as col2, locations.locationid as col3 " +
                 "from emps join locations join depts " +
                 "on emps.locationid = locations.locationid and depts.deptno = emps.deptno";
-        testRewriteFail(mv, "select deptno as col1, empid as col2, locations.locationid as col3 " +
+        testRewriteOK(mv, "select deptno as col1, empid as col2, locations.locationid as col3 " +
                 "from emps join locations on emps.locationid = locations.locationid");
     }
 
@@ -1171,5 +1391,259 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "from emps\n"
                         + "group by deptno, salary) t\n"
                         + "group by deptno");
+    }
+
+    @Test
+    public void testInnerJoinViewDelta() {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+        String mv = "SELECT" +
+                " `l`.`LO_ORDERKEY` as col1, `l`.`LO_ORDERDATE`, `l`.`LO_LINENUMBER`, `l`.`LO_CUSTKEY`, `l`.`LO_PARTKEY`," +
+                " `l`.`LO_SUPPKEY`, `l`.`LO_ORDERPRIORITY`, `l`.`LO_SHIPPRIORITY`, `l`.`LO_QUANTITY`," +
+                " `l`.`LO_EXTENDEDPRICE`, `l`.`LO_ORDTOTALPRICE`, `l`.`LO_DISCOUNT`, `l`.`LO_REVENUE`," +
+                " `l`.`LO_SUPPLYCOST`, `l`.`LO_TAX`, `l`.`LO_COMMITDATE`, `l`.`LO_SHIPMODE`," +
+                " `c`.`C_NAME`, `c`.`C_ADDRESS`, `c`.`C_CITY`, `c`.`C_NATION`, `c`.`C_REGION`, `c`.`C_PHONE`," +
+                " `c`.`C_MKTSEGMENT`, `s`.`S_NAME`, `s`.`S_ADDRESS`, `s`.`S_CITY`, `s`.`S_NATION`, `s`.`S_REGION`," +
+                " `s`.`S_PHONE`, `p`.`P_NAME`, `p`.`P_MFGR`, `p`.`P_CATEGORY`, `p`.`P_BRAND`, `p`.`P_COLOR`," +
+                " `p`.`P_TYPE`, `p`.`P_SIZE`, `p`.`P_CONTAINER`\n" +
+                "FROM `lineorder` AS `l` INNER" +
+                " JOIN `customer` AS `c` ON `c`.`C_CUSTKEY` = `l`.`LO_CUSTKEY`" +
+                " INNER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
+                " INNER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
+
+        String query = "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
+                "FROM `lineorder` INNER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
+                "WHERE `lineorder`.`lo_orderkey` = 100;";
+
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testOuterJoinViewDelta() {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+        String mv = "SELECT" +
+                " `l`.`LO_ORDERKEY` as col1, `l`.`LO_ORDERDATE`, `l`.`LO_LINENUMBER`, `l`.`LO_CUSTKEY`, `l`.`LO_PARTKEY`," +
+                " `l`.`LO_SUPPKEY`, `l`.`LO_ORDERPRIORITY`, `l`.`LO_SHIPPRIORITY`, `l`.`LO_QUANTITY`," +
+                " `l`.`LO_EXTENDEDPRICE`, `l`.`LO_ORDTOTALPRICE`, `l`.`LO_DISCOUNT`, `l`.`LO_REVENUE`," +
+                " `l`.`LO_SUPPLYCOST`, `l`.`LO_TAX`, `l`.`LO_COMMITDATE`, `l`.`LO_SHIPMODE`," +
+                " `c`.`C_NAME`, `c`.`C_ADDRESS`, `c`.`C_CITY`, `c`.`C_NATION`, `c`.`C_REGION`, `c`.`C_PHONE`," +
+                " `c`.`C_MKTSEGMENT`, `s`.`S_NAME`, `s`.`S_ADDRESS`, `s`.`S_CITY`, `s`.`S_NATION`, `s`.`S_REGION`," +
+                " `s`.`S_PHONE`, `p`.`P_NAME`, `p`.`P_MFGR`, `p`.`P_CATEGORY`, `p`.`P_BRAND`, `p`.`P_COLOR`," +
+                " `p`.`P_TYPE`, `p`.`P_SIZE`, `p`.`P_CONTAINER`\n" +
+                "FROM `lineorder` AS `l` " +
+                " LEFT OUTER JOIN `customer` AS `c` ON `c`.`C_CUSTKEY` = `l`.`LO_CUSTKEY`" +
+                " LEFT OUTER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
+                " LEFT OUTER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
+
+        String query = "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
+                "FROM `lineorder` LEFT OUTER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
+                "WHERE `lineorder`.`lo_orderkey` = 100;";
+
+        testRewriteOK(mv, query);
+
+        String mv2 = "SELECT" +
+                " `l`.`LO_ORDERKEY` as col1, `l`.`LO_ORDERDATE`, `l`.`LO_LINENUMBER`, `l`.`LO_CUSTKEY`, `l`.`LO_PARTKEY`," +
+                " `l`.`LO_SUPPKEY`, `l`.`LO_ORDERPRIORITY`, `l`.`LO_SHIPPRIORITY`, `l`.`LO_QUANTITY`," +
+                " `l`.`LO_EXTENDEDPRICE`, `l`.`LO_ORDTOTALPRICE`, `l`.`LO_DISCOUNT`, `l`.`LO_REVENUE`," +
+                " `l`.`LO_SUPPLYCOST`, `l`.`LO_TAX`, `l`.`LO_COMMITDATE`, `l`.`LO_SHIPMODE`," +
+                " `c`.`C_NAME`, `c`.`C_ADDRESS`, `c`.`C_CITY`, `c`.`C_NATION`, `c`.`C_REGION`, `c`.`C_PHONE`," +
+                " `c`.`C_MKTSEGMENT`, `s`.`S_NAME`, `s`.`S_ADDRESS`, `s`.`S_CITY`, `s`.`S_NATION`, `s`.`S_REGION`," +
+                " `s`.`S_PHONE`, `p`.`P_NAME`, `p`.`P_MFGR`, `p`.`P_CATEGORY`, `p`.`P_BRAND`, `p`.`P_COLOR`," +
+                " `p`.`P_TYPE`, `p`.`P_SIZE`, `p`.`P_CONTAINER`\n" +
+                "FROM `lineorder_null` AS `l` " +
+                " LEFT OUTER JOIN `customer` AS `c` ON `c`.`C_CUSTKEY` = `l`.`LO_CUSTKEY`" +
+                " LEFT OUTER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
+                " LEFT OUTER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
+
+        String query2 = "SELECT `lineorder_null`.`lo_orderkey`, `lineorder_null`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
+                "FROM `lineorder_null` LEFT OUTER JOIN `customer` ON `lineorder_null`.`lo_custkey` = `customer`.`c_custkey`\n" +
+                "WHERE `lineorder_null`.`lo_orderkey` = 100;";
+
+        testRewriteOK(mv2, query2);
+    }
+
+    @Test
+    public void testAggJoinViewDelta() {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+        String mv = "SELECT" +
+                " `LO_ORDERKEY` as col1, C_CUSTKEY, S_SUPPKEY, P_PARTKEY," +
+                " sum(LO_QUANTITY) as total_quantity, sum(LO_ORDTOTALPRICE) as total_price, count(*) as num" +
+                " FROM `lineorder` AS `l` " +
+                " LEFT OUTER JOIN `customer` AS `c` ON `c`.`C_CUSTKEY` = `l`.`LO_CUSTKEY`" +
+                " LEFT OUTER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
+                " LEFT OUTER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`" +
+                " group by col1, C_CUSTKEY, S_SUPPKEY, P_PARTKEY";
+
+        String query = "SELECT `lineorder`.`lo_orderkey`, sum(LO_QUANTITY), sum(LO_ORDTOTALPRICE), count(*)\n" +
+                "FROM `lineorder` LEFT OUTER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
+                " group by lo_orderkey";
+
+        testRewriteOK(mv, query);
+    }
+
+    // mv: t1, t2, t2
+    // query: t1, t2
+    @Test
+    public void testViewDeltaJoinUKFK1() {
+        String mv = "select c1 as col1, c2, c3, l.c6, r.c7" +
+                " from t1 join t2 l on t1.c2 = l.c5" +
+                " join t2 r on t1.c3 = r.c5";
+        String query = "select c1, c2, c3, c6 from t1 join t2 on t1.c2 = t2.c5";
+        testRewriteOK(mv, query);
+    }
+
+    // mv: t1, t3, t2, t2
+    // query: t1, t3
+    @Test
+    public void testViewDeltaJoinUKFK2() {
+        String mv = "select c1 as col1, c2, c3, l.c6, r.c7" +
+                " from t1 join t2 l on t1.c2 = l.c5" +
+                " join t2 r on t1.c3 = r.c5" +
+                " join t3 on t1.c2 = t3.c5";
+        String query = "select c1, c2, c3, t3.c5 from t1 join t3 on t1.c2 = t3.c5";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK3() {
+        String mv = "select a.empid, a.deptno from\n"
+                + "(select * from emps where empid = 1) a\n"
+                + "join depts using (deptno)\n"
+                + "join dependents using (empid)";
+        String query = "select a.empid from \n"
+                + "(select * from emps where empid = 1) a\n"
+                + "join dependents using (empid)";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK4() {
+        String mv = "select a.empid, a.deptno from\n"
+                + "(select * from emps where empid = 1) a\n"
+                + "join depts using (deptno)\n"
+                + "join dependents using (empid)";
+        String query = "select a.name from \n"
+                + "(select * from emps where empid = 1) a\n"
+                + "join dependents using (empid)";
+        testRewriteFail(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK5() {
+        String mv = "select a.empid, a.deptno from\n"
+                + "(select * from emps where empid = 1) a\n"
+                + "join depts using (deptno)";
+        String query = "select empid from emps where empid = 1";
+        testRewriteFail(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK6() {
+        String mv = "select emps.empid, emps.deptno from emps\n"
+                + "join depts using (deptno)\n"
+                + "join dependents using (empid)"
+                + "where emps.empid = 1";
+        String query = "select emps.empid from emps\n"
+                + "join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK7() {
+        String mv = "select emps.empid, emps.deptno from emps\n"
+                + "join depts a on (emps.deptno=a.deptno)\n"
+                + "join depts b on (emps.deptno=b.deptno)\n"
+                + "join dependents using (empid)"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid from emps\n"
+                + "join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteOK(mv, query);
+    }
+
+    // join key is not foreign key
+    @Test
+    public void testViewDeltaJoinUKFK8() {
+        String mv = "select emps.empid, emps.deptno from emps\n"
+                + "join depts a on (emps.name=a.name)\n"
+                + "join depts b on (emps.name=b.name)\n"
+                + "join dependents using (empid)"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid from emps\n"
+                + "join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteFail(mv, query);
+    }
+
+    // join key is not foreign key
+    @Test
+    public void testViewDeltaJoinUKFK9() {
+        String mv = "select emps.empid, emps.deptno from emps\n"
+                + "join depts a on (emps.deptno=a.deptno)\n"
+                + "join depts b on (emps.name=b.name)\n"
+                + "join dependents using (empid)"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid from emps\n"
+                + "join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteFail(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK10() {
+        String mv = "select emps.empid as empid1, emps.name, emps.deptno, dependents.empid as empid2 from emps\n"
+                + "join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.empid, emps.deptno\n"
+                + "from emps\n"
+                + "join dependents using (empid)"
+                + "join depts a on (emps.deptno=a.deptno)\n"
+                + "where emps.name = 'Bill'";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK11() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts a on (emps.deptno=a.deptno)\n"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "inner join dependents using (empid)"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "inner join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK12() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "inner join dependents using (empid)"
+                + "left outer join depts a on (emps.deptno=a.deptno)\n"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "inner join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK13() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "inner join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join depts a on (emps.deptno=a.deptno)\n"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "inner join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteOK(mv, query);
     }
 }

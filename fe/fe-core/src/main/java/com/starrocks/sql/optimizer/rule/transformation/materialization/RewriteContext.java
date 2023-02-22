@@ -30,7 +30,7 @@ import java.util.Set;
 public class RewriteContext {
     private final OptExpression queryExpression;
     private final PredicateSplit queryPredicateSplit;
-    private final EquivalenceClasses queryEquivalenceClasses;
+    private EquivalenceClasses queryEquivalenceClasses;
     // key is table relation id
     private final Map<Integer, List<ColumnRefOperator>> queryRelationIdToColumns;
     private final ColumnRefFactory queryRefFactory;
@@ -93,6 +93,10 @@ public class RewriteContext {
 
     public EquivalenceClasses getQueryEquivalenceClasses() {
         return queryEquivalenceClasses;
+    }
+
+    public void setQueryEquivalenceClasses(EquivalenceClasses queryEquivalenceClasses) {
+        this.queryEquivalenceClasses = queryEquivalenceClasses;
     }
 
     public Map<Integer, List<ColumnRefOperator>> getQueryRelationIdToColumns() {
