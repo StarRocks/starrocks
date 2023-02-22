@@ -1339,15 +1339,18 @@ public class Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
+        connectContext.getState().setError(cancelReason.toString());
         if (null != receiver) {
             receiver.cancel();
         }
         cancelRemoteFragmentsAsync(cancelReason);
         if (profileDoneSignal != null && cancelReason != PPlanFragmentCancelReason.LIMIT_REACH) {
             // count down to zero to notify all objects waiting for this
-            profileDoneSignal.countDownToZero(new Status());
-            LOG.info("unfinished instance: {}",
-                    profileDoneSignal.getLeftMarks().stream().map(e -> DebugUtil.printId(e.getKey())).toArray());
+            if (!connectContext.getSessionVariable().isEnableProfile()) {
+                profileDoneSignal.countDownToZero(new Status());
+                LOG.info("unfinished instance: {}",
+                        profileDoneSignal.getLeftMarks().stream().map(e -> DebugUtil.printId(e.getKey())).toArray());
+            }
         }
     }
 
