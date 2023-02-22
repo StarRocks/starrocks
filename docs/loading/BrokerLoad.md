@@ -124,7 +124,7 @@ LOAD LABEL test_db.label1
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, city)
-
+    ,
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
@@ -152,7 +152,7 @@ LOAD LABEL test_db.label2
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, city)
-    
+    ,
     DATA INFILE("s3a://bucket_s3/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
@@ -182,7 +182,7 @@ LOAD LABEL test_db.label3
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, city)
-    
+    ,
     DATA INFILE("s3a://bucket_gcs/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
@@ -245,7 +245,7 @@ LOAD LABEL test_db.label_7
     COLUMNS TERMINATED BY ","
     FORMAT AS "CSV"
 )
-WITH BROKER 
+WITH BROKER "mybroker"
 (
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
@@ -263,7 +263,7 @@ LOAD LABEL test_db.label_8
     COLUMNS TERMINATED BY ","
     FORMAT AS "CSV"
 )
-WITH BROKER 
+WITH BROKER "mybroker"
 (
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
