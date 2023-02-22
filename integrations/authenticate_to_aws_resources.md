@@ -172,10 +172,10 @@ StarRocks 中 Instance Profile、Assumed Role、以及 IAM User 三种认证方�
 
 StarRocks 支持以下四种 External Catalog：
 
-- [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md)
 - [Hive catalog](../data_source/catalog/hive_catalog.md)
-- [Hudi catalog](../data_source/catalog/hudi_catalog.md)
 - [Iceberg catalog](../data_source/catalog/iceberg_catalog.md)
+- [Hudi catalog](../data_source/catalog/hudi_catalog.md)
+- [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md)
 
 以下示例创建了一个名为 `hive_catalog_hms` 或 `hive_catalog_glue` 的 Hive Catalog，用于查询 Hive 集群里的数据。有关详细的语法和参数说明，参见 [Hive catalog](../data_source/catalog/hive_catalog.md)。
 
