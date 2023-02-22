@@ -61,7 +61,7 @@ public:
     // Return true if sink completed and all the data in the chunks_sorters has been pulled out
     bool is_finished();
 
-    // Pull one chunk from sorters or downgrade_buffer
+    // Pull one chunk from sorters or passthrough_buffer
     StatusOr<ChunkPtr> pull_one_chunk();
 
 private:

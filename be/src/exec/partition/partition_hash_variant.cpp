@@ -126,6 +126,11 @@ void PartitionHashMapVariant::init(RuntimeState* state, Type type_) {
     }
 }
 
+void PartitionHashMapVariant::reset() {
+    detail::PartitionHashMapWithKeyPtr ptr;
+    hash_map_with_key = std::move(ptr);
+}
+
 size_t PartitionHashMapVariant::capacity() const {
     return visit([](const auto& hash_map_with_key) { return hash_map_with_key->hash_map.capacity(); });
 }
@@ -142,5 +147,9 @@ size_t PartitionHashMapVariant::size() const {
 
 size_t PartitionHashMapVariant::memory_usage() const {
     return visit([](const auto& hash_map_with_key) { return hash_map_with_key->hash_map.dump_bound(); });
+}
+
+bool PartitionHashMapVariant::is_nullable() const {
+    return visit([](const auto& hash_map_with_key) { return std::decay_t<decltype(*hash_map_with_key)>::is_nullable; });
 }
 } // namespace starrocks
