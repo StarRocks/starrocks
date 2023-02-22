@@ -14,7 +14,8 @@
 
 package com.starrocks.pseudocluster;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.RunMode;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -55,7 +56,7 @@ public class PseudoClusterTest {
 
     @Test
     public void testCreateLakeTable() throws Exception {
-        Config.use_staros = true;
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
@@ -67,6 +68,6 @@ public class PseudoClusterTest {
             stmt.close();
             connection.close();
         }
-        Config.use_staros = false;
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 }

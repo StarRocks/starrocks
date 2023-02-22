@@ -62,9 +62,9 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.RunMode;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
@@ -767,7 +767,8 @@ public class ShowExecutorTest {
             }
         };
 
-        Config.integrate_starmgr = true;
+        globalStateMgr.setRunMode(RunMode.SHARED_DATA);
+
         ShowBackendsStmt stmt = new ShowBackendsStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
@@ -785,7 +786,7 @@ public class ShowExecutorTest {
         Assert.assertEquals("0", resultSet.getString(23));
         Assert.assertEquals("5", resultSet.getString(27));
 
-        Config.integrate_starmgr = false;
+        globalStateMgr.setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
@@ -816,7 +817,7 @@ public class ShowExecutorTest {
         };
 
 
-        Config.integrate_starmgr = true;
+        globalStateMgr.setRunMode(RunMode.SHARED_DATA);
 
         ShowComputeNodesStmt stmt = new ShowComputeNodesStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -834,7 +835,7 @@ public class ShowExecutorTest {
         Assert.assertEquals("1.00 %", resultSet.getString(15));
         Assert.assertEquals("3.0 %", resultSet.getString(16));
 
-        Config.integrate_starmgr = false;
+        globalStateMgr.setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
