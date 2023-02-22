@@ -138,6 +138,12 @@ TEST_F(StoragePageCacheTest, normal) {
         cache.set_capacity(kNumShards);
         ASSERT_FALSE(cache.adjust_capacity(-2 * kNumShards, 0));
     }
+
+    // set capactity = 0
+    {
+        cache.set_capacity(0);
+        ASSERT_EQ(cache.get_capacity(), 0);
+    }
 }
 
 TEST_F(StoragePageCacheTest, metrics) {
