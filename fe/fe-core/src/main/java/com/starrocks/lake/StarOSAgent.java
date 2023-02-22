@@ -82,17 +82,11 @@ public class StarOSAgent {
     }
 
     public boolean init(StarManagerServer server) {
-        if (Config.integrate_starmgr) {
-            if (!Config.use_staros) {
-                LOG.error("integrate_starmgr is true but use_staros is false!");
-                return false;
-            }
-            // check if Config.starmanager_address == FE address
-            String[] starMgrAddr = Config.starmgr_address.split(":");
-            if (!starMgrAddr[0].equals("127.0.0.1")) {
-                LOG.error("Config.starmgr_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
-                return false;
-            }
+        // check if Config.starmanager_address == FE address
+        String[] starMgrAddr = Config.starmgr_address.split(":");
+        if (!starMgrAddr[0].equals("127.0.0.1")) {
+            LOG.error("Config.starmgr_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
+            return false;
         }
 
         client = new StarClient(server);

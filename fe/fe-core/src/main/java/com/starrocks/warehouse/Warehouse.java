@@ -238,8 +238,6 @@ public class Warehouse implements Writable {
         for (Cluster cluster : clusters.values()) {
             long workerGroupId = cluster.getWorkerGroupId();
             GlobalStateMgr.getCurrentStarOSAgent().deleteWorkerGroup(workerGroupId);
-            // for debug
-            LOG.info("release worker group {}", workerGroupId);
         }
     }
 
@@ -249,8 +247,6 @@ public class Warehouse implements Writable {
             long groupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup(this.size);
             Cluster cluster = new Cluster(GlobalStateMgr.getCurrentState().getNextId(), groupId);
             newClusters.put(cluster.getId(), cluster);
-            // for debug
-            LOG.info("apply new worker group {}", groupId);
         }
         return newClusters;
     }
@@ -263,8 +259,6 @@ public class Warehouse implements Writable {
                 GlobalStateMgr.getCurrentStarOSAgent().modifyWorkerGroup(workerGroupId, size);
 
                 this.state = WarehouseState.SCALING;
-                // for debug
-                LOG.info("modify cluster {} size", cluster.getId());
             }
         } finally {
             readUnlock();

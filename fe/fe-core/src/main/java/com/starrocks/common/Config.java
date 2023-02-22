@@ -1783,11 +1783,7 @@ public class Config extends ConfigBase {
      * Set true if using StarOS to manage tablets for StarRocks lake table.
      */
     @ConfField
-    public static boolean use_staros = false;
-    @ConfField
     public static String starmgr_address = "127.0.0.1:6090";
-    @ConfField
-    public static boolean integrate_starmgr = false;
     @ConfField
     public static String starmgr_s3_bucket = "";
     @ConfField
@@ -1804,6 +1800,14 @@ public class Config extends ConfigBase {
     public static String starmgr_assume_role_credential_arn = "";
     @ConfField
     public static String starmgr_assume_role_credential_external_id = "";
+
+    /**
+     * shared_data: means run on cloud-native
+     * shared_nothing: means run on local
+     * hybrid: run on both, not support yet.
+     */
+    @ConfField
+    public static String run_mode = "shared_nothing";
 
     /**
      * empty shard group clean threshold (by create time).

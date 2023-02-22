@@ -361,7 +361,7 @@ public class NodeMgr {
                 }
             }
             getNewImageOnStartup(rightHelperNode, "");
-            if (Config.integrate_starmgr) { // get star mgr image
+            if (GlobalStateMgr.getCurrentState().isSharedDataMode()) { // get star mgr image
                 // subdir might not exist
                 String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
                 File dir = new File(subDir);

@@ -39,9 +39,9 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.RunMode;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -274,7 +274,8 @@ public class SystemInfoServiceTest {
         }
 
         // test removeWorker
-        Config.integrate_starmgr = true;
+        globalStateMgr.setRunMode(RunMode.SHARED_DATA);
+
         StarOSAgent starosAgent = new StarOSAgent();
         new Expectations(starosAgent) {
             {
@@ -321,7 +322,7 @@ public class SystemInfoServiceTest {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }
 
-        Config.integrate_starmgr = false;
+        globalStateMgr.setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
