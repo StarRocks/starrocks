@@ -26,6 +26,7 @@ import com.starrocks.common.proc.ExportProcNode;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -53,7 +54,14 @@ public class ShowExportStmt extends ShowStmt {
 
     private ArrayList<OrderByPair> orderByPairs;
 
-    public ShowExportStmt(String db, Expr whereExpr, List<OrderByElement> orderByElements, LimitElement limitElement) {
+    public ShowExportStmt(String db, Expr whereExpr, List<OrderByElement> orderByElements,
+                          LimitElement limitElement) {
+        this(db, whereExpr, orderByElements, limitElement, NodePosition.ZERO);
+    }
+
+    public ShowExportStmt(String db, Expr whereExpr, List<OrderByElement> orderByElements,
+                          LimitElement limitElement, NodePosition pos) {
+        super(pos);
         this.dbName = db;
         this.whereClause = whereExpr;
         this.orderByElements = orderByElements;

@@ -16,6 +16,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.sql.parser.NodePosition;
 
 public class UserVariable extends SetListItem {
     private final String variable;
@@ -23,6 +24,11 @@ public class UserVariable extends SetListItem {
     private LiteralExpr evaluatedExpression;
 
     public UserVariable(String variable, Expr unevaluatedExpression) {
+        this(variable, unevaluatedExpression, NodePosition.ZERO);
+    }
+
+    public UserVariable(String variable, Expr unevaluatedExpression, NodePosition pos) {
+        super(pos);
         this.variable = variable;
         this.unevaluatedExpression = unevaluatedExpression;
         if (unevaluatedExpression instanceof LiteralExpr) {

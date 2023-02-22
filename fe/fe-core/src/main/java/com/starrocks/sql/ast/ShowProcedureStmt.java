@@ -20,6 +20,7 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowProcedureStmt extends ShowStmt {
 
@@ -41,15 +42,18 @@ public class ShowProcedureStmt extends ShowStmt {
     private String pattern;
     private Expr where;
 
-    public ShowProcedureStmt(String pattern) {
-        this.pattern = pattern;
+    public ShowProcedureStmt(String pattern, Expr where) {
+        this(pattern, where, NodePosition.ZERO);
     }
 
-    public ShowProcedureStmt(Expr where) {
-        setPredicate((Predicate) where);
+    public ShowProcedureStmt(String pattern, Expr where, NodePosition pos) {
+        super(pos);
+        this.pattern = pattern;
+        this.predicate = (Predicate) where;
     }
 
     public ShowProcedureStmt() {
+        super(NodePosition.ZERO);
     }
 
 

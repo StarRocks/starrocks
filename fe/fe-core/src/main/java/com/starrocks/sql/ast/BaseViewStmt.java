@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -30,6 +31,11 @@ public class BaseViewStmt extends DdlStmt {
     protected QueryStatement queryStatement;
 
     public BaseViewStmt(TableName tableName, List<ColWithComment> cols, QueryStatement queryStmt) {
+        this(tableName, cols, queryStmt, NodePosition.ZERO);
+    }
+
+    public BaseViewStmt(TableName tableName, List<ColWithComment> cols, QueryStatement queryStmt, NodePosition pos) {
+        super(pos);
         Preconditions.checkNotNull(queryStmt);
         this.tableName = tableName;
         this.cols = cols;

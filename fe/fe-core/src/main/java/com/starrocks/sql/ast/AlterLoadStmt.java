@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.LabelName;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
@@ -36,6 +37,11 @@ public class AlterLoadStmt extends DdlStmt {
     private final Map<String, String> analyzedJobProperties = Maps.newHashMap();
 
     public AlterLoadStmt(LabelName labelName, Map<String, String> jobProperties) {
+        this(labelName, jobProperties, NodePosition.ZERO);
+    }
+
+    public AlterLoadStmt(LabelName labelName, Map<String, String> jobProperties, NodePosition pos) {
+        super(pos);
         this.labelName = labelName;
         this.jobProperties = jobProperties != null ? jobProperties : Maps.newHashMap();
     }

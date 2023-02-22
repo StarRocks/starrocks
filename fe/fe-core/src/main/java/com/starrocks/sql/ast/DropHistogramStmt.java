@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -25,6 +26,11 @@ public class DropHistogramStmt extends StatementBase {
     private final List<String> columnNames;
 
     public DropHistogramStmt(TableName tbl, List<String> columnNames) {
+        this(tbl, columnNames, NodePosition.ZERO);
+    }
+
+    public DropHistogramStmt(TableName tbl, List<String> columnNames, NodePosition pos) {
+        super(pos);
         this.tbl = tbl;
         this.columnNames = columnNames;
     }

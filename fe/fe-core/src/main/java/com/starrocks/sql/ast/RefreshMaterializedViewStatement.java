@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 public class RefreshMaterializedViewStatement extends DdlStmt {
     private final TableName mvName;
@@ -24,6 +25,13 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
     public RefreshMaterializedViewStatement(TableName mvName,
                                             PartitionRangeDesc partitionRangeDesc,
                                             boolean forceRefresh) {
+        this(mvName, partitionRangeDesc, forceRefresh, NodePosition.ZERO);
+    }
+
+    public RefreshMaterializedViewStatement(TableName mvName,
+                                            PartitionRangeDesc partitionRangeDesc,
+                                            boolean forceRefresh, NodePosition pos) {
+        super(pos);
         this.mvName = mvName;
         this.partitionRangeDesc = partitionRangeDesc;
         this.forceRefresh = forceRefresh;

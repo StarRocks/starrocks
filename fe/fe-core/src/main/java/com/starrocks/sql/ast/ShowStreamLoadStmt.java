@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LabelName;
@@ -27,6 +28,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -96,18 +98,27 @@ public class ShowStreamLoadStmt extends ShowStmt {
     private List<OrderByElement> orderElements;
     private LimitElement limitElement;
 
+    @VisibleForTesting
     public ShowStreamLoadStmt(LabelName labelName, boolean includeHistory) {
-        this.labelName = labelName;
-        this.includeHistory = includeHistory;
+        this(labelName, includeHistory, null, null, null, NodePosition.ZERO);
     }
 
     public ShowStreamLoadStmt(LabelName labelName, boolean includeHistory, Expr expr,
                               List<OrderByElement> orderElements, LimitElement limitElement) {
-        this(labelName, includeHistory);
+        this(labelName, includeHistory, expr, orderElements, limitElement, NodePosition.ZERO);
+    }
+
+    public ShowStreamLoadStmt(LabelName labelName, boolean includeHistory, Expr expr,
+                              List<OrderByElement> orderElements, LimitElement limitElement, NodePosition pos) {
+        super(pos);
+        this.labelName = labelName;
+        this.includeHistory = includeHistory;
         this.whereClause = expr;
         this.orderElements = orderElements;
         this.limitElement = limitElement;
     }
+
+
 
     public String getDbFullName() {
         return labelName.getDbName();

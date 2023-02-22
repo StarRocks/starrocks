@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
@@ -27,6 +28,11 @@ public class CreateCatalogStmt extends DdlStmt {
     private String catalogType;
 
     public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties) {
+        this(catalogName, comment, properties, NodePosition.ZERO);
+    }
+
+    public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties, NodePosition pos) {
+        super(pos);
         this.catalogName = catalogName;
         this.comment = comment;
         this.properties = properties;

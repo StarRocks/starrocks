@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterOpType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -36,8 +37,12 @@ public class ModifyPartitionClause extends AlterTableClause {
     }
 
     // c'tor for non-star clause
-    public ModifyPartitionClause(List<String> partitionNames, Map<String, String> properties) {
-        super(AlterOpType.MODIFY_PARTITION);
+    public ModifyPartitionClause(List<String> partitionNames, Map<String, String> propertie) {
+        this(partitionNames, propertie, NodePosition.ZERO);
+    }
+
+    public ModifyPartitionClause(List<String> partitionNames, Map<String, String> properties, NodePosition pos) {
+        super(AlterOpType.MODIFY_PARTITION, pos);
         this.partitionNames = partitionNames;
         this.properties = properties;
         this.needExpand = false;
@@ -51,8 +56,8 @@ public class ModifyPartitionClause extends AlterTableClause {
     }
 
     // c'tor for 'Modify Partition(*)' clause
-    private ModifyPartitionClause(Map<String, String> properties) {
-        super(AlterOpType.MODIFY_PARTITION);
+    private ModifyPartitionClause(Map<String, String> properties, NodePosition pos) {
+        super(AlterOpType.MODIFY_PARTITION, pos);
         this.partitionNames = Lists.newArrayList();
         this.properties = properties;
         this.needExpand = true;
@@ -60,7 +65,12 @@ public class ModifyPartitionClause extends AlterTableClause {
     }
 
     public static ModifyPartitionClause createStarClause(Map<String, String> properties) {
-        return new ModifyPartitionClause(properties);
+        return new ModifyPartitionClause(properties, NodePosition.ZERO);
+    }
+
+
+    public static ModifyPartitionClause createStarClause(Map<String, String> properties, NodePosition pos) {
+        return new ModifyPartitionClause(properties, pos);
     }
 
     @Override

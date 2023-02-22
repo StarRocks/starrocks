@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.time.LocalDateTime;
 
@@ -28,7 +29,12 @@ public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
     private IntervalLiteral intervalLiteral;
 
     public AsyncRefreshSchemeDesc(boolean defineStartTime, LocalDateTime startTime, IntervalLiteral intervalLiteral) {
-        super(MaterializedView.RefreshType.ASYNC);
+        this(defineStartTime, startTime, intervalLiteral, NodePosition.ZERO);
+    }
+
+    public AsyncRefreshSchemeDesc(boolean defineStartTime, LocalDateTime startTime, IntervalLiteral intervalLiteral,
+                                  NodePosition pos) {
+        super(MaterializedView.RefreshType.ASYNC, pos);
         this.defineStartTime = defineStartTime;
         this.startTime = startTime;
         this.intervalLiteral = intervalLiteral;

@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowSmallFilesStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
@@ -34,6 +35,11 @@ public class ShowSmallFilesStmt extends ShowStmt {
     private String dbName;
 
     public ShowSmallFilesStmt(String dbName) {
+        this(dbName, NodePosition.ZERO);
+    }
+
+    public ShowSmallFilesStmt(String dbName, NodePosition pos) {
+        super(pos);
         this.dbName = dbName;
     }
 

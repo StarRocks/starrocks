@@ -19,6 +19,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // Show warehouse statement.
 public class ShowWarehousesStmt extends ShowStmt {
@@ -38,10 +39,15 @@ public class ShowWarehousesStmt extends ShowStmt {
     private Expr where;
 
     public ShowWarehousesStmt(String pattern) {
-        this.pattern = pattern;
+        this(pattern, null, NodePosition.ZERO);
     }
 
     public ShowWarehousesStmt(String pattern, Expr where) {
+        this(pattern, where, NodePosition.ZERO);
+    }
+
+    public ShowWarehousesStmt(String pattern, Expr where, NodePosition pos) {
+        super(pos);
         this.pattern = pattern;
         this.where = where;
     }

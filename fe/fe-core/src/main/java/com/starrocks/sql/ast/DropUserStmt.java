@@ -14,11 +14,18 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class DropUserStmt extends DdlStmt {
     private final UserIdentity userIdent;
     private final boolean ifExists;
 
     public DropUserStmt(UserIdentity userIdent, boolean ifExists) {
+        this(userIdent, ifExists, NodePosition.ZERO);
+    }
+
+    public DropUserStmt(UserIdentity userIdent, boolean ifExists, NodePosition pos) {
+        super(pos);
         this.userIdent = userIdent;
         this.ifExists = ifExists;
     }

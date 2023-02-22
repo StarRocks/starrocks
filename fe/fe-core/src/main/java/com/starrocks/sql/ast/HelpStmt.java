@@ -23,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class HelpStmt extends ShowStmt {
     private static final ShowResultSetMetaData TOPIC_META_DATA =
@@ -45,6 +46,11 @@ public class HelpStmt extends ShowStmt {
     private String mask;
 
     public HelpStmt(String mask) {
+        this(mask, NodePosition.ZERO);
+    }
+
+    public HelpStmt(String mask, NodePosition pos) {
+        super(pos);
         this.mask = mask;
     }
 

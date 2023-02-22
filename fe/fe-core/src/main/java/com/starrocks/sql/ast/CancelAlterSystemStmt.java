@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.common.Pair;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -26,6 +27,11 @@ public class CancelAlterSystemStmt extends CancelStmt {
     private final List<Pair<String, Integer>> hostPortPairs;
 
     public CancelAlterSystemStmt(List<String> hostPorts) {
+        this(hostPorts, NodePosition.ZERO);
+    }
+
+    public CancelAlterSystemStmt(List<String> hostPorts, NodePosition pos) {
+        super(pos);
         this.hostPorts = hostPorts;
         this.hostPortPairs = new LinkedList<>();
     }

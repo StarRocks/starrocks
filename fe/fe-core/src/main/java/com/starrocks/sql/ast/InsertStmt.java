@@ -22,6 +22,7 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -74,6 +75,12 @@ public class InsertStmt extends DmlStmt {
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite) {
+        this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
+    }
+
+    public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
+                      QueryStatement queryStatement, boolean isOverwrite, NodePosition pos) {
+        super(pos);
         this.tblName = tblName;
         this.targetPartitionNames = targetPartitionNames;
         this.label = label;
@@ -84,6 +91,8 @@ public class InsertStmt extends DmlStmt {
 
     // Ctor for CreateTableAsSelectStmt
     public InsertStmt(TableName name, QueryStatement queryStatement) {
+        // CTAS claus hasn't explicit insert stmt, we use the pos of queryStmt to express the location of insertStmt
+        super(queryStatement.getPos());
         this.tblName = name;
         this.targetPartitionNames = null;
         this.targetColumnNames = null;

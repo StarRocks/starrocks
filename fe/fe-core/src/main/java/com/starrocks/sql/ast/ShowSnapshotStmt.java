@@ -22,6 +22,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -40,6 +41,11 @@ public class ShowSnapshotStmt extends ShowStmt {
     private List<String> snapshotNames;
 
     public ShowSnapshotStmt(String repoName, Expr where) {
+        this(repoName, where, NodePosition.ZERO);
+    }
+
+    public ShowSnapshotStmt(String repoName, Expr where, NodePosition pos) {
+        super(pos);
         this.repoName = repoName;
         this.where = where;
         this.snapshotNames = Lists.newArrayList();

@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.sql.parser.NodePosition;
 
 public class DropFunctionStmt extends DdlStmt {
     private final FunctionName functionName;
@@ -32,6 +33,11 @@ public class DropFunctionStmt extends DdlStmt {
     private FunctionSearchDesc function;
 
     public DropFunctionStmt(FunctionName functionName, FunctionArgsDef argsDef) {
+        this(functionName, argsDef, NodePosition.ZERO);
+    }
+
+    public DropFunctionStmt(FunctionName functionName, FunctionArgsDef argsDef, NodePosition pos) {
+        super(pos);
         this.functionName = functionName;
         this.argsDef = argsDef;
     }

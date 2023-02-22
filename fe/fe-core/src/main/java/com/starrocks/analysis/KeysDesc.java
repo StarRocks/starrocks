@@ -42,22 +42,31 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
-public class KeysDesc implements Writable {
+public class KeysDesc implements ParseNode, Writable {
     private KeysType type;
     private final List<String> keysColumnNames;
 
+    private final NodePosition pos;
+
     public KeysDesc() {
+        pos = NodePosition.ZERO;
         this.type = KeysType.AGG_KEYS;
         this.keysColumnNames = Lists.newArrayList();
     }
 
     public KeysDesc(KeysType type, List<String> keysColumnNames) {
+        this(type, keysColumnNames, NodePosition.ZERO);
+    }
+
+    public KeysDesc(KeysType type, List<String> keysColumnNames, NodePosition pos) {
+        this.pos = pos;
         this.type = type;
         this.keysColumnNames = keysColumnNames;
     }
@@ -132,6 +141,7 @@ public class KeysDesc implements Writable {
         }
     }
 
+    @Override
     public String toSql() {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append(type.name()).append("(");
@@ -145,6 +155,11 @@ public class KeysDesc implements Writable {
         }
         stringBuilder.append(")");
         return stringBuilder.toString();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     public static KeysDesc read(DataInput in) throws IOException {

@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -29,6 +30,11 @@ public class AdminRepairTableStmt extends DdlStmt {
     private long timeoutS = 0;
 
     public AdminRepairTableStmt(TableRef tblRef) {
+        this(tblRef, NodePosition.ZERO);
+    }
+
+    public AdminRepairTableStmt(TableRef tblRef, NodePosition pos) {
+        super(pos);
         this.tblRef = tblRef;
     }
 

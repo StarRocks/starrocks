@@ -26,6 +26,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -54,19 +55,25 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             TimestampArithmeticExpr.TimeUnit.YEAR
     );
 
+    public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long offset) {
+        this(partitionBegin, partitionEnd, offset, null, NodePosition.ZERO);
+    }
+
     public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long step,
                                    String timeUnit) {
+        this(partitionBegin, partitionEnd, step, timeUnit, NodePosition.ZERO);
+    }
+
+    public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long step,
+                                   String timeUnit, NodePosition pos) {
+        super(pos);
         this.partitionBegin = partitionBegin;
         this.partitionEnd = partitionEnd;
         this.step = step;
         this.timeUnit = timeUnit;
     }
 
-    public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long offset) {
-        this.partitionBegin = partitionBegin;
-        this.partitionEnd = partitionEnd;
-        this.step = offset;
-    }
+
 
     public Long getStep() {
         return step;

@@ -16,12 +16,18 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 public class UninstallPluginStmt extends DdlStmt {
 
     private final String pluginName;
 
     public UninstallPluginStmt(String pluginName) {
+        this(pluginName, NodePosition.ZERO);
+    }
+
+    public UninstallPluginStmt(String pluginName, NodePosition pos) {
+        super(pos);
         this.pluginName = pluginName;
     }
 

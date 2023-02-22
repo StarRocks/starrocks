@@ -15,10 +15,15 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
+import com.starrocks.sql.parser.NodePosition;
 
 public class CreateImageClause extends AlterClause {
     public CreateImageClause() {
-        super(AlterOpType.ALTER_OTHER);
+        this(NodePosition.ZERO);
+    }
+
+    public CreateImageClause(NodePosition pos) {
+        super(AlterOpType.ALTER_OTHER, pos);
     }
 
     @Override

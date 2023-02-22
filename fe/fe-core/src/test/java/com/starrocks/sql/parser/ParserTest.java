@@ -19,17 +19,21 @@ import com.starrocks.qe.SessionVariable;
 import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.plan.PlanTestBase.assertContains;
-import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
-class TokenLimitTest {
+class ParserTest {
 
     @Test
     void tokensExceedLimitTest() {
         String sql = "select 1";
         SessionVariable sessionVariable = new SessionVariable();
         sessionVariable.setParseTokensLimit(1);
-        assertThrows(OperationNotAllowedException.class, () -> SqlParser.parse(sql, sessionVariable));
+        try {
+            SqlParser.parse(sql, sessionVariable);
+        } catch (Exception e) {
+            assertContains(e.getMessage(), "Getting syntax error. Detail message: " +
+                    "Statement exceeds maximum length limit");
+        }
     }
 
     @Test
@@ -40,7 +44,8 @@ class TokenLimitTest {
             SqlParser.parse(sql, sessionVariable);
             fail("sql should fail to parse.");
         } catch (Exception e) {
-            assertContains(e.getMessage(), "You have an error in your SQL syntax");
+            assertContains(e.getMessage(), "Getting syntax error at line 1, column 14. " +
+                    "Detail message: Input 'tbl' is not valid at this position, please check the SQL Reference.");
         }
     }
 
@@ -75,6 +80,32 @@ class TokenLimitTest {
             } catch (Exception e) {
                 fail("Unexpected exception for query: " + query);
             }
+        }
+    }
+
+    @Test
+    void testInvalidDbName() {
+        String sql = "use a.b.c";
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable);
+            fail("sql should fail to parse.");
+        } catch (Exception e) {
+            assertContains(e.getMessage(), "Getting syntax error from line 1, column 4 to line 1, column 8. " +
+                    "Detail message: Invalid db name format 'a.b.c'.");
+        }
+    }
+
+    @Test
+    void testInvalidTaskName() {
+        String sql = "submit task a.b.c as create table a.b (v1, v2) as select * from t1";
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable);
+            fail("sql should fail to parse.");
+        } catch (Exception e) {
+            assertContains(e.getMessage(), "Getting syntax error from line 1, column 12 to line 1, column 16." +
+                    " Detail message: Invalid task name format 'a.b.c'.");
         }
     }
 }

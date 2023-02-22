@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.List;
 
 // REVOKE Role 'role' FROM 'user'
@@ -25,8 +27,16 @@ public class RevokeRoleStmt extends BaseGrantRevokeRoleStmt {
         super(granteeRole, userIdent);
     }
 
+    public RevokeRoleStmt(List<String> granteeRole, UserIdentity userIdent, NodePosition pos) {
+        super(granteeRole, userIdent, pos);
+    }
+
     public RevokeRoleStmt(List<String> granteeRole, String role) {
         super(granteeRole, role);
+    }
+
+    public RevokeRoleStmt(List<String> granteeRole, String role, NodePosition pos) {
+        super(granteeRole, role, pos);
     }
 
     @Override

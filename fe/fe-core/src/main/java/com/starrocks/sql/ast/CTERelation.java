@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -25,7 +25,14 @@ public class CTERelation extends Relation {
     private final QueryStatement cteQueryStatement;
     private boolean resolvedInFromClause;
 
-    public CTERelation(int cteMouldId, String name, List<String> columnOutputNames, QueryStatement cteQueryStatement) {
+    public CTERelation(int cteMouldId, String name, List<String> columnOutputNames,
+                       QueryStatement cteQueryStatement) {
+        this(cteMouldId, name, columnOutputNames, cteQueryStatement, NodePosition.ZERO);
+    }
+
+    public CTERelation(int cteMouldId, String name, List<String> columnOutputNames,
+                       QueryStatement cteQueryStatement, NodePosition pos) {
+        super(pos);
         this.cteMouldId = cteMouldId;
         this.name = name;
         this.explicitColumnNames = columnOutputNames;
@@ -43,7 +50,6 @@ public class CTERelation extends Relation {
     public String getName() {
         return name;
     }
-
 
     public void setResolvedInFromClause(boolean resolvedInFromClause) {
         this.resolvedInFromClause = resolvedInFromClause;

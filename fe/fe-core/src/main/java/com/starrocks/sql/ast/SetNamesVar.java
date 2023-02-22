@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 // Now only support utf-8
 public class SetNamesVar extends SetListItem {
     public static final String DEFAULT_NAMES = "utf8";
@@ -26,6 +28,11 @@ public class SetNamesVar extends SetListItem {
     }
 
     public SetNamesVar(String charsetName, String collate) {
+        this(charsetName, collate, NodePosition.ZERO);
+    }
+
+    public SetNamesVar(String charsetName, String collate, NodePosition pos) {
+        super(pos);
         this.charset = charsetName;
         this.collate = collate;
     }

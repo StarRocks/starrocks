@@ -25,6 +25,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Arrays;
 import java.util.List;
@@ -58,6 +59,11 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
     private String dbFullName;
 
     public ShowRoutineLoadTaskStmt(String dbName, Expr jobNameExpr) {
+        this(dbName, jobNameExpr, NodePosition.ZERO);
+    }
+
+    public ShowRoutineLoadTaskStmt(String dbName, Expr jobNameExpr, NodePosition pos) {
+        super(pos);
         this.dbFullName = dbName;
         this.jobNameExpr = jobNameExpr;
     }

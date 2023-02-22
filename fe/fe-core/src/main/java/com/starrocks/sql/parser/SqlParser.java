@@ -26,11 +26,18 @@ import io.trino.sql.parser.ParsingException;
 import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.DefaultErrorStrategy;
+import org.antlr.v4.runtime.InputMismatchException;
+import org.antlr.v4.runtime.Parser;
+import org.antlr.v4.runtime.RecognitionException;
+import org.antlr.v4.runtime.Token;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Objects;
+
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class SqlParser {
     private static final Logger LOG = LogManager.getLogger(SqlParser.class);
@@ -122,12 +129,62 @@ public class SqlParser {
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
 
+        // Unify the error message
+        parser.setErrorHandler(new DefaultErrorStrategy() {
+            @Override
+            public Token recoverInline(Parser recognizer)
+                    throws RecognitionException {
+                if (nextTokensContext == null) {
+                    throw new InputMismatchException(recognizer);
+                } else {
+                    throw new InputMismatchException(recognizer, nextTokensState, nextTokensContext);
+                }
+            }
+
+            @Override
+            protected void reportMissingToken(Parser recognizer) {
+                reportMissMatchedToken(recognizer);
+            }
+
+            @Override
+            protected void reportUnwantedToken(Parser recognizer) {
+                reportMissMatchedToken(recognizer);
+            }
+
+            private void reportMissMatchedToken(Parser recognizer) {
+                if (inErrorRecoveryMode(recognizer)) {
+                    return;
+                }
+
+                beginErrorCondition(recognizer);
+                Token t = recognizer.getCurrentToken();
+                String tokenName = getTokenDisplay(t);
+                recognizer.notifyErrorListeners(t, PARSER_ERROR_MSG.inputMismatch(tokenName), null);
+            }
+        });
+
         StarRocksParser.sqlMode = sessionVariable.getSqlMode();
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
-        parser.addParseListener(new TokenNumberListener(sessionVariable.getParseTokensLimit(), Config.expr_children_limit));
-
+        parser.addParseListener(
+                new PostProcessListener(sessionVariable.getParseTokensLimit(), Config.expr_children_limit));
         return parser;
+    }
+
+    public static String getTokenDisplay(Token t) {
+        if (t == null) {
+            return "<no token>";
+        }
+
+        String s = t.getText();
+        if (s == null) {
+            if (t.getType() == Token.EOF) {
+                s = "<EOF>";
+            } else {
+                s = "<" + t.getType() + ">";
+            }
+        }
+        return s;
     }
 }

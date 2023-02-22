@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +27,11 @@ public class SetDefaultRoleStmt extends StatementBase {
     private final SetRoleType setRoleType;
 
     public SetDefaultRoleStmt(UserIdentity userIdentity, SetRoleType setRoleType, List<String> roles) {
+        this(userIdentity, setRoleType, roles, NodePosition.ZERO);
+    }
+
+    public SetDefaultRoleStmt(UserIdentity userIdentity, SetRoleType setRoleType, List<String> roles, NodePosition pos) {
+        super(pos);
         this.userIdentity = userIdentity;
         this.roles.addAll(roles);
         this.setRoleType = setRoleType;

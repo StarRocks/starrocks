@@ -24,6 +24,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang.NotImplementedException;
 
@@ -33,6 +34,16 @@ import java.util.Map;
 public class PartitionDesc implements ParseNode {
 
     protected PartitionType type;
+
+    protected final NodePosition pos;
+
+    public PartitionDesc() {
+        this(NodePosition.ZERO);
+    }
+
+    protected PartitionDesc(NodePosition pos) {
+        this.pos = pos;
+    }
 
     public PartitionType getType() {
         return type;
@@ -44,6 +55,11 @@ public class PartitionDesc implements ParseNode {
 
     public String toSql() {
         throw new NotImplementedException();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     // Currently, RANGE is used for materialized view ExpressionRangePartitionInfo, which is isExprPartition=false,

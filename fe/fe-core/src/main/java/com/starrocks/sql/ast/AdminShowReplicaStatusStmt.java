@@ -26,6 +26,7 @@ import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -45,6 +46,11 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
     private ReplicaStatus statusFilter;
 
     public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where) {
+        this(tblRef, where, NodePosition.ZERO);
+    }
+
+    public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where, NodePosition pos) {
+        super(pos);
         this.tblRef = tblRef;
         this.where = where;
     }

@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -25,6 +26,11 @@ public class SetUserPropertyStmt extends DdlStmt {
     private final List<SetUserPropertyVar> propertyList;
 
     public SetUserPropertyStmt(String user, List<SetUserPropertyVar> propertyList) {
+        this(user, propertyList, NodePosition.ZERO);
+    }
+
+    public SetUserPropertyStmt(String user, List<SetUserPropertyVar> propertyList, NodePosition pos) {
+        super(pos);
         this.user = user;
         this.propertyList = propertyList;
     }

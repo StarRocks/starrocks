@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 public class CreateTableLikeStmt extends DdlStmt {
 
@@ -24,6 +25,12 @@ public class CreateTableLikeStmt extends DdlStmt {
     private final TableName existedTableName;
 
     public CreateTableLikeStmt(boolean ifNotExists, TableName tableName, TableName existedTableName) {
+        this(ifNotExists, tableName, existedTableName, NodePosition.ZERO);
+    }
+
+    public CreateTableLikeStmt(boolean ifNotExists, TableName tableName,
+                               TableName existedTableName, NodePosition pos) {
+        super(pos);
         this.ifNotExists = ifNotExists;
         this.tableName = tableName;
         this.existedTableName = existedTableName;

@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -45,6 +46,11 @@ public class AdminCheckTabletsStmt extends DdlStmt {
     }
 
     public AdminCheckTabletsStmt(List<Long> tabletIds, Map<String, String> properties) {
+        this(tabletIds, properties, NodePosition.ZERO);
+    }
+
+    public AdminCheckTabletsStmt(List<Long> tabletIds, Map<String, String> properties, NodePosition pos) {
+        super(pos);
         this.tabletIds = tabletIds;
         this.properties = properties;
     }

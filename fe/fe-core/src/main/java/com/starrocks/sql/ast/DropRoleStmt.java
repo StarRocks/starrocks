@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.List;
 
 public class DropRoleStmt extends DdlStmt {
@@ -21,6 +23,11 @@ public class DropRoleStmt extends DdlStmt {
     private final boolean ifExists;
 
     public DropRoleStmt(List<String> roles, boolean ifExists) {
+        this(roles, ifExists, NodePosition.ZERO);
+    }
+
+    public DropRoleStmt(List<String> roles, boolean ifExists, NodePosition pos) {
+        super(pos);
         this.roles = roles;
         this.ifExists = ifExists;
     }

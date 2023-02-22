@@ -17,12 +17,20 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Delimiter;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.parser.NodePosition;
 
 public class RowDelimiter implements ParseNode {
     private final String oriDelimiter;
     private final String delimiter;
 
+    private final NodePosition pos;
+
     public RowDelimiter(String delimiter) {
+        this(delimiter, NodePosition.ZERO);
+    }
+
+    public RowDelimiter(String delimiter, NodePosition pos) {
+        this.pos = pos;
         this.oriDelimiter = delimiter;
         this.delimiter = Delimiter.convertDelimiter(oriDelimiter);
     }
@@ -33,6 +41,11 @@ public class RowDelimiter implements ParseNode {
 
     public String toSql() {
         return "'" + oriDelimiter + "'";
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     @Override

@@ -42,6 +42,7 @@ import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -136,8 +137,14 @@ public class LoadStmt extends DdlStmt {
             .add(PRIORITY)
             .build();
 
-    public LoadStmt(LabelName label, List<DataDescription> dataDescriptions,
-                    BrokerDesc brokerDesc, String cluster, Map<String, String> properties) {
+    public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, BrokerDesc brokerDesc,
+                    String cluster, Map<String, String> properties) {
+        this(label, dataDescriptions, brokerDesc, cluster, properties, NodePosition.ZERO);
+    }
+
+    public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, BrokerDesc brokerDesc,
+                    String cluster, Map<String, String> properties, NodePosition pos) {
+        super(pos);
         this.label = label;
         this.dataDescriptions = dataDescriptions;
         this.brokerDesc = brokerDesc;
@@ -147,8 +154,14 @@ public class LoadStmt extends DdlStmt {
         this.user = null;
     }
 
-    public LoadStmt(LabelName label, List<DataDescription> dataDescriptions,
-                    ResourceDesc resourceDesc, Map<String, String> properties) {
+    public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, ResourceDesc resourceDesc,
+                    Map<String, String> properties) {
+        this(label, dataDescriptions, resourceDesc, properties, NodePosition.ZERO);
+    }
+
+    public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, ResourceDesc resourceDesc,
+                    Map<String, String> properties, NodePosition pos) {
+        super(pos);
         this.label = label;
         this.dataDescriptions = dataDescriptions;
         this.brokerDesc = null;

@@ -43,6 +43,7 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -53,7 +54,14 @@ public class TypeDef implements ParseNode {
     private Type parsedType;
     private boolean isAnalyzed;
 
+    private final NodePosition pos;
+
     public TypeDef(Type parsedType) {
+        this(parsedType, NodePosition.ZERO);
+    }
+
+    public TypeDef(Type parsedType, NodePosition pos) {
+        this.pos = pos;
         this.parsedType = parsedType;
     }
 
@@ -226,5 +234,10 @@ public class TypeDef implements ParseNode {
     @Override
     public String toSql() {
         return parsedType.toSql();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

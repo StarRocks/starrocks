@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.List;
 
 public class CreateRoleStmt extends DdlStmt {
@@ -22,6 +24,11 @@ public class CreateRoleStmt extends DdlStmt {
     private final boolean ifNotExists;
 
     public CreateRoleStmt(List<String> roles, boolean ifNotExists) {
+        this(roles, ifNotExists, NodePosition.ZERO);
+    }
+
+    public CreateRoleStmt(List<String> roles, boolean ifNotExists, NodePosition pos) {
+        super(pos);
         this.roles = roles;
         this.ifNotExists = ifNotExists;
     }

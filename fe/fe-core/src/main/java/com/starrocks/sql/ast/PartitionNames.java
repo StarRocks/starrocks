@@ -25,6 +25,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -48,12 +49,20 @@ public class PartitionNames implements ParseNode, Writable {
     @SerializedName(value = "isTemp")
     private final boolean isTemp;
 
+    private final NodePosition pos;
+
     public PartitionNames(boolean isTemp, List<String> partitionNames) {
+        this(isTemp, partitionNames, NodePosition.ZERO);
+    }
+
+    public PartitionNames(boolean isTemp, List<String> partitionNames, NodePosition pos) {
+        this.pos = pos;
         this.partitionNames = partitionNames;
         this.isTemp = isTemp;
     }
 
     public PartitionNames(PartitionNames other) {
+        this.pos = other.pos;
         this.partitionNames = Lists.newArrayList(other.partitionNames);
         this.isTemp = other.isTemp;
     }
@@ -64,6 +73,11 @@ public class PartitionNames implements ParseNode, Writable {
 
     public boolean isTemp() {
         return isTemp;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     @Override

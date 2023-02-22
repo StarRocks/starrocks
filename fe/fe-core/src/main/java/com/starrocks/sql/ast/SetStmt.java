@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -22,6 +23,11 @@ public class SetStmt extends StatementBase {
     private final List<SetListItem> setListItems;
 
     public SetStmt(List<SetListItem> setListItems) {
+        this(setListItems, NodePosition.ZERO);
+    }
+
+    public SetStmt(List<SetListItem> setListItems, NodePosition pos) {
+        super(pos);
         this.setListItems = setListItems;
     }
 

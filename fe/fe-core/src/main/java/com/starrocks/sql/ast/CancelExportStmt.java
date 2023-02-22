@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.UUID;
 
@@ -50,6 +51,11 @@ public class CancelExportStmt extends DdlStmt {
     }
 
     public CancelExportStmt(String dbName, Expr whereClause) {
+        this(dbName, whereClause, NodePosition.ZERO);
+    }
+
+    public CancelExportStmt(String dbName, Expr whereClause, NodePosition pos) {
+        super(pos);
         this.dbName = dbName;
         this.whereClause = whereClause;
     }

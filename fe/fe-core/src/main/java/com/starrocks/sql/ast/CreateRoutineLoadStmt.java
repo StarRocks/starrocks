@@ -35,6 +35,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -230,6 +231,15 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public CreateRoutineLoadStmt(LabelName labelName, String tableName, List<ParseNode> loadPropertyList,
                                  Map<String, String> jobProperties,
                                  String typeName, Map<String, String> dataSourceProperties) {
+        this(labelName, tableName, loadPropertyList, jobProperties, typeName,
+                dataSourceProperties, NodePosition.ZERO);
+    }
+
+    public CreateRoutineLoadStmt(LabelName labelName, String tableName, List<ParseNode> loadPropertyList,
+                                 Map<String, String> jobProperties,
+                                 String typeName, Map<String, String> dataSourceProperties,
+                                 NodePosition pos) {
+        super(pos);
         this.labelName = labelName;
         this.tableName = tableName;
         this.loadPropertyList = loadPropertyList;

@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,13 @@ public class AnalyzeStmt extends StatementBase {
     public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties,
                        boolean isSample, boolean isAsync,
                        AnalyzeTypeDesc analyzeTypeDesc) {
+        this(tbl, columns, properties, isSample, isAsync, analyzeTypeDesc, NodePosition.ZERO);
+    }
+
+    public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties,
+                       boolean isSample, boolean isAsync,
+                       AnalyzeTypeDesc analyzeTypeDesc, NodePosition pos) {
+        super(pos);
         this.tbl = tbl;
         this.columnNames = columns;
         this.isSample = isSample;

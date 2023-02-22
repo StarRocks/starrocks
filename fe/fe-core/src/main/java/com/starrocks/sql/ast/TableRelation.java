@@ -20,6 +20,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.HashSet;
 import java.util.List;
@@ -46,12 +47,18 @@ public class TableRelation extends Relation {
     private Expr partitionPredicate;
 
     public TableRelation(TableName name) {
+        super(name.getPos());
         this.name = name;
         this.partitionNames = null;
         this.tabletIds = Lists.newArrayList();
     }
 
     public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds) {
+        this(name, partitionNames, tabletIds, NodePosition.ZERO);
+    }
+
+    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds, NodePosition pos) {
+        super(pos);
         this.name = name;
         this.partitionNames = partitionNames;
         this.tabletIds = tabletIds;
@@ -106,9 +113,9 @@ public class TableRelation extends Relation {
         if (alias != null) {
             if (name.getDb() != null) {
                 if (name.getCatalog() != null) {
-                    return new TableName(name.getCatalog(), name.getDb(), alias.getTbl());
+                    return new TableName(name.getCatalog(), name.getDb(), alias.getTbl(), name.getPos());
                 } else {
-                    return new TableName(name.getDb(), alias.getTbl());
+                    return new TableName(null, name.getDb(), alias.getTbl(), name.getPos());
                 }
             } else {
                 return alias;

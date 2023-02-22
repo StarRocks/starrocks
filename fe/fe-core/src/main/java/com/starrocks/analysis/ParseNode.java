@@ -37,6 +37,7 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 
 public interface ParseNode {
     /**
@@ -56,6 +57,8 @@ public interface ParseNode {
     default String toSql() {
         throw new RuntimeException("New AST not implement toSql function");
     }
+
+    NodePosition getPos();
 
     default <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         throw new RuntimeException("Not implement accept function");

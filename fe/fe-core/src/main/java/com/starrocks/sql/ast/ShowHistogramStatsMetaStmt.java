@@ -26,14 +26,21 @@ import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.HistogramStatsMeta;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class ShowHistogramStatsMetaStmt extends ShowStmt {
+
     public ShowHistogramStatsMetaStmt(Predicate predicate) {
-        setPredicate(predicate);
+        this(predicate, NodePosition.ZERO);
+    }
+
+    public ShowHistogramStatsMetaStmt(Predicate predicate, NodePosition pos) {
+        super(pos);
+        this.predicate = predicate;
     }
 
     private static final ShowResultSetMetaData META_DATA =

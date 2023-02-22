@@ -14,5 +14,15 @@
 
 package com.starrocks.sql.ast;
 
-public class AnalyzeBasicDesc implements AnalyzeTypeDesc {
+import com.starrocks.sql.parser.NodePosition;
+
+public class AnalyzeBasicDesc extends AnalyzeTypeDesc {
+
+    public AnalyzeBasicDesc() {
+        this(NodePosition.ZERO);
+    }
+
+    public AnalyzeBasicDesc(NodePosition pos) {
+        super(pos);
+    }
 }

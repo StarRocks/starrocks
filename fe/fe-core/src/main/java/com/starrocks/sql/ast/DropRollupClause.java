@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
@@ -28,7 +29,11 @@ public class DropRollupClause extends AlterTableClause {
     private Map<String, String> properties;
 
     public DropRollupClause(String rollupName, Map<String, String> properties) {
-        super(AlterOpType.DROP_ROLLUP);
+        this(rollupName, properties, NodePosition.ZERO);
+    }
+
+    public DropRollupClause(String rollupName, Map<String, String> properties, NodePosition pos) {
+        super(AlterOpType.DROP_ROLLUP, pos);
         this.rollupName = rollupName;
         this.properties = properties;
         this.needTableStable = false;
