@@ -41,7 +41,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.nio.NConnectContext;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -174,7 +174,7 @@ public class ConnectScheduler {
         for (ConnectContext ctx : connectionMap.values()) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                 if (!ctx.getQualifiedUser().equals(user) &&
-                        !PrivilegeManager.checkSystemAction(currContext, PrivilegeType.OPERATE)) {
+                        !PrivilegeActions.checkSystemAction(currContext, PrivilegeType.OPERATE)) {
                     continue;
                 }
             } else {

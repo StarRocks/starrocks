@@ -152,7 +152,7 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -3644,7 +3644,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
         if (table instanceof MaterializedView) {
-            if (!PrivilegeManager.checkMaterializedViewAction(ConnectContext.get(),
+            if (!PrivilegeActions.checkMaterializedViewAction(ConnectContext.get(),
                     stmt.getDbName(),
                     stmt.getMvName(),
                     PrivilegeType.DROP)) {

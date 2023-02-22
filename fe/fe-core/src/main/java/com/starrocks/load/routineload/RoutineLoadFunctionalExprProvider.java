@@ -21,7 +21,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -250,7 +250,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
         try {
             // validate table privilege at the end of a predicateChain in the `stream().filter()`
             if (cxt.getGlobalStateMgr().isUsingNewPrivilege()) {
-                return PrivilegeManager.checkTableAction(
+                return PrivilegeActions.checkTableAction(
                         cxt,
                         job.getDbFullName(),
                         job.getTableName(),
