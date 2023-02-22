@@ -35,6 +35,7 @@ RUN apt-get install -yq tzdata && \
 
 # Install perf tool for low-level performance debug
 RUN apt-get install -yq linux-tools-common linux-tools-generic
+RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc
 
 RUN rm -rf /var/lib/apt/lists/*
 
@@ -48,7 +49,7 @@ WORKDIR $STARROCKS_ROOT
 COPY --from=artifacts /release/be_artifacts/ $STARROCKS_ROOT/
 
 # Copy be k8s scripts to the runtime container image
-COPY docker/bin/be_* $STARROCKS_ROOT/
+COPY docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
 
 # Create directory for BE storage
 RUN mkdir -p $STARROCKS_ROOT/be/storage
