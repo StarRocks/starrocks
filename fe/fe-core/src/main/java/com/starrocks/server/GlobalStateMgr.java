@@ -2609,7 +2609,6 @@ public class GlobalStateMgr {
             sb.append("\"table\" = \"").append(jdbcTable.getJdbcTable()).append("\"");
             sb.append("\n)");
         }
-
         sb.append(";");
 
         createTableStmt.add(sb.toString());
