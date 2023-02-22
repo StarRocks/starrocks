@@ -100,6 +100,7 @@ set(EXEC_FILES
     vectorized/table_function_node.cpp
     vectorized/schema_scanner.cpp
     vectorized/schema_scan_node.cpp
+    vectorized/schema_scanner/schema_be_tablets_scanner.cpp
     vectorized/schema_scanner/schema_tables_scanner.cpp
     vectorized/schema_scanner/schema_dummy_scanner.cpp
     vectorized/schema_scanner/schema_schemata_scanner.cpp

@@ -54,6 +54,7 @@ class TabletUpdates;
 class CompactionTask;
 class CompactionCandidate;
 class CompactionContext;
+class TabletBasicInfo;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
@@ -254,6 +255,8 @@ public:
     }
 
     Status contains_version(const Version& version);
+
+    void get_basic_info(TabletBasicInfo& info);
 
 protected:
     void on_shutdown() override;

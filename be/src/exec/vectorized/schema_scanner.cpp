@@ -3,6 +3,7 @@
 #include "exec/vectorized/schema_scanner.h"
 
 #include "column/type_traits.h"
+#include "exec/vectorized/schema_scanner/schema_be_tablets_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_charsets_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_collations_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_columns_scanner.h"
@@ -100,6 +101,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<vectorized::SchemaMaterializedViewsScanner>();
     case TSchemaTableType::SCH_TABLES_CONFIG:
         return std::make_unique<vectorized::SchemaTablesConfigScanner>();
+    case TSchemaTableType::SCH_BE_TABLETS:
+        return std::make_unique<SchemaBeTabletsScanner>();
     default:
         return std::make_unique<vectorized::SchemaDummyScanner>();
     }
