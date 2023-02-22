@@ -1926,19 +1926,19 @@ PARALLEL_TEST(VecStringFunctionsTest, replaceNullablePattern) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(
-            StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     const auto result = StringFunctions::replace(context, columns).value();
-    const auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
+    const auto v =
+            ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
 
     EXPECT_EQ(res[0], v->get_data()[0].to_string());
     EXPECT_TRUE(result->is_null(1));
     EXPECT_EQ(res[2], v->get_data()[2].to_string());
 
-    ASSERT_TRUE(
-            StringFunctions::replace_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                    .ok());
+    ASSERT_TRUE(StringFunctions::replace_close(context,
+                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, replaceOnlyNullPattern) {
@@ -1964,8 +1964,7 @@ PARALLEL_TEST(VecStringFunctionsTest, replaceOnlyNullPattern) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(
-            StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     const auto result = StringFunctions::replace(context, columns).value();
 
@@ -1973,9 +1972,9 @@ PARALLEL_TEST(VecStringFunctionsTest, replaceOnlyNullPattern) {
         EXPECT_TRUE(result->is_null(i));
     }
 
-    ASSERT_TRUE(
-            StringFunctions::replace_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                    .ok());
+    ASSERT_TRUE(StringFunctions::replace_close(context,
+                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, replaceConstPattern) {
@@ -2004,8 +2003,7 @@ PARALLEL_TEST(VecStringFunctionsTest, replaceConstPattern) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(
-            StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     const auto result = StringFunctions::replace(context, columns).value();
     const auto v = ColumnHelper::as_column<BinaryColumn>(result);
@@ -2014,9 +2012,9 @@ PARALLEL_TEST(VecStringFunctionsTest, replaceConstPattern) {
         ASSERT_EQ(res[i], v->get_data()[i].to_string());
     }
 
-    ASSERT_TRUE(
-            StringFunctions::replace_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                    .ok());
+    ASSERT_TRUE(StringFunctions::replace_close(context,
+                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, replace) {
@@ -2047,8 +2045,7 @@ PARALLEL_TEST(VecStringFunctionsTest, replace) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(
-            StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     const auto result = StringFunctions::replace(context, columns).value();
     const auto v = ColumnHelper::as_column<BinaryColumn>(result);
@@ -2057,9 +2054,9 @@ PARALLEL_TEST(VecStringFunctionsTest, replace) {
         ASSERT_EQ(res[i], v->get_data()[i].to_string());
     }
 
-    ASSERT_TRUE(
-            StringFunctions::replace_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                    .ok());
+    ASSERT_TRUE(StringFunctions::replace_close(context,
+                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, replaceWithEmptyPattern) {
@@ -2086,8 +2083,7 @@ PARALLEL_TEST(VecStringFunctionsTest, replaceWithEmptyPattern) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(
-            StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     const auto result = StringFunctions::replace(context, columns).value();
     const auto v = ColumnHelper::as_column<BinaryColumn>(result);
@@ -2096,9 +2092,9 @@ PARALLEL_TEST(VecStringFunctionsTest, replaceWithEmptyPattern) {
         ASSERT_EQ(strs[i], v->get_data()[i].to_string());
     }
 
-    ASSERT_TRUE(
-            StringFunctions::replace_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                    .ok());
+    ASSERT_TRUE(StringFunctions::replace_close(context,
+                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, moneyFormatDouble) {

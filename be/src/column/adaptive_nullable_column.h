@@ -567,7 +567,7 @@ public:
         }
     }
 
-    void materialized_nullable() const {
+    void materialized_nullable() const override {
         if (_state == State::kMaterialized) {
             return;
         }
