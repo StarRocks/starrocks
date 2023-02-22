@@ -3,6 +3,7 @@
 ## Description
 
 This function uses repl to replace a sequence of characters in str that matches pattern.
+If any argument is NULL, the result is NULL.
 Note: Prior to 3.0, it was implemented as [regexp_replace](../like_predicate-functions/regexp_replace.md).
 
 ## Syntax
@@ -56,6 +57,27 @@ MySQL > SELECT replace('StarRocks is awesome', 'handsome', '404: Pattern Not Fou
 | StarRocks is awesome                                                  |
 +-----------------------------------------------------------------------+
 
+
+MySQL > SELECT replace(NULL, 'a', 'z');
++-------------------------+
+| replace(NULL, 'a', 'z') |
++-------------------------+
+| NULL                    |
++-------------------------+
+
+MySQL > SELECT replace('abc', NULL, 'z');
++---------------------------+
+| replace('abc', NULL, 'z') |
++---------------------------+
+| NULL                      |
++---------------------------+
+
+MySQL > SELECT replace('abc', 'a', NULL);
++---------------------------+
+| replace('abc', 'a', NULL) |
++---------------------------+
+| NULL                      |
++---------------------------+
 ```
 
 ## keyword
