@@ -535,14 +535,14 @@ protected:
         const auto& data = down_cast<const ColumnType&>(src_column).get_data();
 
         auto less_fn = [&data](uint32_t l, uint32_t r) -> bool { return data[l] < data[r]; };
-        pdqsort(false, sort_index->begin() + offset, sort_index->begin() + offset + count, less_fn);
+        pdqsort(sort_index->begin() + offset, sort_index->begin() + offset + count, less_fn);
     }
 
     // For JSON type
     static void _sort_column(std::vector<uint32_t>* sort_index, const JsonColumn& src_column, size_t offset,
                              size_t count) {
         auto less_fn = [&](uint32_t l, uint32_t r) -> bool { return src_column.compare_at(l, r, src_column, -1) < 0; };
-        pdqsort(false, sort_index->begin() + offset, sort_index->begin() + offset + count, less_fn);
+        pdqsort(sort_index->begin() + offset, sort_index->begin() + offset + count, less_fn);
     }
 
     static void _sort_item(std::vector<uint32_t>* sort_index, const Column& src_column,

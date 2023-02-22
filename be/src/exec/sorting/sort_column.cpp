@@ -451,7 +451,7 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
         int range_first = ti.range_first, range_last = ti.range_last;
         if (range_last - range_first > 1) {
             ::pdqsort(
-                    cancel, small_perm->begin() + range_first, small_perm->begin() + range_last,
+                    small_perm->begin() + range_first, small_perm->begin() + range_last,
                     [](SmallPermuteItem lhs, SmallPermuteItem rhs) { return lhs.index_in_chunk < rhs.index_in_chunk; });
         }
     }
