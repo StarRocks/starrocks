@@ -1536,8 +1536,134 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertEquals("Materialized view query statement select item " +
                     "date_trunc('month', `tbl1`.`k1`) must has an alias", e.getMessage());
+=======
+            Assert.assertEquals("Materialized view query statement select item rand() " +
+                    "not supported nondeterministic function", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testAsSelectItemAlias1() throws Exception {
+        String sql = "create materialized view testAsSelectItemAlias1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            MaterializedView mv = ((MaterializedView) testDb.getTable("testAsSelectItemAlias1"));
+            mv.setActive(false);
+            List<Column> mvColumns = mv.getFullSchema();
+
+            Assert.assertEquals("EXPR$0", mvColumns.get(0).getName());
+            Assert.assertEquals("k1", mvColumns.get(1).getName());
+            Assert.assertEquals("k2", mvColumns.get(2).getName());
+
+        } catch (Exception e) {
+            Assert.fail("Materialized view query statement select item " +
+                    "date_trunc('month', `tbl1`.`k1`) should be supported");
+        } finally {
+            dropMv("testAsSelectItemAlias1");
+        }
+    }
+
+    @Test
+    public void testAsSelectItemAlias2() throws Exception {
+        String sql = "create materialized view testAsSelectItemAlias2 " +
+                "partition by k1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as " +
+                "select date_trunc('month',tbl1.k1), k1, k2 from tbl1 union all " +
+                "select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            MaterializedView mv = ((MaterializedView) testDb.getTable("testAsSelectItemAlias2"));
+            mv.setActive(false);
+            List<Column> mvColumns = mv.getFullSchema();
+
+            Assert.assertEquals("EXPR$0", mvColumns.get(0).getName());
+            Assert.assertEquals("k1", mvColumns.get(1).getName());
+            Assert.assertEquals("k2", mvColumns.get(2).getName());
+
+        } catch (Exception e) {
+            Assert.fail("Materialized view query statement select item " +
+                    "date_trunc('month', `tbl1`.`k1`) should be supported");
+        } finally {
+            dropMv("testAsSelectItemAlias2");
+        }
+    }
+
+    @Test
+    // partition by expr is still not supported.
+    public void testAsSelectItemAlias3() throws Exception {
+        String sql = "create materialized view testAsSelectItemAlias3 " +
+                "partition by date_trunc('month',tbl1.k1) " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Materialized view partition exp: " +
+                    "`tbl1`.`k1` must related to column"));
+        } finally {
+            dropMv("testAsSelectItemAlias3");
+        }
+    }
+
+    @Test
+    // distribution by expr is still not supported.
+    public void testAsSelectItemAlias4() throws Exception {
+        String sql = "create materialized view testAsSelectItemAlias1 " +
+                "partition by k1 " +
+                "distributed by hash(date_trunc('month',tbl1.k1)) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("You have an error in your SQL syntax; check the manual that " +
+                    "corresponds to your MySQL server version for the right syntax to use near '(' at line 1"));
+        }
+    }
+
+    @Test
+    public void testAsSelectItemNoAliasWithNondeterministicFunction1() {
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select rand(), date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Materialized view query statement select item rand() not " +
+                    "supported nondeterministic function",
+                    e.getMessage());
+>>>>>>> 87fea4324 ([Feature] support view delta join mv rewrite (#18146))
         }
     }
 

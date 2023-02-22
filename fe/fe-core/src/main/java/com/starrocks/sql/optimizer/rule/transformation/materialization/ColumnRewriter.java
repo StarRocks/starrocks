@@ -136,7 +136,12 @@ public class ColumnRewriter {
                     }
                 }
                 if (!found) {
+<<<<<<< HEAD
                     LOG.warn("can not find column ref:%s in target relation:%d", columnRef, targetRelationId);
+=======
+                    LOG.warn("can not find column ref id:{} name:{} in target relation:{}",
+                            columnRef.getId(), columnRef.getName(), targetRelationId);
+>>>>>>> 87fea4324 ([Feature] support view delta join mv rewrite (#18146))
                 }
             }
             if (enableEquivalenceClassesRewrite && equivalenceClasses != null) {

@@ -119,6 +119,74 @@ public class MvUtils {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // get all ref table scan descs within and below root
+    // the operator tree must match the rule pattern we define and now we only support SPJG pattern tree rewrite.
+    // so here LogicalScanOperator's children must be LogicalScanOperator or LogicalJoinOperator
+    public static List<TableScanDesc> getTableScanDescs(OptExpression root) {
+        TableScanContext scanContext = new TableScanContext();
+        OptExpressionVisitor joinFinder = new OptExpressionVisitor<Void, TableScanContext>() {
+            @Override
+            public Void visit(OptExpression optExpression, TableScanContext context) {
+                for (OptExpression child : optExpression.getInputs()) {
+                    child.getOp().accept(this, child, context);
+                }
+                return null;
+            }
+
+            @Override
+            public Void visitLogicalTableScan(OptExpression optExpression, TableScanContext context) {
+                LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
+                Table table = scanOperator.getTable();
+                Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
+                TableScanDesc tableScanDesc = new TableScanDesc(table, id, scanOperator, null);
+                context.getTableScanDescs().add(tableScanDesc);
+                scanContext.getTableIdMap().put(table, ++id);
+                return null;
+            }
+
+            @Override
+            public Void visitLogicalJoin(OptExpression optExpression, TableScanContext context) {
+                for (OptExpression child : optExpression.getInputs()) {
+                    if (child.getOp() instanceof LogicalScanOperator) {
+                        LogicalScanOperator scanOperator = (LogicalScanOperator) child.getOp();
+                        Table table = scanOperator.getTable();
+                        Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
+                        LogicalJoinOperator joinOperator = optExpression.getOp().cast();
+                        TableScanDesc tableScanDesc =
+                                new TableScanDesc(table, id, scanOperator, joinOperator.getJoinType());
+                        context.getTableScanDescs().add(tableScanDesc);
+                        scanContext.getTableIdMap().put(table, ++id);
+                    } else {
+                        child.getOp().accept(this, child, context);
+                    }
+                }
+                return null;
+            }
+        };
+
+        root.getOp().<Void, TableScanContext>accept(joinFinder, root, scanContext);
+        return scanContext.getTableScanDescs();
+    }
+
+    public static List<JoinOperator> getAllJoinOperators(OptExpression root) {
+        List<JoinOperator> joinOperators = Lists.newArrayList();
+        getAllJoinOperators(root, joinOperators);
+        return joinOperators;
+    }
+
+    private static void getAllJoinOperators(OptExpression root, List<JoinOperator> joinOperators) {
+        if (root.getOp() instanceof LogicalJoinOperator) {
+            LogicalJoinOperator join = (LogicalJoinOperator) root.getOp();
+            joinOperators.add(join.getJoinType());
+        }
+        for (OptExpression child : root.getInputs()) {
+            getAllJoinOperators(child, joinOperators);
+        }
+    }
+
+>>>>>>> 87fea4324 ([Feature] support view delta join mv rewrite (#18146))
     public static List<LogicalScanOperator> getScanOperator(OptExpression root) {
         List<LogicalScanOperator> scanOperators = Lists.newArrayList();
         getScanOperator(root, scanOperators);
