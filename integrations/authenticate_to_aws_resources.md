@@ -141,7 +141,7 @@ IAM User 也是一种 Catalog 级的数据源访问控制解决方案，支持�
 
 StarRocks 中 Instance Profile、Assumed Role、以及 IAM User 三种认证方式的原理和差异如下图所示。
 
-![Credentials](../assets/credential_method_comparison_zh.png)
+![Credentials](../assets/authenticate_s3_credential_methods_zh.png)
 
 ## 相关参数配置
 
