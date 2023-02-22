@@ -348,10 +348,10 @@ public class InformationSchemaDataSource {
             case HIVE:
             case ICEBERG:
             case HUDI:
-            case LAKE:
             case ELASTICSEARCH:
             case JDBC:
                 return "EXTERNAL TABLE";
+            case LAKE:
             case OLAP:
             case OLAP_EXTERNAL:
                 return "BASE TABLE";
