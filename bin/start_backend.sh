@@ -115,7 +115,7 @@ export LIBHDFS_OPTS="$LIBHDFS_OPTS -Xrs"
 
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
-export CLASSPATH=$STARROCKS_HOME/conf:$STARROCKS_HOME/lib/jni-packages/*:$HADOOP_CLASSPATH:$CLASSPATH
+export CLASSPATH=$STARROCKS_HOME/lib/jni-packages/udf-extensions-jar-with-dependencies.jar:$STARROCKS_HOME/lib/jni-packages/starrocks-jdbc-bridge-jar-with-dependencies.jar:$STARROCKS_HOME/conf:$STARROCKS_HOME/lib/jni-packages/*:$HADOOP_CLASSPATH:$CLASSPATH
 
 
 # ================= native section =====================
