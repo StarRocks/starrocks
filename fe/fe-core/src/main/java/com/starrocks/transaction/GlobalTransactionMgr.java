@@ -451,7 +451,7 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void abortTransaction(long dbId, long transactionId, String reason) throws UserException {
-        abortTransaction(dbId, transactionId, reason, null);
+        abortTransaction(dbId, transactionId, reason, Lists.newArrayList());
     }
 
     public void abortTransaction(long dbId, long transactionId, String reason, List<TabletFailInfo> failedTablets)
