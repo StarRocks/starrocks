@@ -4577,7 +4577,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<Expr> partitionExprs = visit(context.partition, Expr.class);
 
         return new AnalyticExpr(functionCallExpr, partitionExprs, orderByElements,
-                (AnalyticWindow) visitIfPresent(context.windowFrame()));
+                (AnalyticWindow) visitIfPresent(context.windowFrame()),
+                context.bracketHint() == null ? null : context.bracketHint().identifier(0).getText());
     }
 
     @Override
