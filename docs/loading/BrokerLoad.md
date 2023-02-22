@@ -126,7 +126,7 @@ LOAD LABEL test_db.label1
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
-
+    ,
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
@@ -153,7 +153,7 @@ LOAD LABEL test_db.label2
     DATA INFILE("s3a://bucket_s3/input/file1.csv")
     INTO TABLE table1
     (id, name, score)
-    
+    ,
     DATA INFILE("s3a://bucket_s3/input/file2.csv")
     INTO TABLE table2
     (id, city)
@@ -181,7 +181,7 @@ LOAD LABEL test_db.label3
     DATA INFILE("s3a://bucket_gcs/input/file1.csv")
     INTO TABLE table1
     (id, name, score)
-    
+    ,
     DATA INFILE("s3a://bucket_gcs/input/file2.csv")
     INTO TABLE table2
     (id, city)
