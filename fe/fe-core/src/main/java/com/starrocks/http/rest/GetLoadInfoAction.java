@@ -43,7 +43,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.UnauthorizedException;
 import com.starrocks.load.Load;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -79,7 +79,7 @@ public class GetLoadInfoAction extends RestBaseAction {
 
         if (info.tblNames.isEmpty()) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkActionInDb(ConnectContext.get(), info.dbName, PrivilegeType.INSERT)) {
+                if (!PrivilegeActions.checkActionInDb(ConnectContext.get(), info.dbName, PrivilegeType.INSERT)) {
                     throw new UnauthorizedException(
                             "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
                 }

@@ -37,7 +37,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
@@ -95,7 +95,7 @@ public class InformationSchemaDataSource {
         }
         for (String fullName : dbNames) {
             if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, fullName)) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
                     continue;
                 }
             } else {

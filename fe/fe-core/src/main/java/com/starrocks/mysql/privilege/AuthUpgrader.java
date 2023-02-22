@@ -29,6 +29,7 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivObjNotFoundException;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeCollection;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
@@ -1039,13 +1040,13 @@ public class AuthUpgrader {
         switch (privilege) {
             case ADMIN_PRIV:   // ADMIN_PRIV -> db_admin + user_admin
                 grantRoleToCollection(collection, roleId,
-                        PrivilegeManager.DB_ADMIN_ROLE_ID, PrivilegeManager.USER_ADMIN_ROLE_ID);
+                        PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID, PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID);
                 break;
             case NODE_PRIV:    // NODE_PRIV -> cluster_admin
-                grantRoleToCollection(collection, roleId, PrivilegeManager.CLUSTER_ADMIN_ROLE_ID);
+                grantRoleToCollection(collection, roleId, PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_ID);
                 break;
             case GRANT_PRIV:   // GRANT_PRIV -> user_admin
-                grantRoleToCollection(collection, roleId, PrivilegeManager.USER_ADMIN_ROLE_ID);
+                grantRoleToCollection(collection, roleId, PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID);
                 break;
 
             default:

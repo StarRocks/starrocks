@@ -23,7 +23,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -75,7 +75,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
 
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         if (context.getGlobalStateMgr().isUsingNewPrivilege() &&
-                !PrivilegeManager.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
+                !PrivilegeActions.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
             return null;
         }
 

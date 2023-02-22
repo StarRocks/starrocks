@@ -47,7 +47,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -151,7 +151,7 @@ public class AnalyzerUtils {
             db.readLock();
             Function search = new Function(fnName, argTypes, Type.INVALID, false);
             Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            if (fn != null && !PrivilegeManager.checkFunctionAction(context, fn.dbName(),
+            if (fn != null && !PrivilegeActions.checkFunctionAction(context, fn.dbName(),
                     fn.signatureString(), PrivilegeType.USAGE)) {
                 throw new StarRocksPlannerException(String.format("Access denied. " +
                         "Found UDF: %s and need the USAGE privilege for FUNCTION", fn.getFunctionName()),
@@ -168,10 +168,10 @@ public class AnalyzerUtils {
         Function search = new Function(fnName, argTypes, Type.INVALID, false);
         Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        if (fn != null && !PrivilegeManager.checkGlobalFunctionAction(context,
+        if (fn != null && !PrivilegeActions.checkGlobalFunctionAction(context,
                 fn.signatureString(), PrivilegeType.USAGE)) {
             throw new StarRocksPlannerException(String.format("Access denied. " +
-                            "Found UDF: %s and need the USAGE privilege for GLOBAL FUNCTION", fn.getFunctionName()),
+                    "Found UDF: %s and need the USAGE privilege for GLOBAL FUNCTION", fn.getFunctionName()),
                     ErrorType.USER_ERROR);
         }
 
@@ -631,8 +631,8 @@ public class AnalyzerUtils {
         }
     }
 
-    public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
-               List<String> partitionValues, long interval, String granularity) throws AnalysisException {
+    public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(
+            OlapTable olapTable, List<String> partitionValues, long interval, String granularity) throws AnalysisException {
         Map<String, AddPartitionClause> result = Maps.newHashMap();
         String partitionPrefix = "p";
         for (String partitionValue : partitionValues) {
