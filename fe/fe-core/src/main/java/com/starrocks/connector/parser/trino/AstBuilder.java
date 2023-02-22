@@ -627,7 +627,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         List<Expr> partitionExprs = visit(node.getPartitionBy(), context, Expr.class);
 
         return new AnalyticExpr(functionCallExpr, partitionExprs, orderByElements,
-                (AnalyticWindow) processOptional(node.getFrame(), context));
+                (AnalyticWindow) processOptional(node.getFrame(), context), null);
     }
 
     private ParseNode visitWindow(FunctionCallExpr functionCallExpr, Window windowSpec, ParseTreeContext context) {

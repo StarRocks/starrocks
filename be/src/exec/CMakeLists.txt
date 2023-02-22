@@ -212,6 +212,9 @@ set(EXEC_FILES
     pipeline/set/intersect_build_sink_operator.cpp
     pipeline/set/intersect_probe_sink_operator.cpp
     pipeline/set/intersect_output_source_operator.cpp
+    pipeline/hash_partition_context.cpp
+    pipeline/hash_partition_sink_operator.cpp
+    pipeline/hash_partition_source_operator.cpp
     pipeline/adaptive/collect_stats_sink_operator.cpp
     pipeline/adaptive/collect_stats_source_operator.cpp
     pipeline/adaptive/collect_stats_context.cpp

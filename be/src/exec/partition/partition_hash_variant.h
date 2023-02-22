@@ -191,10 +191,14 @@ struct PartitionHashMapVariant {
 
     void init(RuntimeState* state, Type type_);
 
+    void reset();
+
     size_t capacity() const;
 
     size_t size() const;
 
     size_t memory_usage() const;
+
+    bool is_nullable() const;
 };
 } // namespace starrocks
