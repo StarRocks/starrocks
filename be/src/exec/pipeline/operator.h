@@ -140,8 +140,6 @@ public:
 
     MemTracker* mem_tracker() const { return _mem_tracker.get(); }
 
-    RuntimeProfile* get_runtime_profile() const { return _runtime_profile.get(); }
-
     virtual std::string get_name() const {
         return strings::Substitute("$0_$1_$2($3)", _name, _plan_node_id, this, is_finished() ? "X" : "O");
     }
