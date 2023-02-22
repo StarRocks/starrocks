@@ -17,7 +17,6 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/stream_epoch_manager.h"
-#include "exec/stream/stream_fdw.h"
 
 namespace starrocks::stream {
 
