@@ -40,7 +40,7 @@ jobs:
         if: steps.changes.outputs.be == 'true'
         id: review
         with:
-          build_dir: be/build_Release
+          build_dir: be/ut_build_ASAN
           config_file: .clang-tidy
 
       - name: post build
