@@ -237,6 +237,7 @@ set(EXEC_FILES
     spill/spilled_stream.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
+    stream/aggregate/agg_group_state.cpp
     stream/aggregate/stream_aggregator.cpp
     stream/aggregate/stream_aggregate_operator.cpp
     stream/stream_aggregate_node.cpp)

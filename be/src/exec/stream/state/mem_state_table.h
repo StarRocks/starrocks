@@ -22,9 +22,10 @@
 
 namespace starrocks::stream {
 
-using Fields = Fields;
-using Schema = Schema;
+using DatumRow = std::vector<Datum>;
 using DatumKeyRow = std::vector<DatumKey>;
+using DatumRowPtr = std::shared_ptr<DatumRow>;
+using DatumRowOpt = std::optional<DatumRow>;
 
 // NOTE: This class is only used in testing. DatumRowIterator is used to convert datum to chunk iter.
 class DatumRowIterator final : public ChunkIterator {
@@ -63,22 +64,31 @@ public:
     }
     ~MemStateTable() override = default;
 
-    Status init() override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
+
+    Status seek(const Columns& keys, StateTableResult& values) const override;
+    Status seek(const Columns& keys, const std::vector<uint8_t>& selection, StateTableResult& values) const override;
+
+    Status seek(const Columns& keys, const std::vector<std::string>& projection_columns,
+                StateTableResult& values) const override;
+    ChunkIteratorPtrOr prefix_scan(const Columns& keys, size_t row_idx) const override;
+    ChunkIteratorPtrOr prefix_scan(const std::vector<std::string>& projection_columns, const Columns& keys,
+                                   size_t row_idx) const override;
+
+    Status write(RuntimeState* state, const StreamChunkPtr& chunk) override;
     Status commit(RuntimeState* state) override;
-    ChunkPtrOr seek(const DatumRow& key) const override;
-    std::vector<ChunkPtrOr> seek(const std::vector<DatumRow>& keys) const override;
-    ChunkIteratorPtrOr prefix_scan(const DatumRow& key) const override;
-    std::vector<ChunkIteratorPtrOr> prefix_scan(const std::vector<DatumRow>& keys) const override;
-    Status flush(RuntimeState* state, StreamChunk* chunk) override;
+    Status reset_epoch(RuntimeState* state) override;
 
 private:
+    DatumKeyRow _convert_columns_to_key(const Columns& cols, size_t idx) const;
+    Status _append_datum_row_to_chunk(const DatumRow& v_row, ChunkPtr& result_chunk) const;
+    Status _append_null_to_chunk(ChunkPtr& result_chunk) const;
+
     Schema _make_schema_from_slots(const std::vector<SlotDescriptor*>& slots) const;
-    static DatumKeyRow _convert_datum_row_to_key(const DatumRow& row, size_t start, size_t end);
-    static DatumKeyRow _make_datum_key_row(Chunk* chunk, size_t start, size_t end, int row_idx);
-    static DatumRow _make_datum_row(Chunk* chunk, size_t start, size_t end, int row_idx);
-    bool _equal_keys(const DatumKeyRow& m_k, const DatumRow key) const;
+    static DatumKeyRow _make_datum_key_row(const ChunkPtr& chunk, size_t start, size_t end, int row_idx);
+    static DatumRow _make_datum_row(const ChunkPtr& chunk, size_t start, size_t end, int row_idx);
+    bool _equal_keys(const DatumKeyRow& m_k, const DatumKeyRow& keys) const;
 
 private:
     std::vector<SlotDescriptor*> _slots;
