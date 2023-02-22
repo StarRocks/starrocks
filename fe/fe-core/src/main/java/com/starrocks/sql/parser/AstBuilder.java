@@ -581,51 +581,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionDescList.add(rangePartitionDesc);
             }
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
-            String functionName = functionCallExpr.getFnName().getFunction();
-            NodePosition pos = functionCallExpr.getPos();
-            List<String> columnList = Lists.newArrayList();
-            List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
-            if (FunctionSet.DATE_TRUNC.equals(functionName)) {
-                if (paramsExpr.size() != 2) {
-                    throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
-                }
-                Expr firstExpr = paramsExpr.get(0);
-                if (firstExpr instanceof StringLiteral) {
-                    StringLiteral stringLiteral = (StringLiteral) firstExpr;
-                    String fmt = stringLiteral.getValue();
-                    if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
-                        throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), pos);
-                    }
-                } else {
-                    throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName));
-                }
-                Expr secondExpr = paramsExpr.get(1);
-                if (secondExpr instanceof SlotRef) {
-                    columnList.add(((SlotRef) secondExpr).getColumnName());
-                } else {
-                    throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), pos);
-                }
-            } else if (FunctionSet.TIME_SLICE.equals(functionName)) {
-                Expr firstExpr = paramsExpr.get(0);
-                if (firstExpr instanceof SlotRef) {
-                    columnList.add(((SlotRef) firstExpr).getColumnName());
-                } else {
-                    throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), pos);
-                }
-                Expr secondExpr = paramsExpr.get(1);
-                Expr thirdExpr = paramsExpr.get(2);
-                if (secondExpr instanceof IntLiteral && thirdExpr instanceof StringLiteral) {
-                    StringLiteral stringLiteral = (StringLiteral) thirdExpr;
-                    String fmt = stringLiteral.getValue();
-                    if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
-                        throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), pos);
-                    }
-                } else {
-                    throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), pos);
-                }
-            } else {
-                throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
-            }
+            List<String> columnList = checkAndExtractPartitionCol(functionCallExpr);
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
             return new ExpressionPartitionDesc(rangePartitionDesc, functionCallExpr);
         }
@@ -647,6 +603,56 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
         }
         return partitionDesc;
+    }
+
+    // check the partition expr is legal and extract partition columns
+    private List<String> checkAndExtractPartitionCol(FunctionCallExpr expr) {
+        String functionName = expr.getFnName().getFunction();
+        NodePosition pos = expr.getPos();
+        List<String> columnList = Lists.newArrayList();
+        List<Expr> paramsExpr = expr.getParams().exprs();
+        if (FunctionSet.DATE_TRUNC.equals(functionName)) {
+            if (paramsExpr.size() != 2) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr firstExpr = paramsExpr.get(0);
+            if (firstExpr instanceof StringLiteral) {
+                StringLiteral stringLiteral = (StringLiteral) firstExpr;
+                String fmt = stringLiteral.getValue();
+                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                }
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr secondExpr = paramsExpr.get(1);
+            if (secondExpr instanceof SlotRef) {
+                columnList.add(((SlotRef) secondExpr).getColumnName());
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+        } else if (FunctionSet.TIME_SLICE.equals(functionName)) {
+            Expr firstExpr = paramsExpr.get(0);
+            if (firstExpr instanceof SlotRef) {
+                columnList.add(((SlotRef) firstExpr).getColumnName());
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr secondExpr = paramsExpr.get(1);
+            Expr thirdExpr = paramsExpr.get(2);
+            if (secondExpr instanceof IntLiteral && thirdExpr instanceof StringLiteral) {
+                StringLiteral stringLiteral = (StringLiteral) thirdExpr;
+                String fmt = stringLiteral.getValue();
+                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                }
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+        }
+        return columnList;
     }
 
     private AlterClause getRollup(StarRocksParser.RollupItemContext rollupItemContext) {
@@ -1274,17 +1280,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 if (expr instanceof SlotRef) {
                     expressionPartitionDesc = new ExpressionPartitionDesc(expr);
                 } else if (expr instanceof FunctionCallExpr) {
-                    for (Expr child : expr.getChildren()) {
-                        if (child instanceof SlotRef) {
-                            expressionPartitionDesc = new ExpressionPartitionDesc(expr);
-                            break;
-                        }
-                    }
+                    checkAndExtractPartitionCol((FunctionCallExpr) expr);
+                    expressionPartitionDesc = new ExpressionPartitionDesc(expr);
                 } else {
-                    throw new IllegalArgumentException("Partition exp not supports:" + expr.toSql());
-                }
-
-                if (expressionPartitionDesc == null) {
                     throw new IllegalArgumentException("Partition exp not supports:" + expr.toSql());
                 }
             }
@@ -4726,7 +4724,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     try {
                         ((LiteralExpr) child).swapSign();
                     } catch (NotImplementedException e) {
-                        throw new ParsingException(PARSER_ERROR_MSG.wrongExpr(child.toSql()), child.getPos());
+                        throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(child.toSql()), child.getPos());
                     }
                     return child;
                 } else {
@@ -5236,7 +5234,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitArraySlice(StarRocksParser.ArraySliceContext context) {
-        throw new ParsingException(PARSER_ERROR_MSG.wrongExpr("array slice"), createPos(context));
+        throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr("array slice"), createPos(context));
         //TODO: support array slice in BE
         /*
         Expr expr = (Expr) visit(context.primaryExpression());
@@ -5453,7 +5451,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (expr instanceof IntLiteral) {
                 intervalVal = ((IntLiteral) expr).getLongValue();
             } else {
-                throw new ParsingException(PARSER_ERROR_MSG.wrongExpr(expr.toSql()), expr.getPos());
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(),
+                        "RANGE DESC"), expr.getPos());
             }
             return new MultiRangePartitionDesc(
                     ((StringLiteral) visit(context.string(0))).getStringValue(),
