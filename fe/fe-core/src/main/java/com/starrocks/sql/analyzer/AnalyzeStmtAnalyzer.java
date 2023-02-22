@@ -30,6 +30,8 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 public class AnalyzeStmtAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -39,6 +41,7 @@ public class AnalyzeStmtAnalyzer {
     private static final List<String> VALID_PROPERTIES = Lists.newArrayList(
             StatsConstants.STATISTIC_AUTO_COLLECT_RATIO,
             StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
+            StatsConstants.STATISTIC_EXCLUDE_PATTERN,
 
             StatsConstants.HISTOGRAM_BUCKET_NUM,
             StatsConstants.HISTOGRAM_MCV_SIZE,
@@ -150,6 +153,17 @@ public class AnalyzeStmtAnalyzer {
             for (String key : NUMBER_PROP_KEY_LIST) {
                 if (properties.containsKey(key) && !NumberUtils.isCreatable(properties.get(key))) {
                     throw new SemanticException("Property '%s' value must be numeric", key);
+                }
+            }
+
+            if (properties.containsKey(StatsConstants.STATISTIC_EXCLUDE_PATTERN)) {
+                String pattern = properties.get(StatsConstants.STATISTIC_EXCLUDE_PATTERN);
+                // check regex
+                try {
+                    Pattern.compile(pattern);
+                } catch (PatternSyntaxException e) {
+                    throw new SemanticException("Property %s value is error, msg: %s",
+                            StatsConstants.STATISTIC_EXCLUDE_PATTERN, e.getMessage());
                 }
             }
         }
