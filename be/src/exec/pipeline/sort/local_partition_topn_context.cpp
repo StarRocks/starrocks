@@ -60,7 +60,7 @@ Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
 }
 
 Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk) {
-    auto st = _chunks_partitioner->offer(
+    auto st = _chunks_partitioner->offer<true>(
             chunk,
             [this, state](size_t partition_idx) {
                 _chunks_sorters.emplace_back(std::make_shared<ChunksSorterTopn>(
@@ -70,7 +70,7 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
             [this, state](size_t partition_idx, const ChunkPtr& chunk) {
                 _chunks_sorters[partition_idx]->update(state, chunk);
             });
-    if (_chunks_partitioner->is_downgrade()) {
+    if (_chunks_partitioner->is_passthrough()) {
         transfer_all_chunks_from_partitioner_to_sorters(state);
     }
     return st;
@@ -100,8 +100,8 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
 }
 
 bool LocalPartitionTopnContext::has_output() {
-    if (_chunks_partitioner->is_downgrade() && _is_transfered) {
-        return _sorter_index < _chunks_sorters.size() || !_chunks_partitioner->is_downgrade_buffer_empty();
+    if (_chunks_partitioner->is_passthrough() && _is_transfered) {
+        return _sorter_index < _chunks_sorters.size() || !_chunks_partitioner->is_passthrough_buffer_empty();
     }
     return _is_sink_complete && _sorter_index < _chunks_sorters.size();
 }
@@ -121,7 +121,7 @@ StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk() {
             return chunk;
         }
     }
-    chunk = _chunks_partitioner->consume_from_downgrade_buffer();
+    chunk = _chunks_partitioner->consume_from_passthrough_buffer();
     return chunk;
 }
 
