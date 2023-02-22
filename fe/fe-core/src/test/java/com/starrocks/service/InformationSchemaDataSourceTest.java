@@ -108,9 +108,9 @@ public class InformationSchemaDataSourceTest {
         Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.HIVE));
         Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.ICEBERG));
         Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.HUDI));
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.LAKE));
         Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.ELASTICSEARCH));
         Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.JDBC));
+        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.LAKE));
         Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.OLAP));
         Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.OLAP_EXTERNAL));
         Assert.assertEquals("VIEW", m.invoke(InformationSchemaDataSource.class, TableType.MATERIALIZED_VIEW));
