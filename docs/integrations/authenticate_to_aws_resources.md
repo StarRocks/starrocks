@@ -147,7 +147,7 @@ You need to create an IAM user and attach the policy provided in the "[Access AW
 
 The following figure provides a high-level explanation of the differences in mechanism between instance profile-based credential, assumed role-based credential, and IAM user-based credential in StarRocks.
 
-![Comparison between credential methods](../assets/authenticate_s3_credential_method_en.png)
+![Comparison between credential methods](../assets/authenticate_s3_credential_methods.png)
 
 ## Build connections with AWS resources
 
