@@ -38,12 +38,20 @@ struct SchemaScannerParam {
     // and no longer call get_db_names() and get_table_names().
     bool without_db_table{false};
 
+    int64_t table_id{-1};
+    int64_t partition_id{-1};
+    int64_t tablet_id{-1};
+
     RuntimeProfile::Counter* _rpc_timer = nullptr;
     RuntimeProfile::Counter* _fill_chunk_timer = nullptr;
 
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner.h
     SchemaScannerParam()
 
     {}
+=======
+    SchemaScannerParam() = default;
+>>>>>>> 72d4b6667 ([Enhancement] Add BE tablets information to information schema (#18210)):be/src/exec/schema_scanner.h
 };
 
 // virtual scanner for all schema table

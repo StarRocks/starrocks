@@ -47,6 +47,7 @@ set(EXEC_FILES
     local_file_writer.cpp
     broker_writer.cpp
     parquet_builder.cpp
+<<<<<<< HEAD
     plain_text_builder.cpp
     vectorized/aggregator.cpp
     vectorized/aggregate/aggregate_base_node.cpp
@@ -123,6 +124,52 @@ set(EXEC_FILES
     vectorized/sorting/sort_column.cpp
     vectorized/sorting/sort_permute.cpp
     vectorized/connector_scan_node.cpp
+=======
+    file_scan_node.cpp
+    assert_num_rows_node.cpp
+    intersect_hash_set.cpp
+    intersect_node.cpp
+    hdfs_scanner.cpp
+    hdfs_scanner_orc.cpp
+    hdfs_scanner_parquet.cpp
+    hdfs_scanner_text.cpp
+    json_scanner.cpp
+    json_parser.cpp
+    project_node.cpp
+    dict_decode_node.cpp
+    repeat_node.cpp
+    table_function_node.cpp
+    schema_scanner.cpp
+    schema_scan_node.cpp
+    iceberg/iceberg_delete_builder.cpp
+    schema_scanner/schema_tables_scanner.cpp
+    schema_scanner/schema_dummy_scanner.cpp
+    schema_scanner/schema_schemata_scanner.cpp
+    schema_scanner/schema_variables_scanner.cpp
+    schema_scanner/schema_columns_scanner.cpp
+    schema_scanner/schema_charsets_scanner.cpp
+    schema_scanner/schema_collations_scanner.cpp
+    schema_scanner/schema_statistics_scanner.cpp
+    schema_scanner/schema_triggers_scanner.cpp
+    schema_scanner/schema_events_scanner.cpp
+    schema_scanner/schema_views_scanner.cpp
+    schema_scanner/schema_materialized_views_scanner.cpp
+    schema_scanner/schema_tasks_scanner.cpp
+    schema_scanner/schema_task_runs_scanner.cpp
+    schema_scanner/schema_user_privileges_scanner.cpp
+    schema_scanner/schema_schema_privileges_scanner.cpp
+    schema_scanner/schema_table_privileges_scanner.cpp
+    schema_scanner/schema_tables_config_scanner.cpp
+    schema_scanner/schema_be_tablets_scanner.cpp
+    schema_scanner/schema_helper.cpp
+    jdbc_scanner.cpp
+    sorting/compare_column.cpp
+    sorting/merge_column.cpp
+    sorting/merge_cascade.cpp
+    sorting/sort_column.cpp
+    sorting/sort_permute.cpp
+    connector_scan_node.cpp
+>>>>>>> 72d4b6667 ([Enhancement] Add BE tablets information to information schema (#18210))
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp

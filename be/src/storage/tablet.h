@@ -53,7 +53,11 @@ class TabletMeta;
 class TabletUpdates;
 class CompactionTask;
 class CompactionContext;
+<<<<<<< HEAD
 class CompactionCandidate;
+=======
+class TabletBasicInfo;
+>>>>>>> 72d4b6667 ([Enhancement] Add BE tablets information to information schema (#18210))
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
@@ -259,6 +263,17 @@ public:
         return _tablet_meta->set_enable_persistent_index(enable_persistent_index);
     }
 
+<<<<<<< HEAD
+=======
+    void set_binlog_config(TBinlogConfig binlog_config) { _tablet_meta->set_binlog_config(binlog_config); }
+
+    BinlogManager* binlog_manager() { return _binlog_manager == nullptr ? nullptr : _binlog_manager.get(); }
+
+    Status contains_version(const Version& version);
+
+    void get_basic_info(TabletBasicInfo& info);
+
+>>>>>>> 72d4b6667 ([Enhancement] Add BE tablets information to information schema (#18210))
 protected:
     void on_shutdown() override;
 

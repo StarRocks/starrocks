@@ -32,6 +32,7 @@ DIAGNOSTIC_POP
 #include <memory>
 
 #include "common/config.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "runtime/current_thread.h"
@@ -1333,6 +1334,68 @@ void TabletManager::_remove_tablet_from_partition(const Tablet& tablet) {
     }
 }
 
+<<<<<<< HEAD
+=======
+void TabletManager::get_tablets_by_partition(int64_t partition_id, std::vector<TabletInfo>& tablet_infos) {
+    std::shared_lock rlock(_partition_tablet_map_lock);
+    auto search = _partition_tablet_map.find(partition_id);
+    if (search != _partition_tablet_map.end()) {
+        tablet_infos.reserve(search->second.size());
+        tablet_infos.assign(search->second.begin(), search->second.end());
+    }
+}
+
+void TabletManager::get_tablets_basic_infos(int64_t table_id, int64_t partition_id, int64_t tablet_id,
+                                            std::vector<TabletBasicInfo>& tablet_infos) {
+    if (tablet_id != -1) {
+        auto tablet = get_tablet(tablet_id, true, nullptr);
+        if (tablet) {
+            auto& info = tablet_infos.emplace_back();
+            tablet->get_basic_info(info);
+        }
+    } else if (partition_id != -1) {
+        vector<int64_t> tablet_ids;
+        {
+            std::shared_lock rlock(_partition_tablet_map_lock);
+            auto search = _partition_tablet_map.find(partition_id);
+            if (search != _partition_tablet_map.end()) {
+                for (auto tablet_id : search->second) {
+                    tablet_ids.push_back(tablet_id.tablet_id);
+                }
+            }
+        }
+        for (int64_t tablet_id : tablet_ids) {
+            auto tablet = get_tablet(tablet_id, true, nullptr);
+            if (tablet) {
+                auto& info = tablet_infos.emplace_back();
+                tablet->get_basic_info(info);
+            }
+        }
+    } else {
+        for (auto& shard : _tablets_shards) {
+            std::shared_lock rlock(shard.lock);
+            for (auto& itr : shard.tablet_map) {
+                auto& tablet = itr.second;
+                if (table_id == -1 || tablet->tablet_meta()->table_id() == table_id) {
+                    auto& info = tablet_infos.emplace_back();
+                    tablet->get_basic_info(info);
+                }
+            }
+        }
+        // order by table_id, partition_id, tablet_id by default
+        std::sort(tablet_infos.begin(), tablet_infos.end(), [](const TabletBasicInfo& a, const TabletBasicInfo& b) {
+            if (a.partition_id == b.partition_id) {
+                return a.tablet_id < b.tablet_id;
+            }
+            if (a.table_id == b.table_id) {
+                return a.partition_id < b.partition_id;
+            }
+            return a.table_id < b.table_id;
+        });
+    }
+}
+
+>>>>>>> 72d4b6667 ([Enhancement] Add BE tablets information to information schema (#18210))
 std::shared_mutex& TabletManager::_get_tablets_shard_lock(TTabletId tabletId) {
     return _get_tablets_shard(tabletId).lock;
 }

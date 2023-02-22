@@ -113,6 +113,11 @@ enum TSchemaTableType {
     SCH_VIEWS,
     SCH_TASKS,
     SCH_TASK_RUNS,
+<<<<<<< HEAD
+=======
+    SCH_VERBOSE_SESSION_VARIABLES,
+    SCH_BE_TABLETS,
+>>>>>>> 72d4b6667 ([Enhancement] Add BE tablets information to information schema (#18210))
     SCH_INVALID
 }
 

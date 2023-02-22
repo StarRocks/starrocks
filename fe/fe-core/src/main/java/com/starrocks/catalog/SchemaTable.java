@@ -459,6 +459,47 @@ public class SchemaTable extends Table {
                                                     ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .column("TABLE_ROWS", ScalarType.createVarchar(50))
                                             .build()))
+<<<<<<< HEAD
+=======
+                    .put("tables_config",
+                            new SchemaTable(
+                                    SystemId.TABLES_CONFIG_ID,
+                                    "tables_config",
+                                    TableType.SCHEMA,
+                                    builder()
+                                            .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                            .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                            .column("TABLE_ENGINE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                            .column("TABLE_MODEL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                            .column("PRIMARY_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                            .column("PARTITION_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                            .column("DISTRIBUTE_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                            .column("DISTRIBUTE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                            .column("DISTRIBUTE_BUCKET", ScalarType.INT)
+                                            .column("SORT_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                            .column("PROPERTIES", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .build()))
+                    .put("be_tablets", new SchemaTable(
+                            SystemId.BE_TABLETS_ID,
+                            "be_tablets",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TABLE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("PARTITION_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TABLET_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NUM_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("MAX_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("MIN_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NUM_ROWSET", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NUM_ROW", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("DATA_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("INDEX_MEM", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CREATE_TIME", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
+>>>>>>> 72d4b6667 ([Enhancement] Add BE tablets information to information schema (#18210))
                     .build();
 
     public static class Builder {
@@ -492,4 +533,87 @@ public class SchemaTable extends Table {
     public boolean isSupported() {
         return true;
     }
+<<<<<<< HEAD
+=======
+
+    public enum SchemaTableType {
+        // defination
+        SCH_AUTHORS("AUTHORS", "AUTHORS", TSchemaTableType.SCH_AUTHORS),
+        SCH_CHARSETS("CHARSETS", "CHARACTER_SETS", TSchemaTableType.SCH_CHARSETS),
+        SCH_COLLATIONS("COLLATIONS", "COLLATIONS", TSchemaTableType.SCH_COLLATIONS),
+        SCH_COLLATION_CHARACTER_SET_APPLICABILITY("COLLATION_CHARACTER_SET_APPLICABILITY",
+                "COLLATION_CHARACTER_SET_APPLICABILITY",
+                TSchemaTableType.SCH_COLLATION_CHARACTER_SET_APPLICABILITY),
+        SCH_COLUMNS("COLUMNS", "COLUMNS", TSchemaTableType.SCH_COLUMNS),
+        SCH_COLUMN_PRIVILEGES("COLUMN_PRIVILEGES", "COLUMN_PRIVILEGES",
+                TSchemaTableType.SCH_COLUMN_PRIVILEGES),
+        SCH_ENGINES("ENGINES", "ENGINES", TSchemaTableType.SCH_ENGINES),
+        SCH_EVENTS("EVENTS", "EVENTS", TSchemaTableType.SCH_EVENTS),
+        SCH_FILES("FILES", "FILES", TSchemaTableType.SCH_FILES),
+        SCH_GLOBAL_STATUS("GLOBAL_STATUS", "GLOBAL_STATUS", TSchemaTableType.SCH_GLOBAL_STATUS),
+        SCH_GLOBAL_VARIABLES("GLOBAL_VARIABLES", "GLOBAL_VARIABLES",
+                TSchemaTableType.SCH_GLOBAL_VARIABLES),
+        SCH_KEY_COLUMN_USAGE("KEY_COLUMN_USAGE", "KEY_COLUMN_USAGE",
+                TSchemaTableType.SCH_KEY_COLUMN_USAGE),
+        SCH_MATERIALIZED_VIEWS("MATERIALIZED_VIEWS", "MATERIALIZED_VIEWS", TSchemaTableType.SCH_MATERIALIZED_VIEWS),
+        SCH_OPEN_TABLES("OPEN_TABLES", "OPEN_TABLES", TSchemaTableType.SCH_OPEN_TABLES),
+        SCH_PARTITIONS("PARTITIONS", "PARTITIONS", TSchemaTableType.SCH_PARTITIONS),
+        SCH_PLUGINS("PLUGINS", "PLUGINS", TSchemaTableType.SCH_PLUGINS),
+        SCH_PROCESSLIST("PROCESSLIST", "PROCESSLIST", TSchemaTableType.SCH_PROCESSLIST),
+        SCH_PROFILES("PROFILES", "PROFILES", TSchemaTableType.SCH_PROFILES),
+        SCH_REFERENTIAL_CONSTRAINTS("REFERENTIAL_CONSTRAINTS", "REFERENTIAL_CONSTRAINTS",
+                TSchemaTableType.SCH_REFERENTIAL_CONSTRAINTS),
+        SCH_PROCEDURES("ROUTINES", "ROUTINES", TSchemaTableType.SCH_PROCEDURES),
+        SCH_SCHEMATA("SCHEMATA", "SCHEMATA", TSchemaTableType.SCH_SCHEMATA),
+        SCH_SCHEMA_PRIVILEGES("SCHEMA_PRIVILEGES", "SCHEMA_PRIVILEGES",
+                TSchemaTableType.SCH_SCHEMA_PRIVILEGES),
+        SCH_SESSION_STATUS("SESSION_STATUS", "SESSION_STATUS", TSchemaTableType.SCH_SESSION_STATUS),
+        SCH_SESSION_VARIABLES("SESSION_VARIABLES", "SESSION_VARIABLES",
+                TSchemaTableType.SCH_SESSION_VARIABLES),
+        SCH_STATISTICS("STATISTICS", "STATISTICS", TSchemaTableType.SCH_STATISTICS),
+        SCH_STATUS("STATUS", "STATUS", TSchemaTableType.SCH_STATUS),
+        SCH_TABLES("TABLES", "TABLES", TSchemaTableType.SCH_TABLES),
+        SCH_TABLES_CONFIG("TABLES_CONFIG", "TABLES_CONFIG", TSchemaTableType.SCH_TABLES_CONFIG),
+        SCH_TABLE_CONSTRAINTS("TABLE_CONSTRAINTS", "TABLE_CONSTRAINTS",
+                TSchemaTableType.SCH_TABLE_CONSTRAINTS),
+        SCH_TABLE_NAMES("TABLE_NAMES", "TABLE_NAMES", TSchemaTableType.SCH_TABLE_NAMES),
+        SCH_TABLE_PRIVILEGES("TABLE_PRIVILEGES", "TABLE_PRIVILEGES",
+                TSchemaTableType.SCH_TABLE_PRIVILEGES),
+        SCH_TRIGGERS("TRIGGERS", "TRIGGERS", TSchemaTableType.SCH_TRIGGERS),
+        SCH_USER_PRIVILEGES("USER_PRIVILEGES", "USER_PRIVILEGES", TSchemaTableType.SCH_USER_PRIVILEGES),
+        SCH_VARIABLES("VARIABLES", "VARIABLES", TSchemaTableType.SCH_VARIABLES),
+        SCH_VIEWS("VIEWS", "VIEWS", TSchemaTableType.SCH_VIEWS),
+        SCH_CREATE_TABLE("CREATE_TABLE", "CREATE_TABLE", TSchemaTableType.SCH_CREATE_TABLE),
+        SCH_TASKS("TASKS", "TASKS", TSchemaTableType.SCH_TASKS),
+        SCH_TASK_RUNS("TASK_RUNS", "TASK_RUNS", TSchemaTableType.SCH_TASK_RUNS),
+        SCH_VERBOSE_SESSION_VARIABLES("VERBOSE_SESSION_VARIABLES", "VERBOSE_SESSION_VARIABLES",
+                TSchemaTableType.SCH_VERBOSE_SESSION_VARIABLES),
+        SCH_BE_TABLETS("BE_TABLETS", "BE_TABLETS",
+                TSchemaTableType.SCH_BE_TABLETS),
+        SCH_INVALID("NULL", "NULL", TSchemaTableType.SCH_INVALID);
+
+        private final String description;
+        private final String tableName;
+        private final TSchemaTableType tableType;
+
+        SchemaTableType(String description, String tableName, TSchemaTableType tableType) {
+            this.description = description;
+            this.tableName = tableName;
+            this.tableType = tableType;
+        }
+
+        public static TSchemaTableType getThriftType(String name) {
+            for (SchemaTableType type : SchemaTableType.values()) {
+                if (type.tableName.equalsIgnoreCase(name)) {
+                    return type.tableType;
+                }
+            }
+            return null;
+        }
+
+        public String toString() {
+            return description;
+        }
+    }
+>>>>>>> 72d4b6667 ([Enhancement] Add BE tablets information to information schema (#18210))
 }

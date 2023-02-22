@@ -27,6 +27,7 @@ class MemTracker;
 class RowsetReadOptions;
 class SnapshotMeta;
 class Tablet;
+class TabletBasicInfo;
 class TTabletInfo;
 
 namespace vectorized {
@@ -233,6 +234,8 @@ public:
                            std::vector<RowsetMetaPB>& rowset_metas_pb);
 
     Status check_and_remove_rowset();
+
+    void get_basic_info_extra(TabletBasicInfo& info);
 
 private:
     friend class Tablet;
