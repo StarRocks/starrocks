@@ -136,7 +136,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
-        // if use_staros, create lake table
         KeysType keysType = KeysType.UNIQUE_KEYS;
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,
@@ -168,7 +167,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
-        // if use_staros, create lake table, which not support primary key
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,
                 StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),

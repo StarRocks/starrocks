@@ -53,7 +53,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
@@ -423,7 +422,7 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             // remove worker
-            if (Config.integrate_starmgr) {
+            if (GlobalStateMgr.getCurrentState().isSharedDataMode()) {
                 long starletPort = droppedBackend.getStarletPort();
                 // only need to remove worker after be reported its staretPort
                 if (starletPort != 0) {
@@ -1026,7 +1025,7 @@ public class SystemInfoService {
         if (null != cluster) {
             cluster.removeBackend(backend.getId());
             // clear map in starosAgent
-            if (Config.integrate_starmgr) {
+            if (GlobalStateMgr.getCurrentState().isSharedDataMode()) {
                 long starletPort = backend.getStarletPort();
                 if (starletPort == 0) {
                     return;
