@@ -11,7 +11,7 @@ DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ART
 ```
 **E.g.**
 ```shell
-DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=ghcr.io/starrocks/starrocks/artifact-ubuntu:latest -f allin1-ubuntu.Dockerfile -t allin1-ubuntu:latest .
+DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=ghcr.io/starrocks/starrocks/artifact-ubuntu:main -f allin1-ubuntu.Dockerfile -t allin1-ubuntu:main .
 ```
 
 **2) Use locally build artifacts to package allin1 runtime container image**
@@ -20,5 +20,5 @@ DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=local --build-arg LOC
 ```
 **E.g.**
 ```shell
-DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=local --build-arg LOCAL_REPO_PATH=. -f allin1-ubuntu.Dockerfile -t allin1-ubuntu:latest .
+DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=local --build-arg LOCAL_REPO_PATH=. -f allin1-ubuntu.Dockerfile -t allin1-ubuntu:main .
 ```
