@@ -898,7 +898,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             readUnlock();
         }
         Preconditions.checkState(endTimeMs != -1, endTimeMs);
-        if (isForce || ((currentMs - endTimeMs) > Config.label_keep_max_second * 1000)) {
+        if (isForce || ((currentMs - endTimeMs) > Config.stream_load_task_keep_max_second * 1000L)) {
             return true;
         }
         return false;

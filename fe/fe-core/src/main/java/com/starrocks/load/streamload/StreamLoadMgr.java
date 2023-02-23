@@ -236,15 +236,15 @@ public class StreamLoadMgr {
         }
 
         // Clear the stream load tasks manually
-        if (idToStreamLoadTask.size() > Config.label_keep_max_num) {
+        if (idToStreamLoadTask.size() > Config.stream_load_task_keep_max_num) {
             // If enable_load_profile = true,
             // most stream load tasks are generated through flink-cdc and routine load generally,
             // so clearing the syncStreamLoadTask is preferred.
             LOG.info("trigger cleanSyncStreamLoadTasks when add load task label:{}", task.getLabel());
             cleanSyncStreamLoadTasks();
             // The size of idToStreamLoadTask is still huge, indicates that the type of most tasks is PARALLEL,
-            // so clean all the streamLoadTasks manaully not waitting for Config.label_keep_max_second.
-            if (idToStreamLoadTask.size() > Config.label_keep_max_num / 2) {
+            // so clean all the streamLoadTasks manaully not waitting for Config.stream_load_task_keep_max_second.
+            if (idToStreamLoadTask.size() > Config.stream_load_task_keep_max_num / 2) {
                 LOG.info("trigger cleanOldStreamLoadTasks when add load task label{}", task.getLabel());
                 cleanOldStreamLoadTasks(true);
             }
@@ -383,7 +383,7 @@ public class StreamLoadMgr {
 
     // Remove old stream load tasks from idToStreamLoadTask and dbToLabelToStreamLoadTask
     // This function is called periodically.
-    // Cancelled and Committed task will be removed after Configure.label_keep_max_second seconds
+    // Cancelled and Committed task will be removed after Config.stream_load_task_keep_max_second seconds
     public void cleanOldStreamLoadTasks(boolean isForce) {
         LOG.debug("begin to clean old stream load tasks");
         writeLock();
