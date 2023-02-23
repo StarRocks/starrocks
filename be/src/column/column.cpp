@@ -16,6 +16,8 @@
 
 #include "common/statusor.h"
 
+#include <fmt/format.h>
+
 namespace starrocks {
 
 void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
@@ -70,7 +72,11 @@ bool Column::empty_null_in_complex_column(const Filter& null_data, const std::ve
         throw std::runtime_error("empty_null_in_complex_column() only works for array and map column.");
     }
     bool need_empty = false;
-    auto size = this->size();
+    size_t size = this->size();
+    if (size + 1 != offsets.size()) {
+        throw std::runtime_error(
+                fmt::format("inputs offsets' size {} != the column's offsets' size {}.", offsets.size(), size + 1));
+    }
     // TODO: optimize it using SIMD
     for (auto i = 0; i < size && !need_empty; ++i) {
         if (null_data[i] && offsets[i + 1] != offsets[i]) {
