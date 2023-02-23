@@ -1764,6 +1764,7 @@ informationFunctionExpression
     | name = USER '(' ')'
     | name = CONNECTION_ID '(' ')'
     | name = CURRENT_USER ('(' ')')?
+    | name = CURRENT_CATALOG ('(' ')')?
     ;
 
 specialDateTimeExpression
