@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
@@ -40,7 +39,6 @@ public class ShowTableStmt extends ShowStmt {
     private Expr where;
     private String catalogName;
 
-    @VisibleForTesting
     public ShowTableStmt(String db, boolean isVerbose, String pattern) {
         this(db, isVerbose, pattern, null, null, NodePosition.ZERO);
     }
