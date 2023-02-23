@@ -171,18 +171,6 @@ public class ColocateTableBalancerTest {
             }
         };
 
-        // TODO find the root cause of
-        // Missing 1 invocation to:
-        // com.starrocks.system.SystemInfoService#getIdToBackend()
-        //  on mock instance: com.starrocks.system.SystemInfoService@cf1d636
-        // Caused by: Missing invocations
-        //  at com.starrocks.system.SystemInfoService.getIdToBackend(SystemInfoService.java)
-        //  at com.starrocks.system.HeartbeatMgr.runAfterCatalogReady(HeartbeatMgr.java:120)
-        //  at com.starrocks.common.util.LeaderDaemon.runOneCycle(LeaderDaemon.java:60)
-        //  at com.starrocks.common.util.Daemon.run(Daemon.java:115)
-        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
-
-        GlobalStateMgr.getCurrentSystemInfo().getBackendIds();
 
         GroupId groupId = new GroupId(10000, 10001);
         List<Column> distributionCols = Lists.newArrayList();
@@ -218,6 +206,26 @@ public class ColocateTableBalancerTest {
         System.out.println(balancedBackendsPerBucketSeq);
         Assert.assertFalse(changed);
         Assert.assertTrue(balancedBackendsPerBucketSeq.isEmpty());
+
+        // TODO find the root cause of
+        // Missing 1 invocation to:
+        // com.starrocks.system.SystemInfoService#getIdToBackend()
+        //  on mock instance: com.starrocks.system.SystemInfoService@cf1d636
+        // Caused by: Missing invocations
+        //  at com.starrocks.system.SystemInfoService.getIdToBackend(SystemInfoService.java)
+        //  at com.starrocks.system.HeartbeatMgr.runAfterCatalogReady(HeartbeatMgr.java:120)
+        //  at com.starrocks.common.util.LeaderDaemon.runOneCycle(LeaderDaemon.java:60)
+        //  at com.starrocks.common.util.Daemon.run(Daemon.java:115)
+
+        try {
+            Thread.sleep(1000L);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+
+        GlobalStateMgr.getCurrentSystemInfo().getBackendIds();
     }
 
     private void setGroup2Schema(GroupId groupId, ColocateTableIndex colocateTableIndex,
