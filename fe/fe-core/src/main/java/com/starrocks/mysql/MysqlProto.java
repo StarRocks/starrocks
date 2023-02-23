@@ -36,6 +36,7 @@ package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -72,18 +73,30 @@ public class MysqlProto {
 
         // In new RBAC privilege framework
         if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+            AuthenticationManager authenticationManager = context.getGlobalStateMgr().getAuthenticationManager();
+            UserIdentity currentUser = null;
             if (Config.enable_auth_check) {
-                UserIdentity currentUser = context.getGlobalStateMgr().getAuthenticationManager().checkPassword(
-                        user, remoteIp, scramble, randomString);
+                currentUser = authenticationManager.checkPassword(user, remoteIp, scramble, randomString);
                 if (currentUser == null) {
                     ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
                     return false;
                 }
-                context.setAuthDataSalt(randomString);
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
-                context.setQualifiedUser(user);
+            } else {
+                Set<UserIdentity> matchedUserIdentities =
+                        authenticationManager.getMatchedUserIdentity(user, remoteIp).keySet();
+                if (matchedUserIdentities.isEmpty()) {
+                    LOG.info("enable_auth_check is false, but cannot find user '{}'@'{}'", user, remoteIp);
+                    ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
+                    return false;
+                } else {
+                    currentUser = matchedUserIdentities.iterator().next();
+                }
             }
+
+            context.setAuthDataSalt(randomString);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+            context.setQualifiedUser(user);
             return true;
         }
 
