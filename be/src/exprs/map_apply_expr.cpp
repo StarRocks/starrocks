@@ -37,7 +37,7 @@ MapApplyExpr::MapApplyExpr(TypeDescriptor type) : Expr(std::move(type), false) {
 StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> input_columns;
     NullColumnPtr input_null_map = nullptr;
-    std::shared_ptr<MapColumn> input_map = nullptr;
+    MapColumn* input_map = nullptr;
     // step 1: get input columns from map(key_col, value_col)
     for (int i = 1; i < _children.size(); ++i) {
         ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], chunk);
@@ -49,13 +49,13 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
         child_col = ColumnHelper::unpack_and_duplicate_const_column(child_col->size(), child_col);
         auto data_column = child_col;
         if (child_col->is_nullable()) {
-            auto nullable = std::dynamic_pointer_cast<NullableColumn>(child_col);
+            auto nullable = down_cast<const NullableColumn*>(child_col.get());
             DCHECK(nullable != nullptr);
             data_column = nullable->data_column();
             // empty null map with non-empty elements
             data_column->empty_null_in_complex_column(
                     nullable->null_column()->get_data(),
-                    std::dynamic_pointer_cast<MapColumn>(data_column)->offsets_column()->get_data());
+                    down_cast<MapColumn*>(data_column.get())->offsets_column()->get_data());
             if (input_null_map) {
                 input_null_map =
                         FunctionHelper::union_null_column(nullable->null_column(), input_null_map); // merge null
@@ -64,13 +64,13 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
             }
         }
         DCHECK(data_column->is_map());
-        auto cur_map = std::dynamic_pointer_cast<MapColumn>(data_column);
+        auto cur_map = down_cast<MapColumn*>(data_column.get());
 
         if (input_map == nullptr) {
             input_map = cur_map;
         } else {
-            if (!ColumnHelper::offsets_equal(cur_map->offsets_column(), input_map->offsets_column())) {
-                throw std::runtime_error("Input map element's size are not equal in map_apply().");
+            if (UNLIKELY(!ColumnHelper::offsets_equal(cur_map->offsets_column(), input_map->offsets_column()))) {
+                return Status::InternalError("Input map element's size are not equal in map_apply().");
             }
         }
         input_columns.push_back(cur_map->keys_column());
@@ -78,7 +78,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
     }
     // step 2: construct a new chunk to evaluate the lambda expression, output a map column without warping null info.
     ColumnPtr column = nullptr;
-    if (input_map->keys_column()->size() == 0) { // map is empty
+    if (input_map->keys_column()->empty()) { // map is empty
         column = ColumnHelper::create_column(type(), false);
     } else {
         auto cur_chunk = std::make_shared<Chunk>();
@@ -96,9 +96,9 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
         for (auto id : slot_ids) {
             DCHECK(id > 0);
             auto captured = chunk->get_column_by_slot_id(id);
-            if (captured->size() < input_map->size()) {
-                throw std::runtime_error(fmt::format("The size of the captured column {} is less than map's size.",
-                                                     captured->get_name()));
+            if (UNLIKELY(captured->size() < input_map->size())) {
+                return Status::InternalError(fmt::format("The size of the captured column {} is less than map's size.",
+                                                         captured->get_name()));
             }
             cur_chunk->append_column(captured->replicate(input_map->offsets_column()->get_data()), id);
         }
@@ -122,11 +122,11 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
         }
     }
     // attach offsets
-    auto map_col = std::dynamic_pointer_cast<MapColumn>(column);
-    if (input_map->offsets_column()->get_data().back() < map_col->keys_column()->size()) {
-        throw std::runtime_error(fmt::format("The max index of offsets {} < map->key column's size {}",
-                                             input_map->offsets_column()->get_data().back(),
-                                             map_col->keys_column()->size()));
+    auto map_col = down_cast<MapColumn*>(column.get());
+    if (UNLIKELY(input_map->offsets_column()->get_data().back() < map_col->keys_column()->size())) {
+        return Status::InternalError(fmt::format("The max index of offsets {} < map->key column's size {}",
+                                                 input_map->offsets_column()->get_data().back(),
+                                                 map_col->keys_column()->size()));
     }
     auto res_map =
             std::make_shared<MapColumn>(map_col->keys_column(), map_col->values_column(), input_map->offsets_column());

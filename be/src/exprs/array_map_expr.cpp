@@ -40,7 +40,7 @@ ArrayMapExpr::ArrayMapExpr(TypeDescriptor type) : Expr(std::move(type), false) {
 StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> inputs;
     NullColumnPtr input_null_map = nullptr;
-    std::shared_ptr<ArrayColumn> input_array = nullptr;
+    ArrayColumn* input_array = nullptr;
     // for many valid arguments:
     // if one of them is a null literal, the result is a null literal;
     // if one of them is only null, then results are null;
@@ -58,12 +58,12 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
 
         auto column = child_col;
         if (child_col->is_nullable()) {
-            auto nullable = std::dynamic_pointer_cast<NullableColumn>(child_col);
+            auto nullable = down_cast<const NullableColumn*>(child_col.get());
             DCHECK(nullable != nullptr);
             column = nullable->data_column();
             // empty null array with non-zero elements
             column->empty_null_in_complex_column(nullable->null_column()->get_data(),
-                                                 std::dynamic_pointer_cast<ArrayColumn>(column)->offsets().get_data());
+                                                 down_cast<const ArrayColumn*>(column.get())->offsets().get_data());
             if (input_null_map) {
                 input_null_map =
                         FunctionHelper::union_null_column(nullable->null_column(), input_null_map); // merge null
@@ -72,20 +72,20 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             }
         }
         DCHECK(column->is_array());
-        auto cur_array = std::dynamic_pointer_cast<ArrayColumn>(column);
+        auto cur_array = down_cast<ArrayColumn*>(column.get());
 
         if (input_array == nullptr) {
             input_array = cur_array;
         } else {
-            if (!ColumnHelper::offsets_equal(cur_array->offsets_column(), input_array->offsets_column())) {
-                throw std::runtime_error("Input array element's size is not equal in array_map().");
+            if (UNLIKELY(!ColumnHelper::offsets_equal(cur_array->offsets_column(), input_array->offsets_column()))) {
+                return Status::InternalError("Input array element's size is not equal in array_map().");
             }
         }
         inputs.push_back(cur_array->elements_column());
     }
 
     ColumnPtr column = nullptr;
-    if (input_array->elements_column()->size() == 0) { // arrays may be null or empty
+    if (input_array->elements_column()->empty()) { // arrays may be null or empty
         column = ColumnHelper::create_column(type().children[0],
                                              true); // array->elements must be of return array->elements' type
     } else {
@@ -105,9 +105,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         for (auto id : slot_ids) {
             DCHECK(id > 0);
             auto captured = chunk->get_column_by_slot_id(id);
-            if (captured->size() < input_array->size()) {
-                throw std::runtime_error(fmt::format("The size of the captured column {} is less than array's size.",
-                                                     captured->get_name()));
+            if (UNLIKELY(captured->size() < input_array->size())) {
+                return Status::InternalError(fmt::format(
+                        "The size of the captured column {} is less than array's size.", captured->get_name()));
             }
             cur_chunk->append_column(captured->replicate(input_array->offsets_column()->get_data()), id);
         }
@@ -131,11 +131,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
 
         // construct the result array
         DCHECK(column != nullptr);
-        if (auto nullable = std::dynamic_pointer_cast<NullableColumn>(column);
-            nullable == nullptr && !column->is_nullable()) {
-            NullColumnPtr null_col = NullColumn::create(column->size(), 0);
-            column = NullableColumn::create(std::move(column), null_col);
-        }
+        column = ColumnHelper::cast_to_nullable_column(column);
     }
     // attach offsets
     auto array_col = std::make_shared<ArrayColumn>(column, input_array->offsets_column());

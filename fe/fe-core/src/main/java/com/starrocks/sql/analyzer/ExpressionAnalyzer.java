@@ -211,10 +211,6 @@ public class ExpressionAnalyzer {
                     throw new SemanticException(i + "th lambda input should be arrays.");
                 }
                 Type itemType = ((ArrayType) expr.getType()).getItemType();
-                if (itemType == Type.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),
-                    // rather than a common columnRef, so change its type here.
-                    itemType = Type.BOOLEAN;
-                }
                 scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
             }
         } else {
@@ -238,13 +234,6 @@ public class ExpressionAnalyzer {
             }
             Type keyType = ((MapType) expr.getType()).getKeyType();
             Type valueType = ((MapType) expr.getType()).getValueType();
-            if (keyType == Type.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),
-                // rather than a common columnRef, so change its type here.
-                keyType = Type.BOOLEAN;
-            }
-            if (valueType == Type.NULL) {
-                valueType = Type.BOOLEAN;
-            }
             scope.putLambdaInput(new PlaceHolderExpr(-1, true, keyType));
             scope.putLambdaInput(new PlaceHolderExpr(-2, true, valueType));
         }

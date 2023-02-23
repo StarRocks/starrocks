@@ -190,8 +190,10 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitMap(MapOperator node, FormatterContext context) {
-            return new MapExpr(node.getType(),
+            MapExpr expr = new MapExpr(node.getType(),
                     node.getChildren().stream().map(e -> buildExpr.build(e, context)).collect(Collectors.toList()));
+            hackTypeNull(expr);
+            return expr;
         }
 
         @Override
