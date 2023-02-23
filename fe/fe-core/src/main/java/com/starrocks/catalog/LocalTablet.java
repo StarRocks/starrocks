@@ -196,7 +196,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         List<String> backends = new ArrayList<String>();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            Backend backend = infoService.getBackend(replica.getBackendId());
             if (backend == null) {
                 continue;
             }
