@@ -394,4 +394,116 @@ public class RuntimeProfileTest {
         Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count2_sub"));
         Assert.assertEquals(6, mergedProfile.getCounterMap().get("count2_sub").getValue());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testConflictInfoString() {
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+
+        RuntimeProfile profile1 = new RuntimeProfile("profile");
+        {
+            profile1.addInfoString("key1", "value1");
+            profiles.add(profile1);
+        }
+
+        RuntimeProfile profile2 = new RuntimeProfile("profile");
+        {
+            profile2.addInfoString("key1", "value2");
+            profiles.add(profile2);
+        }
+
+        RuntimeProfile profile3 = new RuntimeProfile("profile");
+        {
+            profile3.addInfoString("key1", "value1");
+            profiles.add(profile3);
+        }
+
+        RuntimeProfile profile4 = new RuntimeProfile("profile");
+        {
+            profile4.addInfoString("key1__DUP(1)", "value3");
+            profile4.addInfoString("key1", "value4");
+            profiles.add(profile4);
+        }
+
+        RuntimeProfile profile5 = new RuntimeProfile("profile");
+        {
+            profile5.addInfoString("key1", "value5");
+            profile5.addInfoString("key1__DUP(1)", "value6");
+            profiles.add(profile5);
+        }
+
+        RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        RuntimeProfile mergedProfile = profiles.get(0);
+
+        Set<String> expectedValues = Sets.newHashSet("value1", "value2", "value3", "value4", "value5", "value6");
+        Set<String> actualValues = Sets.newHashSet();
+
+        actualValues.add(mergedProfile.getInfoString("key1"));
+        actualValues.add(mergedProfile.getInfoString("key1__DUP(0)"));
+        actualValues.add(mergedProfile.getInfoString("key1__DUP(1)"));
+        actualValues.add(mergedProfile.getInfoString("key1__DUP(2)"));
+        actualValues.add(mergedProfile.getInfoString("key1__DUP(3)"));
+        actualValues.add(mergedProfile.getInfoString("key1__DUP(4)"));
+
+        Assert.assertEquals(expectedValues, actualValues);
+    }
+
+    @Test
+    public void testJsonProfileFormater() {
+        //profile
+        RuntimeProfile profile = new RuntimeProfile("profile");
+        profile.addInfoString("key", "value");
+        profile.addInfoString("key1", "value1");
+        Counter count1 = profile.addCounter("count1", TUnit.UNIT, null);
+        count1.setValue(15);
+
+        //child1
+        RuntimeProfile child1 = new RuntimeProfile("child1");
+        child1.addInfoString("child1_key", "child1_value");
+        profile.addChild(child1);
+
+        //child11
+        RuntimeProfile child11 = new RuntimeProfile("child11");
+        child11.addInfoString("child11_key", "child11_value");
+        Counter count2 = child11.addCounter("data_size", TUnit.BYTES_PER_SECOND, null);
+        count2.setValue(10240);
+        Counter count3 = child11.addCounter("count2", TUnit.UNIT_PER_SECOND, null);
+        count3.setValue(1000);
+        child1.addChild(child11);
+
+        //child12
+        RuntimeProfile child12 = new RuntimeProfile("child12");
+        child1.addChild(child12);
+        Counter count4 = child12.addCounter("count3", TUnit.UNIT, null);
+        count4.setValue(15);
+        Counter count5 = child12.addCounter("data_size", TUnit.BYTES, null);
+        count5.setValue(10240);
+        Counter count6 = child12.addCounter("time_ns", TUnit.TIME_NS, null);
+        count6.setValue(1000000);
+
+        RuntimeProfile.JsonProfileFormater formater = new RuntimeProfile.JsonProfileFormater();
+        String jsonStr = formater.format(profile);
+        JsonObject jsonObj = new Gson().fromJson(jsonStr, JsonElement.class).getAsJsonObject();
+
+        JsonObject jsonObjProfile = jsonObj.getAsJsonObject("profile");
+        Assert.assertEquals(jsonObjProfile.getAsJsonPrimitive("key").getAsString(), "value");
+        Assert.assertEquals(jsonObjProfile.getAsJsonPrimitive("key1").getAsString(), "value1");
+        Assert.assertEquals(jsonObjProfile.getAsJsonPrimitive("count1").getAsString(), "15");
+
+        JsonObject jsonObjchild1 = jsonObjProfile.getAsJsonObject("child1");
+        Assert.assertEquals(jsonObjchild1.getAsJsonPrimitive("child1_key").getAsString(), "child1_value");
+
+        JsonObject jsonObjchild11 = jsonObjchild1.getAsJsonObject("child11");
+        Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("child11_key").getAsString(), "child11_value");
+        Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("count2").getAsString(), "1.0K /sec");
+        Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("data_size").getAsString(), "10.0 KB/sec");
+
+        JsonObject jsonObjchild12 = jsonObjchild1.getAsJsonObject("child12");
+        Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("count3").getAsString(), "15");
+        Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("data_size").getAsString(), "10.00 KB");
+        Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("time_ns").getAsString(), "1.0ms");
+
+    }
+>>>>>>> 1fcbd44c8 ([Enhancement] Keep all different string infos when merging profile if there is conflict (#18261))
 }
