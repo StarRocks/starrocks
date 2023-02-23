@@ -19,6 +19,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -83,8 +84,8 @@ public class AST2StringBuilderTest {
         Assert.assertEquals(1, statementBase.size());
         SetStmt convertStmt = (SetStmt) statementBase.get(0);
 
-        Assert.assertEquals(1, convertStmt.getSetVars().size());
-        Assert.assertEquals(SetType.GLOBAL, convertStmt.getSetVars().get(0).getType());
+        Assert.assertEquals(1, convertStmt.getSetListItems().size());
+        Assert.assertEquals(SetType.GLOBAL, ((SystemVariable) convertStmt.getSetListItems().get(0)).getType());
         Assert.assertEquals(AstToStringBuilder.toString(originStmt), AstToStringBuilder.toString(convertStmt));
 
         // 2. two default statement
@@ -101,9 +102,9 @@ public class AST2StringBuilderTest {
         Assert.assertEquals(1, statementBase.size());
         convertStmt = (SetStmt) statementBase.get(0);
 
-        Assert.assertEquals(2, convertStmt.getSetVars().size());
-        Assert.assertEquals(SetType.DEFAULT, convertStmt.getSetVars().get(0).getType());
-        Assert.assertEquals(SetType.DEFAULT, convertStmt.getSetVars().get(1).getType());
+        Assert.assertEquals(2, convertStmt.getSetListItems().size());
+        Assert.assertEquals(SetType.SESSION, ((SystemVariable) convertStmt.getSetListItems().get(0)).getType());
+        Assert.assertEquals(SetType.SESSION, ((SystemVariable) convertStmt.getSetListItems().get(1)).getType());
         Assert.assertEquals(AstToStringBuilder.toString(originStmt), AstToStringBuilder.toString(convertStmt));
     }
 
@@ -121,7 +122,7 @@ public class AST2StringBuilderTest {
         Assert.assertEquals(1, statementBase.size());
         SetStmt originStmt = (SetStmt) statementBase.get(0);
         Analyzer.analyze(originStmt, AnalyzeTestUtil.getConnectContext());
-        Assert.assertEquals("SET `time_zone` = 'Asia/Shanghai',`allow_default_partition` = TRUE," +
+        Assert.assertEquals("SET SESSION `time_zone` = 'Asia/Shanghai',SESSION `allow_default_partition` = TRUE," +
                 "@`var1` = cast (1 as tinyint(4))," +
                 "@`var2` = cast ('2020-01-01' as date)," +
                 "@`var3` = cast ('foo' as varchar)," +
@@ -134,9 +135,9 @@ public class AST2StringBuilderTest {
         SetStmt convertStmt = (SetStmt) statementBase.get(0);
         Analyzer.analyze(convertStmt, AnalyzeTestUtil.getConnectContext());
 
-        Assert.assertEquals(7, convertStmt.getSetVars().size());
-        Assert.assertEquals(SetType.DEFAULT, convertStmt.getSetVars().get(0).getType());
-        Assert.assertEquals(SetType.DEFAULT, convertStmt.getSetVars().get(1).getType());
+        Assert.assertEquals(7, convertStmt.getSetListItems().size());
+        Assert.assertEquals(SetType.SESSION, ((SystemVariable) convertStmt.getSetListItems().get(0)).getType());
+        Assert.assertEquals(SetType.SESSION, ((SystemVariable) convertStmt.getSetListItems().get(1)).getType());
         Assert.assertEquals(AstToStringBuilder.toString(originStmt), AstToStringBuilder.toString(convertStmt));
     }
 }

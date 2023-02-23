@@ -1363,4 +1363,11 @@ public class ExpressionTest extends PlanTestBase {
         assertContains(plan, "PREDICATES: ((1: v1 IN (3, 4, 5)) OR (1: v1 = 2: v2)) OR (1: v1 = 3: v3)");
     }
 
+    @Test
+    public void testBitNotLargeInt() throws Exception {
+        String sql = "select bitnot(cast(power(-2,127) as largeint)+1);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "~ CAST(power(-2.0, 127.0) AS LARGEINT) + 1");
+    }
+
 }

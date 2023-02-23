@@ -67,20 +67,20 @@ void QueryStatistics::add_scan_stats(int64_t scan_rows, int64_t scan_bytes) {
 
 void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
     // Make the exchange action atomic
-    int64_t rows = other.scan_rows.load();
-    scan_rows += rows;
-    other.scan_rows -= rows;
+    int64_t scan_rows = other.scan_rows.load();
+    this->scan_rows += scan_rows;
+    other.scan_rows -= scan_rows;
 
-    int64_t bytes = other.scan_bytes.load();
-    scan_bytes += bytes;
-    other.scan_bytes -= bytes;
+    int64_t scan_bytes = other.scan_bytes.load();
+    this->scan_bytes += scan_bytes;
+    other.scan_bytes -= scan_bytes;
 
     int64_t cpu_ns = other.cpu_ns.load();
-    cpu_ns += cpu_ns;
+    this->cpu_ns += cpu_ns;
     other.cpu_ns -= cpu_ns;
 
-    int64_t mem_bytes = other.mem_cost_bytes.load();
-    mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, mem_bytes);
+    int64_t mem_cost_bytes = other.mem_cost_bytes.load();
+    this->mem_cost_bytes = std::max<int64_t>(this->mem_cost_bytes, mem_cost_bytes);
 
     _stats_items.insert(_stats_items.end(), other._stats_items.begin(), other._stats_items.end());
 }

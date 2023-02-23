@@ -508,7 +508,7 @@ build_librdkafka() {
 
     $CMAKE_CMD -DCMAKE_LIBRARY_PATH=$TP_INSTALL_DIR/lib -DCMAKE_INCLUDE_PATH=$TP_INSTALL_DIR/include \
         -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DRDKAFKA_BUILD_STATIC=ON -DWITH_SASL=OFF \
-        -DRDKAFKA_BUILD_EXAMPLES=OFF -DRDKAFKA_BUILD_TESTS=OFF -DWITH_SASL_OAUTHBEARER=OFF -DCMAKE_INSTALL_LIBDIR=lib
+        -DRDKAFKA_BUILD_EXAMPLES=OFF -DRDKAFKA_BUILD_TESTS=OFF -DWITH_SASL_OAUTHBEARER=ON -DCMAKE_INSTALL_LIBDIR=lib
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -785,7 +785,7 @@ build_hadoop() {
 #jdk
 build_jdk() {
     check_if_source_exist $JDK_SOURCE
-    cp -r $TP_SOURCE_DIR/$JDK_SOURCE $TP_INSTALL_DIR/open_jdk
+    rm -rf $TP_INSTALL_DIR/open_jdk && cp -r $TP_SOURCE_DIR/$JDK_SOURCE $TP_INSTALL_DIR/open_jdk
 }
 
 # ragel
@@ -860,10 +860,11 @@ build_aliyun_jindosdk() {
     cp -r $TP_SOURCE_DIR/$JINDOSDK_SOURCE/lib/*.jar $TP_INSTALL_DIR/jindosdk
 }
 
-build_tencent_cos_jars() {
+build_broker_thirdparty_jars() {
     check_if_source_exist $BROKER_THIRDPARTY_JARS_SOURCE
     mkdir -p $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
-    cp -r $TP_SOURCE_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/*cos* $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
+    cp -r $TP_SOURCE_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/* $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
+    rm $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/hadoop-aliyun-2.7.2.jar
 }
 
 build_aws_cpp_sdk() {
@@ -875,6 +876,7 @@ build_aws_cpp_sdk() {
     # only build s3, s3-crt, transfer manager, identity-management and sts, you can add more components if you want.
     $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer;identity-management;sts" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
+               -DENABLE_CURL_LOGGING=OFF \
                -G "${CMAKE_GENERATOR}" \
                -D_POSIX_C_SOURCE=200112L \
                -DCURL_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libcurl.a   \
@@ -965,7 +967,7 @@ build_fast_float() {
 
 build_cachelib() {
     check_if_source_exist $CACHELIB_SOURCE
-    mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $STARROCKS_THIRDPARTY/installed/
+    rm -rf $STARROCKS_THIRDPARTY/installed/$CACHELIB_SOURCE && mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $STARROCKS_THIRDPARTY/installed/
 }
 
 # streamvbyte
@@ -984,6 +986,56 @@ build_streamvbyte() {
 
     make -j$PARALLEL
     make install
+}
+
+# jansson
+build_jansson() {
+    check_if_source_exist $JANSSON_SOURCE
+    cd $TP_SOURCE_DIR/$JANSSON_SOURCE/
+    mkdir -p build
+    cd build
+    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
+# avro-c
+build_avro_c() {
+    check_if_source_exist $AVRO_SOURCE
+    cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
+    mkdir -p build
+    cd build
+    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_BUILD_TYPE=Release
+    ${BUILD_SYSTEM} -j$PARALLEL    
+    ${BUILD_SYSTEM} install
+    rm ${TP_INSTALL_DIR}/lib64/libavro.so*
+}
+
+# serders
+build_serdes() {
+    OLD_CFLAGS=$CFLAGS
+    unset CFLAGS
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
+    check_if_source_exist $SERDES_SOURCE
+    cd $TP_SOURCE_DIR/$SERDES_SOURCE
+    export LIBS="-lrt -lpthread -lcurl -ljansson -lrdkafka -lrdkafka++ -lavro -lssl -lcrypto -ldl" 
+    ./configure --prefix=${TP_INSTALL_DIR} \
+                --libdir=${TP_INSTALL_DIR}/lib \
+                --CFLAGS="-I ${TP_INSTALL_DIR}/include"  \
+                --CXXFLAGS="-I ${TP_INSTALL_DIR}/include" \
+                --LDFLAGS="-L ${TP_INSTALL_DIR}/lib -L ${TP_INSTALL_DIR}/lib64" \
+                --enable-static \
+                --disable-shared
+
+    make -j$PARALLEL
+    make install
+    rm ${TP_INSTALL_DIR}/lib/libserdes.so*
+    # these symbols also be definition in librdkafka, change these symbols to be local.
+    objcopy --localize-symbol=cnd_timedwait ${TP_INSTALL_DIR}/lib/libserdes.a
+    objcopy --localize-symbol=cnd_timedwait_ms ${TP_INSTALL_DIR}/lib/libserdes.a
+    objcopy --localize-symbol=thrd_is_current ${TP_INSTALL_DIR}/lib/libserdes.a
+    unset LIBS
+    export CFLAGS=$OLD_CFLAGS
 }
 
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
@@ -1027,7 +1079,7 @@ build_ragel
 build_hyperscan
 build_mariadb
 build_aliyun_jindosdk
-build_tencent_cos_jars
+build_broker_thirdparty_jars
 build_aws_cpp_sdk
 build_vpack
 build_opentelemetry
@@ -1036,6 +1088,9 @@ build_benchmark
 build_fast_float
 build_cachelib
 build_streamvbyte
+build_jansson
+build_avro_c
+build_serdes
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

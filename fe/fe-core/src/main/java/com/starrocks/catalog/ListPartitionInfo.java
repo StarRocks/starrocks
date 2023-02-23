@@ -15,12 +15,14 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -88,6 +90,10 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToValues.put(partitionId, values);
     }
 
+    public void setIdToIsTempPartition(long partitionId, boolean isTemp) {
+        this.idToIsTempPartition.put(partitionId, isTemp);
+    }
+
     public void setLiteralExprValues(long partitionId, List<String> values) throws AnalysisException {
         List<LiteralExpr> partitionValues = new ArrayList<>(values.size());
         for (String value : values) {
@@ -97,6 +103,16 @@ public class ListPartitionInfo extends PartitionInfo {
             partitionValues.add(partitionValue);
         }
         this.idToLiteralExprValues.put(partitionId, partitionValues);
+    }
+
+    public List<Long> getPartitionIds(boolean isTemp) {
+        List<Long> partitionIds = Lists.newArrayList();
+        idToIsTempPartition.forEach((k, v) -> {
+            if (v.equals(isTemp)) {
+                partitionIds.add(k);
+            }
+        });
+        return partitionIds;
     }
 
     public void setBatchLiteralExprValues(Map<Long, List<String>> batchValues) throws AnalysisException {
@@ -207,36 +223,38 @@ public class ListPartitionInfo extends PartitionInfo {
                 .map(item -> "`" + item.getName() + "`")
                 .collect(Collectors.joining(",")));
         sb.append(")(\n");
-
+        List<Long> partitionIds = getPartitionIds(false);
         if (!this.idToValues.isEmpty()) {
-            sb.append(this.singleListPartitionSql(table, tableReplicationNum));
+            sb.append(this.singleListPartitionSql(table, partitionIds, tableReplicationNum));
         }
 
         if (!this.idToMultiValues.isEmpty()) {
-            sb.append(this.multiListPartitionSql(table, tableReplicationNum));
+            sb.append(this.multiListPartitionSql(table, partitionIds, tableReplicationNum));
         }
 
         sb.append("\n)");
         return sb.toString();
     }
 
-    private String singleListPartitionSql(OlapTable table, short tableReplicationNum) {
+    private String singleListPartitionSql(OlapTable table, List<Long> partitionIds, short tableReplicationNum) {
         StringBuilder sb = new StringBuilder();
         this.idToLiteralExprValues.forEach((partitionId, values) -> {
-            Short partitionReplicaNum = table.getPartitionInfo().idToReplicationNum.get(partitionId);
-            Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
-                String partitionName = partition.getName();
-                sb.append("  PARTITION ")
-                        .append(partitionName)
-                        .append(" VALUES IN ")
-                        .append(this.valuesToString(values));
+            if (partitionIds.contains(partitionId)) {
+                Short partitionReplicaNum = table.getPartitionInfo().idToReplicationNum.get(partitionId);
+                Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
+                    String partitionName = partition.getName();
+                    sb.append("  PARTITION ")
+                            .append(partitionName)
+                            .append(" VALUES IN ")
+                            .append(this.valuesToString(values));
 
-                if (partitionReplicaNum != null && partitionReplicaNum != tableReplicationNum) {
-                    sb.append(" (").append("\"" + PROPERTIES_REPLICATION_NUM + "\" = \"").append(partitionReplicaNum)
-                            .append("\")");
-                }
-                sb.append(",\n");
-            });
+                    if (partitionReplicaNum != null && partitionReplicaNum != tableReplicationNum) {
+                        sb.append(" (").append("\"" + PROPERTIES_REPLICATION_NUM + "\" = \"").append(partitionReplicaNum)
+                                .append("\")");
+                    }
+                    sb.append(",\n");
+                });
+            }
         });
         return StringUtils.removeEnd(sb.toString(), ",\n");
     }
@@ -246,24 +264,26 @@ public class ListPartitionInfo extends PartitionInfo {
                 .collect(Collectors.joining(", ")) + ")";
     }
 
-    private String multiListPartitionSql(OlapTable table, short tableReplicationNum) {
+    private String multiListPartitionSql(OlapTable table, List<Long> partitionIds, short tableReplicationNum) {
         StringBuilder sb = new StringBuilder();
         this.idToMultiLiteralExprValues.forEach((partitionId, multiValues) -> {
-            Short partitionReplicaNum = table.getPartitionInfo().idToReplicationNum.get(partitionId);
-            Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
-                String partitionName = partition.getName();
-                sb.append("  PARTITION ")
-                        .append(partitionName)
-                        .append(" VALUES IN ")
-                        .append(this.multiValuesToString(multiValues));
+            if (partitionIds.contains(partitionId)) {
+                Short partitionReplicaNum = table.getPartitionInfo().idToReplicationNum.get(partitionId);
+                Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
+                    String partitionName = partition.getName();
+                    sb.append("  PARTITION ")
+                            .append(partitionName)
+                            .append(" VALUES IN ")
+                            .append(this.multiValuesToString(multiValues));
 
-                if (partitionReplicaNum != null && partitionReplicaNum != tableReplicationNum) {
-                    sb.append(" (").append("\"" + PROPERTIES_REPLICATION_NUM + "\" = \"").append(partitionReplicaNum)
-                            .append("\")");
-                }
+                    if (partitionReplicaNum != null && partitionReplicaNum != tableReplicationNum) {
+                        sb.append(" (").append("\"" + PROPERTIES_REPLICATION_NUM + "\" = \"").append(partitionReplicaNum)
+                                .append("\")");
+                    }
 
-                sb.append(",\n");
-            });
+                    sb.append(",\n");
+                });
+            }
         });
         return StringUtils.removeEnd(sb.toString(), ",\n");
     }
@@ -290,16 +310,15 @@ public class ListPartitionInfo extends PartitionInfo {
         return "";
     }
 
-    public void handleNewListPartitionDescs(List<PartitionDesc> partitionDescs, List<Partition> partitionList,
+    public void handleNewListPartitionDescs(Map<Partition, PartitionDesc> partitionMap,
                                             Set<String> existPartitionNameSet, boolean isTempPartition)
             throws DdlException {
         try {
-            for (int i = 0; i < partitionDescs.size(); i++) {
-                Partition partition = partitionList.get(i);
+            for (Partition partition : partitionMap.keySet()) {
                 String name = partition.getName();
                 if (!existPartitionNameSet.contains(name)) {
                     long partitionId = partition.getId();
-                    PartitionDesc partitionDesc = partitionDescs.get(i);
+                    PartitionDesc partitionDesc = partitionMap.get(partition);
                     this.idToDataProperty.put(partitionId, partitionDesc.getPartitionDataProperty());
                     this.idToReplicationNum.put(partitionId, partitionDesc.getReplicationNum());
                     this.idToInMemory.put(partitionId, partitionDesc.isInMemory());
@@ -341,6 +360,36 @@ public class ListPartitionInfo extends PartitionInfo {
         }
 
         List<String> values = partitionPersistInfo.getValues();
+        if (values != null && values.size() > 0) {
+            this.idToValues.put(partitionId, values);
+            this.setLiteralExprValues(partitionId, values);
+        }
+    }
+
+    @Override
+    public void dropPartition(long partitionId) {
+        super.dropPartition(partitionId);
+        idToValues.remove(partitionId);
+        idToLiteralExprValues.remove(partitionId);
+        idToMultiValues.remove(partitionId);
+        idToMultiLiteralExprValues.remove(partitionId);
+        idToIsTempPartition.remove(partitionId);
+    }
+
+    @Override
+    public void moveRangeFromTempToFormal(long tempPartitionId) {
+        super.moveRangeFromTempToFormal(tempPartitionId);
+        idToIsTempPartition.computeIfPresent(tempPartitionId, (k, v) -> false);
+    }
+
+    public void addPartition(long partitionId, DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                             StorageCacheInfo storageCacheInfo, List<String> values,
+                             List<List<String>> multiValues) throws AnalysisException {
+        super.addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageCacheInfo);
+        if (multiValues != null && multiValues.size() > 0) {
+            this.idToMultiValues.put(partitionId, multiValues);
+            this.setMultiLiteralExprValues(partitionId, multiValues);
+        }
         if (values != null && values.size() > 0) {
             this.idToValues.put(partitionId, values);
             this.setLiteralExprValues(partitionId, values);

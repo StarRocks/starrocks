@@ -84,7 +84,7 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         start();
         ColumnPtr col;
-        if constexpr (pt_is_decimal<Type>) {
+        if constexpr (lt_is_decimal<Type>) {
             col = RunTimeColumnType<Type>::create(this->type().precision, this->type().scale);
         } else {
             col = RunTimeColumnType<Type>::create();
@@ -145,7 +145,7 @@ public:
             return ColumnHelper::create_const_null_column(1);
         }
         ColumnPtr col = nullptr;
-        if constexpr (pt_is_decimal<Type>) {
+        if constexpr (lt_is_decimal<Type>) {
             col = RunTimeColumnType<Type>::create(this->type().precision, this->type().scale);
         } else {
             col = RunTimeColumnType<Type>::create();

@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.UserDesc;
-import com.starrocks.mysql.privilege.Role;
+
+import java.util.List;
 
 /*
  * We support the following create user stmts:
@@ -34,22 +34,19 @@ import com.starrocks.mysql.privilege.Role;
  */
 public class CreateUserStmt extends BaseCreateAlterUserStmt {
 
-    private boolean ifNotExist;
+    private final boolean ifNotExists;
 
-    public CreateUserStmt(UserDesc userDesc) {
-        super(userDesc, "CREATE");
+    public CreateUserStmt(boolean ifNotExists, UserDesc userDesc, List<String> defaultRoles) {
+        super(userDesc, SetRoleType.ROLE, defaultRoles);
+        this.ifNotExists = ifNotExists;
     }
 
-    public CreateUserStmt(boolean ifNotExist, UserDesc userDesc, String role) {
-        super(userDesc, role, "CREATE");
-        this.ifNotExist = ifNotExist;
+    public boolean isIfNotExists() {
+        return ifNotExists;
     }
 
-    public boolean isIfNotExist() {
-        return ifNotExist;
-    }
-
-    public boolean isSuperuser() {
-        return role.equalsIgnoreCase(Role.ADMIN_ROLE);
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateUserStatement(this, context);
     }
 }

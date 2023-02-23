@@ -37,6 +37,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.io.Text;
@@ -472,6 +473,20 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         // TODO: what if unusedShards deletion is partially successful?
         ShardDeleter.dropTabletAndDeleteShard(unusedShards, GlobalStateMgr.getCurrentStarOSAgent());
 
+        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
+            LakeTable table = (db != null) ? db.getTable(tableId) : null;
+            if (table != null) {
+                try {
+                    GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo((OlapTable) table);
+                } catch (DdlException e) {
+                    // log an error if update colocation info failed, schema change already succeeded
+                    LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
+                }
+            } else {
+                LOG.info("database or table has been dropped while trying to update colocation info for job {}.", jobId);
+            }
+        }
+
         if (span != null) {
             span.end();
         }
@@ -741,7 +756,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     @Override
     protected boolean cancelImpl(String errMsg) {
-        if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED_REWRITING || jobState == JobState.FINISHED) {
+        if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED) {
+            return false;
+        }
+
+        // Cancel a job of state `FINISHED_REWRITING` only when the database or table has been dropped.
+        if (jobState == JobState.FINISHED_REWRITING && tableExists()) {
             return false;
         }
 
@@ -779,7 +799,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
         // calc progress first. all index share the same process
-        String progress = FeConstants.null_string;
+        String progress = FeConstants.NULL_STRING;
         if (jobState == JobState.RUNNING && schemaChangeBatchTask.getTaskNum() > 0) {
             progress = schemaChangeBatchTask.getFinishedTaskNum() + "/" + schemaChangeBatchTask.getTaskNum();
         }
@@ -803,6 +823,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             info.add(progress);
             info.add(timeoutMs / 1000);
             infos.add(info);
+        }
+    }
+
+    private boolean tableExists() {
+        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+            return db != null && db.getTable(tableId) != null;
         }
     }
 

@@ -19,14 +19,16 @@ package starrocks;
 import "olap_file.proto";
 import "types.proto";
 
-message RowsetIdPB {
-    optional int64 hi = 1;
-    optional int64 mi = 2;
-    optional int64 lo = 3;
-}
-
 message FileIdPB {
-    optional RowsetIdPB rowset_id = 1;
+    // Unique id for a rowset used by a binlog file. It's the publish version
+    // for duplicate key, and TabletUpdate#_next_rowset_id for primary key.
+    // For duplicate key, the binlog file only uses incremental rowsets which
+    // can be distinguished by the publish version, see Tablet#_inc_rs_version_map.
+    // Compared to use the data structure RowsetId, this can save the space,
+    // and use the existing index to get rowset_id -> Rowset, that's,
+    // Tablet#_inc_rs_version_map for duplicate key, and TabletUpdates#_rowsets
+    // for primary key
+    optional int64 rowset_id = 1;
     optional int32 segment_index = 2;
 }
 
@@ -95,7 +97,7 @@ message PageHeaderPB {
     // whether this is the last page of the version
     optional bool end_of_version = 11;
     // rowsets that this page uses
-    repeated RowsetIdPB rowsets = 12;
+    repeated int64 rowsets = 12;
 }
 
 message BinlogFileHeaderPB {
@@ -122,5 +124,5 @@ message BinlogFileMetaPB {
     // file size of the binlog file
     optional int64 file_size = 9;
     // rowsets that this binlog file uses
-    repeated RowsetIdPB rowsets = 10;
+    repeated int64 rowsets = 10;
 }

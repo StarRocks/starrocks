@@ -27,6 +27,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.RunMode;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
@@ -55,12 +56,12 @@ public class CreateLakeTableTest {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
 
-        Config.use_staros = true;
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
     }
 
     @AfterClass
     public static void afterClass() {
-        Config.use_staros = false;
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 
     private static void createTable(String sql) throws Exception {
@@ -106,7 +107,7 @@ public class CreateLakeTableTest {
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
@@ -171,7 +172,7 @@ public class CreateLakeTableTest {
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));

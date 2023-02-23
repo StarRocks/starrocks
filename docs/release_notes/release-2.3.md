@@ -1,5 +1,32 @@
 # StarRocks version 2.3
 
+## 2.3.9
+
+Release date: February 20, 2023
+
+### Bug Fixes
+
+- During a schema change, if a tablet clone is triggered and the BE nodes on which the tablet replicas reside change, the schema change fails. [#16948](https://github.com/StarRocks/starrocks/pull/16948)
+- The string returned by the group_concat() function is truncated. [#16948](https://github.com/StarRocks/starrocks/pull/16948)
+- When you use Broker Load to load data from HDFS through Tencent Big Data Suite (TBDS), an error `invalid hadoop.security.authentication.tbds.securekey` occurs, indicating that StarrRocks cannot access HDFS by using the authentication information provided by TBDS. [#14125](https://github.com/StarRocks/starrocks/pull/14125) [#15693](https://github.com/StarRocks/starrocks/pull/15693)
+- In some cases, CBO may use incorrect logic to compare whether two operators are equivalent. [#17227](https://github.com/StarRocks/starrocks/pull/17227) [#17199](https://github.com/StarRocks/starrocks/pull/17199)
+- When you connect to a non-Leader FE node and send the SQL statement `USE <catalog_name>.<database_name>`, the non-Leader FE node forwards the SQL statement, with `<catalog_name>` excluded, to the Leader FE node. As a result, the Leader FE node chooses to use the `default_catalog` and eventually fails to find the specified database. [#17302](https://github.com/StarRocks/starrocks/pull/17302)
+
+## 2.3.8
+
+Release date: February 2, 2023
+
+### Bug fixes
+
+The following bugs are fixed:
+
+- When resources are released after a large query finishes, there is a low probability that other queries are slowed down. This issue is more likely to occur if resource groups are enabled or the large query ends unexpectedly. [#16454](https://github.com/StarRocks/starrocks/pull/16454) [#16602](https://github.com/StarRocks/starrocks/pull/16602)
+- For a primary key table, if a replica's metadata version falls behind, StarRocks incrementally clones the missing metadata from other replicas to this replica. In this process, StarRocks pulls a large number of versions of metadata, and if too many versions of metadata accumulate without timely GC, excessive memory may be consumed and consequently the BEs may encounter OOM exceptions. [#15935](https://github.com/StarRocks/starrocks/pull/15935)
+- If an FE sends an occasional heartbeat to a BE, and the heartbeat connection times out, the FE considers the BE unavailable, leading to transaction failures on the BE. [# 16386](https://github.com/StarRocks/starrocks/pull/16386)
+- When you use a StarRocks external table to load data between StarRocks clusters, if the source StarRocks cluster is in an earlier version and the target StarRocks cluster is in a later version (2.2.8 ~ 2.2.11, 2.3.4 ~ 2.3.7, 2.4.1 or 2.4.2), the data loading fails. [#16173](https://github.com/StarRocks/starrocks/pull/16173)
+- BEs crash when multiple queries run concurrently and memory usage is relatively high. [#16047](https://github.com/StarRocks/starrocks/pull/16047)
+- When dynamic partitioning is enabled for a table and some partitions are dynamically deleted, if you execute TRUNCATE TABLE, an error `NullPointerException` is returned. Meanwhile, if you load data into the table, the FEs crash and can not restart. [#16822](https://github.com/StarRocks/starrocks/pull/16822)
+
 ## 2.3.7
 
 Release date: December 30, 2022

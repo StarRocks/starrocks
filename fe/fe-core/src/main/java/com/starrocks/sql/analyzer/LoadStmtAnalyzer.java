@@ -21,7 +21,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
@@ -112,12 +111,12 @@ public class LoadStmtAnalyzer {
                     // in PrivilegeCheckerV2.
                     if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                         if (!GlobalStateMgr.getCurrentState().getAuth().checkResourcePriv(ConnectContext.get(),
-                                                                                          resourceDesc.getName(),
-                                                                                          PrivPredicate.USAGE)) {
+                                resourceDesc.getName(),
+                                PrivPredicate.USAGE)) {
                             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                                                                "USAGE denied to user '" + ConnectContext.get().getQualifiedUser()
-                                                                + "'@'" + ConnectContext.get().getRemoteIP()
-                                                                + "' for resource '" + resourceDesc.getName() + "'");
+                                    "USAGE denied to user '" + ConnectContext.get().getQualifiedUser()
+                                            + "'@'" + ConnectContext.get().getRemoteIP()
+                                            + "' for resource '" + resourceDesc.getName() + "'");
                         }
                     }
                 } else if (brokerDesc != null) {

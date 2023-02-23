@@ -15,10 +15,12 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.HashSet;
 import java.util.List;
@@ -42,13 +44,21 @@ public class TableRelation extends Relation {
     // optional temporal clause for external MySQL tables that support this syntax
     private String temporalClause;
 
+    private Expr partitionPredicate;
+
     public TableRelation(TableName name) {
+        super(name.getPos());
         this.name = name;
         this.partitionNames = null;
         this.tabletIds = Lists.newArrayList();
     }
 
     public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds) {
+        this(name, partitionNames, tabletIds, NodePosition.ZERO);
+    }
+
+    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds, NodePosition pos) {
+        super(pos);
         this.name = name;
         this.partitionNames = partitionNames;
         this.tabletIds = tabletIds;
@@ -90,14 +100,22 @@ public class TableRelation extends Relation {
         return columns;
     }
 
+    public Expr getPartitionPredicate() {
+        return this.partitionPredicate;
+    }
+
+    public void setPartitionPredicate(Expr partitionPredicate) {
+        this.partitionPredicate = partitionPredicate;
+    }
+
     @Override
     public TableName getResolveTableName() {
         if (alias != null) {
             if (name.getDb() != null) {
                 if (name.getCatalog() != null) {
-                    return new TableName(name.getCatalog(), name.getDb(), alias.getTbl());
+                    return new TableName(name.getCatalog(), name.getDb(), alias.getTbl(), name.getPos());
                 } else {
-                    return new TableName(name.getDb(), alias.getTbl());
+                    return new TableName(null, name.getDb(), alias.getTbl(), name.getPos());
                 }
             } else {
                 return alias;

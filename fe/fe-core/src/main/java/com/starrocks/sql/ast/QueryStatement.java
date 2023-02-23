@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.OutFileClause;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 public class QueryStatement extends StatementBase {
     private final QueryRelation queryRelation;
@@ -25,6 +26,11 @@ public class QueryStatement extends StatementBase {
     protected OutFileClause outFileClause;
 
     public QueryStatement(QueryRelation queryRelation) {
+        this(queryRelation, NodePosition.ZERO);
+    }
+
+    public QueryStatement(QueryRelation queryRelation, NodePosition pos) {
+        super(pos);
         this.queryRelation = queryRelation;
     }
 

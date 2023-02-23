@@ -12,14 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.UserDesc;
 
-public class AlterUserStmt extends BaseCreateAlterUserStmt {
+import java.util.Collections;
 
-    public AlterUserStmt(UserDesc userDesc) {
-        super(userDesc, "ALTER");
+public class AlterUserStmt extends BaseCreateAlterUserStmt {
+    private final boolean ifExists;
+
+    public AlterUserStmt(UserDesc userDesc, boolean ifExists) {
+        super(userDesc, null, Collections.emptyList());
+        this.ifExists = ifExists;
+    }
+
+    public boolean isIfExists() {
+        return ifExists;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAlterUserStatement(this, context);
     }
 }

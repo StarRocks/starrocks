@@ -115,6 +115,7 @@ public class CurrentQueryInfoProvider {
                     statistics.updateCpuCostNs(queryStatistics.cpuCostNs);
                     statistics.updateScanBytes(queryStatistics.scanBytes);
                     statistics.updateScanRows(queryStatistics.scanRows);
+                    statistics.updateMemUsageBytes(queryStatistics.memUsageBytes);
                     final Request request = pair.first;
                     String host = String.format("%s:%d",
                             request.getAddress().getHostname(), request.getAddress().getPort());
@@ -198,6 +199,7 @@ public class CurrentQueryInfoProvider {
                         statistics.updateCpuCostNs(queryStatistics.cpuCostNs);
                         statistics.updateScanBytes(queryStatistics.scanBytes);
                         statistics.updateScanRows(queryStatistics.scanRows);
+                        statistics.updateMemUsageBytes(queryStatistics.memUsageBytes);
                     }
                 }
             } catch (InterruptedException e) {
@@ -232,6 +234,7 @@ public class CurrentQueryInfoProvider {
         long cpuCostNs = 0;
         long scanBytes = 0;
         long scanRows = 0;
+        long memUsageBytes = 0;
 
         public QueryStatistics() {
 
@@ -259,6 +262,14 @@ public class CurrentQueryInfoProvider {
 
         public void updateScanRows(long value) {
             scanRows += value;
+        }
+
+        public long getMemUsageBytes() {
+            return memUsageBytes;
+        }
+
+        public void updateMemUsageBytes(long value) {
+            memUsageBytes += value;
         }
     }
 

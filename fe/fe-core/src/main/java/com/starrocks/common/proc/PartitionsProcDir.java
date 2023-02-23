@@ -49,6 +49,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
@@ -58,6 +59,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.ListComparator;
@@ -199,7 +201,8 @@ public class PartitionsProcDir implements ProcDirInterface {
                                           LimitElement limitElement) throws AnalysisException {
         List<List<Comparable>> partitionInfos = getPartitionInfos();
         List<List<Comparable>> filterPartitionInfos;
-        //where
+
+        // where
         if (filterMap == null || filterMap.isEmpty()) {
             filterPartitionInfos = partitionInfos;
         } else {
@@ -231,7 +234,7 @@ public class PartitionsProcDir implements ProcDirInterface {
             filterPartitionInfos.sort(comparator);
         }
 
-        //limit
+        // limit
         if (limitElement != null && limitElement.hasLimit()) {
             int beginIndex = (int) limitElement.getOffset();
             int endIndex = (int) (beginIndex + limitElement.getLimit());
@@ -277,7 +280,7 @@ public class PartitionsProcDir implements ProcDirInterface {
 
             // for range partitions, we return partitions in ascending range order by default.
             // this is to be consistent with the behaviour before 0.12
-            if (tblPartitionInfo.getType() == PartitionType.RANGE) {
+            if (tblPartitionInfo.isRangePartition()) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) tblPartitionInfo;
                 partitionIds = rangePartitionInfo.getSortedRangeMap(isTempPartition).stream()
                         .map(Map.Entry::getKey).collect(Collectors.toList());
@@ -288,7 +291,13 @@ public class PartitionsProcDir implements ProcDirInterface {
             }
 
             for (Long partitionId : partitionIds) {
-                partitionInfos.add(getOlapPartitionInfo(tblPartitionInfo, table.getPartition(partitionId)));
+                Partition partition = table.getPartition(partitionId);
+                String partitionName = partition.getName();
+                if (partitionName != null && !partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                    partitionInfos.add(getOlapPartitionInfo(tblPartitionInfo, partition));
+                } else if (Config.enable_display_shadow_partitions) {
+                    partitionInfos.add(getOlapPartitionInfo(tblPartitionInfo, partition));
+                }
             }
         } finally {
             db.readUnlock();

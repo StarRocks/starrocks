@@ -2,13 +2,13 @@
 
 ## Variable Settings and Viewing
 
-This section describes the variables supported by the StarRocks system. They can be viewed with the `SHOW VARIABLES` command. These variables can take effect globally on the system or only on the current session.
+This section describes the variables supported by StarRocks. You can view these variables by using the `SHOW VARIABLES` command. These variables can take effect globally on the entire system or only on the current session.
 
 The variables in StarRocks refer to the variable sets in MySQL, but **some variables are only compatible with the MySQL client protocol and do not function on the MySQL database**.
 
-### View
+### View variables
 
-You can view all or some variables by `SHOW VARIABLES [LIKE 'xxx']`;. For example:
+You can view all or some variables by using `SHOW VARIABLES [LIKE 'xxx']`. Example:
 
 ```SQL
 SHOW VARIABLES;
@@ -16,14 +16,14 @@ SHOW VARIABLES;
 SHOW VARIABLES LIKE '%time_zone%';
 ```
 
-### Settings
+### Set variables
 
 Variables can generally be set to take effect **globally** or **only on the current session**. When set to global, a new value will be used in subsequent new sessions without affecting the current session. When set to “current session only”, the variable will only take effect on the current session.
 
 A variable set by `SET var_name=xxx;` only takes effect for the current session. For example:
 
 ```SQL
-SET exec_mem_limit = 137438953472;
+SET query_mem_limit = 137438953472;
 
 SET forward_to_master = true;
 
@@ -33,7 +33,7 @@ SET time_zone = "Asia/Shanghai";
 A variable set by the `SET GLOBAL var_name=xxx;` statement takes effect globally. For example:
 
 ```SQL
-SET GLOBAL exec_mem_limit = 137438953472;
+SET GLOBAL query_mem_limit = 137438953472;
 ```
 
 > Note: Only ADMIN users can set variables to be globally effective. Globally effective variables do not affect the current session, only subsequent new sessions.
@@ -42,7 +42,7 @@ Variables that can be set both globally or partially effective include:
 
 * batch_size
 * disable_streaming_preaggregations
-* exec_mem_limit
+* query_mem_limit
 * force_streaming_aggregate
 * enable_profile
 * hash_join_push_down_right_table
@@ -63,26 +63,26 @@ Variables that can only be set globally effective include:
 In addition, variable settings also support constant expressions, such as:
 
 ```SQL
-SET exec_mem_limit = 10 * 1024 * 1024 * 1024;
+SET query_mem_limit = 10 * 1024 * 1024 * 1024;
 ```
 
  ```SQL
 SET forward_to_master = concat('tr', 'u', 'e');
 ```
 
-### Setting variables in query statements
+### Set variables in a single query statement
 
 In some scenarios, we may need to set variables specifically for certain queries. By using `SET_VAR`, it is possible to set session variables that will only take effect within a single statement. For example:
 
 ```sql
-SELECT /*+ SET_VAR(exec_mem_limit = 8589934592) */ name FROM people ORDER BY name;
+SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY name;
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 ```
 
 > Note: It must start with `/*+` and can only be followed by the `SELECT` keyword.
 
-## Supported Variables
+## Descriptions of variables
 
 * SQL_AUTO_IS_NULL
 
@@ -102,7 +102,11 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * default_rowset_type
 
-  Used to set the default storage format used by the storage engine of the computing node. The currently supported storage formats are `alpha` and `beta`.
+  Global variable. Used to set the default storage format used by the storage engine of the computing node. The currently supported storage formats are `alpha` and `beta`.
+
+* default_table_compression
+
+  Set the default compression algorithm for table storage, supported compression algorithms are: `snappy, lz4, zlib, zstd`.
 
 * disable_colocate_join
 
@@ -137,45 +141,37 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   Used for MySQL client compatibility. No practical usage.
 
-* exec_mem_limit
-
-  Used to set the memory limit that can be used by a single query plan instance. The default value is 2GB, and the default unit is B. `B/K/KB/M/MB/G/GB/T/TB/P/PB` are supported.
-
-  There may be multiple instances of a query plan, and a BE node may execute one or more instances. Therefore, this parameter does not accurately limit the memory usage of a query across the cluster, nor does it accurately limit the memory usage of a query on a single BE node. It needs to be evaluated based on the generated query plan.
-
-  Usually, more memory is consumed on blocking nodes (e.g. Sort Node, Aggregate Node, Join Node). Unblocking nodes (e.g. Scan Node) transmit data in stream, which does not take up too much memory.
-
-  When there is a `Memory Exceed Limit` error, try to increase this parameter.
-
 * force_streaming_aggregate
 
   Used to control whether the aggregation node enables streaming aggregation for computing. The default value is false, meaning the feature is not enabled.
 
 * forward_to_master
 
-  Used to set whether some commands will be forwarded to the leader FE node for execution. The default value is false, meaning no forwarding. There are multiple FE nodes in StarRocks, one of which is the leader node. Normally, users can connect to any FE node for full-featured operation. However, some information is only available from the leader FE node.
+  Used to specify whether some commands will be forwarded to the leader FE for execution. The default value is `false`, meaning not forwarding to the leader FE. There are multiple FEs in a StarRocks cluster, one of which is the leader FE. Normally, users can connect to any FE for full-featured operations. However, some information is only available on the leader FE.
 
-  For example, if the `SHOW BACKENDS;` commend is not forwarded to the leader FE node, only basic information (e.g., whether the node is alive or not) can be seen. Forwarding to the leader FE can get more detailed information including the node start time, last heartbeat time, etc.
+  For example, if the SHOW BACKENDS command is not forwarded to the leader FE, only basic information (for example, whether the node is alive) can be viewed. Forwarding to the leader FE can get more detailed information including the node start time and last heartbeat time.
 
   The commands affected by this parameter are as follows:
 
-  * `SHOW FRONTENDS`: Forwarding to leader allows users to view the last heartbeat message.
+  * SHOW FRONTENDS: Forwarding to the leader FE allows users to view the last heartbeat message.
 
-  * `SHOW BACKEND`: Forwarding to leader allows users to view the boot time, last heartbeat information, and disk capacity information.
+  * SHOW BACKENDS: Forwarding to the leader FE allows users to view the boot time, last heartbeat information, and disk capacity information.
 
-  * `SHOW BROKER`: Forwarding to leader allows users to view the boot time and last heartbeat information.
+  * SHOW BROKER: Forwarding to the leader FE allows users to view the boot time and last heartbeat information.
 
-  * `SHOW TABLET`;
-  * `ADMIN SHOW REPLICA DISTRIBUTION`;
-  * `ADMIN SHOW REPLICA STATUS`: Forwarding to leader allows users to view the tablet information stored in the leader FE metadata. Normally, the tablet information in the different FE metadata should be the same. In case of a problem, you can use this method to compare the differences in metadata of the current FE and the leader FE.
+  * SHOW TABLET
 
-  * `Show PROC`: Forwarding to leader allows users to view the PROC information stored in the metadata. This is mainly used for metadata comparison.
+  * ADMIN SHOW REPLICA DISTRIBUTION
+
+  * ADMIN SHOW REPLICA STATUS: Forwarding to the leader FE allows users to view the tablet information stored in the metadata of the leader FE. Normally, the tablet information should be the same in the metadata of different FEs. If an error occurs, you can use this method to compare the metadata of the current FE and the leader FE.
+
+  * Show PROC: Forwarding to the leader FE allows users to view the PROC information stored in the metadata. This is mainly used for metadata comparison.
 
 * hash_join_push_down_right_table
 
   Used to control whether the data of the left table can be filtered by using the filter condition against the right table in the Join query. If so, it can reduce the amount of data that needs to be processed during the query.
 
-  If “true”, indicating the operation is allowed and the system will decide whether the left table can be filtered. If “false”, indicating the operation is disabled. The default value is true.
+  `true` indicates the operation is allowed and the system decides whether the left table can be filtered. `false` indicates the operation is disabled. The default value is `true`.
 
 * init_connect
 
@@ -185,13 +181,13 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   Used for MySQL client compatibility. No practical usage.
 
-* enable_materialized_view_union_rewrite
+* enable_materialized_view_union_rewrite (2.5 and later)
 
-  Boolean value to control if to enable materialized view Union query rewrite. Default: `true`.
+  Boolean value to control whether to enable materialized view Union query rewrite. Default: `true`.
 
-* enable_rule_based_materialized_view_rewrite
+* enable_rule_based_materialized_view_rewrite (2.5 and later)
 
-  Boolean value to control if to enable rule-based materialized view query rewrite. This variable is mainly used in single-table query rewrite. Default: `true`.
+  Boolean value to control whether to enable rule-based materialized view query rewrite. This variable is mainly used in single-table query rewrite. Default: `true`.
 
 * enable_profile
 
@@ -213,15 +209,53 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   Boolean value to enable query queues for statistics queries.
 
-* enable_scan_block_cache
+* enable_scan_block_cache (2.5 and later)
   
-  Whether to enable the Block Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Block cache](../data_source/Block_cache.md).
+  Specifies whether to enable the Local Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Local Cache](../data_source/Block_cache.md).
 
-  This feature is supported in v2.5.
-
-* enable_populate_block_cache
+* enable_populate_block_cache (2.5 and later)
   
-  Whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5.
+  Specifies whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5.
+
+* enable_query_cache (2.5 and later)
+
+  Specifies whether to enable the Query Cache feature. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. When this feature is enabled, it works only for queries that meet the conditions specified in the application scenarios of [Query Cache](../using_starrocks/query_cache.md#application-scenarios).
+
+* query_cache_force_populate (2.5 and later)
+
+  Specifies whether to ignore the computation results saved in the query cache. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. If this feature is enabled, StarRocks ignores the cached computation results when it performs computations required by queries. In this case, StarRocks once again reads data from the source, computes the data, and updates the computation results saved in the query cache. In this sense, the `query_cache_force_populate=true` setting resembles cache misses.
+
+* query_cache_entry_max_bytes (2.5 and later)
+
+  The threshold for triggering the Passthrough mode. Valid values: 0 to 9223372036854775807. When the number of bytes or rows from the computation results of a specific tablet accessed by a query exceeds the threshold specified by the `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` parameter, the query is switched to Passthrough mode.
+
+* group_concat_max_len
+
+  Used for compatibility with MySQL. No practical usage. Default value: 65535.
+
+* query_cache_entry_max_rows (2.5 and later)
+
+  The upper limit of rows that can be cached. See the description in `query_cache_entry_max_bytes`. Default value: 409600.
+
+* query_cache_agg_cardinality_limit (2.5 and later)
+
+  The upper limit of cardinality for GROUP BY in Query Cache. Query Cache is not enabled if the rows generated by GROUP BY exceeds this value. Default value: 5000000. If the `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` parameter is set to 0, the Passthrough mode is used even when no computation results are generated from the involved tablets.
+
+* enable_adaptive_sink_dop (2.5 and later)
+
+  Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. For a newly deployed v2.5 StarRocks cluster, the value is `true` by default. For a v2.5 cluster upgraded from v2.4, the value is `false`.
+
+* enable_pipeline_engine
+
+  Specifies whether to enable the pipeline execution engine. `true` indicates enabled and `false` indicates the opposite. Default value: `true`.
+
+* pipeline_dop
+
+  The parallelism of a pipeline instance, which is used to adjust the query concurrency. Default value: 0, indicating the system automatically adjusts the parallelism of each pipeline instance. You can also set this parameter to a value greater than 0. Generally, set the value to half the number of physical CPU cores.
+
+* enable_sort_aggregate (2.5 and later)
+
+  Specifies whether to enable sorted streaming. `true` indicates sorted streaming is enabled to sort data in data streams.
 
 * enable_page_cache
 
@@ -237,7 +271,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * load_mem_limit
 
-  Specifies the memory limit for the import operation. The default value is 0, meaning that this variable is not used and `exec_mem_limit` is used instead.
+  Specifies the memory limit for the import operation. The default value is 0, meaning that this variable is not used and `query_mem_limit` is used instead.
 
   This variable is only used for the `INSERT` operation which involves both query and import. If the user does not set this variable, the memory limit for both query and import will be set as `exec_mem_limit`. Otherwise, the memory limit for query will be set as `exec_mem_limit` and the memory limit for import will be as `load_mem_limit`.
 
@@ -293,7 +327,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * prefer_compute_node
 
-  Whether the FEs distribute query execution plans to CN nodes. Valid values:
+  Specifies whether the FEs distribute query execution plans to CN nodes. Valid values:
 
   * true: indicates that the FEs distribute query execution plans to CN nodes.
   * false: indicates that the FEs do not distribute query execution plans to CN nodes.
@@ -305,6 +339,12 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 * query_cache_type
 
   Used for compatibility with JDBC connection pool C3P0. No practical use.
+  
+* query_mem_limit
+
+  Used to set the memory limit of a query on each backend node. The default value is 0, which means no limit for it. Units including `B/K/KB/M/MB/G/GB/T/TB/P/PB` are supported.
+
+  When the `Memory Exceed Limit` error happens, you could try to increase this parameter.
 
 * query_queue_concurrency_limit
 

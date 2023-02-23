@@ -128,6 +128,8 @@ public class LoadPlanner {
     // Routine load related structs
     TRoutineLoadTask routineLoadTask;
 
+    private Boolean missAutoIncrementColumn = Boolean.FALSE;
+
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
                        boolean strictMode, String timezone, long timeoutS,
                        long startTime, boolean partialUpdate, ConnectContext context,
@@ -171,10 +173,10 @@ public class LoadPlanner {
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
-            boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
-            Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
-            boolean routimeStreamLoadNegative, int parallelInstanceNum,
-            List<ImportColumnDesc> columnDescs, StreamLoadInfo streamLoadInfo) {
+                       boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
+                       Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+                       boolean routimeStreamLoadNegative, int parallelInstanceNum,
+                       List<ImportColumnDesc> columnDescs, StreamLoadInfo streamLoadInfo) {
         this.loadJobId = loadJobId;
         this.loadId = loadId;
         this.txnId = txnId;
@@ -204,10 +206,10 @@ public class LoadPlanner {
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
-            boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
-            Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
-            boolean routimeStreamLoadNegative, int parallelInstanceNum, List<ImportColumnDesc> columnDescs,
-            StreamLoadInfo streamLoadInfo, String label, long timeoutS) {
+                       boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
+                       Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+                       boolean routimeStreamLoadNegative, int parallelInstanceNum, List<ImportColumnDesc> columnDescs,
+                       StreamLoadInfo streamLoadInfo, String label, long timeoutS) {
         this(loadJobId, loadId, txnId, dbId, dbName, destTable, strictMode, timezone, partialUpdate, context,
                 sessionVariables, loadMemLimit, execMemLimit, routimeStreamLoadNegative, parallelInstanceNum,
                 columnDescs, streamLoadInfo);
@@ -241,14 +243,20 @@ public class LoadPlanner {
         } else if (!isPrimaryKey && partialUpdate) {
             throw new DdlException("Only primary key table support partial update");
         }
+        List<Boolean> isMissAutoIncrementColumn = Lists.newArrayList();
         if (partialUpdate) {
             if (this.etlJobType == EtlJobType.BROKER) {
-                destColumns = Load.getPartialUpateColumns(destTable, fileGroups.get(0).getColumnExprList());
+                destColumns = Load.getPartialUpateColumns(destTable, fileGroups.get(0).getColumnExprList(),
+                    isMissAutoIncrementColumn);
             } else {
-                destColumns = Load.getPartialUpateColumns(destTable, columnDescs);
+                destColumns = Load.getPartialUpateColumns(destTable, columnDescs, isMissAutoIncrementColumn);
             }
         } else {
             destColumns = destTable.getFullSchema();
+        }
+
+        if (isMissAutoIncrementColumn.size() != 0) {
+            this.missAutoIncrementColumn = isMissAutoIncrementColumn.get(0);
         }
 
         generateTupleDescriptor(destColumns, isPrimaryKey);
@@ -377,13 +385,38 @@ public class LoadPlanner {
         return scanNode;
     }
 
+    private boolean checkNullExprInAutoIncrement() {
+        boolean nullExprInAutoIncrement = false;
+        for (ScanNode node : scanNodes) {
+            if (this.etlJobType == EtlJobType.BROKER) {
+                if (((FileScanNode) node).nullExprInAutoIncrement()) {
+                    nullExprInAutoIncrement = true;
+                }
+            } else if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == EtlJobType.ROUTINE_LOAD) {
+                if (((StreamLoadScanNode) node).nullExprInAutoIncrement()) {
+                    nullExprInAutoIncrement = true;
+                }
+            }
+
+            if (nullExprInAutoIncrement) {
+                break;
+            }
+        }
+
+        return nullExprInAutoIncrement;
+    }
+
     private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds, boolean canUsePipeLine,
                                      boolean completeTabletSink) throws UserException {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink
             dataSink = new OlapTableSink((OlapTable) destTable, tupleDesc, partitionIds, canUsePipeLine,
-                    ((OlapTable) destTable).writeQuorum(), ((OlapTable) destTable).enableReplicatedStorage());
+                    ((OlapTable) destTable).writeQuorum(), ((OlapTable) destTable).enableReplicatedStorage(),
+                    checkNullExprInAutoIncrement());
+            if (this.missAutoIncrementColumn == Boolean.TRUE) {
+                ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
+            }
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).complete();

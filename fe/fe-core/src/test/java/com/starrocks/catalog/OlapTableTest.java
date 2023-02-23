@@ -37,7 +37,6 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.IndexDef;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
@@ -61,7 +60,7 @@ public class OlapTableTest {
         new MockUp<GlobalStateMgr>() {
             @Mock
             int getCurrentStateJournalVersion() {
-                return FeConstants.meta_version;
+                return FeConstants.META_VERSION;
             }
         };
 

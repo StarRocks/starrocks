@@ -26,6 +26,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -48,6 +49,12 @@ public class ListPartitionDesc extends PartitionDesc {
 
     public ListPartitionDesc(List<String> partitionColNames,
                              List<PartitionDesc> partitionDescs) {
+        this(partitionColNames, partitionDescs, NodePosition.ZERO);
+    }
+
+    public ListPartitionDesc(List<String> partitionColNames,
+                             List<PartitionDesc> partitionDescs, NodePosition pos) {
+        super(pos);
         super.type = PartitionType.LIST;
         this.partitionColNames = partitionColNames;
         this.singleListPartitionDescs = Lists.newArrayList();
@@ -74,6 +81,12 @@ public class ListPartitionDesc extends PartitionDesc {
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException {
         // analyze partition columns
         List<ColumnDef> columnDefList = this.analyzePartitionColumns(columnDefs);
+        for (ColumnDef columnDef : columnDefList) {
+            if (columnDef.isAllowNull()) {
+                throw new AnalysisException("The list partition column does not support allow null currently, column:["
+                        + columnDef.getName() + "] should be set to not null.");
+            }
+        }
         // analyze single list property
         this.analyzeSingleListPartition(tableProperties, columnDefList);
         // analyze multi list partition
@@ -93,7 +106,8 @@ public class ListPartitionDesc extends PartitionDesc {
             boolean found = false;
             for (ColumnDef columnDef : columnDefs) {
                 if (columnDef.getName().equals(partitionCol)) {
-                    if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()) {
+                    if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()
+                            || columnDef.getType().isDecimalOfAnyVersion()) {
                         throw new AnalysisException(String.format("Invalid partition column '%s': %s",
                                 columnDef.getName(), "invalid data type " + columnDef.getType()));
                     }
@@ -191,7 +205,8 @@ public class ListPartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
+    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId,
+                                         boolean isTemp, boolean isExprPartition)
             throws DdlException {
         try {
             List<Column> partitionColumns = this.findPartitionColumns(columns);
@@ -204,6 +219,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
                 listPartitionInfo.setValues(partitionId, desc.getValues());
                 listPartitionInfo.setLiteralExprValues(partitionId, desc.getValues());
+                listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
             }
             for (MultiItemListPartitionDesc desc : this.multiListPartitionDescs) {
                 long partitionId = partitionNameToId.get(desc.getPartitionName());
@@ -213,6 +229,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
                 listPartitionInfo.setMultiValues(partitionId, desc.getMultiValues());
                 listPartitionInfo.setMultiLiteralExprValues(partitionId, desc.getMultiValues());
+                listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
             }
             return listPartitionInfo;
         } catch (AnalysisException e) {

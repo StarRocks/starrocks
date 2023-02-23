@@ -38,7 +38,9 @@ public:
 
     const SchemaMapping& get_schema_mapping() const { return _schema_mapping; }
 
-    std::vector<ColumnId>* get_mutable_selected_column_indexs() { return &_selected_column_indexs; }
+    std::vector<ColumnId>* get_mutable_selected_column_indexes() { return &_selected_column_indexes; }
+
+    const std::vector<ColumnId>& get_selected_column_indexes() const { return _selected_column_indexes; }
 
     bool change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const TabletMetaSharedPtr& base_tablet_meta,
                       const TabletMetaSharedPtr& new_tablet_meta, MemPool* mem_pool);
@@ -53,7 +55,7 @@ private:
     // @brief column-mapping specification of new schema
     SchemaMapping _schema_mapping;
 
-    std::vector<ColumnId> _selected_column_indexs;
+    std::vector<ColumnId> _selected_column_indexes;
 
     DISALLOW_COPY(ChunkChanger);
 };

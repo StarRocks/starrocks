@@ -61,5 +61,14 @@ public class AnalyzeArrayTest {
                 "            array_contains([true, false, true], true),\n" +
                 "            array_contains([true, false, true], false)");
         analyzeSuccess("select array_length(null)");
+
+        analyzeFail("select array_concat([])");
+    }
+
+    @Test
+    public void testArrayConcat() {
+        analyzeSuccess("select array_concat([1.0, 2.0, 3.0], [2.00, 2.0])");
+        analyzeSuccess("select array_concat([1.0, 2.0, 3.0], ['2.00', '2.0'])");
+        analyzeFail("select array_concat([1, 2, 3], [[1, 1], [2, 2]])");
     }
 }

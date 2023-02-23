@@ -366,9 +366,9 @@ public:
     }
 
     std::string debug_string() const override {
-        LogicalType ptype = Type;
+        LogicalType ltype = Type;
         std::stringstream ss;
-        ss << "RuntimeBF(type = " << ptype << ", bfsize = " << _size << ", has_null = " << _has_null;
+        ss << "RuntimeBF(type = " << ltype << ", bfsize = " << _size << ", has_null = " << _has_null;
         if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
             if constexpr (!std::is_same_v<CppType, __int128>) {
                 ss << ", _min = " << _min << ", _max = " << _max;
@@ -401,10 +401,10 @@ public:
     }
 
     size_t serialize(uint8_t* data) const override {
-        LogicalType ptype = Type;
+        LogicalType ltype = Type;
         size_t offset = 0;
-        memcpy(data + offset, &ptype, sizeof(ptype));
-        offset += sizeof(ptype);
+        memcpy(data + offset, &ltype, sizeof(ltype));
+        offset += sizeof(ltype);
         offset += JoinRuntimeFilter::serialize(data + offset);
         memcpy(data + offset, &_has_min_max, sizeof(_has_min_max));
         offset += sizeof(_has_min_max);
@@ -434,10 +434,10 @@ public:
     }
 
     size_t deserialize(const uint8_t* data) override {
-        LogicalType ptype = Type;
+        LogicalType ltype = Type;
         size_t offset = 0;
-        memcpy(&ptype, data + offset, sizeof(ptype));
-        offset += sizeof(ptype);
+        memcpy(&ltype, data + offset, sizeof(ltype));
+        offset += sizeof(ltype);
         offset += JoinRuntimeFilter::deserialize(data + offset);
 
         bool has_min_max = false;
@@ -497,6 +497,33 @@ public:
         if (*max_value < _min) return true;
         if (*min_value > _max) return true;
         return false;
+    }
+
+    void compute_hash(const std::vector<Column*>& columns, RunningContext* ctx) const override {
+        if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
+        size_t num_rows = columns[0]->size();
+
+        // initialize hash_values.
+        // reuse ctx's hash_values object.
+        std::vector<uint32_t>& _hash_values = ctx->hash_values;
+        switch (_join_mode) {
+        case TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET:
+        case TRuntimeFilterBuildJoinMode::COLOCATE:
+        case TRuntimeFilterBuildJoinMode::BORADCAST: {
+            _hash_values.assign(num_rows, 0);
+            break;
+        }
+        case TRuntimeFilterBuildJoinMode::PARTITIONED:
+        case TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET: {
+            _hash_values.assign(num_rows, HashUtil::FNV_SEED);
+            break;
+        }
+        default:
+            DCHECK(false) << "unexpected join mode: " << _join_mode;
+        }
+
+        // compute hash_values
+        _compute_hash_values_for_multi_part(ctx, _join_mode, columns, num_rows, _hash_values);
     }
 
 private:
@@ -649,33 +676,6 @@ private:
         const uint32_t bucket_idx = shuffle_hash;
         size_t hash = compute_hash(value);
         return _hash_partition_bf[bucket_idx].test_hash(hash);
-    }
-
-    void compute_hash(const std::vector<Column*>& columns, RunningContext* ctx) const override {
-        if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
-        size_t num_rows = columns[0]->size();
-
-        // initialize hash_values.
-        // reuse ctx's hash_values object.
-        std::vector<uint32_t>& _hash_values = ctx->hash_values;
-        switch (_join_mode) {
-        case TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET:
-        case TRuntimeFilterBuildJoinMode::COLOCATE:
-        case TRuntimeFilterBuildJoinMode::BORADCAST: {
-            _hash_values.assign(num_rows, 0);
-            break;
-        }
-        case TRuntimeFilterBuildJoinMode::PARTITIONED:
-        case TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET: {
-            _hash_values.assign(num_rows, HashUtil::FNV_SEED);
-            break;
-        }
-        default:
-            DCHECK(false) << "unexpected join mode: " << _join_mode;
-        }
-
-        // compute hash_values
-        _compute_hash_values_for_multi_part(ctx, _join_mode, columns, num_rows, _hash_values);
     }
 
     using HashValues = std::vector<uint32_t>;

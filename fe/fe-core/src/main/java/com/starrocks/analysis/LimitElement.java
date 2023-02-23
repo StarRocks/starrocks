@@ -35,6 +35,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 
 /**
  * Combination of limit and offset expressions.
@@ -51,22 +52,30 @@ public class LimitElement implements ParseNode {
     // END: Members that need to be reset()
     /////////////////////////////////////////
 
+    private final NodePosition pos;
+
     public LimitElement() {
+        pos = NodePosition.ZERO;
         limit = -1;
         offset = 0;
     }
 
     public LimitElement(long limit) {
-        this.limit = limit;
-        offset = 0;
+        this(0, limit, NodePosition.ZERO);
     }
 
     public LimitElement(long offset, long limit) {
+        this(offset, limit, NodePosition.ZERO);
+    }
+
+    public LimitElement(long offset, long limit, NodePosition pos) {
+        this.pos = pos;
         this.offset = offset;
         this.limit = limit;
     }
 
     protected LimitElement(LimitElement other) {
+        pos = other.pos;
         limit = other.limit;
         offset = other.offset;
     }
@@ -110,6 +119,11 @@ public class LimitElement implements ParseNode {
         }
         sb.append("").append(limit);
         return sb.toString();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     public String toDigest() {

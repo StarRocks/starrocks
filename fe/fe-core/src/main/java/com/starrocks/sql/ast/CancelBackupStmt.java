@@ -15,12 +15,19 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class CancelBackupStmt extends CancelStmt {
 
     private String dbName;
     private final boolean isRestore;
 
     public CancelBackupStmt(String dbName, boolean isRestore) {
+        this(dbName, isRestore, NodePosition.ZERO);
+    }
+
+    public CancelBackupStmt(String dbName, boolean isRestore, NodePosition pos) {
+        super(pos);
         this.dbName = dbName;
         this.isRestore = isRestore;
     }

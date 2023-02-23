@@ -31,6 +31,8 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.JoinMetaGroupInfo;
 import com.staros.proto.PlacementPolicy;
+import com.staros.proto.PlacementPreference;
+import com.staros.proto.PlacementRelationship;
 import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
@@ -80,21 +82,8 @@ public class StarOSAgent {
     }
 
     public boolean init(StarManagerServer server) {
-        if (Config.integrate_starmgr) {
-            if (!Config.use_staros) {
-                LOG.error("integrate_starmgr is true but use_staros is false!");
-                return false;
-            }
-            // check if Config.starmanager_address == FE address
-            String[] starMgrAddr = Config.starmgr_address.split(":");
-            if (!starMgrAddr[0].equals("127.0.0.1")) {
-                LOG.error("Config.starmgr_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
-                return false;
-            }
-        }
-
         client = new StarClient(server);
-        client.connectServer(Config.starmgr_address);
+        client.connectServer(String.format("127.0.0.1:%d", Config.cloud_native_meta_port));
         return true;
     }
 
@@ -111,7 +100,7 @@ public class StarOSAgent {
             ServiceInfo serviceInfo = client.getServiceInfoByName(SERVICE_NAME);
             serviceId = serviceInfo.getServiceId();
         } catch (StarClientException e) {
-            LOG.warn("Failed to get serviceId from starMgr. Error: {}", e);
+            LOG.warn("Failed to get serviceId from starMgr. Error:", e);
             return;
         }
         LOG.info("get serviceId {} from starMgr", serviceId);
@@ -120,7 +109,8 @@ public class StarOSAgent {
     public FilePathInfo allocateFilePath(long tableId) throws DdlException {
         try {
             EnumDescriptor enumDescriptor = FileStoreType.getDescriptor();
-            FileStoreType fsType = FileStoreType.valueOf(enumDescriptor.findValueByName(Config.default_fs_type).getNumber());
+            FileStoreType fsType = FileStoreType.valueOf(
+                    enumDescriptor.findValueByName(Config.cloud_native_storage_type).getNumber());
             FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, Long.toString(tableId));
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
@@ -220,10 +210,27 @@ public class StarOSAgent {
                     LOG.info("worker {} already added in starMgr", workerId);
                 }
             }
+            tryRemovePreviousWorker(backendId);
             workerToId.put(workerIpPort, workerId);
             workerToBackend.put(workerId, backendId);
             LOG.info("add worker {} success, backendId is {}", workerId, backendId);
         }
+    }
+
+    // remove previous worker with same backend id
+    private void tryRemovePreviousWorker(long backendId) {
+        long prevWorkerId = getWorkerIdByBackendIdInternal(backendId);
+        if (prevWorkerId < 0) {
+            return;
+        }
+        try {
+            client.removeWorker(serviceId, prevWorkerId);
+        } catch (StarClientException e) {
+            // TODO: fix this corner case later in star mgr
+            LOG.error("Failed to remove worker {} with backend id {}. error: {}", prevWorkerId, backendId, e.getMessage());
+        }
+        workerToBackend.remove(prevWorkerId);
+        workerToId.entrySet().removeIf(e -> e.getValue() == prevWorkerId);
     }
 
     public void removeWorker(String workerIpPort) throws DdlException {
@@ -256,15 +263,19 @@ public class StarOSAgent {
 
     public long getWorkerIdByBackendId(long backendId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            long workerId = -1;
-            for (Map.Entry<Long, Long> entry : workerToBackend.entrySet()) {
-                if (entry.getValue() == backendId) {
-                    workerId = entry.getKey();
-                    break;
-                }
-            }
-            return workerId;
+            return getWorkerIdByBackendIdInternal(backendId);
         }
+    }
+
+    private long getWorkerIdByBackendIdInternal(long backendId) {
+        long workerId = -1;
+        for (Map.Entry<Long, Long> entry : workerToBackend.entrySet()) {
+            if (entry.getValue() == backendId) {
+                workerId = entry.getKey();
+                break;
+            }
+        }
+        return workerId;
     }
 
     public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
@@ -307,21 +318,39 @@ public class StarOSAgent {
         }
     }
 
-    public List<Long> createShards(int numShards, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
         throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, groupId, null);
+    }
+
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+            List<Long> matchShardIds)
+        throws DdlException {
+        if (matchShardIds != null) {
+            Preconditions.checkState(numShards == matchShardIds.size());
+        }
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
             List<CreateShardInfo> createShardInfoList = new ArrayList<>(numShards);
 
             CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
-            builder.setReplicaCount(replicaNum)
+            builder.setReplicaCount(1)
                     .addGroupIds(groupId)
                     .setPathInfo(pathInfo)
                     .setCacheInfo(cacheInfo);
 
             for (int i = 0; i < numShards; ++i) {
                 builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
+                if (matchShardIds != null) {
+                    builder.clearPlacementPreferences();
+                    PlacementPreference preference = PlacementPreference.newBuilder()
+                            .setPlacementPolicy(PlacementPolicy.PACK)
+                            .setPlacementRelationship(PlacementRelationship.WITH_SHARD)
+                            .setRelationshipTargetId(matchShardIds.get(i))
+                            .build();
+                    builder.addPlacementPreferences(preference);
+                }
                 createShardInfoList.add(builder.build());
             }
             shardInfos = client.createShard(serviceId, createShardInfoList);
@@ -347,6 +376,9 @@ public class StarOSAgent {
     }
 
     public void deleteShards(Set<Long> shardIds) throws DdlException {
+        if (shardIds.isEmpty()) {
+            return;
+        }
         prepare();
         try {
             client.deleteShard(serviceId, shardIds);
@@ -461,6 +493,7 @@ public class StarOSAgent {
             } else {
                 QuitMetaGroupInfo quitInfo = QuitMetaGroupInfo.newBuilder()
                         .setMetaGroupId(metaGroupId)
+                        .setDeleteMetaGroupIfEmpty(true)
                         .build();
                 builder.setQuitInfo(quitInfo);
             }
@@ -471,5 +504,27 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             throw new DdlException("Failed to update meta group. error: " + e.getMessage());
         }
+    }
+
+    public boolean queryMetaGroupStable(long metaGroupId) {
+        prepare();
+
+        try {
+            return client.queryMetaGroupStable(serviceId, metaGroupId);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to query meta group {} whether stable. error:{}", metaGroupId, e.getMessage());
+        }
+        return false; // return false if any error happens
+    }
+
+    // Mocked
+    public long createWorkerGroup(String size) throws DdlException {
+        return GlobalStateMgr.getCurrentState().getNextId();
+    }
+
+    public void deleteWorkerGroup(long groupId) throws DdlException {
+    }
+
+    public void modifyWorkerGroup(long groupId, String size) throws DdlException {
     }
 }

@@ -112,12 +112,11 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         PhysicalScanOperator that = (PhysicalScanOperator) o;
         return Objects.equals(table.getId(), that.table.getId()) &&
                 Objects.equals(colRefToColumnMetaMap, that.getColRefToColumnMetaMap());

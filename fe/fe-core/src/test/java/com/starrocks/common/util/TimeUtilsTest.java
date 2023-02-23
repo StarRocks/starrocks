@@ -145,7 +145,7 @@ public class TimeUtilsTest {
 
     @Test
     public void testDateTrans() throws AnalysisException {
-        Assert.assertEquals(FeConstants.null_string, TimeUtils.longToTimeString(-2));
+        Assert.assertEquals(FeConstants.NULL_STRING, TimeUtils.longToTimeString(-2));
 
         long timestamp = 1426125600000L;
         Assert.assertEquals("2015-03-12 10:00:00", TimeUtils.longToTimeString(timestamp));

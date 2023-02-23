@@ -17,11 +17,11 @@ package com.starrocks.authentication;
 
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataOutput;
@@ -32,7 +32,7 @@ public class UserAuthenticationInfo implements Writable {
     protected static final String ANY_USER = "%";
 
     @SerializedName(value = "p")
-    private byte[] password = null;
+    private byte[] password = MysqlPassword.EMPTY_PASSWORD;
     @SerializedName(value = "a")
     private String authPlugin = null;
     @SerializedName(value = "t")
@@ -60,16 +60,10 @@ public class UserAuthenticationInfo implements Writable {
     }
 
     public void analyze() throws AuthenticationException {
-        try {
-            isAnyUser = origUser.equals(ANY_USER);
-            isAnyHost = origHost.equals(ANY_HOST);
-            userPattern = PatternMatcher.createMysqlPattern(origUser, CaseSensibility.USER.getCaseSensibility());
-            hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());
-        } catch (AnalysisException e) {
-            AuthenticationException exception = new AuthenticationException("failed to parse user host");
-            exception.initCause(e);
-            throw exception;
-        }
+        isAnyUser = origUser.equals(ANY_USER);
+        isAnyHost = origHost.equals(ANY_HOST);
+        userPattern = PatternMatcher.createMysqlPattern(origUser, CaseSensibility.USER.getCaseSensibility());
+        hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());
     }
 
     @Override

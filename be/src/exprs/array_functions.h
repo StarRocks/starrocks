@@ -31,6 +31,11 @@ public:
     DEFINE_VECTORIZED_FN(array_contains);
     DEFINE_VECTORIZED_FN(array_position);
 
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_distinct(FunctionContext* context, const Columns& columns) {
+        return ArrayDistinct<type>::process(context, columns);
+    }
+
 #define APPLY_COMMONE_TYPES_FOR_ARRAY(M)      \
     M(boolean, LogicalType::TYPE_BOOLEAN)     \
     M(tinyint, LogicalType::TYPE_TINYINT)     \
@@ -46,16 +51,9 @@ public:
     M(datetime, LogicalType::TYPE_DATETIME)   \
     M(date, LogicalType::TYPE_DATE)
 
-#define DEFINE_ARRAY_DISTINCT_FN(NAME, PT)                                                               \
-    static StatusOr<ColumnPtr> array_distinct_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayDistinct<PT>::process(context, columns);                                             \
-    }
-    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_DISTINCT_FN)
-#undef DEFINE_ARRAY_DISTINCT_FN
-
-#define DEFINE_ARRAY_DIFFERENCE_FN(NAME, PT)                                                               \
+#define DEFINE_ARRAY_DIFFERENCE_FN(NAME, LT)                                                               \
     static StatusOr<ColumnPtr> array_difference_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayDifference<PT>::process(context, columns);                                             \
+        return ArrayDifference<LT>::process(context, columns);                                             \
     }
 
     DEFINE_ARRAY_DIFFERENCE_FN(boolean, LogicalType::TYPE_BOOLEAN)
@@ -70,47 +68,41 @@ public:
 
 #undef DEFINE_ARRAY_DIFFERENCE_FN
 
-#define DEFINE_ARRAY_SLICE_FN(NAME, PT)                                                               \
-    static StatusOr<ColumnPtr> array_slice_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArraySlice<PT>::process(context, columns);                                             \
-    }
-    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SLICE_FN)
-    DEFINE_ARRAY_SLICE_FN(json, LogicalType::TYPE_JSON)
-#undef DEFINE_ARRAY_SLICE_FN
+    DEFINE_VECTORIZED_FN(array_slice);
 
-#define DEFINE_ARRAY_OVERLAP_FN(NAME, PT)                                                               \
+#define DEFINE_ARRAY_OVERLAP_FN(NAME, LT)                                                               \
     static StatusOr<ColumnPtr> array_overlap_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayOverlap<PT>::process(context, columns);                                             \
+        return ArrayOverlap<LT>::process(context, columns);                                             \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_OVERLAP_FN)
 #undef DEFINE_ARRAY_OVERLAP_FN
 
-#define DEFINE_ARRAY_INTERSECT_FN(NAME, PT)                                                               \
+#define DEFINE_ARRAY_INTERSECT_FN(NAME, LT)                                                               \
     static StatusOr<ColumnPtr> array_intersect_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayIntersect<PT>::process(context, columns);                                             \
+        return ArrayIntersect<LT>::process(context, columns);                                             \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_INTERSECT_FN)
 #undef DEFINE_ARRAY_INTERSECT_FN
 
-#define DEFINE_ARRAY_SORT_FN(NAME, PT)                                                               \
+#define DEFINE_ARRAY_SORT_FN(NAME, LT)                                                               \
     static StatusOr<ColumnPtr> array_sort_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArraySort<PT>::process(context, columns);                                             \
+        return ArraySort<LT>::process(context, columns);                                             \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SORT_FN)
     DEFINE_ARRAY_SORT_FN(json, LogicalType::TYPE_JSON)
 #undef DEFINE_ARRAY_SORT_FN
 
-#define DEFINE_ARRAY_SORTBY_FN(NAME, PT)                                                               \
+#define DEFINE_ARRAY_SORTBY_FN(NAME, LT)                                                               \
     static StatusOr<ColumnPtr> array_sortby_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArraySortBy<PT>::process(context, columns);                                             \
+        return ArraySortBy<LT>::process(context, columns);                                             \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SORTBY_FN)
     DEFINE_ARRAY_SORTBY_FN(json, LogicalType::TYPE_JSON)
 #undef DEFINE_ARRAY_SORTBY_FN
 
-#define DEFINE_ARRAY_REVERSE_FN(NAME, PT)                                                               \
+#define DEFINE_ARRAY_REVERSE_FN(NAME, LT)                                                               \
     static StatusOr<ColumnPtr> array_reverse_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayReverse<PT>::process(context, columns);                                             \
+        return ArrayReverse<LT>::process(context, columns);                                             \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_REVERSE_FN)
     DEFINE_ARRAY_REVERSE_FN(json, LogicalType::TYPE_JSON)

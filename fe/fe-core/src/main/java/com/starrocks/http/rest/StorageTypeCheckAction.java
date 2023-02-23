@@ -35,7 +35,6 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -49,6 +48,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TStorageType;
 import io.netty.handler.codec.http.HttpMethod;
 import org.json.JSONObject;

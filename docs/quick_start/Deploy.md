@@ -213,7 +213,7 @@ After the FE node and BE node are started properly, you can set up the StarRocks
 1. Log in to StarRocks via your MySQL client. You can log in with the default user `root`, and the password is empty by default.
 
     ```Plain
-    mysql -h <fe_ip> -P<fe_http_port> -uroot
+    mysql -h <fe_ip> -P<fe_query_port> -uroot
     ```
 
     > **NOTE**
@@ -254,7 +254,7 @@ After the FE node and BE node are started properly, you can set up the StarRocks
 
     - If the field `Alive` is `true`, this FE node is properly started and added to the cluster.
     - If the field `Role` is `FOLLOWER`, this FE node is eligible to be elected as the Leader node.
-    - If the field `IsMaster` is `true`, this FE node is the Leader node.
+    - If the field `Role` is `LEADER`, this FE node is the Leader node.
 
 3. Add the BE node to the cluster.
 

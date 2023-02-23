@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -49,6 +50,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggT
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.SingleTableMvRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
@@ -198,7 +200,13 @@ public class Optimizer {
         }
 
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
-        context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
+        OptimizerTraceInfo traceInfo;
+        if (connectContext.getExecutor() == null) {
+            traceInfo = new OptimizerTraceInfo(connectContext.getQueryId(), null);
+        } else {
+            traceInfo = new OptimizerTraceInfo(connectContext.getQueryId(), connectContext.getExecutor().getParsedStmt());
+        }
+        context.setTraceInfo(traceInfo);
 
         if (Config.enable_experimental_mv
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
@@ -308,21 +316,24 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+
+        // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+
         ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
         ruleRewriteIterative(tree, rootTaskContext, new RewriteMinMaxAggToMetaScanRule());
 
+        // if mv has multi table sources, we will process it in memo to support view delta join rewrite
         if (!optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
                 && sessionVariable.isEnableMaterializedViewRewrite()
                 && sessionVariable.isEnableRuleBasedMaterializedViewRewrite()
-                && !rootTaskContext.getOptimizerContext().getCandidateMvs().isEmpty()) {
+                && !rootTaskContext.getOptimizerContext().getCandidateMvs().isEmpty()
+                && rootTaskContext.getOptimizerContext().getCandidateMvs()
+                .stream().allMatch(context -> !context.hasMultiTables())) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
-            // external table need to to re-compute scanOperatorPredicates because of the predicates of scan operator
-            // may changed
-            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         }
         return tree.getInputs().get(0);
     }
@@ -362,9 +373,9 @@ public class Optimizer {
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         // Join reorder
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        if (!sessionVariable.isDisableJoinReorder()
-                && Utils.countInnerJoinNodeSize(tree) < sessionVariable.getCboMaxReorderNode()) {
-            if (Utils.countInnerJoinNodeSize(tree) > sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
+        int innerCrossJoinNode = Utils.countJoinNodeSize(tree, JoinOperator.innerCrossJoinSet());
+        if (!sessionVariable.isDisableJoinReorder() && innerCrossJoinNode < sessionVariable.getCboMaxReorderNode()) {
+            if (innerCrossJoinNode > sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
                 CTEUtils.collectForceCteStatistics(memo, context);
 
                 OptimizerTraceUtil.logOptExpression(connectContext, "before ReorderJoinRule:\n%s", tree);
@@ -373,15 +384,16 @@ public class Optimizer {
 
                 context.getRuleSet().addJoinCommutativityWithOutInnerRule();
             } else {
-                if (Utils.capableSemiReorder(tree, false, 0, sessionVariable.getCboMaxReorderNodeUseExhaustive())) {
+                if (Utils.countJoinNodeSize(tree, JoinOperator.semiAntiJoinSet()) <
+                        sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
                     context.getRuleSet().getTransformRules().add(new SemiReorderRule());
                 }
                 context.getRuleSet().addJoinTransformationRules();
             }
         }
 
-        if (sessionVariable.isEnableOuterJoinReorder() &&
-                Utils.capableOuterReorder(tree, sessionVariable.getCboReorderThresholdUseExhaustive())) {
+        if (!sessionVariable.isDisableJoinReorder() && sessionVariable.isEnableOuterJoinReorder()
+                && Utils.capableOuterReorder(tree, sessionVariable.getCboReorderThresholdUseExhaustive())) {
             context.getRuleSet().addOuterJoinTransformationRules();
         }
 
@@ -403,6 +415,10 @@ public class Optimizer {
 
         if (!context.getCandidateMvs().isEmpty()
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()) {
+            if (rootTaskContext.getOptimizerContext().getCandidateMvs()
+                    .stream().anyMatch(context -> context.hasMultiTables())) {
+                new SingleTableMvRewriteRule().transform(tree, context);
+            }
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
 
@@ -460,9 +476,7 @@ public class Optimizer {
                 childPlans);
         // record inputProperties at optExpression, used for planFragment builder to determine join type
         expression.setRequiredProperties(inputProperties);
-        expression.setStatistics(groupExpression.getGroup().hasConfidenceStatistic(requiredProperty) ?
-                groupExpression.getGroup().getConfidenceStatistic(requiredProperty) :
-                groupExpression.getGroup().getStatistics());
+        expression.setStatistics(groupExpression.getGroup().getStatistics());
         expression.setCost(groupExpression.getCost(requiredProperty));
 
         // When build plan fragment, we need the output column of logical property

@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -52,12 +53,18 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.PEntryObject;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
@@ -65,6 +72,7 @@ import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -75,14 +83,15 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
-import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
@@ -109,42 +118,173 @@ public class AstToStringBuilder {
     }
 
     public static class AST2StringBuilderVisitor extends AstVisitor<String, Void> {
+
+        // ------------------------------------------- Privilege Statement -------------------------------------------------
+
+        @Override
+        public String visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, Void context) {
+            StringBuilder sb = new StringBuilder();
+            if (statement instanceof CreateUserStmt) {
+                sb.append("CREATE");
+            } else {
+                sb.append("ALTER");
+            }
+
+            sb.append(" USER ").append(statement.getUserIdentity());
+            if (!Strings.isNullOrEmpty(statement.getOriginalPassword())) {
+                if (statement.isPasswordPlain()) {
+                    sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                } else {
+                    sb.append(" IDENTIFIED BY PASSWORD '").append(statement.getOriginalPassword()).append("'");
+                }
+            }
+
+            if (!Strings.isNullOrEmpty(statement.getAuthPluginName())) {
+                sb.append(" IDENTIFIED WITH ").append(statement.getAuthPluginName());
+                if (!Strings.isNullOrEmpty(statement.getAuthStringUnResolved())) {
+                    if (statement.isPasswordPlain()) {
+                        sb.append(" BY '");
+                    } else {
+                        sb.append(" AS '");
+                    }
+                    sb.append(statement.getAuthStringUnResolved()).append("'");
+                }
+            }
+
+            if (!statement.getDefaultRoles().isEmpty()) {
+                sb.append(" DEFAULT ROLE ");
+                sb.append(Joiner.on(",").join(
+                        statement.getDefaultRoles().stream().map(r -> "'" + r + "'").collect(toList())));
+            }
+
+            return sb.toString();
+        }
+
+        @Override
+        public String visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            if (stmt instanceof GrantPrivilegeStmt) {
+                sb.append("GRANT ");
+            } else {
+                sb.append("REVOKE ");
+            }
+            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                List<String> privList = stmt.getPrivilegeTypes().stream().map(Enum::name).collect(toList());
+                sb.append(Joiner.on(", ").join(privList));
+                sb.append(" ON ");
+
+                if (stmt.getObjectType() == ObjectType.SYSTEM) {
+                    sb.append(stmt.getObjectType().name());
+                } else {
+                    if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
+                        sb.append(stmt.getObjectList().get(0).toString());
+                    } else {
+                        sb.append(stmt.getObjectType().name()).append(" ");
+
+                        List<String> objectString = new ArrayList<>();
+                        for (PEntryObject tablePEntryObject : stmt.getObjectList()) {
+                            objectString.add(tablePEntryObject.toString());
+                        }
+                        sb.append(Joiner.on(", ").join(objectString));
+                    }
+                }
+
+            } else {
+                boolean firstLine = true;
+                for (Privilege privilege : stmt.getPrivBitSet().toPrivilegeList()) {
+                    if (firstLine) {
+                        firstLine = false;
+                    } else {
+                        sb.append(", ");
+                    }
+                    String priv = privilege.toString().toUpperCase();
+                    sb.append(priv, 0, priv.length() - 5);
+                }
+                if (stmt.getObjectTypeUnResolved().equals("TABLE") || stmt.getObjectTypeUnResolved().equals("DATABASE")) {
+                    sb.append(" ON ").append(stmt.getTblPattern());
+                } else if (stmt.getObjectTypeUnResolved().equals("RESOURCE")) {
+                    sb.append(" ON RESOURCE ").append(stmt.getResourcePattern());
+                } else {
+                    sb.append(" ON USER ").append(stmt.getUserPrivilegeObject());
+                }
+            }
+            if (stmt instanceof GrantPrivilegeStmt) {
+                sb.append(" TO ");
+            } else {
+                sb.append(" FROM ");
+            }
+            if (stmt.getUserIdentity() != null) {
+                sb.append("USER ").append(stmt.getUserIdentity());
+            } else {
+                sb.append("ROLE '").append(stmt.getRole()).append("'");
+            }
+
+            if (stmt instanceof GrantPrivilegeStmt && ((GrantPrivilegeStmt) stmt).isWithGrantOption()) {
+                sb.append(" WITH GRANT OPTION");
+            }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder();
+            if (statement instanceof GrantRoleStmt) {
+                sqlBuilder.append("GRANT ");
+            } else {
+                sqlBuilder.append("REVOKE ");
+            }
+
+            sqlBuilder.append(Joiner.on(", ")
+                    .join(statement.getGranteeRole().stream().map(r -> "'" + r + "'").collect(toList())));
+            sqlBuilder.append(" ");
+            if (statement instanceof GrantRoleStmt) {
+                sqlBuilder.append("TO ");
+            } else {
+                sqlBuilder.append("FROM ");
+            }
+            if (statement.getRole() != null) {
+                sqlBuilder.append(" ROLE ").append(statement.getRole());
+            } else {
+                sqlBuilder.append(statement.getUserIdentity());
+            }
+
+            return sqlBuilder.toString();
+        }
+
+        // --------------------------------------------Set Statement -------------------------------------------------------
+
         @Override
         public String visitSetStatement(SetStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("SET ");
 
             List<String> setVarList = new ArrayList<>();
-            for (SetVar setVar : stmt.getSetVars()) {
-                if (setVar instanceof SetPassVar) {
-                    StringBuilder tmp = new StringBuilder();
-                    tmp.append("PASSWORD FOR ")
-                            .append(((SetPassVar) setVar).getUserIdent().toString())
-                            .append(" = PASSWORD('***')");
-                    setVarList.add(tmp.toString());
-                    continue;
-                }
-                String setVarSql = "";
+            for (SetListItem setVar : stmt.getSetListItems()) {
+                if (setVar instanceof SystemVariable) {
+                    SystemVariable systemVariable = (SystemVariable) setVar;
+                    String setVarSql = "";
+                    setVarSql += systemVariable.getType().toString() + " ";
+                    setVarSql += "`" + systemVariable.getVariable() + "`";
+                    setVarSql += " = ";
+                    setVarSql += visit(systemVariable.getResolvedExpression());
 
-                // `SET DEFAULT` is not supported
-                if (!setVar.getType().equals(SetType.DEFAULT)) {
-                    if (setVar.getType().equals(SetType.USER)) {
-                        setVarSql += "@";
-                    } else {
-                        setVarSql += setVar.getType().toString() + " ";
-                    }
-                }
-                setVarSql += "`" + setVar.getVariable() + "`";
-                setVarSql += " = ";
+                    setVarList.add(setVarSql);
+                } else if (setVar instanceof UserVariable) {
+                    UserVariable userVariable = (UserVariable) setVar;
+                    String setVarSql = "";
+                    setVarSql += "@";
+                    setVarSql += "`" + userVariable.getVariable() + "`";
+                    setVarSql += " = ";
 
-                if (setVar instanceof UserVariable) {
-                    setVarSql += "cast (" + visit(setVar.getResolvedExpression())
-                            + " as " + setVar.getResolvedExpression().getType().toSql() + ")";
-                } else {
-                    setVarSql += visit(setVar.getExpression());
+                    setVarSql += "cast (" + visit(userVariable.getEvaluatedExpression())
+                            + " as " + userVariable.getEvaluatedExpression().getType().toSql() + ")";
+                    setVarList.add(setVarSql);
+                } else if (setVar instanceof SetPassVar) {
+                    String tmp = "PASSWORD FOR " +
+                            ((SetPassVar) setVar).getUserIdent().toString() +
+                            " = PASSWORD('***')";
+                    setVarList.add(tmp);
                 }
-
-                setVarList.add(setVarSql);
             }
 
             return sb.append(Joiner.on(",").join(setVarList)).toString();
@@ -159,7 +299,7 @@ public class AstToStringBuilder {
                 if (idx != 0) {
                     sb.append(", ");
                 }
-                sb.append(stringStringPair.first + " = " + stringStringPair.second);
+                sb.append(stringStringPair.first).append(" = ").append(stringStringPair.second);
                 idx++;
             }
             return sb.toString();
@@ -261,18 +401,18 @@ public class AstToStringBuilder {
             } else {
                 sb.append(stmt.getTblName().toSql());
             }
-            
+
             if (stmt.getPartitions() != null && !stmt.getPartitions().isEmpty()) {
                 sb.append(" PARTITION (");
                 Joiner.on(",").appendTo(sb, stmt.getPartitions()).append(")");
             }
-            
+
             if (stmt.getColumnNames() != null && !stmt.getColumnNames().isEmpty()) {
                 sb.append("(");
                 Joiner.on(",").appendTo(sb, stmt.getColumnNames()).append(")");
             }
             sb.append(" TO ");
-            sb.append("\"" + stmt.getPath() +  "\" ");
+            sb.append("\"" + stmt.getPath() + "\" ");
             if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
                 sb.append("PROPERTIES (");
                 sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
@@ -287,45 +427,6 @@ public class AstToStringBuilder {
                 sb.append(new PrintableMap<String, String>(stmt.getBrokerDesc().getProperties(), "=", true, false, true));
                 sb.append(")");
             }
-            return sb.toString();
-        }
-
-        @Override
-        public String visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, Void context) {
-            StringBuilder sb = new StringBuilder();
-            if (stmt instanceof GrantPrivilegeStmt) {
-                sb.append("GRANT ");
-            } else {
-                sb.append("REVOKE ");
-            }
-            boolean firstLine = true;
-            for (Privilege privilege : stmt.getPrivBitSet().toPrivilegeList()) {
-                if (firstLine) {
-                    firstLine = false;
-                } else {
-                    sb.append(", ");
-                }
-                String priv = privilege.toString().toUpperCase();
-                sb.append(priv.substring(0, priv.length() - 5));
-            }
-            if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
-                sb.append(" ON " + stmt.getTblPattern());
-            } else if (stmt.getPrivType().equals("RESOURCE")) {
-                sb.append(" ON RESOURCE ").append(stmt.getResourcePattern());
-            } else {
-                sb.append(" ON ").append(stmt.getUserPrivilegeObject());
-            }
-            if (stmt instanceof GrantPrivilegeStmt) {
-                sb.append(" TO ");
-            } else {
-                sb.append(" FROM ");
-            }
-            if (stmt.getUserIdentity() != null) {
-                sb.append(stmt.getUserIdentity());
-            } else {
-                sb.append("ROLE '" + stmt.getRole() + "'");
-            }
-
             return sb.toString();
         }
 
@@ -741,6 +842,9 @@ public class AstToStringBuilder {
         public String visitFunctionCall(FunctionCallExpr node, Void context) {
             FunctionParams fnParams = node.getParams();
             StringBuilder sb = new StringBuilder();
+            if (node.getFnName().getDb() != null) {
+                sb.append("`" + node.getFnName().getDb() + "`.");
+            }
             String functionName = node.getFnName().getFunction();
             sb.append(functionName);
 

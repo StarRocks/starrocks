@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
@@ -25,6 +24,7 @@ import com.google.common.hash.Funnel;
 import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
@@ -71,11 +71,12 @@ public class HDFSBackendSelector implements BackendSelector {
     Multimap<String, ComputeNode> hostToBackends = HashMultimap.create();
     private final ScanNode scanNode;
     private final List<TScanRangeLocations> locations;
-    private final CoordinatorPreprocessor.FragmentScanRangeAssignment assignment;
+    private final FragmentScanRangeAssignment assignment;
     private final Set<Long> usedBackendIDs;
     private final Map<TNetworkAddress, Long> addressToBackendId;
     private final ImmutableCollection<ComputeNode> computeNodes;
     private boolean forceScheduleLocal;
+    private boolean chooseComputeNode;
     private final int kCandidateNumber = 3;
     private final int kMaxImbalanceRatio = 3;
     private final int kMaxNodeSizeUseRendezvousHashRing = 64;
@@ -136,15 +137,17 @@ public class HDFSBackendSelector implements BackendSelector {
     private HdfsScanRangeHasher hdfsScanRangeHasher;
 
     public HDFSBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                               CoordinatorPreprocessor.FragmentScanRangeAssignment assignment,
+                               FragmentScanRangeAssignment assignment,
                                Map<TNetworkAddress, Long> addressToBackendId,
                                Set<Long> usedBackendIDs,
                                ImmutableCollection<ComputeNode> computeNodes,
+                               boolean chooseComputeNode,
                                boolean forceScheduleLocal) {
         this.scanNode = scanNode;
         this.locations = locations;
         this.assignment = assignment;
         this.computeNodes = computeNodes;
+        this.chooseComputeNode = chooseComputeNode;
         this.forceScheduleLocal = forceScheduleLocal;
         this.addressToBackendId = addressToBackendId;
         this.usedBackendIDs = usedBackendIDs;
@@ -275,7 +278,7 @@ public class HDFSBackendSelector implements BackendSelector {
             hostToBackends.put(computeNode.getHost(), computeNode);
         }
         if (hostToBackends.isEmpty()) {
-            throw new UserException("Backend not found. Check if any backend is down or not");
+            throw new UserException(FeConstants.getNodeNotFoundError(chooseComputeNode));
         }
 
         // schedule scan ranges to co-located backends.

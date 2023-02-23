@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -36,6 +37,11 @@ public class AddSqlBlackListStmt extends StatementBase {
     }
 
     public AddSqlBlackListStmt(String sql) {
+        this(sql, NodePosition.ZERO);
+    }
+
+    public AddSqlBlackListStmt(String sql, NodePosition pos) {
+        super(pos);
         this.sql = sql;
     }
 

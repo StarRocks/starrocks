@@ -1,3 +1,17 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/aggregate/agg_hash_variant.h"
 
 #include <type_traits>
@@ -185,6 +199,11 @@ void AggHashMapVariant::convert_to_two_level(RuntimeState* state) {
     CONVERT_TO_TWO_LEVEL_MAP(phase2_slice_two_level, phase2_slice);
 }
 
+void AggHashMapVariant::reset() {
+    detail::AggHashMapWithKeyPtr ptr;
+    hash_map_with_key = std::move(ptr);
+}
+
 size_t AggHashMapVariant::capacity() const {
     return visit([](const auto& hash_map_with_key) { return hash_map_with_key->hash_map.capacity(); });
 }
@@ -244,6 +263,12 @@ void AggHashSetVariant::convert_to_two_level(RuntimeState* state) {
     CONVERT_TO_TWO_LEVEL_SET(phase1_slice_two_level, phase1_slice);
     CONVERT_TO_TWO_LEVEL_SET(phase2_slice_two_level, phase2_slice);
 }
+
+void AggHashSetVariant::reset() {
+    detail::AggHashSetWithKeyPtr ptr;
+    hash_set_with_key = std::move(ptr);
+}
+
 size_t AggHashSetVariant::capacity() const {
     return visit([](auto& hash_set_with_key) { return hash_set_with_key->hash_set.capacity(); });
 }

@@ -2,7 +2,7 @@
 
 ## Description
 
-This function converts all strings in an argument to lower-case.
+Converts all strings in an argument to lower-case.
 
 ## Syntax
 

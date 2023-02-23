@@ -1,4 +1,4 @@
-## Introdcution
+# Deploy StarRocks in Docker
 
 This document is used to deploy the simplest StarRocks cluster, which contains one FE and one BE.
 
@@ -12,7 +12,7 @@ This document is used to deploy the simplest StarRocks cluster, which contains o
 You need to download the docker compose yaml file of starrocks.
 
 ```sh
-wget https://raw.githubusercontent.com/StarRocks/starrocks/main/docker/docker-compose/docker-compose.yaml
+wget https://raw.githubusercontent.com/StarRocks/starrocks/main/docker/docker-compose/docker-compose.yml
 ```
 
 ## Step 2: Run StarRocks cluster
@@ -29,7 +29,7 @@ Then you can check the containers status.
 
 Connect to StarRocks cluster
 
-```
+```sh
 mysql -h 127.0.0.1 -P9030 -u root
 ```
 

@@ -87,6 +87,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     public List<Expr> resolvedTupleExprs;
 
     private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
+    private boolean withRuntimeFilters = false;
 
     public void setAnalyticPartitionExprs(List<Expr> exprs) {
         this.analyticPartitionExprs = exprs;
@@ -161,6 +162,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                 this.buildRuntimeFilters.add(rf);
             }
         }
+        withRuntimeFilters = !buildRuntimeFilters.isEmpty();
     }
 
     @Override
@@ -191,6 +193,10 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
         msg.sort_node = new TSortNode(sortInfo, useTopN);
         msg.sort_node.setOffset(offset);
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        msg.sort_node.setMax_buffered_rows(sessionVariable.getFullSortMaxBufferedRows());
+        msg.sort_node.setMax_buffered_bytes(sessionVariable.getFullSortMaxBufferedBytes());
+        msg.sort_node.setLate_materialization(sessionVariable.isFullSortLateMaterialization());
 
         if (info.getPartitionExprs() != null) {
             msg.sort_node.setPartition_exprs(Expr.treesToThrift(info.getPartitionExprs()));
@@ -334,6 +340,11 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return !withRuntimeFilters && getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }
 
     @Override

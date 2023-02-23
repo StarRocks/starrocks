@@ -110,6 +110,10 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
         return type;
     }
 
+    public boolean isRangePartition() {
+        return type == PartitionType.RANGE || type == PartitionType.EXPR_RANGE;
+    }
+
     public DataProperty getDataProperty(long partitionId) {
         return idToDataProperty.get(partitionId);
     }
@@ -174,6 +178,9 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
         idToDataProperty.remove(partitionId);
         idToReplicationNum.remove(partitionId);
         idToInMemory.remove(partitionId);
+    }
+
+    public void moveRangeFromTempToFormal(long tempPartitionId) {
     }
 
     public void addPartition(long partitionId, DataProperty dataProperty,

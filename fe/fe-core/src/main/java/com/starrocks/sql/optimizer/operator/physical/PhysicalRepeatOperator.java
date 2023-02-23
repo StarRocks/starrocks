@@ -71,12 +71,15 @@ public class PhysicalRepeatOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
+
+        if (!super.equals(o)) {
             return false;
         }
+
         PhysicalRepeatOperator that = (PhysicalRepeatOperator) o;
         return Objects.equals(outputGrouping, that.outputGrouping) &&
-                Objects.equals(repeatColumnRef, that.repeatColumnRef);
+                Objects.equals(repeatColumnRef, that.repeatColumnRef) &&
+                Objects.equals(groupingIds, that.groupingIds);
     }
 
     @Override

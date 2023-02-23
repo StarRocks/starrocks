@@ -16,17 +16,19 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class MaterializationContext {
     private MaterializedView mv;
     // scan materialized view operator
-    private Operator scanMvOperator;
+    private LogicalOlapScanOperator scanMvOperator;
     // logical OptExpression for query of materialized view
     private OptExpression mvExpression;
 
@@ -43,27 +45,31 @@ public class MaterializationContext {
 
     private Set<String> mvPartitionNamesToRefresh;
 
+    private List<Table> baseTables;
+
     public MaterializationContext(MaterializedView mv,
                                   OptExpression mvExpression,
                                   ColumnRefFactory queryColumnRefFactory,
                                   ColumnRefFactory mvColumnRefFactory,
-                                  Set<String> mvPartitionNamesToRefresh) {
+                                  Set<String> mvPartitionNamesToRefresh,
+                                  List<Table> baseTables) {
         this.mv = mv;
         this.mvExpression = mvExpression;
         this.queryRefFactory = queryColumnRefFactory;
         this.mvColumnRefFactory = mvColumnRefFactory;
         this.mvPartitionNamesToRefresh = mvPartitionNamesToRefresh;
+        this.baseTables = baseTables;
     }
 
     public MaterializedView getMv() {
         return mv;
     }
 
-    public Operator getScanMvOperator() {
+    public LogicalOlapScanOperator getScanMvOperator() {
         return scanMvOperator;
     }
 
-    public void setScanMvOperator(Operator scanMvOperator) {
+    public void setScanMvOperator(LogicalOlapScanOperator scanMvOperator) {
         this.scanMvOperator = scanMvOperator;
     }
 
@@ -109,5 +115,13 @@ public class MaterializationContext {
 
     public Set<String> getMvPartitionNamesToRefresh() {
         return mvPartitionNamesToRefresh;
+    }
+
+    public List<Table> getBaseTables() {
+        return baseTables;
+    }
+
+    public boolean hasMultiTables() {
+        return baseTables != null && baseTables.size() > 1;
     }
 }

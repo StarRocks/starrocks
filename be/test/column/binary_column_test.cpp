@@ -655,4 +655,14 @@ PARALLEL_TEST(BinaryColumnTest, test_replicate) {
     ASSERT_EQ("def", slices[4]);
 }
 
+PARALLEL_TEST(BinaryColumnTest, test_reference_memory_usage) {
+    auto column = BinaryColumn::create();
+    column->append("");
+    column->append("1");
+    column->append("23");
+    column->append("456");
+
+    ASSERT_EQ(0, column->Column::reference_memory_usage());
+}
+
 } // namespace starrocks

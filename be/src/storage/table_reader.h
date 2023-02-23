@@ -24,12 +24,20 @@
 
 namespace starrocks {
 
-// Parameters used to create a TableReader.
+class LocalTabletReader;
+
+// Parameters used to create a TableReader supporting only single local tablet access
+struct LocalTableReaderParams {
+    int64_t tablet_id;
+    int64_t version;
+};
+
+// Parameters used to create a TableReader supporting remote full table access
 struct TableReaderParams {
     // table schema
     TOlapTableSchemaParam schema;
     // Version of data to read
-    uint64_t version;
+    int64_t version;
     // table and partition info, used to find the tablet that a key belongs to
     TOlapTablePartitionParam partition_param;
     // tablet id -> { node id list }, used to find BE nodes that a tablet locates on
@@ -42,9 +50,12 @@ struct TableReaderParams {
 // or remote tablets according to the location of the data.
 class TableReader {
 public:
-    TableReader(const TableReaderParams& params);
-
+    TableReader();
     ~TableReader();
+
+    Status init(const LocalTableReaderParams& local_params);
+
+    Status init(const TableReaderParams& params);
 
     /**
      * Batch get of multi-rows by multiple keys
@@ -81,6 +92,7 @@ public:
      * Scan the table, return the rows that match the predicates
      * @param value_columns the columns to read
      * @param predicates the predicates to match, only simple predicates are supported(e.g. >,<,=,in)
+     *                   contents of predicates must remain valid when using the returned ChunkIteratorPtr
      * @return A ChunkIterator which can be used to iterate over the rows of the table satisfying the predicates, or
      *         error status
      * note: specifying ordering is not supported, user cannot assume the order of the returned rows,
@@ -91,14 +103,12 @@ public:
                                     const std::vector<const ColumnPredicate*>& predicates);
 
 private:
-    StatusOr<ChunkIteratorPtr> _base_scan(Schema& value_schema, const std::vector<const ColumnPredicate*>& predicates);
-    void _build_get_predicates(DatumTuple& tuple, std::vector<const ColumnPredicate*>* predicates,
-                               ObjectPool& obj_pool);
-    Status _build_value_schema(const std::vector<std::string>& value_columns, Schema* schema);
+    // fields for local tablet reader
+    std::unique_ptr<LocalTableReaderParams> _local_params;
+    std::unique_ptr<LocalTabletReader> _local_tablet_reader;
 
-    TableReaderParams _params;
-    std::vector<TabletSharedPtr> _local_tablets;
-    Schema _tablet_schema;
+    // fields for remote tablet reader
+    std::unique_ptr<TableReaderParams> _params;
 };
 
 } // namespace starrocks

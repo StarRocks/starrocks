@@ -118,11 +118,11 @@ OutPut Exchange Id: 34
 |  75 <-> 1 - [74: cast, DECIMAL64(18,2), true]
 |  76 <-> cast([75: subtract, DECIMAL64(18,2), true] as DECIMAL128(18,2))
 |  77 <-> [73: cast, DECIMAL128(15,2), true] * [76: cast, DECIMAL128(18,2), true]
-|  cardinality: 4000253
+|  cardinality: 242843
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 16.0, 3736521.0] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 16.0, 242842.78223700623] ESTIMATE
+|  * case-->[-Infinity, Infinity, 0.0, 16.0, 242843.78223700623] ESTIMATE
 |
 31:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
@@ -130,17 +130,17 @@ OutPut Exchange Id: 34
 |  build runtime filters:
 |  - filter_id = 6, build_expr = (17: l_orderkey), remote = true
 |  output columns: 22, 23, 37, 55
-|  cardinality: 4000253
+|  cardinality: 242843
 |  column statistics:
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4000252.679999999] ESTIMATE
-|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
+|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 242842.78223700623] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4000252.679999999] ESTIMATE
 |  * o_orderdate-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2412.0] ESTIMATE
+|  * n_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 16.0, 3736521.0] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 16.0, 242842.78223700623] ESTIMATE
+|  * case-->[-Infinity, Infinity, 0.0, 16.0, 242843.78223700623] ESTIMATE
 |
 |----30:EXCHANGE
 |       distribution type: SHUFFLE

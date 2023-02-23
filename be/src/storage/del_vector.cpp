@@ -120,4 +120,12 @@ void DelVector::_update_stats() {
     }
 }
 
+void DelVector::copy_from(const DelVector& delvec) {
+    _loaded = delvec._loaded;
+    _version = delvec._version;
+    _cardinality = delvec._cardinality;
+    _memory_usage = delvec._memory_usage;
+    _roaring = std::make_unique<Roaring>(*delvec._roaring);
+}
+
 } // namespace starrocks

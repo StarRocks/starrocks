@@ -19,6 +19,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "fs/fs.h"
+#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
@@ -33,26 +34,29 @@ class UpdateManager;
 
 class MetaFileBuilder {
 public:
-    explicit MetaFileBuilder(std::shared_ptr<TabletMetadata>& metadata_ptr, UpdateManager* update_mgr);
-    ~MetaFileBuilder() {}
-    //// for PK table
+    explicit MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
+    // append delvec to builder's buffer
     void append_delvec(DelVectorPtr delvec, uint32_t segment_id);
+    // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
-    Status finalize(LocationProvider* location_provider);
+    // finalize will generate and sync final meta state to storage.
+    Status finalize();
+    // find delvec in builder's buffer, used for batch txn log precess.
     StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const;
     // when apply or finalize fail, need to clear primary index cache
     void handle_failure();
 
 private:
-    Status _finalize_delvec(LocationProvider* location_provider, int64_t version);
+    Status _finalize_delvec(int64_t version);
 
 private:
+    Tablet _tablet;
     std::shared_ptr<TabletMetadata> _tablet_meta;
     UpdateManager* _update_mgr;
     Buffer<uint8_t> _buf;
-    std::unordered_map<uint32_t, DelvecPairPB> _delvecs;
-    std::vector<std::pair<TabletSegmentId, DelVectorPtr>> _cache_delvec_updates;
+    std::unordered_map<uint32_t, DelvecPagePB> _delvecs;
+    bool _has_finalized = false;
 };
 
 class MetaFileReader {
@@ -60,8 +64,7 @@ public:
     explicit MetaFileReader(const std::string& filepath, bool fill_cache);
     ~MetaFileReader() {}
     Status load();
-    Status get_del_vec(LocationProvider* location_provider, uint32_t segment_id, DelVector* delvec,
-                       int64_t* latest_version);
+    Status get_del_vec(TabletManager* tablet_mgr, uint32_t segment_id, DelVector* delvec);
     StatusOr<TabletMetadataPtr> get_meta();
 
 private:
@@ -75,8 +78,8 @@ bool is_primary_key(TabletMetadata* metadata);
 bool is_primary_key(const TabletMetadata& metadata);
 
 // TODO(yixin): cache rowset_rssid_to_path
-void rowset_rssid_to_path(const TabletMetadata& metadata, std::unordered_map<uint32_t, std::string>& rssid_to_path);
-void find_missed_tsid_range(TabletMetadata* metadata, std::vector<TabletSegmentIdRange>& tsid_ranges);
+void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
+                          std::unordered_map<uint32_t, std::string>& rssid_to_path);
 
 } // namespace lake
 } // namespace starrocks

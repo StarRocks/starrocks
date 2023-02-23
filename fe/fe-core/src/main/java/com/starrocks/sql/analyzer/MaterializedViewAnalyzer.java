@@ -27,6 +27,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
@@ -47,9 +48,9 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -87,6 +88,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.util.Strings;
 
@@ -95,6 +97,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -190,20 +193,28 @@ public class MaterializedViewAnalyzer {
             if (CollectionUtils.isEmpty(selectRelations)) {
                 throw new SemanticException("Materialized view query statement must contain at least one select");
             }
+
+            // derive alias
+            final HashSet<String> aliases = Sets.newHashSet();
             for (SelectRelation selectRelation : selectRelations) {
-                // check alias except * and SlotRef
-                validateSelectItem(selectRelation.getSelectList());
+                deriveSelectAlias(selectRelation.getSelectList(), aliases);
             }
 
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
+
+            // for select star, use `analyze` to deduce its child's output and validate select list then.
+            for (SelectRelation selectRelation : selectRelations) {
+                // check alias except * and SlotRef
+                validateSelectItem(selectRelation);
+            }
 
             // convert queryStatement to sql and set
             statement.setInlineViewDef(AstToSQLBuilder.toSQL(queryStatement));
             statement.setSimpleViewDef(AstToSQLBuilder.buildSimple(queryStatement));
             // collect table from query statement
             Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTableAndView(queryStatement);
-            List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
+            List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb());
@@ -229,10 +240,10 @@ public class MaterializedViewAnalyzer {
                 Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
                         tableNameInfo.getDb());
                 if (isInternalCatalog(tableNameInfo.getCatalog())) {
-                    baseTableInfos.add(new MaterializedView.BaseTableInfo(database.getId(), database.getFullName(),
+                    baseTableInfos.add(new BaseTableInfo(database.getId(), database.getFullName(),
                             table.getId()));
                 } else {
-                    baseTableInfos.add(new MaterializedView.BaseTableInfo(tableNameInfo.getCatalog(),
+                    baseTableInfos.add(new BaseTableInfo(tableNameInfo.getCatalog(),
                             tableNameInfo.getDb(), table.getTableIdentifier()));
                 }
             });
@@ -261,18 +272,24 @@ public class MaterializedViewAnalyzer {
             return null;
         }
 
-        private void validateSelectItem(SelectList selectList) {
-            List<SelectListItem> selectListItems = selectList.getItems();
-            for (SelectListItem selectListItem : selectListItems) {
-                if (selectListItem.isStar()) {
-                    throw new SemanticException("Select * is not supported in materialized view");
-                } else if (!(selectListItem.getExpr() instanceof SlotRef)
+        private void deriveSelectAlias(SelectList selectList, HashSet<String> aliases) {
+            for (SelectListItem selectListItem : selectList.getItems()) {
+                if (!(selectListItem.getExpr() instanceof SlotRef)
                         && selectListItem.getAlias() == null) {
-                    throw new SemanticException("Materialized view query statement select item " +
-                            selectListItem.getExpr().toSql() + " must has an alias");
+                    String alias = Util.deriveAliasFromOrdinal(aliases.size());
+                    selectListItem.setAlias(alias);
+                    aliases.add(alias);
                 }
-                // check select item has nondeterministic function
-                checkNondeterministicFunction(selectListItem.getExpr());
+            }
+        }
+
+        private void validateSelectItem(SelectRelation selectRelation) {
+            for (SelectListItem selectListItem : selectRelation.getSelectList().getItems()) {
+                Preconditions.checkState((selectListItem.getExpr() instanceof SlotRef)
+                        || selectListItem.getAlias() != null);
+            }
+            for (Expr expr : selectRelation.getOutputExpr()) {
+                checkNondeterministicFunction(expr);
             }
         }
 
@@ -359,8 +376,8 @@ public class MaterializedViewAnalyzer {
             for (; theBeginIndexOfValue < mvColumns.size(); theBeginIndexOfValue++) {
                 Column column = mvColumns.get(theBeginIndexOfValue);
                 keySizeByte += column.getType().getIndexSize();
-                if (theBeginIndexOfValue + 1 > FeConstants.shortkey_max_column_count ||
-                        keySizeByte > FeConstants.shortkey_maxsize_bytes) {
+                if (theBeginIndexOfValue + 1 > FeConstants.SHORTKEY_MAX_COLUMN_COUNT ||
+                        keySizeByte > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
                     if (theBeginIndexOfValue == 0 && column.getType().getPrimitiveType().isCharFamily()) {
                         column.setIsKey(true);
                         column.setAggregationType(null, false);
@@ -515,12 +532,14 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
             } else {
-                if (partitionColumnNames.size() != 1) {
-                    throw new SemanticException("Materialized view related base table partition columns " +
-                            "only supports single column");
+                boolean found = false;
+                for (String partitionColumn : partitionColumnNames) {
+                    if (partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                        found = true;
+                        break;
+                    }
                 }
-                String partitionColumn = partitionColumnNames.get(0);
-                if (!partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                if (!found) {
                     throw new SemanticException("Materialized view partition column in partition exp " +
                             "must be base table partition column");
                 }
@@ -534,12 +553,15 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
             } else {
-                if (partitionSpec.fields().size() != 1) {
-                    throw new SemanticException("Materialized view related base table partition columns " +
-                            "only supports single column");
+                boolean found = false;
+                for (PartitionField partitionField : partitionSpec.fields()) {
+                    String partitionColumn = partitionField.name();
+                    if (partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                        found = true;
+                        break;
+                    }
                 }
-                String partitionColumn = partitionSpec.fields().get(0).name();
-                if (!partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                if (!found) {
                     throw new SemanticException("Materialized view partition column in partition exp " +
                             "must be base table partition column");
                 }
@@ -562,8 +584,8 @@ public class MaterializedViewAnalyzer {
                                        Map<TableName, Table> tableNameTableMap) {
             TableName tableName = slotRef.getTblNameWithoutAnalyzed();
             Table table = tableNameTableMap.get(tableName);
-            List<MaterializedView.BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
-            for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+            List<BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
+            for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 if (baseTableInfo.getTable().equals(table)) {
                     slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
                             baseTableInfo.getDbName(), table.getName()));

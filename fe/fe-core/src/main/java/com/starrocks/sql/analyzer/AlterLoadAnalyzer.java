@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterLoadStmt;

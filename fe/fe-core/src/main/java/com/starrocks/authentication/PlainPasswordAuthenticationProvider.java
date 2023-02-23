@@ -15,10 +15,10 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.Password;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.nio.charset.StandardCharsets;
 
@@ -27,7 +27,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
 
     /**
      * check password complexity if `enable_validate_password` is set
-     *
+     * <p>
      * The rules are hard-coded for temporary, will change to a plugin config later
      **/
     protected void validatePassword(String password) throws AuthenticationException {
@@ -66,9 +66,8 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
             String password,
             String textForAuthPlugin) throws AuthenticationException {
         validatePassword(password);
-
         UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setPassword(MysqlPassword.makeScrambledPassword(password));
+        info.setPassword(password.getBytes(StandardCharsets.UTF_8));
         info.setTextForAuthPlugin(textForAuthPlugin);
         return info;
     }
@@ -104,7 +103,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
     public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
             throws AuthenticationException {
         UserAuthenticationInfo ret = new UserAuthenticationInfo();
-        ret.setPassword(password.getPassword());
+        ret.setPassword(password.getPassword() == null ? MysqlPassword.EMPTY_PASSWORD : password.getPassword());
         ret.setAuthPlugin(PLUGIN_NAME);
         ret.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
         ret.setTextForAuthPlugin(password.getUserForAuthPlugin());

@@ -108,8 +108,7 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
 }
 
 // TODO: support
-//  1. primary key table
-//  2. rowid range and short key range
+//  1. rowid range and short key range
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
     RowsetReadOptions rs_opts;
     KeysType keys_type = _tablet_schema->keys_type();
@@ -121,7 +120,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
                                                                      &rs_opts.predicates_for_zone_map));
     rs_opts.sorted = ((keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation) ||
-                     is_compaction(params.reader_type);
+                     is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet;
     rs_opts.reader_type = params.reader_type;
     rs_opts.chunk_size = params.chunk_size;
     rs_opts.delete_predicates = &_delete_predicates;
@@ -259,6 +258,21 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         //
         if (_is_vertical_merge && !_is_key) {
             _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+        } else {
+            _collect_iter = new_heap_merge_iterator(seg_iters);
+        }
+    } else if (params.sorted_by_keys_per_tablet && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) &&
+               seg_iters.size() > 1) {
+        if (params.profile != nullptr && (params.is_pipeline || params.profile->parent() != nullptr)) {
+            RuntimeProfile* p;
+            if (params.is_pipeline) {
+                p = params.profile;
+            } else {
+                p = params.profile->parent()->create_child("MERGE", true, true);
+            }
+            RuntimeProfile::Counter* sort_timer = ADD_TIMER(p, "Sort");
+            _collect_iter = new_heap_merge_iterator(seg_iters);
+            _collect_iter = timed_chunk_iterator(_collect_iter, sort_timer);
         } else {
             _collect_iter = new_heap_merge_iterator(seg_iters);
         }

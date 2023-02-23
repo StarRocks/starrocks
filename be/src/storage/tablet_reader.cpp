@@ -399,8 +399,11 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
     Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
+    const auto& sort_key_idxes = tablet_schema.sort_key_idxes();
+    DCHECK(sort_key_idxes.empty() || sort_key_idxes.size() >= input.size());
     for (size_t i = 0; i < input.size(); i++) {
-        auto f = std::make_shared<Field>(ChunkHelper::convert_field(i, tablet_schema.column(i)));
+        int idx = sort_key_idxes.empty() ? i : sort_key_idxes[i];
+        auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema.column(idx)));
         schema.append(f);
         values.emplace_back(Datum());
         if (input.is_null(i)) {

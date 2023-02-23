@@ -98,13 +98,13 @@ public class MaterializedViewTest {
         mv2.setActive(false);
         Assert.assertEquals(false, mv2.isActive());
 
-        List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        MaterializedView.BaseTableInfo baseTableInfo1 = new MaterializedView.BaseTableInfo(100L, 10L);
+        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, 10L);
         baseTableInfos.add(baseTableInfo1);
-        MaterializedView.BaseTableInfo baseTableInfo2 = new MaterializedView.BaseTableInfo(100L, 20L);
+        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, 20L);
         baseTableInfos.add(baseTableInfo2);
         mv2.setBaseTableInfos(baseTableInfos);
-        List<MaterializedView.BaseTableInfo> baseTableInfosCheck = mv2.getBaseTableInfos();
+        List<BaseTableInfo> baseTableInfosCheck = mv2.getBaseTableInfos();
 
         Assert.assertEquals(10L, baseTableInfosCheck.get(0).getTableId());
         Assert.assertEquals(20L, baseTableInfosCheck.get(1).getTableId());
@@ -273,12 +273,12 @@ public class MaterializedViewTest {
         Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
         mv.addPartition(partition);
 
-        List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        MaterializedView.BaseTableInfo baseTableInfo1 = new MaterializedView.BaseTableInfo(100L, 10L);
+        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, 10L);
         baseTableInfos.add(baseTableInfo1);
-        MaterializedView.BaseTableInfo baseTableInfo2 = new MaterializedView.BaseTableInfo(100L, 20L);
+        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, 20L);
         baseTableInfos.add(baseTableInfo2);
-        MaterializedView.BaseTableInfo baseTableInfo3 = new MaterializedView.BaseTableInfo(100L, 30L);
+        BaseTableInfo baseTableInfo3 = new BaseTableInfo(100L, 30L);
         baseTableInfos.add(baseTableInfo3);
 
         mv.setBaseTableInfos(baseTableInfos);
@@ -329,7 +329,7 @@ public class MaterializedViewTest {
                 new FunctionCallExpr("date_trunc", Arrays.asList(quarterStringLiteral, slotRef1));
         exprs.add(quarterFunctionCallExpr);
 
-        RangePartitionInfo partitionInfo = new ExpressionRangePartitionInfo(exprs, partitionColumns);
+        RangePartitionInfo partitionInfo = new ExpressionRangePartitionInfo(exprs, partitionColumns, PartitionType.RANGE);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -380,8 +380,8 @@ public class MaterializedViewTest {
         Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
         mv.addPartition(partition);
 
-        List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        MaterializedView.BaseTableInfo baseTableInfo = new MaterializedView.BaseTableInfo(100L, baseTable.getId());
+        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        BaseTableInfo baseTableInfo = new BaseTableInfo(100L, baseTable.getId());
         baseTableInfos.add(baseTableInfo);
         mv.setBaseTableInfos(baseTableInfos);
         mv.setViewDefineSql("select * from test.tbl1");
@@ -433,12 +433,12 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_to_rename\n" +
+                .withMaterializedView("create materialized view mv_to_rename\n" +
                         "PARTITION BY k1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;")
-                .withNewMaterializedView("create materialized view mv_to_rename2\n" +
+                .withMaterializedView("create materialized view mv_to_rename2\n" +
                         "PARTITION BY date_trunc('month', k1)\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
@@ -494,7 +494,7 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_to_check\n" +
+                .withMaterializedView("create materialized view mv_to_check\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k2, sum(v1) as total from tbl_drop group by k2;");
@@ -528,7 +528,7 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_to_check\n" +
+                .withMaterializedView("create materialized view mv_to_check\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k2, sum(v1) as total from tbl_to_rename group by k2;");
@@ -562,7 +562,7 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_to_check\n" +
+                .withMaterializedView("create materialized view mv_to_check\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k2, sum(v1) as total from tbl_to_rename group by k2;");
@@ -596,7 +596,7 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_with_hint\n" +
+                .withMaterializedView("create materialized view mv_with_hint\n" +
                         "PARTITION BY k1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
@@ -664,7 +664,7 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("CREATE MATERIALIZED VIEW base_mv\n" +
+                .withMaterializedView("CREATE MATERIALIZED VIEW base_mv\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "REFRESH manual\n" +
@@ -678,8 +678,8 @@ public class MaterializedViewTest {
         HashDistributionInfo hashDistributionInfo = new HashDistributionInfo(3, Lists.newArrayList(columns.get(0)));
         MaterializedView mv = new MaterializedView(1000, testDb.getId(), "mv", columns, KeysType.AGG_KEYS,
                 singlePartitionInfo, hashDistributionInfo, refreshScheme);
-        List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        MaterializedView.BaseTableInfo baseTableInfo = new MaterializedView.BaseTableInfo(testDb.getId(), baseMv.getId());
+        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        BaseTableInfo baseTableInfo = new BaseTableInfo(testDb.getId(), baseMv.getId());
         baseTableInfos.add(baseTableInfo);
         mv.setBaseTableInfos(baseTableInfos);
         mv.onCreate();
@@ -708,7 +708,7 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("CREATE MATERIALIZED VIEW base_mv\n" +
+                .withMaterializedView("CREATE MATERIALIZED VIEW base_mv\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "REFRESH async START('2122-12-31 20:45:11') EVERY(INTERVAL 1 DAY)\n" +

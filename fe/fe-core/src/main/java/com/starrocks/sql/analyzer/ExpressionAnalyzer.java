@@ -68,6 +68,9 @@ import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
@@ -79,6 +82,7 @@ import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -87,6 +91,7 @@ import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -164,7 +169,14 @@ public class ExpressionAnalyzer {
     // only high-order functions can use lambda functions.
     void analyzeHighOrderFunction(Visitor visitor, Expr expression, Scope scope) {
         if (!isHighOrderFunction(expression)) {
-            throw new SemanticException("Lambda Functions can only be used in supported high-order functions.");
+            String funcName = "";
+            if (expression instanceof FunctionCallExpr) {
+                funcName = ((FunctionCallExpr) expression).getFnName().getFunction();
+            } else {
+                funcName = expression.toString();
+            }
+            throw new SemanticException(funcName + " can't use lambda functions, " +
+                    "as it is not a supported high-order function.");
         }
         int childSize = expression.getChildren().size();
         // move the lambda function to the first if it is at the last.
@@ -183,7 +195,7 @@ public class ExpressionAnalyzer {
                 expr.setType(Type.ARRAY_INT); // Let it have item type.
             }
             if (!expr.getType().isArrayType()) {
-                throw new SemanticException("Lambda inputs should be arrays.");
+                throw new SemanticException(i + "th lambda input should be arrays.");
             }
             Type itemType = ((ArrayType) expr.getType()).getItemType();
             if (itemType == Type.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),
@@ -300,10 +312,6 @@ public class ExpressionAnalyzer {
                                 node.getChildren().stream().map(Expr::getType).collect(Collectors.toList()));
                     }
 
-                    // Array<DECIMALV3> type is not supported in current version, turn it into DECIMALV2 type
-                    if (targetItemType.isDecimalV3()) {
-                        targetItemType = ScalarType.DECIMALV2;
-                    }
 
                     for (int i = 0; i < node.getChildren().size(); i++) {
                         if (!node.getChildren().get(i).getType().matchesType(targetItemType)) {
@@ -316,7 +324,7 @@ public class ExpressionAnalyzer {
                     throw new SemanticException(e.getMessage());
                 }
             } else {
-                node.setType(new ArrayType(Type.NULL));
+                node.setType(Type.ARRAY_NULL);
             }
             return null;
         }
@@ -628,6 +636,12 @@ public class ExpressionAnalyzer {
         public Void visitInPredicate(InPredicate node, Scope scope) {
             predicateBaseAndCheck(node);
 
+            List<Expr> queryExpressions = Lists.newArrayList();
+            node.collect(arg -> arg instanceof Subquery, queryExpressions);
+            if (queryExpressions.size() > 0 && node.getChildren().size() > 2) {
+                throw new SemanticException("In Predicate only support literal expression list");
+            }
+
             // check compatible type
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
@@ -651,14 +665,16 @@ public class ExpressionAnalyzer {
         public Void visitMultiInPredicate(MultiInPredicate node, Scope scope) {
             predicateBaseAndCheck(node);
             List<Type> leftTypes =
-                    node.getChildren().stream().limit(node.getNumberOfColumns()).map(Expr::getType).collect(Collectors.toList());
+                    node.getChildren().stream().limit(node.getNumberOfColumns()).map(Expr::getType)
+                            .collect(Collectors.toList());
 
             Subquery inSubquery = (Subquery) node.getChild(node.getNumberOfColumns());
             List<Type> rightTypes =
                     inSubquery.getQueryStatement().getQueryRelation().getOutputExpression().stream().map(Expr::getType).
                             collect(Collectors.toList());
             if (leftTypes.size() != rightTypes.size()) {
-                throw new SemanticException("subquery must return the same number of columns as provided by the IN predicate");
+                throw new SemanticException(
+                        "subquery must return the same number of columns as provided by the IN predicate");
             }
 
             for (int i = 0; i < rightTypes.size(); ++i) {
@@ -860,6 +876,11 @@ public class ExpressionAnalyzer {
                     argumentTypes[i] = Type.BIGINT;
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
+            } else if (fnName.equals(FunctionSet.ARRAY_CONCAT)) {
+                if (node.getChildren().size() < 2) {
+                    throw new SemanticException(fnName + " should have at least two inputs");
+                }
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
@@ -879,13 +900,24 @@ public class ExpressionAnalyzer {
                 throw unsupportedException("Table function cannot be used in expression");
             }
 
-            // check params type, don't check var args type
             for (int i = 0; i < fn.getNumArgs(); i++) {
                 if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
                         !Type.canCastToAsFunctionParameter(argumentTypes[i], fn.getArgs()[i])) {
                     throw new SemanticException("No matching function with signature: %s(%s).", fnName,
-                            node.getParams().isStar() ? "*" : Joiner.on(", ")
-                                    .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                            node.getParams().isStar() ? "*" :
+                                    Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
+                }
+            }
+
+            if (fn.hasVarArgs()) {
+                Type varType = fn.getArgs()[fn.getNumArgs() - 1];
+                for (int i = fn.getNumArgs(); i < argumentTypes.length; i++) {
+                    if (!argumentTypes[i].matchesType(varType) &&
+                            !Type.canCastToAsFunctionParameter(argumentTypes[i], varType)) {
+                        throw new SemanticException("Variadic function %s(%s) can't support type: %s", fnName,
+                                Arrays.stream(fn.getArgs()).map(Type::toSql).collect(Collectors.joining(", ")),
+                                argumentTypes[i]);
+                    }
                 }
             }
 
@@ -1140,14 +1172,44 @@ public class ExpressionAnalyzer {
                 node.setStrValue(ClusterNamespace.getNameFromFullName(session.getDatabase()));
             } else if (funcType.equalsIgnoreCase("USER")) {
                 node.setType(Type.VARCHAR);
-                node.setStrValue(session.getUserIdentity().toString());
+
+                String user = session.getQualifiedUser();
+                String remoteIP = session.getRemoteIP();
+
+                node.setStrValue(new UserIdentity(user, remoteIP).toString());
             } else if (funcType.equalsIgnoreCase("CURRENT_USER")) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(session.getCurrentUserIdentity().toString());
+            } else if (funcType.equalsIgnoreCase("CURRENT_ROLE")) {
+                node.setType(Type.VARCHAR);
+
+                PrivilegeManager manager = session.getGlobalStateMgr().getPrivilegeManager();
+                List<String> roleName = new ArrayList<>();
+
+                try {
+                    for (Long roleId : session.getCurrentRoleIds()) {
+                        RolePrivilegeCollection rolePrivilegeCollection =
+                                manager.getRolePrivilegeCollectionUnlocked(roleId, false);
+                        if (rolePrivilegeCollection != null) {
+                            roleName.add(rolePrivilegeCollection.getName());
+                        }
+                    }
+                } catch (PrivilegeException e) {
+                    throw new SemanticException(e.getMessage());
+                }
+
+                if (roleName.isEmpty()) {
+                    node.setStrValue("NONE");
+                } else {
+                    node.setStrValue(Joiner.on(", ").join(roleName));
+                }
             } else if (funcType.equalsIgnoreCase("CONNECTION_ID")) {
                 node.setType(Type.BIGINT);
                 node.setIntValue(session.getConnectionId());
                 node.setStrValue("");
+            } else if (funcType.equalsIgnoreCase("CURRENT_CATALOG")) {
+                node.setType(Type.VARCHAR);
+                node.setStrValue(session.getCurrentCatalog().toString());
             }
             return null;
         }
@@ -1164,13 +1226,13 @@ public class ExpressionAnalyzer {
                         return null;
                     }
 
-                    Type variableType = userVariable.getResolvedExpression().getType();
+                    Type variableType = userVariable.getEvaluatedExpression().getType();
                     node.setType(variableType);
 
-                    if (userVariable.getResolvedExpression() instanceof NullLiteral) {
+                    if (userVariable.getEvaluatedExpression() instanceof NullLiteral) {
                         node.setIsNull();
                     } else {
-                        node.setValue(userVariable.getResolvedExpression().getRealObjectValue());
+                        node.setValue(userVariable.getEvaluatedExpression().getRealObjectValue());
                     }
                 } else {
                     VariableMgr.fillValue(session.getSessionVariable(), node);

@@ -19,10 +19,10 @@ import java.util.List;
 
 public class RevokePrivilegeStmt extends BaseGrantRevokePrivilegeStmt {
     public RevokePrivilegeStmt(
-            List<String> privList,
-            String privType,
+            List<String> privilegeTypeUnResolved,
+            String objectTypeUnResolved,
             GrantRevokeClause grantRevokeClause,
             GrantRevokePrivilegeObjects objects) {
-        super(privList, privType, grantRevokeClause, objects);
+        super(privilegeTypeUnResolved, objectTypeUnResolved, grantRevokeClause, objects);
     }
 }

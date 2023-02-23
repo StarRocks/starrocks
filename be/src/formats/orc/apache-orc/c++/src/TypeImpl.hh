@@ -43,7 +43,7 @@ private:
 
 public:
     /**
-     * Create most of the primitive types.
+     * Create most of the logical types.
      */
     TypeImpl(TypeKind kind);
 

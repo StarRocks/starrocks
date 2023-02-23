@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
@@ -499,7 +498,7 @@ public class WindowTest extends PlanTestBase {
                     "  1:EXCHANGE");
         }
         {
-            // Do not support multi partition by right now, this test need to be updated when supported
+            // Support multi partition by.
             String sql = "select * from (\n" +
                     "    select *, " +
                     "        row_number() over (partition by v2, v3 order by v1) as rk " +
@@ -507,11 +506,24 @@ public class WindowTest extends PlanTestBase {
                     ") sub_t0\n" +
                     "where rk <= 4;";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:SORT\n" +
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 2: v2 , 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
-                    "  |  offset: 0\n" +
-                    "  |  \n" +
-                    "  1:EXCHANGE");
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v2, v3 order by v1) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 2: v2 , 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  offset: 0");
         }
         FeConstants.runningUnitTest = false;
     }
@@ -678,5 +690,46 @@ public class WindowTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  probe runtime filters:\n" +
                 "  |  - filter_id = 0, probe_expr = (1: v1)");
+    }
+
+    @Test
+    public void testHashBasedWindowTest() throws Exception {
+        {
+            String sql = "select sum(v1) over ([hash] partition by v1,v2 )," +
+                    "sum(v1/v3) over ([hash] partition by v1,v2 ) " +
+                    "from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:ANALYTIC\n" +
+                    "  |  functions: [, sum(1: v1), ], [, sum(CAST(1: v1 AS DOUBLE) / CAST(3: v3 AS DOUBLE)), ]\n" +
+                    "  |  partition by: 1: v1, 2: v2\n" +
+                    "  |  useHashBasedPartition");
+        }
+        {
+            String sql = "select sum(v1) over ( partition by v1,v2 )," +
+                    "sum(v1/v3) over ([hash] partition by v1,v2 ) " +
+                    "from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:ANALYTIC\n" +
+                    "  |  functions: [, sum(1: v1), ]\n" +
+                    "  |  partition by: 1: v1, 2: v2");
+            assertContains(plan, "  2:ANALYTIC\n" +
+                    "  |  functions: [, sum(CAST(1: v1 AS DOUBLE) / CAST(3: v3 AS DOUBLE)), ]\n" +
+                    "  |  partition by: 1: v1, 2: v2\n" +
+                    "  |  useHashBasedPartition");
+        }
+        {
+            String sql = "select sum(v1) over ([hash] partition by v1 )," +
+                    "sum(v1/v3) over ([hash] partition by v1,v2 ) " +
+                    "from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:ANALYTIC\n" +
+                    "  |  functions: [, sum(1: v1), ]\n" +
+                    "  |  partition by: 1: v1\n" +
+                    "  |  useHashBasedPartition");
+            assertContains(plan, "  2:ANALYTIC\n" +
+                    "  |  functions: [, sum(CAST(1: v1 AS DOUBLE) / CAST(3: v3 AS DOUBLE)), ]\n" +
+                    "  |  partition by: 1: v1, 2: v2\n" +
+                    "  |  useHashBasedPartition");
+        }
     }
 }

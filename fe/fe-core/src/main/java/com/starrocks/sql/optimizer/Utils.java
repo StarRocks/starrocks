@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
@@ -57,6 +58,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -277,59 +279,29 @@ public class Utils {
         return link.remove();
     }
 
-    public static boolean isInnerOrCrossJoin(Operator operator) {
-        if (operator instanceof LogicalJoinOperator) {
-            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
-            return joinOperator.isInnerOrCrossJoin();
-        }
-        return false;
-    }
-
-    public static int countInnerJoinNodeSize(OptExpression root) {
+    public static int countJoinNodeSize(OptExpression root, Set<JoinOperator> joinTypes) {
         int count = 0;
         Operator operator = root.getOp();
         for (OptExpression child : root.getInputs()) {
-            if (isInnerOrCrossJoin(operator) && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
-                count += countInnerJoinNodeSize(child);
+            if (isSuitableJoin(operator, joinTypes)) {
+                count += countJoinNodeSize(child, joinTypes);
             } else {
-                count = Math.max(count, countInnerJoinNodeSize(child));
+                count = Math.max(count, countJoinNodeSize(child, joinTypes));
             }
         }
 
-        if (isInnerOrCrossJoin(operator) && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
+        if (isSuitableJoin(operator, joinTypes)) {
             count += 1;
         }
         return count;
     }
 
-    public static boolean capableSemiReorder(OptExpression root, boolean hasSemi, int joinNum, int maxJoin) {
-        Operator operator = root.getOp();
-
+    private static boolean isSuitableJoin(Operator operator, Set<JoinOperator> joinTypes) {
         if (operator instanceof LogicalJoinOperator) {
-            if (((LogicalJoinOperator) operator).getJoinType().isSemiAntiJoin()) {
-                hasSemi = true;
-            } else {
-                joinNum = joinNum + 1;
-            }
-
-            if (joinNum > maxJoin && hasSemi) {
-                return false;
-            }
+            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+            return joinTypes.contains(joinOperator.getJoinType()) && joinOperator.getJoinHint().isEmpty();
         }
-
-        for (OptExpression child : root.getInputs()) {
-            if (operator instanceof LogicalJoinOperator) {
-                if (!capableSemiReorder(child, hasSemi, joinNum, maxJoin)) {
-                    return false;
-                }
-            } else {
-                if (!capableSemiReorder(child, false, 0, maxJoin)) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        return false;
     }
 
     public static boolean capableOuterReorder(OptExpression root, int threshold) {
@@ -553,5 +525,30 @@ public class Utils {
         }
 
         root.getChildren().forEach(child -> collect(child, clazz, output));
+    }
+
+    /**
+     * Compute the maximal power-of-two number which is less than or equal to the given number.
+     */
+    public static int computeMaxLEPower2(int num) {
+        num |= (num >>> 1);
+        num |= (num >>> 2);
+        num |= (num >>> 4);
+        num |= (num >>> 8);
+        num |= (num >>> 16);
+        return num - (num >>> 1);
+    }
+
+    /**
+     * Compute the maximal power-of-two number which is less than or equal to the given number.
+     */
+    public static int computeMinGEPower2(int num) {
+        num -= 1;
+        num |= (num >>> 1);
+        num |= (num >>> 2);
+        num |= (num >>> 4);
+        num |= (num >>> 8);
+        num |= (num >>> 16);
+        return num < 0 ? 1 : num + 1;
     }
 }

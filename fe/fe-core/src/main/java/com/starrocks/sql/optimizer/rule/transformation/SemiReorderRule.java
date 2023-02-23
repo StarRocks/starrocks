@@ -142,14 +142,14 @@ public class SemiReorderRule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
         if (newSemiOutputColumns.isEmpty()) {
             ColumnRefOperator smallestColumnRef = Utils.findSmallestColumnRef(
-                    leftChildInputColumns.getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+                    leftChildInputColumns.getStream().map(context.getColumnRefFactory()::getColumnRef)
                             .collect(Collectors.toList())
             );
             projectMap.put(smallestColumnRef, smallestColumnRef);
         } else {
             projectMap = newSemiOutputColumns.getStream()
                     .filter(c -> newTopJoin.getRequiredChildInputColumns().contains(c))
-                    .mapToObj(context.getColumnRefFactory()::getColumnRef)
+                    .map(context.getColumnRefFactory()::getColumnRef)
                     .collect(Collectors.toMap(Function.identity(), Function.identity()));
         }
 
@@ -172,7 +172,7 @@ public class SemiReorderRule extends TransformationRule {
             Map<ColumnRefOperator, ScalarOperator> expressionProject;
             if (leftChildJoinRightChild.getOp().getProjection() == null) {
                 expressionProject = leftChildJoinRightChild.getOutputColumns().getStream()
-                        .mapToObj(id -> context.getColumnRefFactory().getColumnRef(id))
+                        .map(id -> context.getColumnRefFactory().getColumnRef(id))
                         .collect(Collectors.toMap(Function.identity(), Function.identity()));
             } else {
                 expressionProject = Maps.newHashMap(leftChildJoinRightChild.getOp().getProjection().getColumnRefMap());

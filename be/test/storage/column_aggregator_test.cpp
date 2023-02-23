@@ -612,7 +612,7 @@ TEST(ColumnAggregator, testArrayReplace) {
     FieldPtr field = std::make_shared<Field>(1, "test_array", array_type_info,
                                              StorageAggregateType::STORAGE_AGGREGATE_REPLACE, 1, false, false);
 
-    auto agg_elements = BinaryColumn::create();
+    auto agg_elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     auto agg_offsets = UInt32Column::create();
     auto agg = ArrayColumn::create(agg_elements, agg_offsets);
 
@@ -621,11 +621,11 @@ TEST(ColumnAggregator, testArrayReplace) {
     std::vector<uint32_t> loops;
 
     // first chunk column
-    auto elements = BinaryColumn::create();
+    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     auto offsets = UInt32Column::create();
     auto src = ArrayColumn::create(elements, offsets);
     for (int i = 0; i < 10; ++i) {
-        elements->append(Slice(std::to_string(i)));
+        elements->append_datum(Slice(std::to_string(i)));
     }
     offsets->append(2);
     offsets->append(5);
@@ -645,7 +645,7 @@ TEST(ColumnAggregator, testArrayReplace) {
     // second chunk column
     src->reset_column();
     for (int i = 10; i < 20; ++i) {
-        elements->append(Slice(std::to_string(i)));
+        elements->append_datum(Slice(std::to_string(i)));
     }
     offsets->append(2);
     offsets->append(7);
@@ -668,7 +668,7 @@ TEST(ColumnAggregator, testArrayReplace) {
     // third chunk column
     src->reset_column();
     for (int i = 20; i < 30; ++i) {
-        elements->append(Slice(std::to_string(i)));
+        elements->append_datum(Slice(std::to_string(i)));
     }
     offsets->append(10);
 

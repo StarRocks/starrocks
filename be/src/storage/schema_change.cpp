@@ -386,8 +386,8 @@ bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowse
 Status SchemaChangeDirectly::process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer,
                                         TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                         RowsetSharedPtr rowset) {
-    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema(),
-                                                     *_chunk_changer->get_mutable_selected_column_indexs());
+    Schema base_schema =
+            ChunkHelper::convert_schema(base_tablet->tablet_schema(), _chunk_changer->get_selected_column_indexes());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
@@ -576,8 +576,8 @@ Status SchemaChangeWithSorting::process_v2(TabletReader* reader, RowsetWriter* n
                                            TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                            RowsetSharedPtr rowset) {
     MemTableRowsetWriterSink mem_table_sink(new_rowset_writer);
-    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema(),
-                                                     *_chunk_changer->get_mutable_selected_column_indexs());
+    Schema base_schema =
+            ChunkHelper::convert_schema(base_tablet->tablet_schema(), _chunk_changer->get_selected_column_indexes());
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
 
@@ -824,13 +824,28 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         Schema base_schema;
         if (config::enable_schema_change_v2) {
             base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema(),
-                                                      *sc_params.chunk_changer->get_mutable_selected_column_indexs());
+                                                      sc_params.chunk_changer->get_selected_column_indexes());
         } else {
             base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
         }
 
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
+            if (rowsets_to_change.back() == nullptr) {
+                std::vector<Version> base_tablet_versions;
+                base_tablet->list_versions(&base_tablet_versions);
+                std::stringstream ss;
+                ss << " rs_version_map: ";
+                for (auto& ver : base_tablet_versions) {
+                    ss << ver << ",";
+                }
+                ss << " versions_to_be_changed: ";
+                for (auto& ver : versions_to_be_changed) {
+                    ss << ver << ",";
+                }
+                LOG(WARNING) << "fail to get rowset by version: " << version << ". " << ss.str();
+                return Status::InternalError("fail to get rowset by version");
+            }
             // prepare tablet reader to prevent rowsets being compacted
             std::unique_ptr<TabletReader> tablet_reader =
                     std::make_unique<TabletReader>(base_tablet, version, base_schema);

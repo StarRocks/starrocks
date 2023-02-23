@@ -38,6 +38,14 @@ namespace starrocks::pipeline {
 
 using PTransmitChunkParamsPtr = std::shared_ptr<PTransmitChunkParams>;
 
+// ChunksDataRef holds reference to chunks' data and is released after sent by brpc,
+// so that it is valid that brpc IO::buf refers to the c_str of data chunks' data.
+struct ChunksDataRef {
+    ChunksDataRef(int64_t bytes) : data_bytes(bytes) {}
+    std::vector<std::shared_ptr<string>> data_buffer;
+    int64_t data_bytes;
+};
+
 struct TransmitChunkInfo {
     // For BUCKET_SHUFFLE_HASH_PARTITIONED, multiple channels may be related to
     // a same exchange source fragment instance, so we should use fragment_instance_id
@@ -46,13 +54,14 @@ struct TransmitChunkInfo {
     doris::PBackendService_Stub* brpc_stub;
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
-    int64_t attachment_physical_bytes;
+    std::shared_ptr<ChunksDataRef> chunks_data_ref;
 };
 
 struct ClosureContext {
     TUniqueId instance_id;
     int64_t sequence;
     int64_t send_timestamp;
+    std::shared_ptr<ChunksDataRef> chunks_data_ref;
 };
 
 // TimeTrace is introduced to estimate time more accurately.

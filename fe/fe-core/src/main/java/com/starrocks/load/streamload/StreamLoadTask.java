@@ -208,8 +208,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                 throw new Exception("channel num " + String.valueOf(channelNum) + " does not equal to original channel num "
                     + String.valueOf(this.channelNum));
             }
-            if (channelId >= this.channelNum) {
-                throw new Exception("channel id should be less than channel num");
+            if (channelId >= this.channelNum || channelId < 0) {
+                throw new Exception("channel id should be between [0, " + String.valueOf(this.channelNum - 1) + "].");
             }
 
             switch (this.state) {
@@ -284,8 +284,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         boolean exception = false;
         readLock();
         try {
-            if (channelId >= this.channelNum) {
-                throw new Exception("channel id should be less than channel num");
+            if (channelId >= this.channelNum || channelId < 0) {
+                throw new Exception("channel id should be between [0, " + String.valueOf(this.channelNum - 1) + "].");
             }
             switch (this.state) {
                 case BEFORE_LOAD: {
@@ -355,8 +355,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         boolean exception = false;
         writeLock();
         try {
-            if (channelId >= this.channelNum) {
-                throw new Exception("channel id should be less than channel num");
+            if (channelId >= this.channelNum || channelId < 0) {
+                throw new Exception("channel id should be between [0, " + String.valueOf(this.channelNum - 1) + "].");
             }
             switch (this.state) {
                 case BEFORE_LOAD: {
@@ -436,8 +436,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         boolean exception = false;
         writeLock();
         try {
-            if (channelId >= this.channelNum) {
-                throw new Exception("channel id should be less than channel num");
+            if (channelId >= this.channelNum || channelId < 0) {
+                throw new Exception("channel id should be between [0, " + String.valueOf(this.channelNum - 1) + "].");
             }
             switch (this.state) {
                 case BEFORE_LOAD: {

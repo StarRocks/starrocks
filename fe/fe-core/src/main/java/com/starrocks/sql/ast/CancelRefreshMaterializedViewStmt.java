@@ -15,11 +15,17 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 public class CancelRefreshMaterializedViewStmt extends DdlStmt {
     private final TableName mvName;
 
     public CancelRefreshMaterializedViewStmt(TableName mvName) {
+        this(mvName, NodePosition.ZERO);
+    }
+
+    public CancelRefreshMaterializedViewStmt(TableName mvName, NodePosition pos) {
+        super(pos);
         this.mvName = mvName;
     }
 

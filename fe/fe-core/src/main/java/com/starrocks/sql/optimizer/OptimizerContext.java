@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -43,6 +44,7 @@ public class OptimizerContext {
     private OptimizerConfig optimizerConfig;
     private List<MaterializationContext> candidateMvs;
 
+    @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
         this.ruleSet = new RuleSet();

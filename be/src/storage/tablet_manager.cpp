@@ -42,6 +42,7 @@
 #include <memory>
 
 #include "common/config.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
@@ -560,11 +561,11 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
                     }
                 } else {
                     last_failure_ts = tablet_ptr->last_cumu_compaction_failure_time();
-                    if (now_ms - last_failure_ts <= config::min_cmumulative_compaction_failure_interval_sec * 1000) {
+                    if (now_ms - last_failure_ts <= config::min_cumulative_compaction_failure_interval_sec * 1000) {
                         VLOG(1) << "Too often to schedule failure compaction, skip it."
                                 << "compaction_type=" << compaction_type_str
-                                << ", min_cmumulative_compaction_failure_interval_sec="
-                                << config::min_cmumulative_compaction_failure_interval_sec
+                                << ", min_cumulative_compaction_failure_interval_sec="
+                                << config::min_cumulative_compaction_failure_interval_sec
                                 << ", last_failure_timestamp=" << last_failure_ts / 1000
                                 << ", tablet_id=" << tablet_ptr->tablet_id();
                         continue;
@@ -1339,6 +1340,56 @@ void TabletManager::get_tablets_by_partition(int64_t partition_id, std::vector<T
     if (search != _partition_tablet_map.end()) {
         tablet_infos.reserve(search->second.size());
         tablet_infos.assign(search->second.begin(), search->second.end());
+    }
+}
+
+void TabletManager::get_tablets_basic_infos(int64_t table_id, int64_t partition_id, int64_t tablet_id,
+                                            std::vector<TabletBasicInfo>& tablet_infos) {
+    if (tablet_id != -1) {
+        auto tablet = get_tablet(tablet_id, true, nullptr);
+        if (tablet) {
+            auto& info = tablet_infos.emplace_back();
+            tablet->get_basic_info(info);
+        }
+    } else if (partition_id != -1) {
+        vector<int64_t> tablet_ids;
+        {
+            std::shared_lock rlock(_partition_tablet_map_lock);
+            auto search = _partition_tablet_map.find(partition_id);
+            if (search != _partition_tablet_map.end()) {
+                for (auto tablet_id : search->second) {
+                    tablet_ids.push_back(tablet_id.tablet_id);
+                }
+            }
+        }
+        for (int64_t tablet_id : tablet_ids) {
+            auto tablet = get_tablet(tablet_id, true, nullptr);
+            if (tablet) {
+                auto& info = tablet_infos.emplace_back();
+                tablet->get_basic_info(info);
+            }
+        }
+    } else {
+        for (auto& shard : _tablets_shards) {
+            std::shared_lock rlock(shard.lock);
+            for (auto& itr : shard.tablet_map) {
+                auto& tablet = itr.second;
+                if (table_id == -1 || tablet->tablet_meta()->table_id() == table_id) {
+                    auto& info = tablet_infos.emplace_back();
+                    tablet->get_basic_info(info);
+                }
+            }
+        }
+        // order by table_id, partition_id, tablet_id by default
+        std::sort(tablet_infos.begin(), tablet_infos.end(), [](const TabletBasicInfo& a, const TabletBasicInfo& b) {
+            if (a.partition_id == b.partition_id) {
+                return a.tablet_id < b.tablet_id;
+            }
+            if (a.table_id == b.table_id) {
+                return a.partition_id < b.partition_id;
+            }
+            return a.table_id < b.table_id;
+        });
     }
 }
 

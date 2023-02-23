@@ -59,6 +59,13 @@ enum TResultSinkType {
     VARIABLE
 }
 
+struct TParquetOptions {
+    // parquet row group max size in bytes
+    1: optional i64 parquet_max_group_bytes
+    2: optional Types.TCompressionType compression_type
+    3: optional bool use_dict
+}
+
 struct TResultFileSinkOptions {
     1: required string file_path
     2: required PlanNodes.TFileFormatType file_format
@@ -73,7 +80,9 @@ struct TResultFileSinkOptions {
     // hdfs_write_buffer_size_kb for writing through lib hdfs directly
     9: optional i32 hdfs_write_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
-    10: optional PlanNodes.THdfsProperties hdfs_properties 
+    10: optional PlanNodes.THdfsProperties hdfs_properties
+    11: optional TParquetOptions parquet_options
+    12: optional list<string> file_column_names
 }
 
 struct TMemoryScratchSink {
@@ -182,6 +191,10 @@ struct TOlapTableSink {
     18: optional Types.TWriteQuorumType write_quorum_type
     19: optional bool enable_replicated_storage
     20: optional string merge_condition
+    21: optional bool null_expr_in_auto_increment
+    22: optional bool miss_auto_increment_column
+    23: optional bool abort_delete
+    24: optional i32 auto_increment_slot_id;
 }
 
 struct TDataSink {

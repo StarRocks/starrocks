@@ -36,19 +36,20 @@ package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Set;
 
 import static com.starrocks.mysql.MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT;
 
@@ -80,6 +81,7 @@ public class MysqlProto {
                 }
                 context.setAuthDataSalt(randomString);
                 context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
                 context.setQualifiedUser(user);
             }
             return true;
@@ -267,7 +269,8 @@ public class MysqlProto {
             return false;
         }
         // save previous user login info
-        UserIdentity priviousUserIdentity = context.getCurrentUserIdentity();
+        UserIdentity previousUserIdentity = context.getCurrentUserIdentity();
+        Set<Long> previousRoleIds = context.getCurrentRoleIds();
         String previousQualifiedUser = context.getQualifiedUser();
         String previousResourceGroup = context.getSessionVariable().getResourceGroup();
         // do authenticate again
@@ -295,7 +298,8 @@ public class MysqlProto {
                 context.getSerializer().setCapability(context.getCapability());
                 // recover from previous user login info
                 context.getSessionVariable().setResourceGroup(previousResourceGroup);
-                context.setCurrentUserIdentity(priviousUserIdentity);
+                context.setCurrentUserIdentity(previousUserIdentity);
+                context.setCurrentRoleIds(previousRoleIds);
                 context.setQualifiedUser(previousQualifiedUser);
                 return false;
             }

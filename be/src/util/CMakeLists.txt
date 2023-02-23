@@ -99,13 +99,6 @@ set(UTIL_FILES
   debug/query_trace_impl.cpp
 )
 
-# simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
-# Unset architecture-specific flags to avoid breaking implement runtime dispatch.
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    set_source_files_properties(json.cpp PROPERTIES COMPILE_FLAGS "-mno-avx -mno-avx2")
-    set_source_files_properties(json_converter.cpp PROPERTIES COMPILE_FLAGS "-mno-avx -mno-avx2")
-endif()
-
 add_library(Util STATIC
     ${UTIL_FILES}
 )

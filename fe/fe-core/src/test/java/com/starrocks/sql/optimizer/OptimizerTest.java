@@ -156,10 +156,11 @@ public class OptimizerTest {
         Assert.assertTrue(expr1.getInputs().get(0).getOp() instanceof LogicalFilterOperator);
 
         // test timeout
+        long timeout = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(1);
         TaskContext rootTaskContext = optimizer1.getContext().getTaskContext();
         // just give a valid RuleType
-        Rule timeoutRule = new TimeoutRule(RuleType.TF_MV_FILTER_JOIN_RULE, Pattern.create(OperatorType.PATTERN));
+        Rule timeoutRule = new TimeoutRule(RuleType.TF_MV_ONLY_JOIN_RULE, Pattern.create(OperatorType.PATTERN));
         OptExpression tree = OptExpression.create(new LogicalTreeAnchorOperator(), logicalPlan.getRoot());
         optimizer1.getContext().getTaskScheduler().pushTask(
                 new RewriteTreeTask(rootTaskContext, tree, Lists.newArrayList(timeoutRule), true));
@@ -168,7 +169,7 @@ public class OptimizerTest {
         } catch (Exception e) {
             e.getMessage().contains("StarRocks planner use long time 1 ms in logical phase");
         } finally {
-            connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000);
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(timeout);
         }
     }
 
@@ -197,9 +198,9 @@ public class OptimizerTest {
     public void testPreprocessMvNonPartitionMv() throws Exception {
         Config.enable_experimental_mv = true;
         cluster.runSql("test", "insert into t0 values(10, 20, 30)");
-        starRocksAssert.withNewMaterializedView("create materialized view mv_1 distributed by hash(`v1`) " +
+        starRocksAssert.withMaterializedView("create materialized view mv_1 distributed by hash(`v1`) " +
                 "as select v1, v2, sum(v3) as total from t0 group by v1, v2");
-        starRocksAssert.withNewMaterializedView("create materialized view mv_2 distributed by hash(`v1`) " +
+        starRocksAssert.withMaterializedView("create materialized view mv_2 distributed by hash(`v1`) " +
                 "as select v1, sum(total) as total from mv_1 group by v1");
         refreshMaterializedView("test", "mv_1");
         refreshMaterializedView("test", "mv_2");
@@ -239,11 +240,11 @@ public class OptimizerTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_3\n" +
+                .withMaterializedView("create materialized view mv_3\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k2, sum(v1) as total from tbl_with_mv group by k2;")
-                .withNewMaterializedView("create materialized view mv_4\n" +
+                .withMaterializedView("create materialized view mv_4\n" +
                         "PARTITION BY k1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh manual\n" +
@@ -299,14 +300,20 @@ public class OptimizerTest {
         starRocksAssert.dropMaterializedView("mv_3");
         starRocksAssert.dropMaterializedView("mv_4");
 
-        starRocksAssert.withNewMaterializedView("create materialized view mv_5\n" +
+        starRocksAssert.withMaterializedView("create materialized view mv_5\n" +
                 "PARTITION BY date_trunc(\"month\", k1)\n" +
                 "distributed by hash(k2) buckets 3\n" +
                 "refresh manual\n" +
                 "as select k1, k2, v1  from tbl_with_mv;");
         refreshMaterializedView("test", "mv_5");
         cluster.runSql("test", "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
+
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        query = (QueryStatement) stmt;
+
         Optimizer optimizer3 = new Optimizer();
+        logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                .transformWithSelectLimit(query.getQueryRelation());
         OptExpression expr3 = optimizer3.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
                 new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
         Assert.assertNotNull(expr3);

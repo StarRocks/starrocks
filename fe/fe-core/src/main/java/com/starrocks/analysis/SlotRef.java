@@ -56,8 +56,6 @@ import com.starrocks.thrift.TSlotRef;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 
 public class SlotRef extends Expr {
@@ -99,24 +97,25 @@ public class SlotRef extends Expr {
     }
 
     public SlotRef(QualifiedName qualifiedName) {
+        super(qualifiedName.getPos());
         List<String> parts = qualifiedName.getParts();
         // If parts.size() = 1, it must be a column name. Like `Select a FROM table`.
         // If parts.size() = [2, 3, 4], it maybe a column name or specific struct subfield name.
         Preconditions.checkArgument(parts.size() > 0);
-        this.qualifiedName = QualifiedName.of(qualifiedName.getParts());
+        this.qualifiedName = QualifiedName.of(qualifiedName.getParts(), qualifiedName.getPos());
         if (parts.size() == 1) {
             this.col = parts.get(0);
             this.label = parts.get(0);
         } else if (parts.size() == 2) {
-            this.tblName = new TableName(null, parts.get(0));
+            this.tblName = new TableName(null, null, parts.get(0), qualifiedName.getPos());
             this.col = parts.get(1);
             this.label = parts.get(1);
         } else if (parts.size() == 3) {
-            this.tblName = new TableName(parts.get(0), parts.get(1));
+            this.tblName = new TableName(null, parts.get(0), parts.get(1), qualifiedName.getPos());
             this.col = parts.get(2);
             this.label = parts.get(2);
         } else if (parts.size() == 4) {
-            this.tblName = new TableName(parts.get(0), parts.get(1), parts.get(2));
+            this.tblName = new TableName(parts.get(0), parts.get(1), parts.get(2), qualifiedName.getPos());
             this.col = parts.get(3);
             this.label = parts.get(3);
         } else {
@@ -240,6 +239,13 @@ public class SlotRef extends Expr {
         this.desc = desc;
     }
 
+    public void setType(Type type) {
+        super.setType(type);
+        if (desc != null) {
+            desc.setType(type);
+        }
+    }
+
     public SlotDescriptor getSlotDescriptorWithoutCheck() {
         return desc;
     }
@@ -333,7 +339,7 @@ public class SlotRef extends Expr {
             }
         } else {
             // slot id and tuple id are meaningless here
-            msg.slot_ref = new TSlotRef(0,0);
+            msg.slot_ref = new TSlotRef(0, 0);
         }
 
         msg.setOutput_column(outputColumn);

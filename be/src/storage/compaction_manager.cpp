@@ -234,11 +234,11 @@ bool CompactionManager::_check_precondition(const CompactionCandidate& candidate
 
     int64_t now_ms = UnixMillis();
     if (candidate.type == CompactionType::CUMULATIVE_COMPACTION) {
-        if (now_ms - last_failure_ts <= config::min_cmumulative_compaction_failure_interval_sec * 1000) {
+        if (now_ms - last_failure_ts <= config::min_cumulative_compaction_failure_interval_sec * 1000) {
             VLOG(1) << "Too often to schedule failure compaction, skip it."
                     << "compaction_type=" << starrocks::to_string(candidate.type)
-                    << ", min_cmumulative_compaction_failure_interval_sec="
-                    << config::min_cmumulative_compaction_failure_interval_sec
+                    << ", min_cumulative_compaction_failure_interval_sec="
+                    << config::min_cumulative_compaction_failure_interval_sec
                     << ", last_failure_timestamp=" << last_failure_ts / 1000 << ", tablet_id=" << tablet->tablet_id();
             return false;
         }

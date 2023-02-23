@@ -31,6 +31,40 @@
 
 namespace starrocks {
 
+std::string AggrAutoContext::get_auto_state_string(const AggrAutoState& state) {
+    switch (state) {
+    case INIT_PREAGG:
+        return "INIT_PREAGG";
+    case ADJUST:
+        return "ADJUST";
+    case PASS_THROUGH:
+        return "PASS_THROUGH";
+    case FORCE_PREAGG:
+        return "FORCE_PREAGG";
+    case PREAGG:
+        return "PREAGG";
+    case SELECTIVE_PREAGG:
+        return "SELECTIVE_PREAGG";
+    }
+    return "UNKNOWN";
+}
+
+void AggrAutoContext::update_continuous_limit() {
+    continuous_limit = continuous_limit * 2 > ContinuousUpperLimit ? ContinuousUpperLimit : continuous_limit * 2;
+}
+
+size_t AggrAutoContext::get_continuous_limit() {
+    return continuous_limit;
+}
+
+bool AggrAutoContext::is_high_reduction(const size_t agg_count, const size_t chunk_size) {
+    return agg_count >= HighReduction * chunk_size;
+}
+
+bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chunk_size) {
+    return agg_count <= LowReduction * chunk_size;
+}
+
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
                          FunctionContext* context);
 
@@ -131,13 +165,11 @@ Status Aggregator::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
-                           MemTracker* mem_tracker) {
+Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
     _state = state;
 
     _pool = pool;
     _runtime_profile = runtime_profile;
-    _mem_tracker = mem_tracker;
 
     _limit = _params->limit;
     _needs_finalize = _params->needs_finalize;
@@ -419,6 +451,12 @@ void Aggregator::close(RuntimeState* state) {
             _mem_pool->free_all();
         }
 
+        if (_is_only_group_by_columns) {
+            _hash_set_variant.reset();
+        } else {
+            _hash_map_variant.reset();
+        }
+
         Expr::close(_group_by_expr_ctxs, state);
         for (const auto& i : _agg_expr_ctxs) {
             Expr::close(i, state);
@@ -446,12 +484,14 @@ ChunkPtr Aggregator::poll_chunk_buffer() {
     }
     ChunkPtr chunk = _buffer.front();
     _buffer.pop();
+    _buffer_size--;
     return chunk;
 }
 
 void Aggregator::offer_chunk_to_buffer(const ChunkPtr& chunk) {
     std::lock_guard<std::mutex> l(_buffer_mutex);
     _buffer.push(chunk);
+    _buffer_size++;
 }
 
 bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
@@ -649,9 +689,18 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
     auto use_intermediate_as_output = _use_intermediate_as_output();
     const auto& slots = _intermediate_tuple_desc->slots();
 
+    // build group by columns
+    size_t num_rows = input_chunk->num_rows();
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < _group_by_columns.size(); i++) {
-        result_chunk->append_column(_group_by_columns[i], slots[i]->id());
+        // materialize group by const columns
+        if (_group_by_columns[i]->is_constant()) {
+            auto res =
+                    ColumnHelper::unfold_const_column(_group_by_types[i].result_type, num_rows, _group_by_columns[i]);
+            result_chunk->append_column(std::move(res), slots[i]->id());
+        } else {
+            result_chunk->append_column(_group_by_columns[i], slots[i]->id());
+        }
     }
 
     if (!_agg_fn_ctxs.empty()) {
@@ -719,13 +768,15 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
 }
 
 void Aggregator::try_convert_to_two_level_map() {
-    if (_mem_tracker->consumption() > two_level_memory_threshold) {
+    auto current_size = _hash_map_variant.reserved_memory_usage(mem_pool());
+    if (current_size > two_level_memory_threshold) {
         _hash_map_variant.convert_to_two_level(_state);
     }
 }
 
 void Aggregator::try_convert_to_two_level_set() {
-    if (_mem_tracker->consumption() > two_level_memory_threshold) {
+    auto current_size = _hash_set_variant.reserved_memory_usage(mem_pool());
+    if (current_size > two_level_memory_threshold) {
         _hash_set_variant.convert_to_two_level(_state);
     }
 }
@@ -830,9 +881,6 @@ Status Aggregator::_evaluate_group_by_exprs(Chunk* chunk) {
         ASSIGN_OR_RETURN(_group_by_columns[i], _group_by_expr_ctxs[i]->evaluate(chunk));
         DCHECK(_group_by_columns[i] != nullptr);
         if (_group_by_columns[i]->is_constant()) {
-            // If group by column is constant, we disable streaming aggregate.
-            // Because we don't want to send const column to exchange node
-            _streaming_preaggregation_mode = TStreamingPreaggregationMode::FORCE_PREAGGREGATION;
             // All hash table could handle only null, and we don't know the real data
             // type for only null column, so we don't unpack it.
             if (!_group_by_columns[i]->only_null()) {
@@ -873,8 +921,8 @@ bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs, 
             *has_null = true;
             size += 1; // 1 bytes for  null flag.
         }
-        LogicalType ptype = ctx->root()->type().type;
-        size_t byte_size = get_size_of_fixed_length_type(ptype);
+        LogicalType ltype = ctx->root()->type().type;
+        size_t byte_size = get_size_of_fixed_length_type(ltype);
         if (byte_size == 0) return false;
         size += byte_size;
     }

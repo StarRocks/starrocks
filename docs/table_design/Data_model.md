@@ -88,11 +88,11 @@ DISTRIBUTED BY HASH(user_id) BUCKETS 8;
 
 - You can create indexes such as BITMAP indexes and Bloomfilter indexes at table creation.
 
-- If two identical records are loaded, the Duplicate Key model considers the two records as one record instead of two.
+- If two identical records are loaded, the Duplicate Key model retains them as two records, rather than one.
 
 ### What to do next
 
-After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Data import](../loading/Loading_intro.md).
+After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Overview of data loading](../loading/Loading_intro.md).
 
 > Note: When you load data into a table that uses the Duplicate Key model, you can only append data to the table. You cannot modify the existing data in the table.
 
@@ -156,7 +156,10 @@ CREATE TABLE IF NOT EXISTS example_db.aggregate_tbl (
     pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
 )
 AGGREGATE KEY(site_id, date, city_code)
-DISTRIBUTED BY HASH(site_id) BUCKETS 8;
+DISTRIBUTED BY HASH(site_id) BUCKETS 8
+PROPERTIES (
+"replication_num" = "1"
+);
 ```
 
 ### Usage notes
@@ -385,4 +388,4 @@ PROPERTIES("replication_num" = "3",
 
 ### What to do next
 
-You can run a  stream load, broker load, or routine load job to perform insert, update, or delete operations on all or individual columns of a table that uses the Primary Key model. For more information, see [Data load into tables of Primary Key model](../loading/Load_to_Primary_Key_tables.md).
+You can run a  stream load, broker load, or routine load job to perform insert, update, or delete operations on all or individual columns of a table that uses the Primary Key model. For more information, see [Overview of data loading](../loading/Loading_intro.md).

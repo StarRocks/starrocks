@@ -16,13 +16,15 @@ WITH BROKER
 [opt_properties]
 ```
 
-Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../../../sql-reference/sql-statements/keywords.md).
 
 ## Parameters
 
-### `LABEL`
+### `database_name` and `label_name`
 
-The label of the load job.
+`label_name` specifies the label of the load job.
+
+`database_name` optionally specifies the name of the database to which the destination table belongs.
 
 Each load job has a label that is unique across the entire database. You can use the label of a load job to view the execution status of the load job and prevent repeatedly loading the same data. When a load job enters the **FINISHED** state, its label cannot be reused. Only the label of a load job that has entered the **CANCELLED** state can be reused. In most cases, the label of a load job is reused to retry that load job and load the same data, thereby implementing Exactly-Once semantics.
 
@@ -67,6 +69,9 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   - `hdfs_host`: the IP address of the NameNode host in the HDFS cluster.
 
   - `hdfs_host`: the FS port of the NameNode host in the HDFS cluster. The default port number is `9000`.
+
+  > **NOTICE**
+  > Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
 
 - `INTO TABLE`
 
@@ -218,16 +223,15 @@ If the source data is stored in an Amazon S3 bucket, provide the following confi
 
 | Parameter         | Description                                                  |
 | ----------------- | ------------------------------------------------------------ |
-| fs.s3a.access.key | The Access Key ID that you can use to access the Amazon S3 bucket. |
-| fs.s3a.secret.key | The Secret Access Key that you can use to access the Amazon S3 bucket. |
-| fs.s3a.endpoint   | The endpoint that you can use to access the Amazon S3 bucket. |
+| aws.s3.access_key | The Access Key ID that you can use to access the Amazon S3 bucket. |
+| aws.s3.secret_key | The Secret Access Key that you can use to access the Amazon S3 bucket. |
+| aws.s3.endpoint   | The endpoint that you can use to access the Amazon S3 bucket. |
 
 For more information, see AWS documentation [Managing access keys for IAM users](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html).
 
 > **NOTE**
 >
-> - Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
-> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `fs.s3a.access.key` and `fs.s3a.secret.key` unspecified.
+> If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `aws.s3.access_key` and `aws.s3.secret_key` unspecified.
 
 #### Google GCS
 

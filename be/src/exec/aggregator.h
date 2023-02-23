@@ -136,6 +136,31 @@ enum AggrMode {
     AM_STREAMING_POST_CACHE
 };
 
+enum AggrAutoState { INIT_PREAGG = 0, ADJUST, PASS_THROUGH, FORCE_PREAGG, PREAGG, SELECTIVE_PREAGG };
+
+struct AggrAutoContext {
+    static constexpr size_t ContinuousUpperLimit = 10000;
+    static constexpr int ForcePreaggLimit = 3;
+    static constexpr int PreaggLimit = 100;
+    static constexpr int AdjustLimit = 100;
+    static constexpr double LowReduction = 0.2;
+    static constexpr double HighReduction = 0.9;
+    static constexpr size_t MaxHtSize = 64 * 1024 * 1024; // 64 MB
+    static constexpr int StableLimit = 5;
+    std::string get_auto_state_string(const AggrAutoState& state);
+    size_t get_continuous_limit();
+    void update_continuous_limit();
+    bool is_high_reduction(const size_t agg_count, const size_t chunk_size);
+    bool is_low_reduction(const size_t agg_count, const size_t chunk_size);
+    size_t init_preagg_count = 0;
+    size_t adjust_count = 0;
+    size_t pass_through_count = 0;
+    size_t force_preagg_count = 0;
+    size_t preagg_count = 0;
+    size_t selective_preagg_count = 0;
+    size_t continuous_limit = 100;
+};
+
 struct StreamingHtMinReductionEntry {
     int min_ht_mem;
     double streaming_ht_min_reduction;
@@ -182,17 +207,17 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
 // it contains common data struct and algorithm of aggregation
 class Aggregator : public pipeline::ContextWithDependency {
 public:
+    static constexpr auto MAX_CHUNK_BUFFER_SIZE = 1024;
     Aggregator(AggregatorParamsPtr&& params);
 
-    virtual ~Aggregator() noexcept override {
+    ~Aggregator() noexcept override {
         if (_state != nullptr) {
             close(_state);
         }
     }
 
     Status open(RuntimeState* state);
-    virtual Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
-                           MemTracker* mem_tracker);
+    virtual Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     void close(RuntimeState* state) override;
 
     const MemPool* mem_pool() const { return _mem_pool.get(); }
@@ -214,6 +239,10 @@ public:
     void set_aggr_phase(AggrPhase aggr_phase) { _aggr_phase = aggr_phase; }
     AggrPhase get_aggr_phase() { return _aggr_phase; }
 
+    bool is_hash_set() { return _is_only_group_by_columns; }
+    const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
+    const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
+
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
     const AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
     const AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
@@ -231,6 +260,7 @@ public:
 
     bool is_chunk_buffer_empty();
     ChunkPtr poll_chunk_buffer();
+    size_t chunk_buffer_size() { return _buffer_size.load(std::memory_order_acquire); }
     void offer_chunk_to_buffer(const ChunkPtr& chunk);
 
     bool should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
@@ -292,8 +322,6 @@ protected:
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
 
-    MemTracker* _mem_tracker = nullptr;
-
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
     // The open phase still relies on the TFunction object for some initialization operations
@@ -308,6 +336,7 @@ protected:
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
+    std::atomic_int _buffer_size{};
     std::queue<ChunkPtr> _buffer;
     std::mutex _buffer_mutex;
 

@@ -65,12 +65,13 @@ absl::StatusOr<staros::starlet::WorkerInfo> StarOSWorker::worker_info() const {
     staros::starlet::WorkerInfo worker_info;
 
     std::shared_lock l(_mtx);
-    worker_info.worker_id = _worker_id;
-    worker_info.service_id = _service_id;
+    worker_info.worker_id = worker_id();
+    worker_info.service_id = service_id();
     worker_info.properties["port"] = std::to_string(config::starlet_port);
     worker_info.properties["be_port"] = std::to_string(config::be_port);
     worker_info.properties["be_http_port"] = std::to_string(config::be_http_port);
     worker_info.properties["be_brpc_port"] = std::to_string(config::brpc_port);
+    worker_info.properties["be_heartbeat_port"] = std::to_string(config::heartbeat_service_port);
     worker_info.properties["be_version"] = get_short_version();
     for (auto& iter : _shards) {
         worker_info.shards.insert(iter.first);
@@ -79,9 +80,6 @@ absl::StatusOr<staros::starlet::WorkerInfo> StarOSWorker::worker_info() const {
 }
 
 absl::Status StarOSWorker::update_worker_info(const staros::starlet::WorkerInfo& new_worker_info) {
-    std::unique_lock l(_mtx);
-    _service_id = new_worker_info.service_id;
-    _worker_id = new_worker_info.worker_id;
     return absl::OkStatus();
 }
 

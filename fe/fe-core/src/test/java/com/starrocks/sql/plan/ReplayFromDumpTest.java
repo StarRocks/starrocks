@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
@@ -56,6 +57,8 @@ public class ReplayFromDumpTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        // Should disable Dynamic Partition in replay dump test
+        Config.dynamic_partition_enable = false;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
@@ -674,7 +677,7 @@ public class ReplayFromDumpTest {
     public void testHiveTPCH08UsingResource() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  21:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("21:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [52: n_regionkey, INT, true] = [58: r_regionkey, INT, true]\n" +
                 "  |  build runtime filters:\n" +
@@ -737,5 +740,4 @@ public class ReplayFromDumpTest {
                 "     rollup: segment_profile\n" +
                 "     tabletRatio=88635/88635"));
     }
-
 }

@@ -195,10 +195,10 @@ ROCKSDB_SOURCE=rocksdb-6.22.1
 ROCKSDB_MD5SUM="02727e52cdb94fa6a9dbbd68d157e619"
 
 # librdkafka
-LIBRDKAFKA_DOWNLOAD="https://github.com/edenhill/librdkafka/archive/v1.9.2.tar.gz"
-LIBRDKAFKA_NAME=librdkafka-1.9.2.tar.gz
-LIBRDKAFKA_SOURCE=librdkafka-1.9.2
-LIBRDKAFKA_MD5SUM="fe9624e905abbf8324b0f6be520d9c24"
+LIBRDKAFKA_DOWNLOAD="https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.0.2.tar.gz"
+LIBRDKAFKA_NAME=librdkafka-2.0.2.tar.gz
+LIBRDKAFKA_SOURCE=librdkafka-2.0.2
+LIBRDKAFKA_MD5SUM="c0120dc32acc129bfb4656fe17568da1"
 
 # pulsar
 PULSAR_DOWNLOAD="https://github.com/apache/pulsar/archive/refs/tags/v2.10.1.tar.gz"
@@ -292,7 +292,7 @@ MARIADB_SOURCE="mariadb-connector-c-3.1.14"
 MARIADB_MD5SUM="86c4052adeb8447900bf33b4e2ddd1f9"
 
 # jindosdk for Aliyun OSS
-JINDOSDK_DOWNLOAD="https://jindodata-binary.oss-cn-shanghai.aliyuncs.com/release/4.6.2/jindosdk-4.6.2.tar.gz"
+JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.2.tar.gz"
 JINDOSDK_NAME="jindosdk-4.6.2.tar.gz"
 JINDOSDK_SOURCE="jindosdk-4.6.2"
 JINDOSDK_MD5SUM="7288ffb8f2fbdde6b907d15041a0f79c"
@@ -328,10 +328,10 @@ FAST_FLOAT_SOURCE="fast-float-3.5.1"
 FAST_FLOAT_MD5SUM="adb3789b99f47e0cd971b4d90727d4d0"
 
 # cachelib
-CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20230117.tar.gz"
+CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20230130.tar.gz"
 CACHELIB_NAME="cachelib.tar.gz"
 CACHELIB_SOURCE="cachelib"
-CACHELIB_MD5SUM="9ed7137220d25b6c591966fdcb03208e"
+CACHELIB_MD5SUM="7cc245be5cb10afa6aeea0121ec77e9e"
 
 # streamvbyte
 STREAMVBYTE_DOWNLOAD="https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz"
@@ -345,8 +345,26 @@ BROKER_THIRDPARTY_JARS_NAME="broker_thirdparty_jars.tar.gz"
 BROKER_THIRDPARTY_JARS_SOURCE="broker_thirdparty_jars"
 BROKER_THIRDPARTY_JARS_MD5SUM="8e9a8c2ef3b19709dd0cc37e26a60c83"
 
+# jansson
+JANSSON_DOWNLOAD="https://github.com/akheron/jansson/releases/download/v2.14/jansson-2.14.tar.gz"
+JANSSON_NAME="jansson-2.14.tar.gz"
+JANSSON_SOURCE="jansson-2.14"
+JANSSON_MD5SUM="6cbfc54c2ab3b4d7284e188e185c2b0b"
+
+# avro
+AVRO_DOWNLOAD="https://github.com/apache/avro/archive/refs/tags/release-1.10.2.tar.gz"
+AVRO_NAME="avro-release-1.10.2.tar.gz"
+AVRO_SOURCE="avro-release-1.10.2"
+AVRO_MD5SUM="55b9c200976366fd62f1201231f3a5eb"
+
+# serdes
+SERDES_DOWNLOAD="https://github.com/confluentinc/libserdes/archive/refs/tags/v7.3.1.tar.gz"
+SERDES_NAME="libserdes-7.3.1.tar.gz"
+SERDES_SOURCE="libserdes-7.3.1"
+SERDES_MD5SUM="61012487a8845f37540710ac4ac2f7ab"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
-            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS"
+            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS JANSSON AVRO SERDES"

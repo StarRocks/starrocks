@@ -73,6 +73,36 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    // ---------------------------------------- Warehouse Statement ----------------------------------------------------
+
+    public R visitCreateWarehouseStatement(CreateWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowWarehousesStatement(ShowWarehousesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitAlterWarehouseStatement(AlterWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowClusterStatement(ShowClustersStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitResumeWarehouseStatement(ResumeWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropWarehouseStatement(DropWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
     public R visitUseDbStatement(UseDbStmt statement, C context) {
@@ -88,10 +118,6 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitShowGrantsStatement(ShowGrantsStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -156,10 +182,6 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -370,14 +392,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitShowRolesStatement(ShowRolesStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitCreateRoleStatement(CreateRoleStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     public R visitKillStatement(KillStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -436,6 +450,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitKillAnalyzeStatement(KillAnalyzeStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitDropAnalyzeStatement(DropAnalyzeJobStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 
     // ---------------------------------------- Resource Group Statement -----------------------------------------------
@@ -508,10 +526,6 @@ public abstract class AstVisitor<R, C> {
 
     // ---------------------------------------- Show Statement ---------------------------------------------------------
 
-    public R visitShowAuthenticationStatement(ShowAuthenticationStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     public R visitShowWarningStatement(ShowWarningStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -554,19 +568,67 @@ public abstract class AstVisitor<R, C> {
 
     // ---------------------------------------- Privilege Statement ----------------------------------------------------
 
-    public R visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, C context) {
+    public R visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
-    public R visitCreateAlterUserStatement(BaseCreateAlterUserStmt statement, C context) {
-        return visitStatement(statement, context);
+    public R visitCreateUserStatement(CreateUserStmt statement, C context) {
+        return visitBaseCreateAlterUserStmt(statement, context);
     }
 
     public R visitDropUserStatement(DropUserStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
+    public R visitAlterUserStatement(AlterUserStmt statement, C context) {
+        return visitBaseCreateAlterUserStmt(statement, context);
+    }
+
+    public R visitShowUserStatement(ShowUserStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowAuthenticationStatement(ShowAuthenticationStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateRoleStatement(CreateRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitDropRoleStatement(DropRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowRolesStatement(ShowRolesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitGrantRoleStatement(GrantRoleStmt statement, C context) {
+        return visitGrantRevokeRoleStatement(statement, context);
+    }
+
+    public R visitRevokeRoleStatement(RevokeRoleStmt statement, C context) {
+        return visitGrantRevokeRoleStatement(statement, context);
+    }
+
+    public R visitSetRoleStatement(SetRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSetDefaultRoleStatement(SetDefaultRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowGrantsStatement(ShowGrantsStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -678,13 +740,13 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    // ------------------------------------------- Unsupported statement ---------------------------------------------------------
-
-    public R visitUnsupportedStatement(UnsupportedStmt statement, C context) {
+    public R visitSetWarehouseStatement(SetWarehouseStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
-    public R visitSetRoleStatement(SetRoleStmt statement, C context) {
+    // ------------------------------------------- Unsupported statement ---------------------------------------------------------
+
+    public R visitUnsupportedStatement(UnsupportedStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -693,6 +755,10 @@ public abstract class AstVisitor<R, C> {
     //Alter system clause
 
     public R visitFrontendClause(FrontendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitCreateImageClause(CreateImageClause clause, C context) {
         return visitNode(clause, context);
     }
 

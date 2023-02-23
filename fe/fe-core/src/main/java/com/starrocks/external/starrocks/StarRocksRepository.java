@@ -52,8 +52,8 @@ public class StarRocksRepository extends LeaderDaemon {
 
     public void init() {
         MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeConstants.meta_version);
-        metaContext.setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
+        metaContext.setMetaVersion(FeConstants.META_VERSION);
+        metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
         metaContext.setThreadLocalInfo();
         inited = true;
     }

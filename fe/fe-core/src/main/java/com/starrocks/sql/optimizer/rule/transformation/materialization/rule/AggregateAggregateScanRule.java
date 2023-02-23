@@ -25,16 +25,17 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Aggregate
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
-/*
- *
- * Here is the rule for pattern Aggregate-Aggregate-Scan
- *
+/**
+ * Materialized View Rewrite Rule for pattern:
+ * - Aggregate
+ * - Aggregate
+ * - Scan
  */
 public class AggregateAggregateScanRule extends SingleTableRewriteBaseRule {
-    private static AggregateAggregateScanRule INSTANCE = new AggregateAggregateScanRule();
+    private static final AggregateAggregateScanRule INSTANCE = new AggregateAggregateScanRule();
 
     public AggregateAggregateScanRule() {
-        super(RuleType.TF_MV_AGGREGATE_SCAN_RULE, Pattern.create(OperatorType.LOGICAL_AGGR)
+        super(RuleType.TF_MV_AGGREGATE_AGGREGATE_SCAN_RULE, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(OperatorType.PATTERN_SCAN))));
     }
 

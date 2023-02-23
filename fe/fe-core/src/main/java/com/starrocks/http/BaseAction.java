@@ -37,14 +37,16 @@ package com.starrocks.http;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
@@ -296,10 +298,10 @@ public abstract class BaseAction implements IAction {
     }
 
     // For new RBAC privilege framework
-    protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType.SystemAction... systemActions)
+    protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType... systemActions)
             throws UnauthorizedException {
-        for (PrivilegeType.SystemAction systemAction : systemActions) {
-            if (!PrivilegeManager.checkSystemAction(currentUser, systemAction)) {
+        for (PrivilegeType systemAction : systemActions) {
+            if (!PrivilegeActions.checkSystemAction(currentUser, null, systemAction)) {
                 throw new UnauthorizedException("Access denied; you need (at least one of) the "
                         + systemAction.name() + " privilege(s) for this operation");
             }
@@ -312,9 +314,9 @@ public abstract class BaseAction implements IAction {
         try {
             Set<Long> userOwnedRoles = PrivilegeManager.getOwnedRolesByUser(currentUser);
             if (!(currentUser.equals(UserIdentity.ROOT) ||
-                    userOwnedRoles.contains(PrivilegeManager.ROOT_ROLE_ID) ||
-                    (userOwnedRoles.contains(PrivilegeManager.DB_ADMIN_ROLE_ID) &&
-                            userOwnedRoles.contains(PrivilegeManager.USER_ADMIN_ROLE_ID)))) {
+                    userOwnedRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
+                    (userOwnedRoles.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID) &&
+                            userOwnedRoles.contains(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID)))) {
                 throw new UnauthorizedException(
                         "Access denied; you need own root role or own db_admin and user_admin roles for this " +
                                 "operation");
@@ -343,8 +345,8 @@ public abstract class BaseAction implements IAction {
     }
 
     protected void checkTableAction(ConnectContext context, String db, String tbl,
-                                    PrivilegeType.TableAction action) throws UnauthorizedException {
-        if (!PrivilegeManager.checkTableAction(context, db, tbl, action)) {
+                                    PrivilegeType action) throws UnauthorizedException {
+        if (!PrivilegeActions.checkTableAction(context, db, tbl, action)) {
             throw new UnauthorizedException("Access denied; you need (at least one of) the "
                     + action.name() + " privilege(s) for this operation");
         }

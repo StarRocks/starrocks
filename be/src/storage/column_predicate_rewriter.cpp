@@ -302,7 +302,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     size_t value_size = raw_dict_column->size();
     std::vector<uint8_t> selection(value_size);
     const auto* pred = down_cast<const ColumnExprPredicate*>(raw_pred);
-    pred->evaluate(raw_dict_column.get(), selection.data(), 0, value_size);
+    RETURN_IF_ERROR(pred->evaluate(raw_dict_column.get(), selection.data(), 0, value_size));
 
     size_t code_size = raw_code_column->size();
     const auto& code_column = ColumnHelper::cast_to<TYPE_INT>(raw_code_column);
@@ -343,7 +343,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     RuntimeState* state = pred->runtime_state();
     ColumnRef column_ref(pred->slot_desc());
     // change column input type from binary to int(code)
-    TypeDescriptor type_desc = TypeDescriptor::from_primtive_type(TYPE_INT);
+    TypeDescriptor type_desc = TypeDescriptor::from_logical_type(TYPE_INT);
     column_ref._type = type_desc;
     Expr* probe_expr = &column_ref;
 

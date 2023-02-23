@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.MaterializedView;
@@ -120,8 +121,31 @@ public class DropStmtAnalyzer {
                 FunctionArgsDef argsDef = statement.getArgsDef();
                 argsDef.analyze();
 
-                statement.setFunction(
-                        new FunctionSearchDesc(functionName, argsDef.getArgTypes(), argsDef.isVariadic()));
+                FunctionSearchDesc funcDesc = new FunctionSearchDesc(functionName, argsDef.getArgTypes(),
+                        argsDef.isVariadic());
+                statement.setFunction(funcDesc);
+
+                // check function existence
+                Function func;
+                if (functionName.isGlobalFunction()) {
+                    func = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(funcDesc);
+                    if (func == null) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
+                    }
+                } else {
+                    Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
+                    if (db != null) {
+                        try {
+                            db.readLock();
+                            func = db.getFunction(statement.getFunction());
+                            if (func == null) {
+                                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
+                            }
+                        } finally {
+                            db.readUnlock();
+                        }
+                    }
+                }
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }

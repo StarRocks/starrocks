@@ -147,7 +147,10 @@ public class AstToSQLBuilder {
                                 columnName));
                     }
                 } else {
-                    selectListString.add(visit(expr) + " AS `" + columnName + "`");
+                    selectListString.add(
+                            expr.getFn() == null || expr.getFn().getFunctionName().getDb() == null ?
+                                    visit(expr) + " AS `" + columnName + "`" :
+                                    visit(expr) + " AS `" + expr.getFn().getFunctionName().getFunction() + "`");
                 }
             }
 

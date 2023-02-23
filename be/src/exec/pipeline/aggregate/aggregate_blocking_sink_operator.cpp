@@ -22,11 +22,13 @@ namespace starrocks::pipeline {
 
 Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get(), _mem_tracker.get()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
     return _aggregator->open(state);
 }
 
 void AggregateBlockingSinkOperator::close(RuntimeState* state) {
+    auto* counter = ADD_COUNTER(_unique_metrics, "HashTableMemoryUsage", TUnit::BYTES);
+    counter->set(_aggregator->hash_map_memory_usage());
     _aggregator->unref(state);
     Operator::close(state);
 }
@@ -82,7 +84,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
         if (false) {
         }
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, agg_group_by_with_limit));
-        _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
+
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
     }
     if (_aggregator->is_none_group_by_exprs()) {

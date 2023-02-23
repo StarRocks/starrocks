@@ -174,7 +174,7 @@ public:
 
     Status do_visit(BinaryColumn* column) {
         auto col = down_cast<BinaryColumn*>(_column);
-        auto& slices = col->get_data();
+        auto& slices = col->get_proxy_data();
         std::vector<Slice> datas(_sel_mask.size());
         size_t offsets = 0;
 
@@ -269,9 +269,8 @@ SortedStreamingAggregator::~SortedStreamingAggregator() {
     }
 }
 
-Status SortedStreamingAggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
-                                          MemTracker* mem_tracker) {
-    RETURN_IF_ERROR(Aggregator::prepare(state, pool, runtime_profile, mem_tracker));
+Status SortedStreamingAggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
+    RETURN_IF_ERROR(Aggregator::prepare(state, pool, runtime_profile));
     _streaming_state_allocator =
             std::make_shared<StateAllocator>(_mem_pool.get(), _state->chunk_size(), _agg_states_total_size);
     return Status::OK();

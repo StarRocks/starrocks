@@ -29,7 +29,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -141,9 +140,10 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitShowBackupStatement(ShowBackupStmt showBackupStmt, ConnectContext context) {
-            String dbName = getDbName(showBackupStmt.getDbName(), context);
-            showBackupStmt.setDbName(dbName);
-            getDatabase(dbName, context);
+            String dbName = showBackupStmt.getDbName();
+            if (dbName != null) {
+                getDatabase(dbName, context);
+            }
             return null;
         }
 
@@ -244,9 +244,10 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitShowRestoreStatement(ShowRestoreStmt showRestoreStmt, ConnectContext context) {
-            String dbName = getDbName(showRestoreStmt.getDbName(), context);
-            showRestoreStmt.setDbName(dbName);
-            getDatabase(dbName, context);
+            String dbName = showRestoreStmt.getDbName();
+            if (dbName != null) {
+                getDatabase(dbName, context);
+            }
             return null;
         }
     }

@@ -15,18 +15,32 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.List;
 
 // REVOKE Role 'role' FROM 'user'
 // share the same parameter and check logic with GrantRoleStmt
 public class RevokeRoleStmt extends BaseGrantRevokeRoleStmt {
 
-    public RevokeRoleStmt(String granteeRole, UserIdentity userIdent) {
-        super(granteeRole, userIdent, "REVOKE", "FROM");
+    public RevokeRoleStmt(List<String> granteeRole, UserIdentity userIdent) {
+        super(granteeRole, userIdent);
     }
 
-    public RevokeRoleStmt(String granteeRole, String role) {
-        super(granteeRole, role, "REVOKE", "FROM");
+    public RevokeRoleStmt(List<String> granteeRole, UserIdentity userIdent, NodePosition pos) {
+        super(granteeRole, userIdent, pos);
     }
 
+    public RevokeRoleStmt(List<String> granteeRole, String role) {
+        super(granteeRole, role);
+    }
+
+    public RevokeRoleStmt(List<String> granteeRole, String role, NodePosition pos) {
+        super(granteeRole, role, pos);
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitRevokeRoleStatement(this, context);
+    }
 }

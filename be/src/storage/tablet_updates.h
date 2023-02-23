@@ -39,6 +39,7 @@ class MemTracker;
 class RowsetReadOptions;
 class SnapshotMeta;
 class Tablet;
+class TabletBasicInfo;
 class TTabletInfo;
 
 class ChunkIterator;
@@ -96,7 +97,7 @@ public:
 
     Status get_rowsets_total_stats(const std::vector<uint32_t>& rowsets, size_t* total_rows, size_t* total_dels);
 
-    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
+    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time);
 
     Status save_meta();
 
@@ -236,7 +237,7 @@ public:
     // ]
     Status get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<std::unique_ptr<Column>>* columns);
+                             vector<std::unique_ptr<Column>>* columns, void* state);
 
     /*
     Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
@@ -258,6 +259,8 @@ public:
                            std::vector<RowsetMetaPB>& rowset_metas_pb);
 
     Status check_and_remove_rowset();
+
+    void get_basic_info_extra(TabletBasicInfo& info);
 
 private:
     friend class Tablet;

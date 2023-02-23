@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
@@ -82,7 +81,7 @@ public class HDFSBackendSelectorTest {
     }
 
     private Map<TNetworkAddress, Long> computeHostReadBytes(
-            CoordinatorPreprocessor.FragmentScanRangeAssignment assignment,
+            FragmentScanRangeAssignment assignment,
             int scanNodeId) {
         Map<TNetworkAddress, Long> stats = new HashMap<>();
         for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> entry : assignment.entrySet()) {
@@ -110,15 +109,15 @@ public class HDFSBackendSelectorTest {
         int scanRangeSize = 10000;
         int hostNumber = 3;
         List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
-        CoordinatorPreprocessor.FragmentScanRangeAssignment assignment =
-                new CoordinatorPreprocessor.FragmentScanRangeAssignment();
+        FragmentScanRangeAssignment assignment =
+                new FragmentScanRangeAssignment();
         Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
         Set<Long> usedBackendIDs = new HashSet<>();
         List<ComputeNode> computeNodes = createComputeNodes(hostNumber);
 
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
-                        ImmutableList.copyOf(computeNodes), false);
+                        ImmutableList.copyOf(computeNodes), false, false);
         selector.computeScanRangeAssignment();
 
         int avg = (scanRangeNumber * scanRangeSize) / hostNumber;
@@ -159,15 +158,15 @@ public class HDFSBackendSelectorTest {
             }
         }
 
-        CoordinatorPreprocessor.FragmentScanRangeAssignment assignment =
-                new CoordinatorPreprocessor.FragmentScanRangeAssignment();
+        FragmentScanRangeAssignment assignment =
+                new FragmentScanRangeAssignment();
         Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
         Set<Long> usedBackendIDs = new HashSet<>();
         List<ComputeNode> computeNodes = createComputeNodes(hostNumber);
 
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
-                        ImmutableList.copyOf(computeNodes), true);
+                        ImmutableList.copyOf(computeNodes), true, true);
         selector.computeScanRangeAssignment();
 
         Map<TNetworkAddress, Long> stats = computeHostReadBytes(assignment, scanNodeId);

@@ -32,6 +32,7 @@ add_library(Storage STATIC
     segment_replicate_executor.cpp
     metadata_util.cpp
     kv_store.cpp
+    local_tablet_reader.cpp
     olap_common.cpp
     olap_server.cpp
     options.cpp
@@ -180,5 +181,8 @@ add_library(Storage STATIC
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
+    binlog_builder.cpp
+    binlog_manager.cpp
     lake/update_compaction_state.cpp
+    lake/txn_log_applier.cpp
 )

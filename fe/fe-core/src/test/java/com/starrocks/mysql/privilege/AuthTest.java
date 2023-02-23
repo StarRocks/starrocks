@@ -39,7 +39,6 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserDesc;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.DomainResolver;
 import com.starrocks.common.Config;
@@ -62,6 +61,7 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
 import mockit.Expectations;
@@ -185,7 +185,7 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        UserIdentity userIdentity = createUserStmt.getUserIdent();
+        UserIdentity userIdentity = createUserStmt.getUserIdentity();
 
         // 2. check if cmy from specified ip can access
         List<UserIdentity> currentUser = Lists.newArrayList();
@@ -204,7 +204,7 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        userIdentity = createUserStmt.getUserIdent();
+        userIdentity = createUserStmt.getUserIdentity();
 
         // 4. check if zhangsan from specified ip can access
         Assert.assertTrue(auth.checkPlainPassword("zhangsan", "192.168.0.1",
@@ -936,7 +936,7 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        userIdentity = createUserStmt.getUserIdent();
+        userIdentity = createUserStmt.getUserIdentity();
 
         sql = "GRANT NODE_PRIV ON *.* TO zhaoliu";
         try {
@@ -1029,7 +1029,7 @@ public class AuthTest {
         String createUserSql = "CREATE USER 'test_user' IDENTIFIED BY '12345'";
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
         auth.createUser(createUserStmt);
-        UserIdentity userIdentity = createUserStmt.getUserIdent();
+        UserIdentity userIdentity = createUserStmt.getUserIdentity();
 
         // check if select & load & spark resource usage privilege all not granted
         String dbName = "db1";
@@ -1043,9 +1043,9 @@ public class AuthTest {
         String selectRoleName = "select_role";
         String createRoleSql = String.format("CREATE ROLE %s", selectRoleName);
         CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
-        Assert.assertEquals(false, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
+        Assert.assertEquals(false, auth.doesRoleExist(createRoleStmt.getRoles().get(0)));
         auth.createRole(createRoleStmt);
-        Assert.assertEquals(true, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
+        Assert.assertEquals(true, auth.doesRoleExist(createRoleStmt.getRoles().get(0)));
 
         // 3. grant select privilege to role
         GrantPrivilegeStmt grantStmt = null;
@@ -1054,7 +1054,7 @@ public class AuthTest {
         auth.grant(grantStmt);
 
         // 4. grant role to user
-        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(selectRoleName, userIdentity);
+        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(Collections.singletonList(selectRoleName), userIdentity);
         com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
         auth.grantRole(grantRoleStmt);
 
@@ -1081,7 +1081,7 @@ public class AuthTest {
         auth.grant(grantStmt);
 
         // 7. grant role to user
-        grantRoleStmt = new GrantRoleStmt(loadRoleName, userIdentity);
+        grantRoleStmt = new GrantRoleStmt(Collections.singletonList(loadRoleName), userIdentity);
         com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
         auth.grantRole(grantRoleStmt);
 
@@ -1092,7 +1092,7 @@ public class AuthTest {
         Assert.assertEquals(2, auth.getRoleNamesByUser(userIdentity).size());
 
         // 8. revoke load & spark resource usage from user
-        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(loadRoleName, userIdentity);
+        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(Collections.singletonList(loadRoleName), userIdentity);
         com.starrocks.sql.analyzer.Analyzer.analyze(revokeRoleStmt, ctx);
         auth.revokeRole(revokeRoleStmt);
 
@@ -1132,7 +1132,7 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        UserIdentity userIdentity = createUserStmt.getUserIdent();
+        UserIdentity userIdentity = createUserStmt.getUserIdentity();
 
 
         // 2. grant usage_priv on resource 'spark0' to 'testUser'@'%'
@@ -1504,7 +1504,7 @@ public class AuthTest {
         Assert.assertEquals(1, authInfos.size());
         Assert.assertEquals("No", authInfos.get(0).get(1));
         Assert.assertEquals("AUTHENTICATION_LDAP_SIMPLE", authInfos.get(0).get(2));
-        Assert.assertEquals(FeConstants.null_string, authInfos.get(0).get(3));
+        Assert.assertEquals(FeConstants.NULL_STRING, authInfos.get(0).get(3));
 
         /*
             mysql_native_password
@@ -1531,7 +1531,7 @@ public class AuthTest {
         Assert.assertEquals(1, authInfos.size());
         Assert.assertEquals("Yes", authInfos.get(0).get(1));
         Assert.assertEquals("MYSQL_NATIVE_PASSWORD", authInfos.get(0).get(2));
-        Assert.assertEquals(FeConstants.null_string, authInfos.get(0).get(3));
+        Assert.assertEquals(FeConstants.NULL_STRING, authInfos.get(0).get(3));
 
         // alter user lisi identified with mysql_native_password by '654321'
         String sql = "alter user lisi identified with mysql_native_password by '654321'";
@@ -1617,7 +1617,7 @@ public class AuthTest {
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
         // createUserStmt.analyze(analyzer);
         auth.createUser(createUserStmt);
-        UserIdentity user = createUserStmt.getUserIdent();
+        UserIdentity user = createUserStmt.getUserIdentity();
 
         // enable_password_reuse is false allow same password
         Config.enable_password_reuse = true;
@@ -1668,7 +1668,7 @@ public class AuthTest {
 
         // 2. check reuse
         Config.enable_password_reuse = false;
-        auth.checkPasswordReuse(createUserStmt.getUserIdent(), password);
+        auth.checkPasswordReuse(createUserStmt.getUserIdentity(), password);
     }
 
     private static final Logger LOG = LogManager.getLogger(AuthTest.class);
@@ -1756,7 +1756,7 @@ public class AuthTest {
         UserIdentity userIdentity = new UserIdentity("test_user", "%");
         userIdentity.analyze();
         UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
-        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, Collections.emptyList());
         com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
 
         auth.createUser(createUserStmt);
@@ -1930,7 +1930,7 @@ public class AuthTest {
 
         // 2. grant impersonate on gregory to harry
         // 2.1 grant
-        String sql = "grant impersonate on Gregory to Harry";
+        String sql = "grant impersonate on USER Gregory to Harry";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.grant(grantStmt);
         // 2.2 assert
@@ -1939,7 +1939,7 @@ public class AuthTest {
 
         // 3. grant impersonate on albert to harry
         // 3.1 grant
-        sql = "grant impersonate on Albert to Harry";
+        sql = "grant impersonate on USER Albert to Harry";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.grant(grantStmt);
         // 3.2 assert
@@ -1948,7 +1948,7 @@ public class AuthTest {
 
         // 4. revoke impersonate on gregory from harry
         // 4.1 revoke
-        sql = "revoke impersonate on Gregory from Harry";
+        sql = "revoke impersonate on USER Gregory from Harry";
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.revoke(revokeStmt);
         // 4.2 assert
@@ -1962,11 +1962,11 @@ public class AuthTest {
         CreateRoleStmt roleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
         auth.createRole(roleStmt);
         // 5.2 grant impersonate on gregory to role auror
-        sql = "grant impersonate on Gregory to role auror";
+        sql = "grant impersonate on USER Gregory to role auror";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.grant(grantStmt);
         // 5.3 grant auror to neiville
-        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(auror, neville);
+        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(Collections.singletonList(auror), neville);
         com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
         auth.grantRole(grantRoleStmt);
         // 5.4 assert
@@ -1974,7 +1974,7 @@ public class AuthTest {
 
         // 6. grant impersonate on albert to role auror
         // 6.1 grant
-        sql = "grant impersonate on Albert to role auror";
+        sql = "grant impersonate on USER Albert to role auror";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.grant(grantStmt);
         // 6.2 assert
@@ -1982,7 +1982,7 @@ public class AuthTest {
 
         // 7. revert impersonate to gregory from role auror
         // 7.1 revoke
-        sql = "revoke impersonate on Gregory from role auror";
+        sql = "revoke impersonate on USER Gregory from role auror";
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.revoke(revokeStmt);
         // 7.2 assert
@@ -1990,7 +1990,7 @@ public class AuthTest {
 
         // 8. revoke role from neville
         // 8.2 revoke
-        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(auror, neville);
+        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(Collections.singletonList(auror), neville);
         com.starrocks.sql.analyzer.Analyzer.analyze(revokeRoleStmt, ctx);
         auth.revokeRole(revokeRoleStmt);
         // 8.2 assert
@@ -2006,7 +2006,7 @@ public class AuthTest {
             UserIdentity userIdentity = new UserIdentity(name, "%");
             userIdentity.analyze();
             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
-            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, Collections.emptyList());
             com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
             auth.createUser(createUserStmt);
             userToBeCreated.add(userIdentity);
@@ -2020,7 +2020,7 @@ public class AuthTest {
         Assert.assertEquals(1, infos.size());
         Assert.assertEquals(2, infos.get(0).size());
         Assert.assertEquals(emptyPrivilegeUser.toString(), infos.get(0).get(0));
-        Assert.assertEquals("GRANT SELECT ON information_schema.* TO 'user1'@'%'", infos.get(0).get(1));
+        Assert.assertEquals("GRANT SELECT ON information_schema.* TO USER 'user1'@'%'", infos.get(0).get(1));
 
         // 2. grant table privilege to onePrivilegeUser
         TablePattern table = new TablePattern("testdb", "table1");
@@ -2030,7 +2030,7 @@ public class AuthTest {
         Assert.assertEquals(1, infos.size());
         Assert.assertEquals(2, infos.get(0).size());
         Assert.assertEquals(onePrivilegeUser.toString(), infos.get(0).get(0));
-        String expectSQL = "GRANT SELECT ON testdb.table1 TO 'user2'@'%'";
+        String expectSQL = "GRANT SELECT ON testdb.table1 TO USER 'user2'@'%'";
         Assert.assertTrue(infos.get(0).get(1).contains(expectSQL));
 
         // 3. grant resource & table & global & impersonate to manyPrivilegeUser
@@ -2038,16 +2038,16 @@ public class AuthTest {
         TablePattern db = new TablePattern("testdb", "*");
         db.analyze();
         auth.grantPrivs(manyPrivilegeUser, db, PrivBitSet.of(Privilege.LOAD_PRIV, Privilege.SELECT_PRIV), false);
-        expectSQLs.add("GRANT SELECT, LOAD ON testdb.* TO 'user3'@'%'");
+        expectSQLs.add("GRANT SELECT, LOAD ON testdb.* TO USER 'user3'@'%'");
         TablePattern global = new TablePattern("*", "*");
         global.analyze();
         auth.grantPrivs(manyPrivilegeUser, global, PrivBitSet.of(Privilege.GRANT_PRIV), false);
-        expectSQLs.add("GRANT GRANT ON *.* TO 'user3'@'%'");
+        expectSQLs.add("GRANT GRANT ON *.* TO USER 'user3'@'%'");
         ResourcePattern resourcePattern = new ResourcePattern("test_resource");
         resourcePattern.analyze();
         auth.grantPrivs(manyPrivilegeUser, resourcePattern, PrivBitSet.of(Privilege.USAGE_PRIV), false);
-        expectSQLs.add("GRANT USAGE ON RESOURCE test_resource TO 'user3'@'%'");
-        String sql = "GRANT IMPERSONATE ON 'user1'@'%' TO 'user3'@'%'";
+        expectSQLs.add("GRANT USAGE ON RESOURCE test_resource TO USER 'user3'@'%'");
+        String sql = "GRANT IMPERSONATE ON USER 'user1'@'%' TO USER 'user3'@'%'";
         auth.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx));
         expectSQLs.add(sql);
         infos = auth.getGrantsSQLs(manyPrivilegeUser);
@@ -2123,7 +2123,7 @@ public class AuthTest {
         userToBeCreated.add(gregory);
         for (UserIdentity userIdentity : userToBeCreated) {
             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
-            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, Collections.emptyList());
             com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
             auth.createUser(createUserStmt);
         }
@@ -2132,7 +2132,7 @@ public class AuthTest {
         // 2. grant impersonate on gregory to harry
         // 2.1 grant
         Assert.assertFalse(auth.canImpersonate(harry, gregory));
-        String sql = "grant impersonate on Gregory to Harry";
+        String sql = "grant impersonate on USER Gregory to Harry";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.grant(grantStmt);
         // 2.2 check
@@ -2150,7 +2150,7 @@ public class AuthTest {
         Assert.assertEquals(0, infos.size());
 
         // 5. revoke impersonate on greogory from harry
-        sql = "revoke impersonate on Gregory from Harry";
+        sql = "revoke impersonate on USER Gregory from Harry";
         auth.revoke((RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx));
         Assert.assertFalse(auth.canImpersonate(harry, gregory));
 

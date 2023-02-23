@@ -15,17 +15,21 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.privilege.ActionSet;
+import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.PrivObjNotFoundException;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeCollection;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
@@ -33,6 +37,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,17 +55,11 @@ public class AuthUpgrader {
     private static final Logger LOG = LogManager.getLogger(AuthUpgrader.class);
 
     // constants used when upgrading
-    private static final String TABLE_TYPE_STR = PrivilegeType.TABLE.name();
-    private static final String DB_TYPE_STR = PrivilegeType.DATABASE.name();
-    private static final String CATALOG_TYPE_STR = PrivilegeType.CATALOG.name();
-    private static final String USER_TYPE_STR = PrivilegeType.USER.name();
-    private static final String RESOURCE_TYPE_STR = PrivilegeType.RESOURCE.name();
     private static final String STAR = "*";
-    private Auth auth;
-    private AuthenticationManager authenticationManager;
-    private PrivilegeManager privilegeManager;
-    private GlobalStateMgr globalStateMgr;
-
+    private final Auth auth;
+    private final AuthenticationManager authenticationManager;
+    private final PrivilegeManager privilegeManager;
+    private final GlobalStateMgr globalStateMgr;
 
     public AuthUpgrader(
             Auth auth,
@@ -89,9 +88,19 @@ public class AuthUpgrader {
         LOG.info("start to replay upgrade journal.");
         upgradeUser();
         upgradeRole(roleNameToId);
-        authenticationManager.setLoaded();
-        privilegeManager.setLoaded();
+        authenticationManager.setLoaded(true);
+        privilegeManager.setLoaded(true);
         LOG.info("replayed upgrade journal successfully.");
+    }
+
+    private Table getTableObject(String db, String table) {
+        Database dbObj = globalStateMgr.getDb(db);
+        Table tableObj = null;
+        if (dbObj != null) {
+            tableObj = dbObj.getTable(table);
+        }
+
+        return tableObj;
     }
 
     protected void upgradeUser() throws AuthUpgradeUnrecoverableException {
@@ -108,7 +117,10 @@ public class AuthUpgrader {
             try {
                 UserIdentity userIdentity = entry.getUserIdent();
                 if (userIdentity.equals(UserIdentity.ROOT)) {
-                    LOG.info("ignore root entry : {}", entry);
+                    // we should keep the password for root after upgrade
+                    byte[] p = entry.getPassword().getPassword() == null ?
+                            MysqlPassword.EMPTY_PASSWORD : entry.getPassword().getPassword();
+                    authenticationManager.getUserToAuthenticationInfo().get(UserIdentity.ROOT).setPassword(p);
                     continue;
                 }
                 // 1. ignore fake entries created by domain resolver
@@ -137,7 +149,8 @@ public class AuthUpgrader {
             try {
                 authenticationManager.upgradeUserProperty(userName, userProperty.getMaxConn());
                 for (String hostname : whiteList.getAllDomains()) {
-                    byte[] p = whiteList.getPassword(hostname);
+                    byte[] p = whiteList.getPassword(hostname) == null ?
+                            MysqlPassword.EMPTY_PASSWORD : whiteList.getPassword(hostname);
                     Password password = new Password(p, null, null);
                     UserIdentity user = UserIdentity.createAnalyzedUserIdentWithDomain(userName, hostname);
                     authenticationManager.upgradeUserUnlocked(user, password);
@@ -167,6 +180,8 @@ public class AuthUpgrader {
                     LOG.info("ignore entry created by domain resolver : {}", entry);
                     continue;
                 }
+
+                LOG.info("upgrade auth for user '{}'", userIdentity);
 
                 UserPrivilegeCollection collection = new UserPrivilegeCollection();
                 // mark all the old grant pattern, will be used in lower level
@@ -372,7 +387,11 @@ public class AuthUpgrader {
                     case DROP_PRIV:
                     case ALTER_PRIV:
                     case SELECT_PRIV: {
-                        Table.TableType tableType = globalStateMgr.getDb(dbName).getTable(tableName).getType();
+                        Table tableObj = getTableObject(dbName, tableName);
+                        if (tableObj == null) {
+                            break;
+                        }
+                        Table.TableType tableType = tableObj.getType();
                         if (tableType.equals(Table.TableType.VIEW)) {
                             upgradeViewPrivileges(dbName, tableName, privilege, collection, grantPatterns);
                         } else if (tableType.equals(Table.TableType.MATERIALIZED_VIEW)) {
@@ -481,6 +500,9 @@ public class AuthUpgrader {
                     // built roles has been automatically created
                     continue;
                 }
+
+                LOG.info("upgrade auth for role '{}'", roleName);
+
                 // create new role
                 RolePrivilegeCollection collection = new RolePrivilegeCollection(
                         roleName, RolePrivilegeCollection.RoleFlags.MUTABLE,
@@ -545,7 +567,11 @@ public class AuthUpgrader {
                 switch (privilege) {
                     case SELECT_PRIV:
                         if (!table.equals(STAR)) {
-                            Table.TableType tableType = globalStateMgr.getDb(db).getTable(table).getType();
+                            Table tableObj = getTableObject(db, table);
+                            if (tableObj == null) {
+                                break;
+                            }
+                            Table.TableType tableType = tableObj.getType();
                             if (tableType.equals(Table.TableType.VIEW)) {
                                 upgradeViewPrivileges(db, table, privilege, collection, grantPatterns);
                             } else if (tableType.equals(Table.TableType.MATERIALIZED_VIEW)) {
@@ -565,7 +591,7 @@ public class AuthUpgrader {
                         break;
 
                     case USAGE_PRIV:
-                        if (! db.equals(STAR) || ! table.equals(STAR)) {
+                        if (!db.equals(STAR) || !table.equals(STAR)) {
                             throw new AuthUpgradeUnrecoverableException(privilege + " on " +
                                     pattern + " is not supported!");
                         }
@@ -581,7 +607,11 @@ public class AuthUpgrader {
                     case DROP_PRIV:
                     case ALTER_PRIV:
                         if (!table.equals(STAR)) {
-                            Table.TableType tableType = globalStateMgr.getDb(db).getTable(table).getType();
+                            Table tableObj = getTableObject(db, table);
+                            if (tableObj == null) {
+                                break;
+                            }
+                            Table.TableType tableType = tableObj.getType();
                             if (tableType.equals(Table.TableType.VIEW)) {
                                 upgradeViewPrivileges(db, table, privilege, collection, grantPatterns);
                             } else if (tableType.equals(Table.TableType.MATERIALIZED_VIEW)) {
@@ -599,7 +629,7 @@ public class AuthUpgrader {
 
                     case NODE_PRIV:
                     case ADMIN_PRIV:
-                        if (! db.equals(STAR) || ! table.equals(STAR)) {
+                        if (!db.equals(STAR) || !table.equals(STAR)) {
                             throw new AuthUpgradeUnrecoverableException(privilege + " on " +
                                     pattern + " is not supported!");
                         }
@@ -618,7 +648,7 @@ public class AuthUpgrader {
     }
 
     protected void assertGlobalResource(Privilege privilege, String name) throws AuthUpgradeUnrecoverableException {
-        if (! name.equals(STAR)) {
+        if (!name.equals(STAR)) {
             throw new AuthUpgradeUnrecoverableException(privilege + " on " + name + " is not supported!");
         }
     }
@@ -720,30 +750,23 @@ public class AuthUpgrader {
             String db, Privilege privilege, PrivilegeCollection collection,
             Set<Pair<String, String>> grantPatterns)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
-        // type
-        short dbTypeId = privilegeManager.analyzeType(DB_TYPE_STR);
-        short catalogTypeId = privilegeManager.analyzeType(CATALOG_TYPE_STR);
 
         // action
-        ActionSet actionSet;
+        List<PrivilegeType> privilegeTypes;
         switch (privilege) {
             case CREATE_PRIV:
-                actionSet = privilegeManager.analyzeActionSet(dbTypeId,
-                    Arrays.asList(
-                            PrivilegeType.DbAction.CREATE_TABLE.toString(),
-                            PrivilegeType.DbAction.CREATE_VIEW.toString(),
-                            PrivilegeType.DbAction.CREATE_MATERIALIZED_VIEW.toString()
-                    ));
+                privilegeTypes = Arrays.asList(
+                        PrivilegeType.CREATE_TABLE,
+                        PrivilegeType.CREATE_VIEW,
+                        PrivilegeType.CREATE_MATERIALIZED_VIEW);
                 break;
 
             case DROP_PRIV:
-                actionSet = privilegeManager.analyzeActionSet(dbTypeId,
-                        Arrays.asList(PrivilegeType.DbAction.DROP.toString()));
+                privilegeTypes = Collections.singletonList(PrivilegeType.DROP);
                 break;
 
             case ALTER_PRIV:
-                actionSet = privilegeManager.analyzeActionSet(dbTypeId,
-                        Arrays.asList(PrivilegeType.DbAction.ALTER.toString()));
+                privilegeTypes = Collections.singletonList(PrivilegeType.ALTER);
                 break;
             default:
                 throw new AuthUpgradeUnrecoverableException("db privilege " + privilege + " hasn't implemented");
@@ -755,119 +778,123 @@ public class AuthUpgrader {
             isGrant = matchTableGrant(grantPatterns, db, STAR);
         }
 
+
         // object
         List<PEntryObject> objects;
-        if (db.equals(STAR)) {
-            // for *.*
-            objects = Arrays.asList(privilegeManager.analyzeObject(DB_TYPE_STR,
-                    Arrays.asList(PrivilegeType.DATABASE.getPlural()), null, null));
-            if (privilege == Privilege.CREATE_PRIV) {
-                // for CREATE_PRIV on *.*, we also need to grant create_database on default_catalog
-                collection.grant(catalogTypeId,
-                        privilegeManager.analyzeActionSet(catalogTypeId,
-                                Arrays.asList(PrivilegeType.CatalogAction.CREATE_DATABASE.toString())),
-                        Arrays.asList(
-                                privilegeManager.analyzeObject(CATALOG_TYPE_STR,
-                                        Arrays.asList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))),
-                        isGrant);
+        try {
+            if (db.equals(STAR)) {
+                // for *.*
+                objects = Collections.singletonList(
+                        privilegeManager.generateObject(ObjectType.DATABASE, Lists.newArrayList("*")));
+                if (privilege == Privilege.CREATE_PRIV) {
+                    // for CREATE_PRIV on *.*, we also need to grant create_database on default_catalog
+                    collection.grant(ObjectType.CATALOG,
+                            Collections.singletonList(PrivilegeType.CREATE_DATABASE),
+                            Collections.singletonList(privilegeManager.generateObject(ObjectType.CATALOG,
+                                    Collections.singletonList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))),
+                            isGrant);
+                }
+            } else {
+                // for db.*
+                objects = Collections.singletonList(privilegeManager.generateObject(
+                        ObjectType.DATABASE, Collections.singletonList(db)));
             }
-        } else {
-            // for db.*
-            objects = Arrays.asList(privilegeManager.analyzeObject(
-                    DB_TYPE_STR, Arrays.asList(db)));
+        } catch (PrivObjNotFoundException e) {
+            // In old {@link Auth} module, privilege entry is not removed after corresponding object(db, table etc.)
+            // is dropped, so in the upgrade process we should always ignore the exception because of non-existed
+            // object, for those privilege entries, we don't need to transform them to privilege entry in new RBAC
+            // based privilege framework.
+            LOG.info("Privilege '{}' on db {} is ignored when upgrading from" +
+                    " old auth because of non-existed object, message: {}", privilege, db, e.getMessage());
+            return;
         }
 
         // grant db
-        collection.grant(dbTypeId, actionSet, objects, isGrant);
+        collection.grant(ObjectType.DATABASE, privilegeTypes, objects, isGrant);
     }
 
     protected void upgradeViewPrivileges(
-            String db, String table, Privilege privilege, PrivilegeCollection collection,
+            String db, String view, Privilege privilege, PrivilegeCollection collection,
             Set<Pair<String, String>> grantPatterns)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
-        // type
-        String viewTypeStr = PrivilegeType.VIEW.toString();
-        short viewTypeId = privilegeManager.analyzeType(viewTypeStr);
 
         // action
-        PrivilegeType.ViewAction action;
+        PrivilegeType action;
         switch (privilege) {
             case SELECT_PRIV:
-                action = PrivilegeType.ViewAction.SELECT;
+                action = PrivilegeType.SELECT;
                 break;
 
             case ALTER_PRIV:
-                action = PrivilegeType.ViewAction.ALTER;
+                action = PrivilegeType.ALTER;
                 break;
 
             case DROP_PRIV:
-                action = PrivilegeType.ViewAction.DROP;
+                action = PrivilegeType.DROP;
                 break;
 
             default:
                 throw new AuthUpgradeUnrecoverableException("view privilege " + privilege + " hasn't implemented");
         }
-        ActionSet actionSet = privilegeManager.analyzeActionSet(
-                        viewTypeId, Arrays.asList(action.toString()));
+        List<PrivilegeType> actionSet = Collections.singletonList(action);
 
         // object
         List<PEntryObject> objects;
-        if (db.equals(STAR)) {
-            objects = Arrays.asList(privilegeManager.analyzeObject(
-                    viewTypeStr,
-                    Arrays.asList(PrivilegeType.VIEW.getPlural(), PrivilegeType.DATABASE.getPlural()),
-                    null, null));
-        } else if (table.equals(STAR)) {
-            // ALL TABLES in db
-            objects = Arrays.asList(privilegeManager.analyzeObject(
-                    viewTypeStr, Arrays.asList(viewTypeStr), DB_TYPE_STR, db));
-        } else {
-            // db.view
-            objects = Arrays.asList(privilegeManager.analyzeObject(
-                    viewTypeStr, Arrays.asList(db, table)));
+        try {
+            if (db.equals(STAR)) {
+                objects = Collections.singletonList(privilegeManager.generateObject(
+                        ObjectType.VIEW, Lists.newArrayList("*", "*")));
+            } else if (view.equals(STAR)) {
+                // ALL TABLES in db
+                objects = Collections.singletonList(
+                        privilegeManager.generateObject(ObjectType.VIEW, Lists.newArrayList(db, "*")));
+            } else {
+                // db.view
+                objects = Collections.singletonList(privilegeManager.generateObject(
+                        ObjectType.VIEW, Arrays.asList(db, view)));
+            }
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Privilege '{}' on view {}.{} is ignored when upgrading from" +
+                    " old auth because of non-existed object, message: {}", privilege, db, view, e.getMessage());
+            return;
         }
+
 
         // isGrant
         boolean isGrant = false;
         if (grantPatterns != null) {
-            isGrant = matchTableGrant(grantPatterns, db, table);
+            isGrant = matchTableGrant(grantPatterns, db, view);
         }
 
         // grant table
-        collection.grant(viewTypeId, actionSet, objects, isGrant);
+        collection.grant(ObjectType.VIEW, actionSet, objects, isGrant);
     }
 
     protected void upgradeTablePrivileges(
             String db, String table, Privilege privilege, PrivilegeCollection collection,
             Set<Pair<String, String>> grantPatterns)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
-        // type
-        short tableTypeId = privilegeManager.analyzeType(TABLE_TYPE_STR);
 
         // action
-        ActionSet actionSet;
+        List<PrivilegeType> privilegeTypes;
         switch (privilege) {
             case SELECT_PRIV:
-                actionSet = privilegeManager.analyzeActionSet(
-                        tableTypeId, Arrays.asList(PrivilegeType.TableAction.SELECT.toString()));
+                privilegeTypes = Collections.singletonList(PrivilegeType.SELECT);
                 break;
 
             case LOAD_PRIV:
-                List<String> actionStrs = Arrays.asList(
-                        PrivilegeType.TableAction.INSERT.toString(),
-                        PrivilegeType.TableAction.DELETE.toString(),
-                        PrivilegeType.TableAction.EXPORT.toString());
-                actionSet = privilegeManager.analyzeActionSet(tableTypeId, actionStrs);
+                privilegeTypes = Arrays.asList(
+                        PrivilegeType.INSERT,
+                        PrivilegeType.DELETE,
+                        PrivilegeType.EXPORT);
                 break;
 
             case DROP_PRIV:
-                actionSet = privilegeManager.analyzeActionSet(
-                        tableTypeId, Arrays.asList(PrivilegeType.TableAction.DROP.toString()));
+                privilegeTypes = Collections.singletonList(PrivilegeType.DROP);
                 break;
 
             case ALTER_PRIV:
-                actionSet = privilegeManager.analyzeActionSet(
-                        tableTypeId, Arrays.asList(PrivilegeType.TableAction.ALTER.toString()));
+                privilegeTypes = Collections.singletonList(PrivilegeType.ALTER);
                 break;
 
             default:
@@ -876,19 +903,23 @@ public class AuthUpgrader {
 
         // object
         List<PEntryObject> objects;
-        if (db.equals(STAR)) {
-            objects = Arrays.asList(privilegeManager.analyzeObject(
-                    TABLE_TYPE_STR,
-                    Arrays.asList(PrivilegeType.TABLE.getPlural(), PrivilegeType.DATABASE.getPlural()),
-                    null, null));
-        } else if (table.equals(STAR)) {
-            // ALL TABLES in db
-            objects = Arrays.asList(privilegeManager.analyzeObject(
-                    TABLE_TYPE_STR, Arrays.asList(TABLE_TYPE_STR), DB_TYPE_STR, db));
-        } else {
-            // db.table
-            objects = Arrays.asList(privilegeManager.analyzeObject(
-                    TABLE_TYPE_STR, Arrays.asList(db, table)));
+        try {
+            if (db.equals(STAR)) {
+                objects = Collections.singletonList(privilegeManager.generateObject(ObjectType.TABLE,
+                        Lists.newArrayList("*", "*")));
+            } else if (table.equals(STAR)) {
+                // ALL TABLES in db
+                objects = Collections.singletonList(privilegeManager.generateObject(ObjectType.TABLE,
+                        Lists.newArrayList(db, "*")));
+            } else {
+                // db.table
+                objects = Collections.singletonList(privilegeManager.generateObject(ObjectType.TABLE,
+                        Arrays.asList(db, table)));
+            }
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Privilege '{}' on table {}.{} is ignored when upgrading from" +
+                    " old auth because of non-existed object, message: {}", privilege, db, table, e.getMessage());
+            return;
         }
 
         // isGrant
@@ -898,65 +929,63 @@ public class AuthUpgrader {
         }
 
         // grant table
-        collection.grant(tableTypeId, actionSet, objects, isGrant);
+        collection.grant(ObjectType.TABLE, privilegeTypes, objects, isGrant);
     }
 
     protected void upgradeMaterializedViewPrivileges(
-            String db, String table, Privilege privilege, PrivilegeCollection collection,
+            String db, String mv, Privilege privilege, PrivilegeCollection collection,
             Set<Pair<String, String>> grantPatterns) throws PrivilegeException, AuthUpgradeUnrecoverableException {
-        // type
-        String mvTypeStr = PrivilegeType.MATERIALIZED_VIEW.toString();
-        short mvTypeId = privilegeManager.analyzeType(mvTypeStr);
 
         // actionSet
-        ActionSet actionSet;
+        List<PrivilegeType> privilegeTypes;
         switch (privilege) {
             case ALTER_PRIV:
-                actionSet = privilegeManager.analyzeActionSet(
-                        mvTypeId, Arrays.asList(
-                                PrivilegeType.MaterializedViewAction.ALTER.name(),
-                                PrivilegeType.MaterializedViewAction.REFRESH.name()
-                        ));
+                privilegeTypes = Arrays.asList(
+                        PrivilegeType.ALTER,
+                        PrivilegeType.REFRESH);
                 break;
 
             case DROP_PRIV:
-                actionSet = privilegeManager.analyzeActionSet(
-                        mvTypeId, Collections.singletonList(PrivilegeType.MaterializedViewAction.DROP.toString()));
+                privilegeTypes = Collections.singletonList(PrivilegeType.DROP);
                 break;
             case SELECT_PRIV:
-                actionSet = privilegeManager.analyzeActionSet(
-                        mvTypeId, Collections.singletonList(PrivilegeType.MaterializedViewAction.SELECT.toString()));
+                privilegeTypes = Collections.singletonList(PrivilegeType.SELECT);
                 break;
             default:
                 throw new AuthUpgradeUnrecoverableException("materialized view privilege "
-                                                            + privilege + " hasn't implemented");
+                        + privilege + " hasn't implemented");
         }
 
         // object
         List<PEntryObject> objects;
-        if (db.equals(STAR)) {
-            objects = Collections.singletonList(privilegeManager.analyzeObject(
-                mvTypeStr,
-                Arrays.asList(PrivilegeType.MATERIALIZED_VIEW.getPlural(), PrivilegeType.DATABASE.getPlural()),
-                null, null));
-        } else if (table.equals(STAR)) {
-            // ALL TABLES in db
-            objects = Collections.singletonList(privilegeManager.analyzeObject(
-                mvTypeStr, Collections.singletonList(mvTypeStr), DB_TYPE_STR, db));
-        } else {
-            // db.mv
-            objects = Collections.singletonList(privilegeManager.analyzeObject(
-                mvTypeStr, Arrays.asList(db, table)));
+        try {
+            if (db.equals(STAR)) {
+                objects = Collections.singletonList(
+                        privilegeManager.generateObject(ObjectType.MATERIALIZED_VIEW, Lists.newArrayList("*", "*")));
+            } else if (mv.equals(STAR)) {
+                // ALL TABLES in db
+                objects = Collections.singletonList(privilegeManager.generateObject(
+                        ObjectType.MATERIALIZED_VIEW, Lists.newArrayList(db, "*")));
+            } else {
+                // db.mv
+                objects = Collections.singletonList(
+                        privilegeManager.generateObject(ObjectType.MATERIALIZED_VIEW, Arrays.asList(db, mv)));
+            }
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Privilege '{}' on materialized view {}.{} is ignored when upgrading from" +
+                    " old auth because of non-existed object, message: {}", privilege, db, mv, e.getMessage());
+            return;
         }
+
 
         // isGrant
         boolean isGrant = false;
         if (grantPatterns != null) {
-            isGrant = matchTableGrant(grantPatterns, db, table);
+            isGrant = matchTableGrant(grantPatterns, db, mv);
         }
 
         // grant table
-        collection.grant(mvTypeId, actionSet, objects, isGrant);
+        collection.grant(ObjectType.MATERIALIZED_VIEW, privilegeTypes, objects, isGrant);
     }
 
     // `grantPattern` only contains dbx.tblx or dbx.*,
@@ -967,13 +996,15 @@ public class AuthUpgrader {
 
     protected void upgradeImpersonatePrivileges(UserIdentity user, PrivilegeCollection collection)
             throws PrivilegeException {
-        List<PEntryObject> objects = Arrays.asList(privilegeManager.analyzeUserObject(
-                USER_TYPE_STR, user));
-        short userTypeId = privilegeManager.analyzeType(USER_TYPE_STR);
-        ActionSet impersonateActionSet = privilegeManager.analyzeActionSet(
-                userTypeId,
-                Arrays.asList(PrivilegeType.UserAction.IMPERSONATE.toString()));
-        collection.grant(userTypeId, impersonateActionSet, objects, false);
+        List<PEntryObject> objects;
+        try {
+            objects = Collections.singletonList(privilegeManager.generateUserObject(ObjectType.USER, user));
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Privilege 'IMPERSONATE' on user {} is ignored when upgrading from" +
+                    " old auth because of non-existed object, message: {}", user, e.getMessage());
+            return;
+        }
+        collection.grant(ObjectType.USER, Collections.singletonList(PrivilegeType.IMPERSONATE), objects, false);
     }
 
     protected void upgradeResourcePrivileges(
@@ -982,17 +1013,20 @@ public class AuthUpgrader {
         switch (privilege) {
             case USAGE_PRIV: {
                 List<PEntryObject> objects;
-                if (name.equals(STAR)) {
-                    objects = Arrays.asList(privilegeManager.analyzeObject(
-                            RESOURCE_TYPE_STR, Arrays.asList(name), null, null));
-                } else {
-                    objects = Arrays.asList(privilegeManager.analyzeObject(
-                            RESOURCE_TYPE_STR, Arrays.asList(name)));
+                try {
+                    if (name.equals(STAR)) {
+                        objects = Collections.singletonList(privilegeManager.generateObject(
+                                ObjectType.RESOURCE, Lists.newArrayList("*")));
+                    } else {
+                        objects = Collections.singletonList(privilegeManager.generateObject(
+                                ObjectType.RESOURCE, Collections.singletonList(name)));
+                    }
+                } catch (PrivObjNotFoundException e) {
+                    LOG.info("Privilege '{}' on resource {} is ignored when upgrading from" +
+                            " old auth because of non-existed object, message: {}", privilege, name, e.getMessage());
+                    return;
                 }
-                short resourceTypeId = privilegeManager.analyzeType(RESOURCE_TYPE_STR);
-                ActionSet actionSet = privilegeManager.analyzeActionSet(
-                        resourceTypeId, Arrays.asList(PrivilegeType.ResourceAction.USAGE.toString()));
-                collection.grant(resourceTypeId, actionSet, objects, isGrant);
+                collection.grant(ObjectType.RESOURCE, Collections.singletonList(PrivilegeType.USAGE), objects, isGrant);
                 break;
             }
 
@@ -1006,13 +1040,13 @@ public class AuthUpgrader {
         switch (privilege) {
             case ADMIN_PRIV:   // ADMIN_PRIV -> db_admin + user_admin
                 grantRoleToCollection(collection, roleId,
-                        PrivilegeManager.DB_ADMIN_ROLE_ID, PrivilegeManager.USER_ADMIN_ROLE_ID);
+                        PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID, PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID);
                 break;
             case NODE_PRIV:    // NODE_PRIV -> cluster_admin
-                grantRoleToCollection(collection, roleId, PrivilegeManager.CLUSTER_ADMIN_ROLE_ID);
+                grantRoleToCollection(collection, roleId, PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_ID);
                 break;
             case GRANT_PRIV:   // GRANT_PRIV -> user_admin
-                grantRoleToCollection(collection, roleId, PrivilegeManager.USER_ADMIN_ROLE_ID);
+                grantRoleToCollection(collection, roleId, PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID);
                 break;
 
             default:

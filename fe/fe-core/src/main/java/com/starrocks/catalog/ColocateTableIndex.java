@@ -42,7 +42,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -65,7 +64,6 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -316,8 +314,7 @@ public class ColocateTableIndex implements Writable {
         readLock();
         try {
             if (lakeGroups.contains(groupId)) {
-                // TODO: for now just consider lake table always stable
-                return false;
+                return !GlobalStateMgr.getCurrentStarOSAgent().queryMetaGroupStable(groupId.grpId);
             } else {
                 return unstableGroups.contains(groupId);
             }
@@ -635,7 +632,7 @@ public class ColocateTableIndex implements Writable {
                 List<String> cols = groupSchema.getDistributionColTypes().stream().map(
                         e -> e.toSql()).collect(Collectors.toList());
                 info.add(Joiner.on(", ").join(cols));
-                info.add(String.valueOf(!unstableGroups.contains(groupId)));
+                info.add(String.valueOf(!isGroupUnstable(groupId)));
                 infos.add(info);
             }
         } finally {
@@ -991,8 +988,28 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+    public void updateLakeTableColocationInfo(OlapTable olapTable) throws DdlException {
+        if (olapTable == null || !olapTable.isLakeTable()) { // skip non-lake table
+            return;
+        }
+
+        writeLock();
+        try {
+            if (!table2Group.containsKey(olapTable.getId())) { // skip non-colocate table
+                return;
+            }
+
+            GroupId groupId = table2Group.get(olapTable.getId());
+            LakeTable ltbl = (LakeTable) olapTable;
+            List<Long> shardGroupIds = ltbl.getShardGroupIds();
+            GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, true /* isJoin */);
+        } finally {
+            writeUnlock();
+        }
+    }
+
     private void constructLakeGroups(GlobalStateMgr globalStateMgr) {
-        if (!Config.use_staros) {
+        if (!GlobalStateMgr.getCurrentState().isSharedDataMode()) {
             return;
         }
 

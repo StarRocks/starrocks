@@ -52,6 +52,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -115,6 +116,8 @@ public class BackupHandlerTest {
         rootDir = new File(Config.tmp_dir);
         rootDir.mkdirs();
 
+        MetricRepo.init();
+
         new Expectations() {
             {
                 globalStateMgr.getBrokerMgr();
@@ -135,7 +138,7 @@ public class BackupHandlerTest {
 
                 GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
-                result = FeConstants.meta_version;
+                result = FeConstants.META_VERSION;
 
                 GlobalStateMgr.getCurrentInvertedIndex();
                 minTimes = 0;

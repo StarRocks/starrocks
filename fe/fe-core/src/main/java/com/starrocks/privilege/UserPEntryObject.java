@@ -16,38 +16,37 @@
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 
-import java.util.List;
 import java.util.Objects;
 
 public class UserPEntryObject implements PEntryObject {
     @SerializedName(value = "u")
     private UserIdentity userIdentity;  // can be null, means all users
+
     protected UserPEntryObject(UserIdentity userIdentity) {
         this.userIdentity = userIdentity;
     }
 
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
+    }
+
     public static UserPEntryObject generate(GlobalStateMgr mgr, UserIdentity user) throws PrivilegeException {
+        if (user == null) {
+            return new UserPEntryObject(null);
+        }
+
         if (!mgr.getAuthenticationManager().doesUserExist(user)) {
-            throw new PrivilegeException("cannot find user " + user);
+            throw new PrivObjNotFoundException("cannot find user " + user);
         }
         return new UserPEntryObject(user);
     }
 
-    public static UserPEntryObject generate(
-            List<String> allTypes, String restrictType, String restrictName) throws PrivilegeException {
-        // only support ON ALL USERS
-        if (allTypes.size() != 1 || restrictType != null || restrictName != null) {
-            throw new PrivilegeException("invalid ALL statement for user! only support ON ALL USERS");
-        }
-        return new UserPEntryObject(null);
-    }
-
     /**
      * if the current user matches other user, including fuzzy matching.
-     *
+     * <p>
      * this(userx), other(userx) -> true
      * this(userx), other(ALL) -> true
      * this(ALL), other(userx) -> false
@@ -126,5 +125,14 @@ public class UserPEntryObject implements PEntryObject {
     @Override
     public PEntryObject clone() {
         return new UserPEntryObject(userIdentity);
+    }
+
+    @Override
+    public String toString() {
+        if (userIdentity == null) {
+            return "ALL USERS";
+        } else {
+            return userIdentity.toString();
+        }
     }
 }

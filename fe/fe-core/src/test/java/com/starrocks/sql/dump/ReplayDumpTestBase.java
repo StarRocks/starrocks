@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.dump;
 
+import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -31,6 +32,8 @@ public class ReplayDumpTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        // Should disable Dynamic Partition in replay dump test
+        Config.dynamic_partition_enable = false;
     }
 
     public static QueryDumpRegressionTesting getCaseFromJsonConfig(String fileName) {

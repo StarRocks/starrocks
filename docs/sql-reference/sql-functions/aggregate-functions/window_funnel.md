@@ -2,7 +2,7 @@
 
 ## Description
 
-Searches for an event chain in a sliding window and calculates the maximum number of consecutive events in the event chain. This function is commonly used for conversion rate analysis.
+Searches for an event chain in a sliding window and calculates the maximum number of consecutive events in the event chain. This function is commonly used for conversion rate analysis. It is supported from v2.3.
 
 This function works according to the following rules:
 

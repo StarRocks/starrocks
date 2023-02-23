@@ -40,9 +40,9 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.RunMode;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
@@ -53,7 +53,6 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -79,7 +78,6 @@ public class DropPartitionTest {
         createDb(createDbStmtStr);
         createTable(createTableStr);
 
-        Config.use_staros = true;
         StarOSAgent agent = new StarOSAgent();
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
@@ -105,7 +103,7 @@ public class DropPartitionTest {
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, anyInt, pathInfo, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, pathInfo, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(10001L, 10002L, 10003L),
                         Lists.newArrayList(10004L, 10005L, 10006L),
                         Lists.newArrayList(10007L, 10008L, 10009L));
@@ -114,6 +112,7 @@ public class DropPartitionTest {
             }
         };
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
 
         String createLakeTableStr = "create table test.lake_table(k1 date, k2 int, k3 smallint, v1 varchar(2048), "
                 + "v2 datetime default '2014-02-04 15:36:00')"
@@ -124,11 +123,8 @@ public class DropPartitionTest {
                 + " DISTRIBUTED BY HASH(k2) BUCKETS 3"
                 + " PROPERTIES ( \"enable_storage_cache\" = \"true\", \"storage_cache_ttl\" = \"3600\");";
         createTable(createLakeTableStr);
-    }
 
-    @AfterClass
-    public static void afterClass() {
-        Config.use_staros = false;
+        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 
     private static void createDb(String sql) throws Exception {

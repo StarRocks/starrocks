@@ -160,3 +160,53 @@ There may be multiple use cases within a cluster, each of which may use one or m
 ### Scenario 3: Blacklisting
 
 StarRocks does not support blacklisting (only whitelisting is supported), but we can emulate blacklisting in some way. Suppose that the user named user@'192.%' is created first, indicating that the user f is allowed to log in from 192.\*. At this point, if you want to prevent the user from logging in from 192.168.10.1, you can create another user abc@'192.168.10.1' and set a new password. Because 192.168.10.1 has a higher priority than 192.%, the user will no longer be able to log in from 192.168.10.1 with the old password.
+
+## Troubleshooting
+
+## Reset password for root user
+
+If you have lost the password for the user `root`, you can reset it by following these procedures:
+
+1. Add the following configuration item to the configuration files **fe/conf/fe.conf** of **all FE nodes** to disable authentication:
+
+    ```plain
+    enable_auth_check = false
+    ```
+
+2. Restart **all FE nodes**.
+
+    ```shell
+    ./fe/bin/stop_fe.sh
+    ./fe/bin/start_fe.sh
+    ```
+
+3. Launch a MySQL client, and connect to StarRocks using the user `root` without the password.
+
+    ```shell
+    mysql -h <fe_ip> -P<fe_query_port> -uroot
+    ```
+
+4. Reset the password for the user `root`.
+
+    ```sql
+    SET PASSWORD for root = PASSWORD('xxxxxx');
+    ```
+
+5. Re-enable authentication by configuring the configuration item `enable_auth_check` to `true` in the configuration files **fe/conf/fe.conf** of **all FE nodes**.
+
+    ```plain
+    enable_auth_check = true
+    ```
+
+6. Restart **all FE nodes**.
+
+    ```shell
+    ./fe/bin/stop_fe.sh
+    ./fe/bin/start_fe.sh
+    ```
+
+7. Launch a MySQL client, and connect to StarRocks using the user `root` and the new password to verify whether the password is reset successfully.
+
+    ```shell
+    mysql -h <fe_ip> -P<fe_query_port> -uroot -p<xxxxxx>
+    ```

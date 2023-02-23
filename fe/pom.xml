@@ -49,7 +49,7 @@ under the License.
         <parquet.version>1.10.1</parquet.version>
         <hadoop.version>3.3.3</hadoop.version>
         <skip.plugin>false</skip.plugin>
-        <hudi.version>0.12.1</hudi.version>
+        <hudi.version>0.12.2</hudi.version>
         <hive-apache.version>3.1.2-13</hive-apache.version>
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
@@ -270,7 +270,7 @@ under the License.
             <dependency>
                 <groupId>org.codehaus.jackson</groupId>
                 <artifactId>jackson-mapper-asl</artifactId>
-                <version>1.9.13-cloudera.2</version>
+                <version>1.9.13</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/net.sourceforge.czt.dev/java-cup -->
@@ -528,6 +528,10 @@ under the License.
                         <artifactId>zookeeper</artifactId>
                         <groupId>org.apache.zookeeper</groupId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-reload4j</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -595,6 +599,12 @@ under the License.
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-client</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-reload4j</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->

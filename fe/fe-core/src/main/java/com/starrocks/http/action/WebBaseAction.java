@@ -36,7 +36,6 @@ package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.CompoundPredicate.Operator;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -56,6 +55,7 @@ import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -182,7 +182,7 @@ public class WebBaseAction extends BaseAction {
             if (needAdmin()) {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                     checkUserOwnsAdminRole(currentUser);
-                    checkActionOnSystem(currentUser, PrivilegeType.SystemAction.NODE);
+                    checkActionOnSystem(currentUser, PrivilegeType.NODE);
                 } else {
                     checkGlobalAuth(currentUser, PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
                             Privilege.NODE_PRIV), Operator.OR));
@@ -199,6 +199,8 @@ public class WebBaseAction extends BaseAction {
             ctx.setRemoteIP(authInfo.remoteIp);
             ctx.setCurrentUserIdentity(currentUser);
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            ctx.setCurrentRoleIds(currentUser);
+
             ctx.setThreadLocalInfo();
 
             return true;
@@ -222,7 +224,7 @@ public class WebBaseAction extends BaseAction {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                 try {
                     checkUserOwnsAdminRole(sessionValue.currentUser);
-                    checkActionOnSystem(sessionValue.currentUser, PrivilegeType.SystemAction.NODE);
+                    checkActionOnSystem(sessionValue.currentUser, PrivilegeType.NODE);
                     authorized = true;
                 } catch (UnauthorizedException e) {
                     // ignore
@@ -244,6 +246,8 @@ public class WebBaseAction extends BaseAction {
                 ctx.setRemoteIP(request.getHostString());
                 ctx.setCurrentUserIdentity(sessionValue.currentUser);
                 ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                ctx.setCurrentRoleIds(sessionValue.currentUser);
+
                 ctx.setThreadLocalInfo();
                 return true;
             }

@@ -550,4 +550,17 @@ TEST(StructColumnTest, test_unnamed) {
     ASSERT_EQ("{1,'smith'}, {2,'cruise'}", column->debug_string());
 }
 
+TEST(StructColumnTest, test_reference_memory_usage) {
+    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    Columns fields{id, name};
+    auto column = StructColumn::create(fields);
+
+    column->append_datum(DatumStruct{uint64_t(1), Slice("2")});
+    column->append_datum(DatumStruct{uint64_t(1), Slice("4")});
+    column->append_datum(DatumStruct{uint64_t(1), Slice("6")});
+
+    ASSERT_EQ(0, column->Column::reference_memory_usage());
+}
+
 } // namespace starrocks

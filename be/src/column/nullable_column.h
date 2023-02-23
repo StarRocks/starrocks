@@ -29,10 +29,19 @@ using NullValueType = NullColumn::ValueType;
 static constexpr NullValueType DATUM_NULL = NullValueType(1);
 static constexpr NullValueType DATUM_NOT_NULL = NullValueType(0);
 
-class NullableColumn final : public ColumnFactory<Column, NullableColumn> {
+class NullableColumn : public ColumnFactory<Column, NullableColumn> {
     friend class ColumnFactory<Column, NullableColumn>;
 
 public:
+    inline static ColumnPtr wrap_if_necessary(ColumnPtr column) {
+        if (column->is_nullable()) {
+            return column;
+        }
+        auto null = NullColumn::create(column->size(), 0);
+        return NullableColumn::create(std::move(column), std::move(null));
+    }
+    NullableColumn() = default;
+
     NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column);
     NullableColumn(ColumnPtr data_column, NullColumnPtr null_column);
 
@@ -251,9 +260,9 @@ public:
         return _data_column->container_memory_usage() + _null_column->container_memory_usage();
     }
 
-    size_t element_memory_usage(size_t from, size_t size) const override {
+    size_t reference_memory_usage(size_t from, size_t size) const override {
         DCHECK_LE(from + size, this->size()) << "Range error";
-        return _data_column->element_memory_usage(from, size) + _null_column->element_memory_usage(from, size);
+        return _data_column->reference_memory_usage(from, size) + _null_column->reference_memory_usage(from, size);
     }
 
     void swap_column(Column& rhs) override {
@@ -272,7 +281,7 @@ public:
     }
 
     std::string debug_item(size_t idx) const override {
-        DCHECK(_null_column->size() == _data_column->size());
+        DCHECK_EQ(_null_column->size(), _data_column->size());
         std::stringstream ss;
         if (_null_column->get_data()[idx]) {
             ss << "NULL";
@@ -283,7 +292,7 @@ public:
     }
 
     std::string debug_string() const override {
-        DCHECK(_null_column->size() == _data_column->size());
+        DCHECK_EQ(_null_column->size(), _data_column->size());
         std::stringstream ss;
         ss << "[";
         size_t size = _data_column->size();
@@ -303,10 +312,10 @@ public:
 
     void check_or_die() const override;
 
-private:
+protected:
     ColumnPtr _data_column;
     NullColumnPtr _null_column;
-    bool _has_null;
+    mutable bool _has_null;
 };
 
 } // namespace starrocks

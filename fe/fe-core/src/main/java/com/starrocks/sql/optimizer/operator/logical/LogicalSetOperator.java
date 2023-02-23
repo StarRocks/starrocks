@@ -70,14 +70,13 @@ public abstract class LogicalSetOperator extends LogicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         LogicalSetOperator that = (LogicalSetOperator) o;
-        return Objects.equals(outputColumnRefOp, that.outputColumnRefOp) && opType == that.opType;
+        return Objects.equals(outputColumnRefOp, that.outputColumnRefOp);
     }
 
     @Override

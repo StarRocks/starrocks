@@ -324,6 +324,14 @@ set_target_properties(opentelemetry_trace PROPERTIES IMPORTED_LOCATION ${THIRDPA
 add_library(opentelemetry_resources STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_resources.a)
 
+add_library(jansson STATIC IMPORTED GLOBAL)
+set_target_properties(jansson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libjansson.a)
+
+add_library(avro STATIC IMPORTED GLOBAL)
+set_target_properties(avro PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libavro.a)
+
+add_library(serdes STATIC IMPORTED GLOBAL)
+set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libserdes.a)
 
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
@@ -471,6 +479,9 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     endif()
     if (USE_AVX2)
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx2")
+    endif()
+    if (USE_AVX512)
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f")
     endif()
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")
@@ -686,6 +697,9 @@ set(STARROCKS_DEPENDENCIES
     opentelemetry_resources
     opentelemetry_common
     opentelemetry_exporter_jaeger_trace
+    jansson
+    avro
+    serdes
     ${WL_END_GROUP}
 )
 

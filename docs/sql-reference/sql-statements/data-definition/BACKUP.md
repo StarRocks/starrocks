@@ -10,6 +10,7 @@ BACKUP is an asynchronous operation. You can check the status of a BACKUP job st
 >
 > - Only users with the ADMIN privilege can back up data.
 > - In each database, only one running BACKUP or RESTORE job is allowed each time. Otherwise, StarRocks returns an error.
+> - StarRocks does not support specifying data compression algorithm for data backup.
 
 ## Syntax
 

@@ -96,7 +96,7 @@ private:
 // Merge sorted chunks in cascade style
 class CascadeChunkMerger {
 public:
-    CascadeChunkMerger(RuntimeState* state, RuntimeProfile* profile);
+    CascadeChunkMerger(RuntimeState* state);
     ~CascadeChunkMerger() = default;
 
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
@@ -107,7 +107,6 @@ public:
 
 private:
     RuntimeState* _state;
-    RuntimeProfile* _profile;
 
     const std::vector<ExprContext*>* _sort_exprs;
     SortDescs _sort_desc;

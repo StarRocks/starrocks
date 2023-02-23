@@ -90,7 +90,7 @@ public class DatabaseTest {
 
                 GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
-                result = FeConstants.meta_version;
+                result = FeConstants.META_VERSION;
 
                 globalStateMgr.getClusterId();
                 minTimes = 0;

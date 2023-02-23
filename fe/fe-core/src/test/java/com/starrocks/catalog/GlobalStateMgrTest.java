@@ -168,7 +168,7 @@ public class GlobalStateMgrTest {
         file.createNewFile();
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        MetaContext.get().setMetaVersion(FeConstants.meta_version);
+        MetaContext.get().setMetaVersion(FeConstants.META_VERSION);
         Field field = globalStateMgr.getClass().getDeclaredField("load");
         field.setAccessible(true);
         field.set(globalStateMgr, new Load());

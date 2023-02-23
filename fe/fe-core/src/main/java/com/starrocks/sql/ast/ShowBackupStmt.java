@@ -20,6 +20,7 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowBackupStmt extends ShowStmt {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
@@ -31,6 +32,11 @@ public class ShowBackupStmt extends ShowStmt {
     private String dbName;
 
     public ShowBackupStmt(String dbName) {
+        this(dbName, NodePosition.ZERO);
+    }
+
+    public ShowBackupStmt(String dbName, NodePosition pos) {
+        super(pos);
         this.dbName = dbName;
     }
 

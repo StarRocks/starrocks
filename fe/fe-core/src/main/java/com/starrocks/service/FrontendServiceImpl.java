@@ -40,12 +40,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -53,7 +52,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -74,6 +72,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
@@ -95,13 +94,15 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.mysql.privilege.TablePrivEntry;
 import com.starrocks.mysql.privilege.UserPrivTable;
+import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.StreamLoadPlanner;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryQueueManager;
+import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -110,8 +111,10 @@ import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -120,6 +123,8 @@ import com.starrocks.thrift.FrontendServiceVersion;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
+import com.starrocks.thrift.TAllocateAutoIncrementIdParam;
+import com.starrocks.thrift.TAllocateAutoIncrementIdResult;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
@@ -158,6 +163,7 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
+import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TLoadTxnBeginRequest;
@@ -171,6 +177,7 @@ import com.starrocks.thrift.TMVReportEpochResponse;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TMasterResult;
+import com.starrocks.thrift.TMaterializedViewStatus;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TNodeInfo;
 import com.starrocks.thrift.TNodesInfo;
@@ -218,7 +225,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -249,7 +256,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
                         CaseSensibility.DATABASE.getCaseSensibility());
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 throw new TException("Pattern is in bad format: " + params.getPattern());
             }
         }
@@ -266,7 +273,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (String fullName : dbNames) {
             if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, fullName)) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
                     continue;
                 }
             } else {
@@ -286,19 +293,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
-    private boolean checkAnyActionOnTableLikeObject(UserIdentity currentUser, String dbName, Table tbl) {
-        Table.TableType type = tbl.getType();
-        switch (type) {
-            case OLAP:
-                return PrivilegeManager.checkAnyActionOnTable(currentUser, dbName, tbl.getName());
-            case MATERIALIZED_VIEW:
-                return PrivilegeManager.checkAnyActionOnMaterializedView(currentUser, dbName, tbl.getName());
-            case VIEW:
-                return PrivilegeManager.checkAnyActionOnView(currentUser, dbName, tbl.getName());
-            default:
-                return false;
-        }
-    }
 
     @Override
     public TGetTablesResult getTableNames(TGetTablesParams params) throws TException {
@@ -311,7 +305,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
                         CaseSensibility.TABLE.getCaseSensibility());
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 throw new TException("Pattern is in bad format: " + params.getPattern());
             }
         }
@@ -329,7 +323,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 LOG.debug("get table: {}, wait to check", tableName);
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                     Table tbl = db.getTable(tableName);
-                    if (!checkAnyActionOnTableLikeObject(currentUser, params.db, tbl)) {
+                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, tbl)) {
                         continue;
                     }
                 } else {
@@ -359,7 +353,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
                         CaseSensibility.TABLE.getCaseSensibility());
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 throw new TException("Pattern is in bad format " + params.getPattern());
             }
         }
@@ -374,10 +368,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
-        if (params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType())) {
-            listMaterializedViewStatus(tablesResult, limit, matcher, currentUser, params.db);
-            return result;
-        }
         if (db != null) {
             db.readLock();
             try {
@@ -385,7 +375,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
                 for (Table table : tables) {
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!checkAnyActionOnTableLikeObject(currentUser, params.db, table)) {
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, table)) {
                             continue;
                         }
                     } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
@@ -409,7 +399,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         for (TableName tableName : allTables.keySet()) {
                             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                                 Table tbl = db.getTable(tableName.getTbl());
-                                if (!checkAnyActionOnTableLikeObject(currentUser, tableName.getDb(), tbl)) {
+                                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
+                                        tableName.getDb(), tbl)) {
                                     break;
                                 }
                             } else {
@@ -435,49 +426,88 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+    @Override
+    public TListMaterializedViewStatusResult listMaterializedViewStatus(TGetTablesParams params) throws TException {
+        LOG.debug("get list table request: {}", params);
+
+        PatternMatcher matcher = null;
+        if (params.isSetPattern()) {
+            matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
+                    CaseSensibility.TABLE.getCaseSensibility());
+        }
+
+        // database privs should be checked in analysis phrase
+        long limit = params.isSetLimit() ? params.getLimit() : -1;
+        UserIdentity currentUser = null;
+        if (params.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+        } else {
+            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+        }
+        Preconditions.checkState(params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType()));
+        return listMaterializedViewStatus(limit, matcher, currentUser, params.db);
+    }
+
     // list MaterializedView table match pattern
-    public void listMaterializedViewStatus(List<TTableStatus> tablesResult, long limit, PatternMatcher matcher,
-                                           UserIdentity currentUser, String dbName) {
+    private TListMaterializedViewStatusResult listMaterializedViewStatus(long limit, PatternMatcher matcher,
+                                                                         UserIdentity currentUser, String dbName) {
+        TListMaterializedViewStatusResult result = new TListMaterializedViewStatusResult();
+        List<TMaterializedViewStatus> tablesResult = Lists.newArrayList();
+        result.setMaterialized_views(tablesResult);
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             LOG.warn("database not exists: {}", dbName);
-            return;
+            return result;
         }
+
+        List<List<String>> rowSets = listMaterializedViews(limit, matcher, currentUser, dbName);
+        for (List<String> rowSet : rowSets) {
+            TMaterializedViewStatus status = new TMaterializedViewStatus();
+            status.setId(rowSet.get(0));
+            status.setName(rowSet.get(1));
+            status.setDatabase_name(rowSet.get(2));
+            status.setRefresh_type(rowSet.get(3));
+            status.setIs_active(rowSet.get(4));
+            status.setLast_refresh_start_time(rowSet.get(5));
+            status.setLast_refresh_finished_time(rowSet.get(6));
+            status.setLast_refresh_duration(rowSet.get(7));
+            status.setLast_refresh_state(rowSet.get(8));
+            status.setInactive_code(rowSet.get(9));
+            status.setInactive_reason(rowSet.get(10));
+            status.setText(rowSet.get(11));
+            status.setRows(rowSet.get(12));
+            tablesResult.add(status);
+        }
+        return result;
+    }
+
+    private List<List<String>> listMaterializedViews(long limit, PatternMatcher matcher,
+                                                     UserIdentity currentUser, String dbName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        List<MaterializedView> materializedViews = Lists.newArrayList();
+        List<Pair<OlapTable, MaterializedIndex>> singleTableMVs = Lists.newArrayList();
         db.readLock();
         try {
-            for (MaterializedView mvTable : db.getMaterializedViews()) {
-                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!checkAnyActionOnTableLikeObject(currentUser, dbName, mvTable)) {
+            for (Table table : db.getTables()) {
+                if (Table.TableType.MATERIALIZED_VIEW == table.getType()) {
+                    MaterializedView mvTable = (MaterializedView) table;
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, dbName, mvTable)) {
+                            continue;
+                        }
+                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
+                            mvTable.getName(), PrivPredicate.SHOW)) {
                         continue;
                     }
-                } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
-                        mvTable.getName(), PrivPredicate.SHOW)) {
-                    continue;
-                }
-                if (matcher != null && !matcher.match(mvTable.getName())) {
-                    continue;
-                }
-                List<String> createTableStmt = Lists.newArrayList();
-                GlobalStateMgr.getDdlStmt(mvTable, createTableStmt, null, null, false, true);
-                String ddlSql = createTableStmt.get(0);
-                TTableStatus status = new TTableStatus();
-                status.setId(String.valueOf(mvTable.getId()));
-                status.setName(mvTable.getName());
-                status.setDdl_sql(ddlSql);
-                status.setRows(String.valueOf(mvTable.getRowCount()));
-                status.setType(mvTable.getMysqlType());
-                status.setComment(mvTable.getComment());
-                tablesResult.add(status);
-                if (limit > 0 && tablesResult.size() >= limit) {
-                    return;
-                }
-            }
-            for (Table table : db.getTables()) {
-                if (table.getType() == Table.TableType.OLAP) {
+                    if (matcher != null && !matcher.match(mvTable.getName())) {
+                        continue;
+                    }
+
+                    materializedViews.add(mvTable);
+                } else if (table.getType() == Table.TableType.OLAP) {
                     OlapTable olapTable = (OlapTable) table;
                     List<MaterializedIndex> visibleMaterializedViews = olapTable.getVisibleIndex();
                     long baseIdx = olapTable.getBaseIndexId();
-
                     for (MaterializedIndex mvIdx : visibleMaterializedViews) {
                         if (baseIdx == mvIdx.getId()) {
                             continue;
@@ -485,50 +515,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvIdx.getId()))) {
                             continue;
                         }
-                        MaterializedIndexMeta mvMeta = olapTable.getVisibleIndexIdToMeta().get(mvIdx.getId());
-                        TTableStatus status = new TTableStatus();
-                        status.setId(String.valueOf(mvIdx.getId()));
-                        status.setName(olapTable.getIndexNameById(mvIdx.getId()));
-                        if (mvMeta.getOriginStmt() == null) {
-                            StringBuilder originStmtBuilder = new StringBuilder(
-                                    "create materialized view " + olapTable.getIndexNameById(mvIdx.getId()) +
-                                            " as select ");
-                            String groupByString = "";
-                            for (Column column : mvMeta.getSchema()) {
-                                if (column.isKey()) {
-                                    groupByString += column.getName() + ",";
-                                }
-                            }
-                            originStmtBuilder.append(groupByString);
-                            for (Column column : mvMeta.getSchema()) {
-                                if (!column.isKey()) {
-                                    originStmtBuilder.append(column.getAggregationType().toString()).append("(")
-                                            .append(column.getName()).append(")").append(",");
-                                }
-                            }
-                            originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-                            originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
-                                    .append(groupByString);
-                            originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-                            status.setDdl_sql(originStmtBuilder.toString());
-                        } else {
-                            status.setDdl_sql(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
-                                    .replaceAll("[ ]+", " "));
-                        }
-                        status.setRows(String.valueOf(mvIdx.getRowCount()));
-                        // for materialized view used old logic
-                        status.setType("");
-                        status.setComment("");
-                        tablesResult.add(status);
-                        if (limit > 0 && tablesResult.size() >= limit) {
-                            return;
-                        }
+                        singleTableMVs.add(Pair.create(olapTable, mvIdx));
                     }
+                }
+
+                // check limit
+                int mvSize = materializedViews.size() + singleTableMVs.size();
+                if (limit > 0 && mvSize >= limit) {
+                    break;
                 }
             }
         } finally {
             db.readUnlock();
         }
+        return ShowExecutor.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
     }
 
     @Override
@@ -548,7 +548,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         for (Task task : taskList) {
             if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, task.getDbName())) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, task.getDbName())) {
                     continue;
                 }
             } else if (!globalStateMgr.getAuth().checkDbPriv(currentUser, task.getDbName(), PrivPredicate.SHOW)) {
@@ -592,7 +592,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         for (TaskRunStatus status : taskRunList) {
             if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, status.getDbName())) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, status.getDbName())) {
                     continue;
                 }
             } else {
@@ -799,7 +799,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         if (db != null) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!checkAnyActionOnTableLikeObject(currentUser, params.db, db.getTable(params.getTable_name()))) {
+                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db,
+                        db.getTable(params.getTable_name()))) {
                     return result;
                 }
             } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
@@ -826,7 +827,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         boolean reachLimit;
         for (String fullName : dbNames) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, fullName)) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
                     continue;
                 }
             } else {
@@ -840,7 +841,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 for (String tableName : db.getTableNamesViewWithLock()) {
                     LOG.debug("get table: {}, wait to check", tableName);
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!checkAnyActionOnTableLikeObject(currentUser, fullName, db.getTable(tableName))) {
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
+                                fullName, db.getTable(tableName))) {
                             continue;
                         }
                     } else {
@@ -1013,7 +1015,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
             }
             // check INSERT action on table
-            if (!PrivilegeManager.checkTableAction(currentUser, db, tbl, PrivilegeType.TableAction.INSERT)) {
+            if (!PrivilegeActions.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT)) {
                 throw new AuthenticationException(
                         "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
             }
@@ -1488,8 +1490,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!PrivilegeManager.checkTableAction(userIdentity, dbName,
-                            tableName, PrivilegeType.TableAction.INSERT)) {
+                    if (!PrivilegeActions.checkTableAction(userIdentity, null, dbName,
+                            tableName, PrivilegeType.INSERT)) {
                         throw new UnauthorizedException(String.format(
                                 "Access denied; user '%s'@'%s' need INSERT action on %s.%s for this operation",
                                 userIdentity.getQualifiedUser(), userIdentity.getHost(), dbName, tableName));
@@ -1551,8 +1553,38 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
     }
 
+    public TAllocateAutoIncrementIdResult allocAutoIncrementId(TAllocateAutoIncrementIdParam request) throws TException {
+        TAllocateAutoIncrementIdResult result = new TAllocateAutoIncrementIdResult();
+        long rows = Math.max(request.rows, Config.auto_increment_cache_size);
+        Long nextId = GlobalStateMgr.getCurrentState().allocateAutoIncrementId(request.table_id, rows);
+        try {
+            // log the delta result.
+            ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
+            deltaMap.put(request.table_id, nextId + rows);
+            AutoIncrementInfo info = new AutoIncrementInfo(deltaMap);
+            GlobalStateMgr.getCurrentState().getEditLog().logSaveAutoIncrementId(info);
+        } catch (Exception e) {
+            result.setAuto_increment_id(0);
+            result.setAllocated_rows(0);
+
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            result.setStatus(status);
+            return result;
+        }
+
+        result.setAuto_increment_id(nextId);
+        result.setAllocated_rows(rows);
+
+        TStatus status = new TStatus(TStatusCode.OK);
+        result.setStatus(status);
+
+        return result;
+    }
+
     @Override
     public TCreatePartitionResult createPartition(TCreatePartitionRequest request) throws TException {
+
+        LOG.info("Recieve create partition: {}", request);
 
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
@@ -1561,84 +1593,111 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d is not exists", dbId)));
             result.setStatus(errorStatus);
-            result.setErr_msg(String.format("dbId=%d is not exists", dbId));
             return result;
         }
         Table table = db.getTable(tableId);
         if (table == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d tableId=%d is not exists", dbId, tableId)));
             result.setStatus(errorStatus);
-            result.setErr_msg(String.format("dbId=%d tableId=%d is not exists", dbId, tableId));
             return result;
         }
         if (!(table instanceof OlapTable)) {
+            errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d tableId=%d is not olap table", dbId, tableId)));
             result.setStatus(errorStatus);
-            result.setErr_msg(String.format("dbId=%d tableId=%d is not olap table", dbId, tableId));
             return result;
         }
         OlapTable olapTable = (OlapTable) table;
 
-        if (request.partitionValues == null) {
+        if (request.partition_values == null) {
+            errorStatus.setError_msgs(Lists.newArrayList("partition_values should not null."));
             result.setStatus(errorStatus);
-            result.setErr_msg("partitionValues should not null.");
             return result;
         }
         // Now only supports the case of automatically creating single partition
-        if (request.partitionValues.size() != 1) {
+        if (request.partition_values.size() != 1) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    "automatic partition only support single column partition."));
             result.setStatus(errorStatus);
-            result.setErr_msg("only support single partition, partitionValues size should equal 1.");
             return result;
         }
-        List<String> partitionValues = request.partitionValues.get(0);
+        List<String> partitionValues = request.partition_values.get(0);
 
-        Set<String> partitionNames = Sets.newHashSet();
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support expression range partition."));
             result.setStatus(errorStatus);
-            result.setErr_msg("only support expression range partition.");
             return result;
         }
         List<Expr> partitionExprs = ((ExpressionRangePartitionInfo) partitionInfo).getPartitionExprs();
         if (partitionExprs.size() != 1) {
+            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support one expression partitionExpr."));
             result.setStatus(errorStatus);
-            result.setErr_msg("only support one expression partitionExpr.");
             return result;
         }
         Expr expr = partitionExprs.get(0);
         if (!(expr instanceof FunctionCallExpr)) {
+            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support FunctionCallExpr"));
             result.setStatus(errorStatus);
-            result.setErr_msg("only support FunctionCallExpr");
             return result;
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
         String fnName = functionCallExpr.getFnName().getFunction();
-        if (!fnName.equals(FunctionSet.DATE_TRUNC)) {
+        long interval = 1;
+        String granularity;
+        if (fnName.equals(FunctionSet.DATE_TRUNC)) {
+            List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
+            if (paramsExprs.size() != 2) {
+                errorStatus.setError_msgs(Lists.newArrayList("date_trunc params exprs size should be 2."));
+                result.setStatus(errorStatus);
+                return result;
+            }
+            Expr granularityExpr = paramsExprs.get(0);
+            if (!(granularityExpr instanceof StringLiteral)) {
+                errorStatus.setError_msgs(Lists.newArrayList("date_trunc granularity is not string literal."));
+                result.setStatus(errorStatus);
+                return result;
+            }
+            StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
+            granularity = granularityLiteral.getStringValue();
+        } else if (fnName.equals(FunctionSet.TIME_SLICE)) {
+            List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
+            if (paramsExprs.size() != 4) {
+                errorStatus.setError_msgs(Lists.newArrayList("time_slice params exprs size should be 4."));
+                result.setStatus(errorStatus);
+                return result;
+            }
+            Expr intervalExpr = paramsExprs.get(1);
+            if (!(intervalExpr instanceof IntLiteral)) {
+                errorStatus.setError_msgs(Lists.newArrayList("time_slice interval is not int literal."));
+                result.setStatus(errorStatus);
+                return result;
+            }
+            Expr granularityExpr = paramsExprs.get(2);
+            if (!(granularityExpr instanceof StringLiteral)) {
+                errorStatus.setError_msgs(Lists.newArrayList("time_slice granularity is not string literal."));
+                result.setStatus(errorStatus);
+                return result;
+            }
+            StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
+            IntLiteral intervalLiteral = (IntLiteral) intervalExpr;
+            granularity = granularityLiteral.getStringValue();
+            interval = intervalLiteral.getLongValue();
+        } else {
+            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support data_trunc function."));
             result.setStatus(errorStatus);
-            result.setErr_msg("only support data_trunc function.");
             return result;
         }
-        List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
-        if (paramsExprs.size() != 2) {
-            result.setStatus(errorStatus);
-            result.setErr_msg("params exprs size should be 2.");
-            return result;
-        }
-        Expr granularityExpr = paramsExprs.get(0);
-        if (!(granularityExpr instanceof StringLiteral)) {
-            result.setStatus(errorStatus);
-            result.setErr_msg("granularity is not string literal.");
-            return result;
-        }
-        StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
-        String granularity = granularityLiteral.getStringValue();
+
 
         Map<String, AddPartitionClause> addPartitionClauseMap;
         try {
-            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(partitionValues,
-                    granularity, olapTable);
+            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
+                    partitionValues, interval, granularity);
         } catch (AnalysisException ex) {
+            errorStatus.setError_msgs(Lists.newArrayList(ex.getMessage()));
             result.setStatus(errorStatus);
-            result.setErr_msg(ex.getMessage());
             return result;
         }
 
@@ -1647,8 +1706,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 state.addPartitions(db, olapTable.getName(), addPartitionClause);
             } catch (DdlException | AnalysisException e) {
+                LOG.warn(e);
+                errorStatus.setError_msgs(Lists.newArrayList(
+                        String.format("automatic create partition failed. error:%s", e.getMessage())));
                 result.setStatus(errorStatus);
-                result.setErr_msg(String.format("create partition failed. stmt:%s", addPartitionClause.toSql()));
                 return result;
             }
         }

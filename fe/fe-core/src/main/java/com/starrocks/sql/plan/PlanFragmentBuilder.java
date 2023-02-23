@@ -38,6 +38,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -235,7 +236,7 @@ public class PlanFragmentBuilder {
         List<Long> fakePartitionIds = Arrays.asList(1L, 2L, 3L);
 
         DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds, true,
-                view.writeQuorum(), view.enableReplicatedStorage());
+                view.writeQuorum(), view.enableReplicatedStorage(), false);
         execPlan.getTopFragment().setSink(tableSink);
 
         return execPlan;
@@ -311,6 +312,7 @@ public class PlanFragmentBuilder {
             fragment.createDataSink(resultSinkType);
         }
         Collections.reverse(fragments);
+
         // compute local_rf_waiting_set for each PlanNode.
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, we should clear
         // runtime filters from PlanNode.
@@ -326,13 +328,23 @@ public class PlanFragmentBuilder {
                 FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, fragment);
                 normalizer.normalize();
             }
+        } else if (ConnectContext.get() != null &&
+                ConnectContext.get().getSessionVariable().isEnableRuntimeAdaptiveDop()) {
+            for (PlanFragment fragment : fragments) {
+                if (fragment.canUseRuntimeAdaptiveDop()) {
+                    fragment.enableAdaptiveDop();
+                }
+            }
         }
+
         return execPlan;
     }
 
     private static class PhysicalPlanTranslator extends OptExpressionVisitor<PlanFragment, ExecPlan> {
         private final ColumnRefFactory columnRefFactory;
         private final IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator = RuntimeFilterId.createGenerator();
+
+        private boolean canUseLocalShuffleAgg = true;
 
         public PhysicalPlanTranslator(ColumnRefFactory columnRefFactory) {
             this.columnRefFactory = columnRefFactory;
@@ -344,6 +356,7 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visit(OptExpression optExpression, ExecPlan context) {
+            canUseLocalShuffleAgg &= optExpression.arity() <= 1;
             PlanFragment fragment = optExpression.getOp().accept(this, optExpression, context);
             Projection projection = (optExpression.getOp()).getProjection();
 
@@ -363,7 +376,8 @@ public class PlanFragmentBuilder {
             // Key columns and value columns cannot be pruned in the non-skip-aggr scan stage.
             // - All the keys columns must be retained to merge and aggregate rows.
             // - Value columns can only be used after merging and aggregating.
-            if (referenceTable.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
+            MaterializedIndexMeta materializedIndexMeta = referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
+            if (materializedIndexMeta.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
                 return;
             }
 
@@ -385,12 +399,12 @@ public class PlanFragmentBuilder {
             Set<Integer> singlePredColumnIds = new HashSet<Integer>();
             Set<Integer> complexPredColumnIds = new HashSet<Integer>();
             Set<String> aggOrPrimaryKeyTableValueColumnNames = new HashSet<String>();
-            if (referenceTable.getKeysType().isAggregationFamily() ||
-                    referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+            if (materializedIndexMeta.getKeysType().isAggregationFamily() ||
+                    materializedIndexMeta.getKeysType() == KeysType.PRIMARY_KEYS) {
                 aggOrPrimaryKeyTableValueColumnNames =
-                        referenceTable.getFullSchema().stream()
+                        materializedIndexMeta.getSchema().stream()
                                 .filter(col -> !col.isKey())
-                                .map(col -> col.getName())
+                                .map(Column::getName)
                                 .collect(Collectors.toSet());
             }
 
@@ -1098,12 +1112,31 @@ public class PlanFragmentBuilder {
                                 case "TABLE_NAME":
                                     scanNode.setSchemaTable(constantOperator.getVarchar());
                                     break;
+                                case "BE_ID":
+                                    scanNode.setBeId(constantOperator.getBigint());
+                                    break;
+                                case "TABLE_ID":
+                                    scanNode.setTableId(constantOperator.getBigint());
+                                    break;
+                                case "PARTITION_ID":
+                                    scanNode.setPartitionId(constantOperator.getBigint());
+                                    break;
+                                case "TABLET_ID":
+                                    scanNode.setTabletId(constantOperator.getBigint());
+                                    break;
+                                case "TXN_ID":
+                                    scanNode.setTxnId(constantOperator.getBigint());
+                                    break;
                                 default:
                                     break;
                             }
                         }
                     }
                 }
+            }
+
+            if (scanNode.isBeSchemaTable()) {
+                scanNode.computeBeScanRanges();
             }
 
             context.getScanNodes().add(scanNode);
@@ -1355,6 +1388,9 @@ public class PlanFragmentBuilder {
             if (ConnectContext.get() == null) {
                 return inputFragment;
             }
+            if (!canUseLocalShuffleAgg) {
+                return inputFragment;
+            }
             SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
             boolean enableLocalShuffleAgg = sessionVariable.isEnableLocalShuffleAgg()
                     && sessionVariable.isEnablePipelineEngine()
@@ -1390,12 +1426,13 @@ public class PlanFragmentBuilder {
                 }
             }
 
+            clearOlapScanNodePartitions(sourceFragment.getPlanRoot());
+
             return sourceFragment;
         }
 
         /**
-         * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE), if they don't satisfy
-         * the required hash property of blocking aggregation.
+         * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE).
          * <p>
          * When partitionExprs of OlapScanNode are passed to BE, the post operators will use them as
          * local shuffle partition exprs.
@@ -1408,35 +1445,23 @@ public class PlanFragmentBuilder {
          * partitionExprs of OlapScanNode must be cleared to make BE use group by keys not bucket keys as
          * local shuffle partition exprs.
          *
-         * @param fragment The fragment which need to check whether to clear bucket keys of OlapScanNode.
-         * @param aggOp    The aggregate which need to check whether OlapScanNode satisfies its reuiqred hash property.
+         * @param root The root node of the fragment which need to check whether to clear bucket keys of OlapScanNode.
          */
-        private void clearOlapScanNodePartitionsIfNotSatisfy(PlanFragment fragment,
-                                                             PhysicalHashAggregateOperator aggOp) {
-            // Only check ScanNode->BlockingAgg, which must be one-phase agg or
-            // the first phase in three/four-phase agg whose second phase is pruned.
-            if (!aggOp.isOnePhaseAgg() && !aggOp.isMergedLocalAgg()) {
+        private void clearOlapScanNodePartitions(PlanNode root) {
+            if (root instanceof OlapScanNode) {
+                OlapScanNode scanNode = (OlapScanNode) root;
+                scanNode.setBucketExprs(Lists.newArrayList());
+                scanNode.setBucketColumns(Lists.newArrayList());
                 return;
             }
 
-            if (aggOp.getPartitionByColumns().isEmpty()) {
+            if (root instanceof ExchangeNode) {
                 return;
             }
 
-            PlanNode leafNode = fragment.getLeftMostLeafNode();
-            if (!(leafNode instanceof OlapScanNode)) {
-                return;
+            for (PlanNode child : root.getChildren()) {
+                clearOlapScanNodePartitions(child);
             }
-
-            OlapScanNode olapScanNode = (OlapScanNode) leafNode;
-            Set<ColumnRefOperator> requiredPartColumns = new HashSet<>(aggOp.getPartitionByColumns());
-            boolean satisfy = requiredPartColumns.containsAll(olapScanNode.getBucketColumns());
-            if (satisfy) {
-                return;
-            }
-
-            olapScanNode.setBucketExprs(Lists.newArrayList());
-            olapScanNode.setBucketColumns(Lists.newArrayList());
         }
 
         private static class AggregateExprInfo {
@@ -1568,7 +1593,7 @@ public class PlanFragmentBuilder {
                 }
 
                 // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
-                if (!node.isUseStreamingPreAgg() && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && !node.isUseStreamingPreAgg() && hasColocateOlapScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isGlobal()) {
@@ -1623,7 +1648,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.setLimit(node.getLimit());
 
                 // Check colocate for one-phase local agg.
-                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isDistinctGlobal()) {
@@ -1637,6 +1662,10 @@ public class PlanFragmentBuilder {
                         new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
                 aggregationNode.unsetNeedsFinalize();
                 aggregationNode.setIntermediateTuple();
+
+                if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
+                }
             } else if (node.getType().isDistinctLocal()) {
                 // For SQL: select count(distinct id_bigint), sum(id_int) from test_basic;
                 // count function is update function, but sum is merge function
@@ -1666,8 +1695,10 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            if (node.isOnePhaseAgg() || node.isMergedLocalAgg()) {
-                clearOlapScanNodePartitionsIfNotSatisfy(inputFragment, node);
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
+                if (optExpr.getLogicalProperty().isExecuteInOneTablet()) {
+                    clearOlapScanNodePartitions(aggregationNode);
+                }
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
@@ -2139,7 +2170,7 @@ public class PlanFragmentBuilder {
                 }
 
                 outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
-                joinNode.setOutputSlots(outputColumns.getStream().boxed().collect(Collectors.toList()));
+                joinNode.setOutputSlots(outputColumns.getStream().collect(Collectors.toList()));
             }
 
             joinNode.setDistributionMode(distributionMode);
@@ -2294,6 +2325,7 @@ public class PlanFragmentBuilder {
                     partitionExprs,
                     orderByElements,
                     node.getAnalyticWindow(),
+                    node.isUseHashBasedPartition(),
                     null, outputTupleDesc, null, null,
                     context.getDescTbl().createTupleDescriptor());
             analyticEvalNode.setSubstitutedPartitionExprs(partitionExprs);
@@ -2735,7 +2767,7 @@ public class PlanFragmentBuilder {
                 }
 
                 outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
-                joinNode.setOutputSlots(outputColumns.getStream().boxed().collect(Collectors.toList()));
+                joinNode.setOutputSlots(outputColumns.getStream().collect(Collectors.toList()));
             }
 
             joinNode.setDistributionMode(distributionMode);

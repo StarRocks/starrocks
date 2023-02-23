@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -50,6 +51,9 @@ public class SplitTopNRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalTopNOperator src = (LogicalTopNOperator) input.getOp();
 
+        Preconditions.checkState(src.getLimit() < 0 || src.getLimit() + src.getOffset() >= 0,
+                String.format("limit(%d) + offset(%d) is too large and yields an overflow result(%d)", src.getLimit(),
+                        src.getOffset(), src.getLimit() + src.getOffset()));
         long limit = src.getLimit() + src.getOffset();
         LogicalTopNOperator partialSort = new LogicalTopNOperator(
                 src.getOrderByElements(), limit, Operator.DEFAULT_OFFSET, SortPhase.PARTIAL);

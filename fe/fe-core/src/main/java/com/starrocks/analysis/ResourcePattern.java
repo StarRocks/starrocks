@@ -20,7 +20,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeNameFormat;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.privilege.Auth.PrivLevel;

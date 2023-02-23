@@ -24,11 +24,16 @@
 namespace starrocks {
 
 SizeTieredCompactionPolicy::SizeTieredCompactionPolicy(Tablet* tablet) : _tablet(tablet) {
+    _compaction_type = INVALID_COMPACTION;
     _max_level_size =
             config::size_tiered_min_level_size * pow(config::size_tiered_level_multiple, config::size_tiered_level_num);
 }
 
 bool SizeTieredCompactionPolicy::need_compaction(double* score, CompactionType* type) {
+    if (_tablet->tablet_state() != TABLET_RUNNING) {
+        return false;
+    }
+
     bool force_base_compaction = false;
     if (type && *type == BASE_COMPACTION) {
         force_base_compaction = true;
@@ -46,7 +51,9 @@ bool SizeTieredCompactionPolicy::need_compaction(double* score, CompactionType* 
         _compaction_type = INVALID_COMPACTION;
         *score = 0;
     }
-    *type = _compaction_type;
+    if (type) {
+        *type = _compaction_type;
+    }
 
     return _compaction_type != INVALID_COMPACTION;
 }
@@ -67,14 +74,19 @@ std::shared_ptr<CompactionTask> SizeTieredCompactionPolicy::create_compaction(Ta
 
 double SizeTieredCompactionPolicy::_cal_compaction_score(int64_t segment_num, int64_t level_size, int64_t total_size,
                                                          KeysType keys_type, bool reached_max_version) {
-    double score = 0;
+    // base score is segment num
+    double score = segment_num;
+
+    // data bonus
     if (keys_type == KeysType::DUP_KEYS) {
         // duplicate keys only has write amplification, so that we use more aggressive size-tiered strategy
-        score = segment_num + ((double)(total_size - level_size) / level_size) * 2;
+        score = ((double)(total_size - level_size) / level_size) * 2;
     } else {
         // agg/unique key also has read amplification, segment num occupies a greater weight
-        score = segment_num + (segment_num - 1) * 2 + ((double)(total_size - level_size) / level_size);
+        score = (segment_num - 1) * 2 + ((double)(total_size - level_size) / level_size);
     }
+    // Normalized score, max data bouns limit to triple size_tiered_level_multiple
+    score = std::min((double)config::size_tiered_level_multiple * 3 + segment_num, score);
 
     // level bonus: The lower the level means the smaller the data volume of the compaction, the higher the execution priority
     int64_t level_bonus = 0;
@@ -105,16 +117,16 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
 
     std::sort(candidate_rowsets.begin(), candidate_rowsets.end(), Rowset::comparator);
 
-    if (time(nullptr) - candidate_rowsets[0]->creation_time() >
-        config::base_compaction_interval_seconds_since_last_operation) {
-        force_base_compaction = true;
-    }
-
     if (!force_base_compaction && candidate_rowsets.size() == 2 && candidate_rowsets[0]->end_version() == 1 &&
         candidate_rowsets[1]->rowset_meta()->get_compaction_score() <= 1) {
         // the tablet is with rowset: [0-1], [2-y]
         // and [0-1] has no data. in this situation, no need to do base compaction.
         return Status::NotFound("compaction no suitable version error.");
+    }
+
+    if (time(nullptr) - candidate_rowsets[0]->creation_time() >
+        config::base_compaction_interval_seconds_since_last_operation) {
+        force_base_compaction = true;
     }
 
     struct SizeTieredLevel {
@@ -208,8 +220,7 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
                     order_levels.emplace_back(std::move(level));
                 }
 
-                if (transient_rowsets.empty() ||
-                    (!transient_rowsets.empty() && transient_rowsets[0]->start_version() != 0)) {
+                if (transient_rowsets.empty() || transient_rowsets[0]->start_version() != 0) {
                     segment_num = 0;
                     transient_rowsets.clear();
                     level_size = -1;

@@ -32,7 +32,7 @@ public class ExternalSchemaProcNode implements ProcNodeInterface {
 
     private Table table;
 
-    private static final String DEFAULT_STR = FeConstants.null_string;
+    private static final String DEFAULT_STR = FeConstants.NULL_STRING;
     private static final String PARTITION_KEY = "partition key";
 
     public ExternalSchemaProcNode(Table table) {

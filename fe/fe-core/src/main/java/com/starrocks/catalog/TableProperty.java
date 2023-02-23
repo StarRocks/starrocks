@@ -131,8 +131,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
     // 2. Before checkpoint, we relay delete job journal log to persist.
     //    After checkpoint, we relay TableProperty::write to persist.
+    @SerializedName(value = "hasDelete")
     private boolean hasDelete = false;
-
+    @SerializedName(value = "hasForbitGlobalDict")
     private boolean hasForbitGlobalDict = false;
 
     @SerializedName(value = "storageInfo")
@@ -142,6 +143,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private Map<Long, Long> binlogAvailabeVersions = new HashMap<>();
 
     private BinlogConfig binlogConfig;
+
+    // unique constraints for mv rewrite
+    // a table may have multi unique constraints
+    private List<UniqueConstraint> uniqueConstraints;
+
+    // foreign key constraint for mv rewrite
+    private List<ForeignKeyConstraint> foreignKeyConstraints;
 
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
@@ -184,6 +192,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 buildBinlogAvailableVersion();
+                break;
+            case OperationType.OP_ALTER_TABLE_PROPERTIES:
+                buildPartitionLiveNumber();
+                break;
+            case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
+                buildConstraint();
                 break;
             default:
                 break;
@@ -248,6 +262,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildPartitionTTL() {
         partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
+                String.valueOf(INVALID)));
+        return this;
+    }
+
+    public TableProperty buildPartitionLiveNumber() {
+        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
                 String.valueOf(INVALID)));
         return this;
     }
@@ -322,6 +342,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
+        return this;
+    }
+
+    public TableProperty buildConstraint() {
+        uniqueConstraints = UniqueConstraint.parse(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+
+        foreignKeyConstraints = ForeignKeyConstraint.parse(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
         return this;
     }
 
@@ -437,6 +466,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return binlogConfig;
     }
 
+    public List<UniqueConstraint> getUniqueConstraints() {
+        return uniqueConstraints;
+    }
+
+    public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
+        this.uniqueConstraints = uniqueConstraints;
+    }
+
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        return foreignKeyConstraints;
+    }
+
+    public void setForeignKeyConstraints(List<ForeignKeyConstraint> foreignKeyConstraints) {
+        this.foreignKeyConstraints = foreignKeyConstraints;
+    }
+
     public Map<Long, Long> getBinlogAvailaberVersions() {
         return binlogAvailabeVersions;
     }
@@ -470,6 +515,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionTTL();
+        buildPartitionLiveNumber();
         buildAutoRefreshPartitionsLimit();
         buildPartitionRefreshNumber();
         buildExcludedTriggerTables();
@@ -477,5 +523,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildForceExternalTableQueryRewrite();
         buildBinlogConfig();
         buildBinlogAvailableVersion();
+        buildConstraint();
     }
 }

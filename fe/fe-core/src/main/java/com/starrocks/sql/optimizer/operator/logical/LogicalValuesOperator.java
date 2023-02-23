@@ -94,7 +94,7 @@ public class LogicalValuesOperator extends LogicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(columnRefSet);
+        return Objects.hashCode(super.hashCode(), columnRefSet);
     }
 
     public static class Builder extends LogicalOperator.Builder<LogicalValuesOperator, LogicalValuesOperator.Builder> {

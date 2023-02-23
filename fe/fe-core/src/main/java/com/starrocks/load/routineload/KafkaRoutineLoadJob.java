@@ -106,6 +106,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     // kafka properties, property prefix will be mapped to kafka custom parameters, which can be extended in the future
     private Map<String, String> customProperties = Maps.newHashMap();
     private Map<String, String> convertedCustomProperties = Maps.newHashMap();
+    private String confluentSchemaRegistryUrl = null;
 
     public KafkaRoutineLoadJob() {
         // for serialization, id is dummy
@@ -118,6 +119,14 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         this.brokerList = brokerList;
         this.topic = topic;
         this.progress = new KafkaProgress();
+    }
+
+    public String getConfluentSchemaRegistryUrl() {
+        return confluentSchemaRegistryUrl;
+    }
+
+    public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
+        this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
     }
 
     public String getTopic() {
@@ -394,7 +403,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         try {
             unprotectedCheckMeta(db, stmt.getTableName(), stmt.getRoutineLoadDesc());
             Table table = db.getTable(stmt.getTableName());
-            Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table);
+            Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table, false);
             tableId = table.getId();
         } finally {
             db.readUnlock();
@@ -466,6 +475,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             setCustomKafkaProperties(stmt.getCustomKafkaProperties());
         }
 
+        if (stmt.getConfluentSchemaRegistryUrl() != null) {
+            setConfluentSchemaRegistryUrl(stmt.getConfluentSchemaRegistryUrl());
+        }
+
         setDefaultKafkaGroupID();
     }
 
@@ -503,7 +516,15 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @Override
     protected String customPropertiesJsonToString() {
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
-        return gson.toJson(customProperties);
+        Map<String, String> maskedProperties = Maps.newHashMap();
+        for (Map.Entry<String, String> entry : customProperties.entrySet()) {
+            if (entry.getKey().contains("password") || entry.getKey().contains("secret")) {
+                maskedProperties.put(entry.getKey(), "******");
+            } else {
+                maskedProperties.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return gson.toJson(maskedProperties);
     }
 
     @Override

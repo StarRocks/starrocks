@@ -66,7 +66,7 @@ public class ColumnTest {
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
-        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
     }
 
     @Test
@@ -250,6 +250,14 @@ public class ColumnTest {
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         oldColumn.checkSchemaChangeAllowed(newColumn);
         Assert.fail("No exception throws.");
+    }
+
+    @Test
+    public void testAutoIncrement() {
+        Column col = new Column("col", ScalarType.createType(PrimitiveType.BIGINT), true, null, Boolean.FALSE,
+                ColumnDef.DefaultValueDef.NOT_SET, "");
+        col.setIsAutoIncrement(true);
+        Assert.assertTrue(col.isAutoIncrement() == true);
     }
 
     @Test

@@ -89,7 +89,7 @@ public class TableSchemaAction extends RestBaseAction {
             }
             // check privilege for select, otherwise return 401 HTTP status
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.TableAction.SELECT);
+                checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.SELECT);
             } else {
                 checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), dbName, tableName, PrivPredicate.SELECT);
             }

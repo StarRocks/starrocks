@@ -64,8 +64,6 @@ public class ArithmeticExpr extends Expr {
             .put(Operator.BITAND.getName(), Operator.BITAND)
             .put(Operator.BITOR.getName(), Operator.BITOR)
             .put(Operator.BITXOR.getName(), Operator.BITXOR)
-            .put(Operator.BITNOT.getName(), Operator.BITNOT)
-            .put(Operator.FACTORIAL.getName(), Operator.FACTORIAL)
             .put(Operator.BIT_SHIFT_LEFT.getName(), Operator.BIT_SHIFT_LEFT)
             .put(Operator.BIT_SHIFT_RIGHT.getName(), Operator.BIT_SHIFT_RIGHT)
             .put(Operator.BIT_SHIFT_RIGHT_LOGICAL.getName(), Operator.BIT_SHIFT_RIGHT_LOGICAL)

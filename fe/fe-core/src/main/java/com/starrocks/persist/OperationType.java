@@ -92,6 +92,7 @@ public class OperationType {
     // load job for only hadoop load
     public static final short OP_EXPORT_CREATE = 36;
     public static final short OP_EXPORT_UPDATE_STATE = 37;
+    public static final short OP_EXPORT_UPDATE_INFO = 38;
 
     @Deprecated
     public static final short OP_FINISH_SYNC_DELETE = 40;
@@ -158,6 +159,8 @@ public class OperationType {
     @Deprecated
     public static final short OP_FINISHING_SCHEMA_CHANGE = 103;
     public static final short OP_SAVE_TRANSACTION_ID = 104;
+    public static final short OP_SAVE_AUTO_INCREMENT_ID = 105;
+    public static final short OP_DELETE_AUTO_INCREMENT_ID = 106;
 
     // routine load 110~120
     public static final short OP_ROUTINE_LOAD_JOB = 110;
@@ -295,13 +298,26 @@ public class OperationType {
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;
 
-    // alter load
-    public static final short OP_ALTER_LOAD_JOB = 11100;
-
     // stream load
     public static final short OP_CREATE_STREAM_LOAD_TASK = 11020;
 
     // MaterializedView Maintenance
     public static final short OP_MV_EPOCH_UPDATE = 11030;
     public static final short OP_MV_JOB_STATE = 11031;
+
+    // alter load
+    public static final short OP_ALTER_LOAD_JOB = 11100;
+    public static final short OP_ALTER_TABLE_PROPERTIES = 11101;
+
+    // warehouse
+    public static final short OP_CREATE_WH = 11110;
+    public static final short OP_DROP_WH = 11111;
+    public static final short OP_ALTER_WH_ADD_CLUSTER = 11112;
+    public static final short OP_ALTER_WH_REMOVE_CLUSTER = 11113;
+    public static final short OP_ALTER_WH_MOD_PROP = 11114;
+    public static final short OP_SUSPEND_WH = 11115;
+    public static final short OP_RESUME_WH = 11116;
+
+    // constraint properties
+    public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
 }

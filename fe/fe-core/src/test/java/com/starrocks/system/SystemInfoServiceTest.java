@@ -16,8 +16,8 @@
 package com.starrocks.system;
 
 import com.starrocks.cluster.Cluster;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.RunMode;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -34,6 +34,7 @@ import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class SystemInfoServiceTest {
 
@@ -119,8 +120,26 @@ public class SystemInfoServiceTest {
     }
 
     @Test
+    public void testGetBackendOrComputeNode() {
+        Backend be = new Backend(10001, "host1", 1000);
+        service.addBackend(be);
+        ComputeNode cn = new ComputeNode(10002, "host2", 1000);
+        service.addComputeNode(cn);
+
+        Assert.assertEquals(be, service.getBackendOrComputeNode(be.getId()));
+        Assert.assertEquals(cn, service.getBackendOrComputeNode(cn.getId()));
+        Assert.assertNull(service.getBackendOrComputeNode(/* Not Exist */ 100));
+
+        List<ComputeNode> nodes = service.backendAndComputeNodeStream().collect(Collectors.toList());
+        Assert.assertEquals(2, nodes.size());
+        Assert.assertEquals(be, nodes.get(0));
+        Assert.assertEquals(cn, nodes.get(1));
+    }
+
+    @Test
     public void testDropBackend() throws Exception {
-        Config.integrate_starmgr = true;
+        globalStateMgr.setRunMode(RunMode.SHARED_DATA);
+
         Backend be = new Backend(10001, "newHost", 1000);
         service.addBackend(be);
 
@@ -142,12 +161,13 @@ public class SystemInfoServiceTest {
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assert.assertTrue(beIP == null);
 
-        Config.integrate_starmgr = false;
+        globalStateMgr.setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
     public void testReplayDropBackend() throws Exception {
-        Config.integrate_starmgr = true;
+        globalStateMgr.setRunMode(RunMode.SHARED_DATA);
+
         Backend be = new Backend(10001, "newHost", 1000);
         be.setStarletPort(1001);
 
@@ -168,7 +188,7 @@ public class SystemInfoServiceTest {
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assert.assertTrue(beIP == null);
 
-        Config.integrate_starmgr = false;
+        globalStateMgr.setRunMode(RunMode.SHARED_NOTHING);
     }
 
 

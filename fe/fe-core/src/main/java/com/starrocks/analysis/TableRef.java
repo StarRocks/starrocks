@@ -46,6 +46,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -141,36 +142,31 @@ public class TableRef implements ParseNode, Writable {
     // analysis output
     protected TupleDescriptor desc;
 
+    protected final NodePosition pos;
+
     // END: Members that need to be reset()
     // ///////////////////////////////////////
 
     public TableRef() {
         // for persist
+        pos = NodePosition.ZERO;
     }
 
     public TableRef(TableName name, String alias) {
-        this(name, alias, null);
+        this(name, alias, null, NodePosition.ZERO);
     }
 
     public TableRef(TableName name, String alias, PartitionNames partitionNames) {
-        this(name, alias, partitionNames, null);
+        this(name, alias, partitionNames, null, null, NodePosition.ZERO);
     }
 
-    public TableRef(TableName name, String alias, PartitionNames partitionNames, ArrayList<String> commonHints) {
-        this.name = name;
-        if (alias != null) {
-            aliases_ = new String[] {alias};
-            hasExplicitAlias_ = true;
-        } else {
-            hasExplicitAlias_ = false;
-        }
-        this.partitionNames = partitionNames;
-        this.commonHints = commonHints;
-        isAnalyzed = false;
+    public TableRef(TableName name, String alias, PartitionNames partitionNames, NodePosition pos) {
+        this(name, alias, partitionNames, null, null, pos);
     }
 
     public TableRef(TableName name, String alias, PartitionNames partitionNames, ArrayList<Long> tableIds,
-                    ArrayList<String> commonHints) {
+                    ArrayList<String> commonHints, NodePosition pos) {
+        this.pos = pos;
         this.name = name;
         if (alias != null) {
             aliases_ = new String[] {alias};
@@ -189,6 +185,7 @@ public class TableRef implements ParseNode, Writable {
     // Only used to clone
     // this will reset all the 'analyzed' stuff
     protected TableRef(TableRef other) {
+        pos = other.pos;
         name = other.name;
         aliases_ = other.aliases_;
         hasExplicitAlias_ = other.hasExplicitAlias_;
@@ -222,6 +219,11 @@ public class TableRef implements ParseNode, Writable {
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         ErrorReport.reportAnalysisException(ErrorCode.ERR_UNRESOLVED_TABLE_REF, tableRefToSql());
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     /**

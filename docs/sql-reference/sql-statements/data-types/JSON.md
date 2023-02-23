@@ -42,8 +42,6 @@ PROPERTIES (
 );
 ```
 
-> Only tables that use the Duplicate Key model support JSON columns. Additionally, such JSON columns cannot be defined as sort keys.
-
 ### Load data and store the data as JSON data
 
 StarRocks provides the following three methods for you to load data and store the data as JSON data:

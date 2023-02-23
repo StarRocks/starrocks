@@ -364,7 +364,7 @@ public abstract class JoinOrder {
         if (exprInfo.expr.getOp().getProjection() != null) {
             projection.putAll(exprInfo.expr.getOp().getProjection().getColumnRefMap());
         } else {
-            exprInfo.expr.getOutputColumns().getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+            exprInfo.expr.getOutputColumns().getStream().map(context.getColumnRefFactory()::getColumnRef)
                     .forEach(c -> projection.put(c, c));
         }
 

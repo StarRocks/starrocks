@@ -2,7 +2,7 @@
 
 ## Description
 
-Creates a materialized view. Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the materialized view in a database via [SHOW ALTER](..//data-manipulation/SHOW%20ALTER.md) command. For usage information about materialized views, see [materialized view](../../../using_starrocks/Materialized_view.md).
+Creates a materialized view. Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of Sync Refresh single-table materialized views in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) command. For usage information about materialized views, see [materialized view](../../../using_starrocks/Materialized_view.md).
 
 > **CAUTION**
 >
@@ -110,7 +110,7 @@ Properties of the materialized view.
 
 - `replication_num`: The number of materialized view replicas to create.
 - `storage_medium`: Storage medium type. `HDD` and `SSD` are supported.
-- `partition_ttl_number`: The number of most recent materialized view partitions to keep. After the number of partitions exceeds this value, expired partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_enable`, and automatically delete expired partitions. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
+- `partition_ttl_number`: The number of most recent materialized view partitions to keep. After the number of partitions exceeds this value, expired partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
 - `partition_refresh_number`: In a single refresh, the maximum number of partitions to refresh. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. Only when the previous batch of partitions is refreshed successfully, StarRocks will continue to refresh the next batch of partitions until all partitions are refreshed. If any of the partitions fails to be refreshed, no subsequent refresh tasks will be generated. When the value is `-1`, the refresh task will not be split. Default: `-1`.
 - `excluded_trigger_tables`: If a base table of the materialized view is listed here, automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. Default is an empty string.
 - `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. When the value is `-1`, all partitions will be flushed. Default: `-1`.
@@ -138,7 +138,7 @@ When a query is executed with a materialized view, the original query statement 
 
 - A materialized view supports only one aggregate function for each column of the base table. Query statements such as `select sum(a), min(a) from table` are not supported.
 
-- When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you need to ensure that all materialized views of the base table contain the dropped column, otherwise the drop operation cannot be performed. If you have to drop the column, you need to first drop all materialized views that do not contain the column, and then drop the column.
+- When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you must ensure that all materialized views of the base table contain the dropped column, otherwise the drop operation will fail. Before you drop the column, you must first drop all materialized views that contain the column.
 
 - Creating too many materialized views for a table will affect the data load efficiency. When data is being loaded to the base table, the data in materialized view and base table will be updated synchronously. If a base table contains `n` materialized views, the efficiency of loading data into the base table is about the same as the efficiency of loading data into `n` tables.
 

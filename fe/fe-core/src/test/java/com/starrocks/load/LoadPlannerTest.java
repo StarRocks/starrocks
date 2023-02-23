@@ -296,7 +296,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "ORC", Lists.newArrayList("k2"),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
@@ -434,7 +434,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "ORC", Lists.newArrayList("k2"),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
@@ -519,7 +519,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("pk", "v1", "v2");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "CSV", Lists.newArrayList(),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", ",");
@@ -607,7 +607,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("pk", "v1", "v2");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "CSV", Lists.newArrayList(),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", ",");
@@ -714,7 +714,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("c0", "c1", "c2", "c3");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "CSV", Lists.newArrayList(),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", ",");
@@ -811,7 +811,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("pk", "v1", "v2", "__op");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "CSV", Lists.newArrayList(),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", ",");
@@ -917,7 +917,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "ORC", Lists.newArrayList("k2"),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
@@ -1019,7 +1019,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "ORC", Lists.newArrayList("k2"),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");

@@ -64,6 +64,8 @@ The Stream Load transaction interface has the following limits:
 
 - The `/api/transaction/load` operation can be called multiple times within one transaction. In this case, the parameter settings specified for all of the `/api/transaction/load` operations that are called must be the same.
 
+- When you load CSV-formatted data by using the Stream Load transaction interface, make sure that each data record ends with a row delimiter.
+
 ## Basic operations
 
 ### Start a transaction
@@ -369,3 +371,9 @@ curl -H "label:<label_name>" -H "db:<database_name>"
       "Message": ""
   }
   ```
+
+## References
+
+For information about the suitable application scenarios and supported data file formats of Stream Load and about how Stream Load works, see [Load data from a local file system or a streaming data source using HTTP PUT](../loading/StreamLoad.md).
+
+For information about the syntax and parameters for creating Stream Load jobs, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).

@@ -117,6 +117,10 @@ MSG_BE="Backend"
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
+if [[ -z ${USE_AVX512} ]]; then
+    ## Disable it by default
+    USE_AVX512=OFF
+fi
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
@@ -126,7 +130,9 @@ if [ -e /proc/cpuinfo ] ; then
     if [[ -z $(grep -o 'avx[^ ]*' /proc/cpuinfo) ]]; then
         USE_AVX2=OFF
     fi
-
+    if [[ -z $(grep -o 'avx512' /proc/cpuinfo) ]]; then
+        USE_AVX512=OFF
+    fi
     if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
         USE_SSE4_2=OFF
     fi
@@ -212,6 +218,7 @@ echo "Get params:
     WITH_BENCH          -- $WITH_BENCH
     USE_STAROS          -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
+    USE_AVX512          -- $USE_AVX512
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
     WITH_BLOCK_CACHE    -- $WITH_BLOCK_CACHE
@@ -287,7 +294,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
                     -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
-                    -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+                    -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
                     -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
@@ -298,7 +305,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
                     -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
                     -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
-                    -Dstarlet_DIR=${STARLET_INSTALL_DIR}/starlet_install/lib64/cmake ..
+                    -Dstarlet_DIR=${STARLET_INSTALL_DIR}/starlet_install/lib/cmake ..
     else
       ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
                     -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} \
@@ -306,7 +313,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
                     -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
-                    -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+                    -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
                     -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
                     -DWITH_BENCH=${WITH_BENCH} \
@@ -415,6 +422,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
 
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
+
     if [ "${WITH_BLOCK_CACHE}" == "ON"  ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib
         cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
@@ -427,7 +437,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/amd64 ${STARROCKS_OUTPUT}/be/lib/jvm/
     fi
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
     MSG="${MSG} √ ${MSG_BE}"
 fi
 

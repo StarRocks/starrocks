@@ -241,8 +241,6 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
-    _profile.delete_build_timer = ADD_TIMER(_runtime_profile, "DeleteBuildTimer");
-    _profile.delete_file_per_scan_counter = ADD_COUNTER(_runtime_profile, "DeleteFilesPerScan", TUnit::UNIT);
 
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
@@ -271,6 +269,83 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     if (hdfs_scan_node.__isset.partition_sql_predicates) {
         _runtime_profile->add_info_string("PredicatesPartition", hdfs_scan_node.partition_sql_predicates);
     }
+}
+
+static void build_nested_fields(const TypeDescriptor& type, const std::string& parent, std::string* sb) {
+    for (int i = 0; i < type.children.size(); i++) {
+        const auto& t = type.children[i];
+        if (t.is_unknown_type()) continue;
+        std::string p = parent + "." + (type.is_struct_type() ? type.field_names[i] : fmt::format("${}", i));
+        if (t.is_complex_type()) {
+            build_nested_fields(t, p, sb);
+        } else {
+            sb->append(p);
+            sb->append(",");
+        }
+    }
+}
+
+HdfsScanner* HiveDataSource::_create_hudi_jni_scanner() {
+    const auto& scan_range = _scan_range;
+    const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(_hive_table);
+    auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
+    std::string partition_full_path = partition_desc->location();
+
+    std::string required_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        required_fields.append(slot->col_name());
+        required_fields.append(",");
+    }
+    required_fields = required_fields.substr(0, required_fields.size() - 1);
+
+    std::string nested_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        const TypeDescriptor& type = slot->type();
+        if (type.is_complex_type()) {
+            build_nested_fields(type, slot->col_name(), &nested_fields);
+        }
+    }
+    if (!nested_fields.empty()) {
+        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
+    }
+
+    std::string delta_file_paths;
+    if (!scan_range.hudi_logs.empty()) {
+        for (const std::string& log : scan_range.hudi_logs) {
+            delta_file_paths.append(fmt::format("{}/{}", partition_full_path, log));
+            delta_file_paths.append(",");
+        }
+        delta_file_paths = delta_file_paths.substr(0, delta_file_paths.size() - 1);
+    }
+
+    std::string data_file_path;
+    if (scan_range.relative_path.empty()) {
+        data_file_path = "";
+    } else {
+        data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
+    }
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["base_path"] = hudi_table->get_base_path();
+    jni_scanner_params["hive_column_names"] = hudi_table->get_hive_column_names();
+    jni_scanner_params["hive_column_types"] = hudi_table->get_hive_column_types();
+    jni_scanner_params["required_fields"] = required_fields;
+    jni_scanner_params["nested_fields"] = nested_fields;
+    jni_scanner_params["instant_time"] = hudi_table->get_instant_time();
+    jni_scanner_params["delta_file_paths"] = delta_file_paths;
+    jni_scanner_params["data_file_path"] = data_file_path;
+    jni_scanner_params["data_file_length"] = std::to_string(scan_range.file_length);
+    jni_scanner_params["serde"] = hudi_table->get_serde_lib();
+    jni_scanner_params["input_format"] = hudi_table->get_input_format();
+
+#ifndef NDEBUG
+    for (const auto& it : jni_scanner_params) {
+        VLOG_FILE << "jni scanner params. key = " << it.first << ", value = " << it.second;
+    }
+#endif
+    std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
+    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
+    return scanner;
 }
 
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
@@ -335,53 +410,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
 
     if (use_hudi_jni_reader) {
-        const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(_hive_table);
-        auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
-        std::string partition_full_path = partition_desc->location();
-
-        std::string required_fields;
-        for (auto slot : _tuple_desc->slots()) {
-            required_fields.append(slot->col_name());
-            required_fields.append(",");
-        }
-        required_fields = required_fields.substr(0, required_fields.size() - 1);
-
-        std::string delta_file_paths;
-        if (!scan_range.hudi_logs.empty()) {
-            for (const std::string& log : scan_range.hudi_logs) {
-                delta_file_paths.append(fmt::format("{}/{}", partition_full_path, log));
-                delta_file_paths.append(",");
-            }
-            delta_file_paths = delta_file_paths.substr(0, delta_file_paths.size() - 1);
-        }
-
-        std::string data_file_path;
-        if (scan_range.relative_path.empty()) {
-            data_file_path = "";
-        } else {
-            data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
-        }
-
-        std::map<std::string, std::string> jni_scanner_params;
-        jni_scanner_params["base_path"] = hudi_table->get_base_path();
-        jni_scanner_params["hive_column_names"] = hudi_table->get_hive_column_names();
-        jni_scanner_params["hive_column_types"] = hudi_table->get_hive_column_types();
-        jni_scanner_params["required_fields"] = required_fields;
-        jni_scanner_params["instant_time"] = hudi_table->get_instant_time();
-        jni_scanner_params["delta_file_paths"] = delta_file_paths;
-        jni_scanner_params["data_file_path"] = data_file_path;
-        jni_scanner_params["data_file_length"] = std::to_string(scan_range.file_length);
-        jni_scanner_params["serde"] = hudi_table->get_serde_lib();
-        jni_scanner_params["input_format"] = hudi_table->get_input_format();
-
-#ifndef NDEBUG
-        for (const auto& it : jni_scanner_params) {
-            VLOG_FILE << "jni scanner params. key = " << it.first << ", value = " << it.second;
-        }
-#endif
-        std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
-
-        scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
+        scanner = _create_hudi_jni_scanner();
     } else if (format == THdfsFileFormat::PARQUET) {
         scanner = _pool.add(new HdfsParquetScanner());
     } else if (format == THdfsFileFormat::ORC) {

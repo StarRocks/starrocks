@@ -23,13 +23,13 @@
 namespace starrocks {
 
 struct RowsetSegInfo {
-    RowsetSegInfo(RowsetId* id, int index) {
-        rowset_id = id;
-        seg_index = index;
+    RowsetSegInfo(int64_t rid, int32_t sidx) {
+        rowset_id = rid;
+        seg_index = sidx;
     }
 
-    RowsetId* rowset_id;
-    int seg_index;
+    int64_t rowset_id;
+    int32_t seg_index;
 };
 
 // Binlog context for the current page to write
@@ -40,7 +40,7 @@ struct PendingPageContext {
     int32_t last_segment_index;
     int32_t last_row_id;
     int32_t estimated_page_size;
-    std::unordered_set<RowsetId, HashOfRowsetId> rowsets;
+    std::unordered_set<int64_t> rowsets;
     PageHeaderPB page_header;
     PageContentPB page_content;
 };
@@ -51,7 +51,7 @@ struct PendingVersionContext {
     int64_t start_seq_id;
     int64_t change_event_timestamp_in_us;
     int64_t num_pages;
-    std::unordered_set<RowsetId, HashOfRowsetId> rowsets;
+    std::unordered_set<int64_t> rowsets;
 };
 
 extern const char* const k_binlog_magic_number;
@@ -131,8 +131,15 @@ class BinlogFileWriter {
 public:
     BinlogFileWriter(int64_t file_id, std::string path, int32_t page_size, CompressionTypePB compression_type);
 
-    // Initialize the file writer.
+    // Initialize the writer as a newly created file.
     Status init();
+
+    // Initialize the writer as an already existed file, and reset the writer to
+    // the state described by the *previous_meta*. The meta can be a valid result
+    // for a previously successful ingestion. The binlog file maybe truncated to
+    // the previous size, and if init successfully, new data can be appended to the
+    // binlog file
+    Status init(BinlogFileMetaPB* previous_meta);
 
     // Begin to write binlog for a new version.
     Status begin(int64_t version, int64_t start_seq_id, int64_t change_event_timestamp_in_us);
@@ -181,6 +188,10 @@ public:
 
     bool closed() { return _writer_state == CLOSED; }
 
+    bool is_writing() { return _writer_state == WRITING; }
+
+    bool is_closed() { return _writer_state == CLOSED; }
+
     // Actual file size currently, including the data committed
     // and pending to commit
     int64_t file_size() { return _file->size(); }
@@ -191,6 +202,15 @@ public:
 
     void copy_file_meta(BinlogFileMetaPB* new_file_meta) { new_file_meta->CopyFrom(*_file_meta.get()); }
 
+    // For testing
+    std::unordered_set<int64_t>& rowsets() { return _rowsets; }
+
+    // Reopen an existed binlog file to append data. The writer will be reset
+    // to the state described by *previous_meta*.
+    static StatusOr<std::shared_ptr<BinlogFileWriter>> reopen(int64_t file_id, const std::string& file_path,
+                                                              int32_t page_size, CompressionTypePB compression_type,
+                                                              BinlogFileMetaPB* previous_meta);
+
 private:
     Status _check_state(WriterState expect_state);
     Status _switch_page_if_full();
@@ -200,8 +220,8 @@ private:
     Status _truncate_file(int64_t file_size);
     void _reset_pending_context();
 
-    void _set_file_id_pb(const RowsetId& rowset_id, int seg_index, FileIdPB* file_id_pb) {
-        BinlogUtil::convert_rowset_id_to_pb(rowset_id, file_id_pb->mutable_rowset_id());
+    void _set_file_id_pb(int64_t rowset_id, int seg_index, FileIdPB* file_id_pb) {
+        file_id_pb->set_rowset_id(rowset_id);
         file_id_pb->set_segment_index(seg_index);
     }
 
@@ -216,12 +236,14 @@ private:
     // file meta for committed data
     std::unique_ptr<BinlogFileMetaPB> _file_meta;
     // rowsets used by committed data
-    std::unordered_set<RowsetId, HashOfRowsetId> _rowsets;
+    std::unordered_set<int64_t> _rowsets;
 
     // context for the version pending to commit
     std::unique_ptr<PendingVersionContext> _pending_version_context;
     // context for the page pending to flush
     std::unique_ptr<PendingPageContext> _pending_page_context;
 };
+
+using BinlogFileWriterPtr = std::shared_ptr<BinlogFileWriter>;
 
 } // namespace starrocks

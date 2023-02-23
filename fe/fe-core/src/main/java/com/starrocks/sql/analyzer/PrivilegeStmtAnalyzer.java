@@ -18,14 +18,12 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthPlugin;
@@ -43,8 +41,10 @@ import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -68,14 +68,7 @@ public class PrivilegeStmtAnalyzer {
          */
         private void analyseUser(UserIdentity userIdent, ConnectContext session, boolean checkExist) {
             // analyse user identity
-            try {
-                userIdent.analyze();
-            } catch (AnalysisException e) {
-                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
-                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
-                // Remove it after all old methods migrate to the new framework
-                throw new SemanticException(e.getMessage());
-            }
+            userIdent.analyze();
 
             if (checkExist) {
                 // check if user exists
@@ -99,14 +92,7 @@ public class PrivilegeStmtAnalyzer {
          * check if role name valid
          */
         private void validRoleName(String roleName, boolean canBeAdmin, String errMsg) {
-            try {
-                FeNameFormat.checkRoleName(roleName, canBeAdmin, errMsg);
-            } catch (AnalysisException e) {
-                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
-                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
-                // Remove it after all old methods migrate to the new framework
-                throw new SemanticException(e.getMessage());
-            }
+            FeNameFormat.checkRoleName(roleName, canBeAdmin, errMsg);
         }
 
         /**
@@ -115,17 +101,17 @@ public class PrivilegeStmtAnalyzer {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            if (stmt.getUserIdent() == null) {
+            if (stmt.getUserIdentity() == null) {
                 throw new SemanticException("Unsupported syntax: grant/revoke to role is not supported");
             }
-            analyseUser(stmt.getUserIdent(), session, true);
-            analyseRoleName(stmt.getGranteeRole(), session, true, "Can not granted/revoke role to user");
+            analyseUser(stmt.getUserIdentity(), session, true);
+            stmt.getGranteeRole().forEach(role -> analyseRoleName(role, session, true, "Can not granted/revoke role to user"));
             return null;
         }
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
-            if (stmt.isWithGrantOption()) {
+            if (stmt instanceof GrantPrivilegeStmt && ((GrantPrivilegeStmt) stmt).isWithGrantOption()) {
                 throw new SemanticException("unsupported syntax: WITH GRANT OPTION");
             }
             // validate user/role
@@ -136,8 +122,8 @@ public class PrivilegeStmtAnalyzer {
             }
 
             // parse privilege actions to PrivBitSet
-            PrivBitSet privs = getPrivBitSet(stmt.getPrivList());
-            String privType = stmt.getPrivType();
+            PrivBitSet privs = getPrivBitSet(stmt.getPrivilegeTypeUnResolved());
+            String privType = stmt.getObjectTypeUnResolved();
             if (privType.equals("TABLE") || privType.equals("DATABASE")) {
                 if (stmt.getPrivilegeObjectNameTokensList().size() != 1) {
                     throw new SemanticException("unsupported syntax: can only grant/revoke on one " + privType);
@@ -149,7 +135,7 @@ public class PrivilegeStmtAnalyzer {
                 }
                 analyseResourcePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokensList().get(0));
             } else if (privType.equals("USER")) {
-                if (stmt.getPrivList().size() != 1 || !privs.containsPrivs(Privilege.IMPERSONATE_PRIV)) {
+                if (stmt.getPrivilegeTypeUnResolved().size() != 1 || !privs.containsPrivs(Privilege.IMPERSONATE_PRIV)) {
                     throw new SemanticException("only IMPERSONATE can only be granted on user");
                 }
                 if (stmt.getUserPrivilegeObjectList().size() != 1) {
@@ -275,45 +261,47 @@ public class PrivilegeStmtAnalyzer {
             }
         }
 
-        public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdent(), session, stmt instanceof AlterUserStmt);
+        public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
+            analyseUser(stmt.getUserIdentity(), session, stmt instanceof AlterUserStmt);
             /*
              * IDENTIFIED BY
              */
             stmt.setScramblePassword(
-                    analysePassword(stmt.getUserIdent(), stmt.getOriginalPassword(), stmt.isPasswordPlain(),
+                    analysePassword(stmt.getUserIdentity(), stmt.getOriginalPassword(), stmt.isPasswordPlain(),
                             stmt instanceof AlterUserStmt));
             /*
              * IDENTIFIED WITH
              */
-            if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
-                if (AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name().equals(stmt.getAuthPlugin())) {
-                    stmt.setUserForAuthPlugin(stmt.getAuthString());
-                } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equals(stmt.getAuthPlugin())) {
+            if (!Strings.isNullOrEmpty(stmt.getAuthPluginName())) {
+                if (AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name().equals(stmt.getAuthPluginName())) {
+                    stmt.setUserForAuthPlugin(stmt.getAuthStringUnResolved());
+                } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equals(stmt.getAuthPluginName())) {
                     // in this case, authString is password
-                    stmt.setScramblePassword(analysePassword(stmt.getUserIdent(), stmt.getAuthString(),
+                    stmt.setScramblePassword(analysePassword(stmt.getUserIdentity(), stmt.getAuthStringUnResolved(),
                             stmt.isPasswordPlain(), stmt instanceof AlterUserStmt));
-                } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equalsIgnoreCase(stmt.getAuthPlugin()) &&
+                } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equalsIgnoreCase(stmt.getAuthPluginName()) &&
                         GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
                     // In kerberos authentication, userForAuthPlugin represents the user principal realm.
                     // If user realm is not specified when creating user, the service principal realm will be used as
                     // the user principal realm by default.
-                    if (stmt.getAuthString() != null) {
-                        stmt.setUserForAuthPlugin(stmt.getAuthString());
+                    if (stmt.getAuthStringUnResolved() != null) {
+                        stmt.setUserForAuthPlugin(stmt.getAuthStringUnResolved());
                     } else {
                         stmt.setUserForAuthPlugin(Config.authentication_kerberos_service_principal.split("@")[1]);
                     }
                 } else {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, stmt.getAuthPlugin());
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, stmt.getAuthPluginName());
                 }
             }
 
-            if (stmt.hasRole()) {
-                if (stmt.getQualifiedRole().equalsIgnoreCase("SUPERUSER")) {
+            if (!stmt.getDefaultRoles().isEmpty()) {
+                String role = stmt.getDefaultRoles().get(0);
+
+                if (role.equalsIgnoreCase("SUPERUSER")) {
                     // for forward compatibility
-                    stmt.setRole(Role.ADMIN_ROLE);
+                    stmt.getDefaultRoles().set(0, Role.ADMIN_ROLE);
                 }
-                analyseRoleName(stmt.getQualifiedRole(), session, true, "Can not granted/revoke role to user");
+                analyseRoleName(role, session, true, "Can not granted/revoke role to user");
             }
             return null;
         }
@@ -326,30 +314,24 @@ public class PrivilegeStmtAnalyzer {
 
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
-            validRoleName(stmt.getQualifiedRole(), false, "Can not create role");
+            validRoleName(stmt.getRoles().get(0), false, "Can not create role");
             return null;
         }
 
         @Override
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
             if (stmt.getUserIdent() != null) {
-                if (stmt.isAll()) {
-                    throw new SemanticException("Can not specified keyword ALL when specified user");
-                }
                 analyseUser(stmt.getUserIdent(), session, true);
             } else {
-                if (!stmt.isAll()) {
-                    // self
-                    stmt.setUserIdent(session.getCurrentUserIdentity());
-                }
+                stmt.setUserIdent(session.getCurrentUserIdentity());
             }
-            Preconditions.checkState(stmt.isAll() || session.getCurrentUserIdentity() != null);
+            Preconditions.checkState(session.getCurrentUserIdentity() != null);
             return null;
         }
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
-            validRoleName(stmt.getQualifiedRole(), false, "Can not drop role");
+            validRoleName(stmt.getRoles().get(0), false, "Can not drop role");
             return null;
         }
     }

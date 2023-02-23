@@ -17,8 +17,8 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.IndexDef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Index;
+import com.starrocks.sql.parser.NodePosition;
 
 public class CreateIndexClause extends AlterTableClause {
     // index definition class
@@ -26,8 +26,12 @@ public class CreateIndexClause extends AlterTableClause {
     // index internal class
     private Index index;
 
-    public CreateIndexClause(TableName tableName, IndexDef indexDef, boolean alter) {
-        super(AlterOpType.SCHEMA_CHANGE);
+    public CreateIndexClause(IndexDef indexDef) {
+        this(indexDef, NodePosition.ZERO);
+    }
+
+    public CreateIndexClause(IndexDef indexDef, NodePosition pos) {
+        super(AlterOpType.SCHEMA_CHANGE, pos);
         this.indexDef = indexDef;
     }
 

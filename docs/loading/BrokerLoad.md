@@ -16,7 +16,7 @@ From StarRocks v2.5 onwards, Broker Load no longer needs to depend on brokers to
 
 > **NOTE**
 >
-> Loading without the broker process may not work in certain circumstances, such as when you configure multiple HA systems or have multiple Kerberos configurations. In this situation, you can still load data by using the broker process.
+> Loading without the broker process may not work in certain circumstances, such as when you have multiple HDFS clusters or multiple Kerberos users. In this situation, you can still load data by using the broker process.
 
 If you need to load data by using brokers, make sure that brokers are deployed in your StarRocks cluster.
 
@@ -34,7 +34,10 @@ Broker Load supports the following data file formats:
 
 > **NOTE**
 >
-> For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+> For CSV data, take note of the following points:
+>
+> - You can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+> - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
 
 ## Supported storage systems
 
@@ -123,7 +126,7 @@ LOAD LABEL test_db.label1
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
-
+    ,
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
@@ -151,7 +154,7 @@ LOAD LABEL test_db.label2
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
-    
+    ,
     DATA INFILE("s3a://bucket_s3/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
@@ -159,16 +162,16 @@ LOAD LABEL test_db.label2
 )
 WITH BROKER
 (
-    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
+    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 );
 ```
 
 > **NOTE**
 >
 > - Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
-> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `fs.s3a.access.key` and `fs.s3a.secret.key` unspecified.
+> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `aws.s3.access_key` and `aws.s3.secret_key` unspecified.
 
 #### Load data from Google GCS
 
@@ -181,7 +184,7 @@ LOAD LABEL test_db.label3
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
-    
+    ,
     DATA INFILE("s3a://bucket_gcs/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
@@ -246,9 +249,9 @@ LOAD LABEL test_db.label_7
 )
 WITH BROKER 
 (
-    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
+    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 )；
 ```
 
@@ -264,9 +267,9 @@ LOAD LABEL test_db.label_8
 )
 WITH BROKER 
 (
-    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
+    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 )；
 ```
 

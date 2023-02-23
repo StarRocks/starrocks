@@ -15,12 +15,20 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.parser.NodePosition;
 
 public class Property implements ParseNode {
     private final String key;
     private final String value;
 
+    private final NodePosition pos;
+
     public Property(String key, String value) {
+        this(key, value, NodePosition.ZERO);
+    }
+
+    public Property(String key, String value, NodePosition pos) {
+        this.pos = pos;
         this.key = key;
         this.value = value;
     }
@@ -31,5 +39,10 @@ public class Property implements ParseNode {
 
     public String getValue() {
         return value;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

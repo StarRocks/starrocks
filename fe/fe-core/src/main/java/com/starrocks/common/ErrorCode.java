@@ -55,6 +55,7 @@ public enum ErrorCode {
     ERR_ILLEGAL_COLUMN_REFERENCE_ERROR(1053, new byte[] {'2', '3', '0', '0', '1'},
             "Illegal column/field reference '%s' of semi-/anti-join"),
     ERR_BAD_FIELD_ERROR(1054, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
+    ERR_BAD_FUNC_ERROR(1055, new byte[] {'4', '2', '0', '0', '0'}, "Unknown function '%s'"),
     ERR_WRONG_VALUE_COUNT(1058, new byte[] {'2', '1', 'S', '0', '1'}, "Column count doesn't match value count"),
     ERR_DUP_FIELDNAME(1060, new byte[] {'4', '2', 'S', '2', '1'}, "Duplicate column name '%s'"),
     ERR_NONUNIQ_TABLE(1066, new byte[] {'4', '2', '0', '0', '0'}, "Not unique table/alias: '%s'"),
@@ -79,6 +80,8 @@ public enum ErrorCode {
             "%s command denied to user '%s'@'%s' for table '%s'"),
     ERR_MV_ACCESS_DENIED_ERROR(1143, new byte[] {'4', '2', '0', '0', '0'},
             "%s command denied to user '%s'@'%s' for materialized view '%s'"),
+    ERR_FUNC_ACCESS_DENIED_ERROR(1144, new byte[] {'4', '2', '0', '0', '0'},
+            "%s command denied to user '%s'@'%s' for function '%s'"),
     ERR_WRONG_COLUMN_NAME(1166, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect column name '%s'"),
     ERR_UNKNOWN_SYSTEM_VARIABLE(1193, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown system variable '%s'"),
     ERR_TOO_MANY_USER_CONNECTIONS(1203, new byte[] {'4', '2', '0', '0', '0'},
@@ -95,6 +98,8 @@ public enum ErrorCode {
     ERR_WRONG_VALUE_FOR_VAR(1231, new byte[] {'4', '2', '0', '0', '0'},
             "Variable '%s' can't be set to the value of '%s'"),
     ERR_WRONG_TYPE_FOR_VAR(1232, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect argument type to variable '%s'"),
+    ERR_ANY_ACTION_IN_DB_ACCESS_DENIED_ERROR(1233, new byte[] {'4', '2', '0', '0', '0'},
+            "You need any privilege on any TABLE/VIEW/MV in database %s to perform this operation"),
     ERR_DERIVED_MUST_HAVE_ALIAS(1248, new byte[] {'4', '2', '0', '0', '0'},
             "Every derived table must have its own alias"),
 
@@ -130,6 +135,7 @@ public enum ErrorCode {
             "data cannot be inserted into table with empty partition. " +
                     "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. "),
     ERR_NO_SUCH_PARTITION(1749, new byte[] {'H', 'Y', '0', '0', '0'}, "partition '%s' doesn't exist"),
+    
     // Following is StarRocks's error code, which start from 5000
     ERR_NOT_OLAP_TABLE(5000, new byte[] {'H', 'Y', '0', '0', '0'}, "Table '%s' is not a OLAP table"),
     ERR_WRONG_PROC_PATH(5001, new byte[] {'H', 'Y', '0', '0', '0'}, "Proc path '%s' doesn't exist"),
@@ -296,19 +302,18 @@ public enum ErrorCode {
             "Access denied for user '%s' to table '%s' when checking privilege"),
     ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND(5089, new byte[] {'4', '2', '0', '0', '0'},
             "Routine load job [%s] not found when checking privilege"),
-
     ERR_PRIVILEGE_EXPORT_JOB_NOT_FOUND(5090, new byte[] {'4', '2', '0', '0', '0'},
             "Export job [%s] not found when checking privilege"),
-    
     ERR_PRIVILEGE_BACKUP_JOB_NOT_FOUND(5091, new byte[] {'4', '2', '0', '0', '0'},
             "Backup job not found when checking privilege"),
-
-    ERR_PRIVILEGE_FUNC_NOT_FOUND(5092, new byte[] {'4', '2', '0', '0', '0'},
-            "Func not found when checking privilege"),
+    ERROR_DYNAMIC_PARTITION_HISTORY_PARTITION_NUM_ZERO(5092, new byte[] {'4', '2', '0', '0', '0'},
+            "Dynamic history partition num must greater than 0"),
     ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
             "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
-    ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s");
+    ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s"),
 
+    ERR_BAD_WAREHOUSE_ERROR(6002, new byte[] {'4', '2', '0', '0', '0'},
+            "Unknown warehouse '%s'");
 
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {

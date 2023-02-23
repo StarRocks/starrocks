@@ -78,8 +78,6 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : operatorMap.entrySet()) {
                 kv.getValue().accept(rewriter, null);
             }
-
-            return;
         }
     }
 }

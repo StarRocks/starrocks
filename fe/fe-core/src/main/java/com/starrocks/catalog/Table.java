@@ -140,6 +140,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     // not serialized field
     // record all materialized views based on this Table
+    @SerializedName(value = "mvs")
     private Set<MvId> relatedMaterializedViews;
 
     public Table(TableType type) {
@@ -170,16 +171,23 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
-    public boolean isTypeRead() {
-        return isTypeRead;
-    }
-
     public void setTypeRead(boolean isTypeRead) {
         this.isTypeRead = isTypeRead;
     }
 
     public long getId() {
         return id;
+    }
+
+    /**
+     * Get the unique id of table in string format, since we already ensure
+     * the uniqueness of id for internal table, we just convert it to string
+     * and return, for external table it's up to the implementation of connector.
+     *
+     * @return unique id of table in string format
+     */
+    public String getUUID() {
+        return Long.toString(id);
     }
 
     public void setId(long id) {
@@ -262,6 +270,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public Column getColumn(String name) {
         return nameToColumn.get(name);
+    }
+
+    public boolean containColumn(String columnName) {
+        return nameToColumn.containsKey(columnName);
     }
 
     public List<Column> getColumns() {
@@ -496,6 +508,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         }
 
         return true;
+    }
+
+    public boolean hasAutoIncrementColumn() {
+        List<Column> columns = this.getFullSchema();
+        for (Column col : columns) {
+            if (col.isAutoIncrement()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

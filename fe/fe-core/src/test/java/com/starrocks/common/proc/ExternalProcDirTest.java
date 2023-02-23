@@ -157,8 +157,8 @@ public class ExternalProcDirTest {
         Assert.assertEquals(Lists.newArrayList("Field", "Type", "Null", "Key", "Default", "Extra"), result.getColumnNames());
         Assert.assertEquals(2, result.getRows().size());
         List<List<String>> rows = Lists.newArrayList();
-        rows.add(Arrays.asList("id", "INT", "No", "false", FeConstants.null_string, ""));
-        rows.add(Arrays.asList("name", "VARCHAR", "No", "false", FeConstants.null_string, ""));
+        rows.add(Arrays.asList("id", "INT", "No", "false", FeConstants.NULL_STRING, ""));
+        rows.add(Arrays.asList("name", "VARCHAR", "No", "false", FeConstants.NULL_STRING, ""));
         Assert.assertEquals(rows, result.getRows());
     }
 }

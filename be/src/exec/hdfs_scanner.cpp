@@ -261,8 +261,6 @@ void HdfsScanner::update_counter() {
     COUNTER_UPDATE(profile->io_counter, _stats.io_count);
     COUNTER_UPDATE(profile->column_read_timer, _stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _stats.column_convert_ns);
-    COUNTER_UPDATE(profile->delete_build_timer, _stats.delete_build_ns);
-    COUNTER_UPDATE(profile->delete_file_per_scan_counter, _stats.delete_file_per_scan);
 
     if (_scanner_params.use_block_cache && _cache_input_stream) {
         const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
@@ -314,6 +312,23 @@ void HdfsScannerContext::append_not_existed_columns_to_chunk(ChunkPtr* chunk, si
         }
         ck->append_column(std::move(col), slot_desc->id());
     }
+}
+
+Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter) {
+    size_t chunk_size = (*chunk)->num_rows();
+    if (conjunct_ctxs_by_slot.size()) {
+        filter->assign(chunk_size, 1);
+        for (auto& it : conjunct_ctxs_by_slot) {
+            ASSIGN_OR_RETURN(chunk_size, ExecNode::eval_conjuncts_into_filter(it.second, chunk->get(), filter));
+            if (chunk_size == 0) {
+                break;
+            }
+        }
+        if (chunk_size != 0 && chunk_size != (*chunk)->num_rows()) {
+            (*chunk)->filter(*filter);
+        }
+    }
+    return Status::OK();
 }
 
 StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots() {

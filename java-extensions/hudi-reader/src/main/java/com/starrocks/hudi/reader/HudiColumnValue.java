@@ -14,6 +14,7 @@
 
 package com.starrocks.hudi.reader;
 
+import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.MapObjectInspector;
@@ -21,13 +22,18 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+import org.apache.hadoop.io.LongWritable;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import static com.starrocks.hudi.reader.HudiScannerUtils.TIMESTAMP_UNIT_MAPPING;
 
 public class HudiColumnValue implements ColumnValue {
-    private Object fieldData;
-    private ObjectInspector fieldInspector;
+    private final Object fieldData;
+    private final ObjectInspector fieldInspector;
 
     HudiColumnValue(ObjectInspector fieldInspector, Object fieldData) {
         this.fieldInspector = fieldInspector;
@@ -74,6 +80,19 @@ public class HudiColumnValue implements ColumnValue {
     }
 
     @Override
+    public String getTimestamp(ColumnType.TypeValue type) {
+        // INT64 timestamp type
+        if (HudiScannerUtils.isMaybeInt64Timestamp(type) && (fieldData instanceof LongWritable)) {
+            long datetime = ((LongWritable) fieldData).get();
+            TimeUnit timeUnit = TIMESTAMP_UNIT_MAPPING.get(type);
+            LocalDateTime localDateTime = HudiScannerUtils.getTimestamp(datetime, timeUnit, true);
+            return HudiScannerUtils.formatDateTime(localDateTime);
+        } else {
+            return inspectObject().toString();
+        }
+    }
+
+    @Override
     public byte[] getBytes() {
         return (byte[]) inspectObject();
     }
@@ -116,11 +135,14 @@ public class HudiColumnValue implements ColumnValue {
         StructObjectInspector inspector = (StructObjectInspector) fieldInspector;
         List<? extends StructField> fields = inspector.getAllStructFieldRefs();
         for (int i = 0; i < structFieldIndex.size(); i++) {
-            StructField sf = fields.get(structFieldIndex.get(i));
-            Object o = inspector.getStructFieldData(fieldData, sf);
+            Integer idx = structFieldIndex.get(i);
             HudiColumnValue cv = null;
-            if (o != null) {
-                cv = new HudiColumnValue(sf.getFieldObjectInspector(), o);
+            if (idx != null) {
+                StructField sf = fields.get(idx);
+                Object o = inspector.getStructFieldData(fieldData, sf);
+                if (o != null) {
+                    cv = new HudiColumnValue(sf.getFieldObjectInspector(), o);
+                }
             }
             values.add(cv);
         }

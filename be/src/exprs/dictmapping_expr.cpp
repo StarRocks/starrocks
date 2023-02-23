@@ -18,6 +18,7 @@ namespace starrocks {
 DictMappingExpr::DictMappingExpr(const TExprNode& node) : Expr(node, false) {}
 
 StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+    // TODO: record rewrite info in ExprContext
     // If dict_func_expr is nullptr, then it means that this DictExpr has not been rewritten.
     // But in some cases we need to evaluate the original expression directly
     // (usually column_expr_predicate).

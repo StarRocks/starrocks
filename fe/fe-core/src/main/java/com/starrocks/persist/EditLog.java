@@ -37,7 +37,6 @@ package com.starrocks.persist;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authentication.UserPropertyInfo;
@@ -55,6 +54,7 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -66,6 +66,7 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteInfo;
+import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.LoadErrorHub;
@@ -76,6 +77,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
@@ -91,6 +93,8 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeJob;
@@ -100,13 +104,16 @@ import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -144,6 +151,65 @@ public class EditLog {
                     long id = Long.parseLong(idString);
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
                             .initTransactionId(id + 1);
+                    break;
+                }
+                case OperationType.OP_CREATE_WH: {
+                    Warehouse wh = (Warehouse) journal.getData();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayCreateWarehouse(wh);
+                    break;
+                }
+                case OperationType.OP_ALTER_WH_ADD_CLUSTER: {
+                    AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
+                    String warehouseName = log.getWarehouseName();
+                    Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+                    warehouse.replayAddCluster(log);
+                    break;
+                }
+                case OperationType.OP_ALTER_WH_REMOVE_CLUSTER: {
+                    AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
+                    String warehouseName = log.getWarehouseName();
+                    Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+                    warehouse.replayRemoveCluster(log);
+                    break;
+                }
+                case OperationType.OP_ALTER_WH_MOD_PROP: {
+                    AlterWhPropertyOplog log = (AlterWhPropertyOplog) journal.getData();
+                    String warehouseName = log.getWarehouseName();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayModifyProperty(warehouseName, log.getProperties());
+                    break;
+                }
+                case OperationType.OP_SUSPEND_WH: {
+                    OpWarehouseLog log = (OpWarehouseLog) journal.getData();
+                    String warehouseName = log.getWarehouseName();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replaySuspendWarehouse(warehouseName);
+                    break;
+                }
+                case OperationType.OP_RESUME_WH: {
+                    ResumeWarehouseLog log = (ResumeWarehouseLog) journal.getData();
+                    String warehouseName = log.getWarehouseName();
+                    Map<Long, com.starrocks.warehouse.Cluster> clusterMap = log.getClusters();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayResumeWarehouse(warehouseName, clusterMap);
+                    break;
+                }
+                case OperationType.OP_DROP_WH: {
+                    OpWarehouseLog log = (OpWarehouseLog) journal.getData();
+                    String warehouseName = log.getWarehouseName();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayDropWarehouse(warehouseName);
+                }
+                case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
+                case OperationType.OP_DELETE_AUTO_INCREMENT_ID: {
+                    AutoIncrementInfo info = (AutoIncrementInfo) journal.getData();
+                    LocalMetastore metastore = globalStateMgr.getLocalMetastore();
+                    if (opCode == OperationType.OP_SAVE_AUTO_INCREMENT_ID) {
+                        metastore.replayAutoIncrementId(info);
+                    } else if (opCode == OperationType.OP_DELETE_AUTO_INCREMENT_ID) {
+                        metastore.replayDeleteAutoIncrementId(info);
+                    }
                     break;
                 }
                 case OperationType.OP_CREATE_DB: {
@@ -368,6 +434,10 @@ public class EditLog {
                     ExportMgr exportMgr = globalStateMgr.getExportMgr();
                     exportMgr.replayUpdateJobState(op.getJobId(), op.getState());
                     break;
+                case OperationType.OP_EXPORT_UPDATE_INFO:
+                    ExportJob.ExportUpdateInfo exportUpdateInfo = (ExportJob.ExportUpdateInfo) journal.getData();
+                    globalStateMgr.getExportMgr().replayUpdateJobInfo(exportUpdateInfo);
+                    break;
                 case OperationType.OP_FINISH_DELETE: {
                     DeleteInfo info = (DeleteInfo) journal.getData();
                     DeleteHandler deleteHandler = globalStateMgr.getDeleteHandler();
@@ -468,7 +538,7 @@ public class EditLog {
                 case OperationType.OP_META_VERSION: {
                     String versionString = ((Text) journal.getData()).toString();
                     int version = Integer.parseInt(versionString);
-                    if (version > FeConstants.meta_version) {
+                    if (version > FeConstants.META_VERSION) {
                         throw new JournalInconsistentException(
                                 "invalid meta data version found, cat not bigger than FeConstants.meta_version."
                                         + "please update FeConstants.meta_version bigger or equal to " + version +
@@ -479,12 +549,12 @@ public class EditLog {
                 }
                 case OperationType.OP_META_VERSION_V2: {
                     MetaVersion metaVersion = (MetaVersion) journal.getData();
-                    if (metaVersion.getCommunityVersion() > FeConstants.meta_version) {
+                    if (metaVersion.getCommunityVersion() > FeConstants.META_VERSION) {
                         throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
                                 + "FeConstants.meta_version. please update FeConstants.meta_version bigger or equal to "
                                 + metaVersion.getCommunityVersion() + "and restart.");
                     }
-                    if (metaVersion.getStarRocksVersion() > FeConstants.starrocks_meta_version) {
+                    if (metaVersion.getStarRocksVersion() > FeConstants.STARROCKS_META_VERSION) {
                         throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
                                 + "FeConstants.starrocks_meta_version. please update FeConstants.starrocks_meta_version"
                                 + " bigger or equal to " + metaVersion.getStarRocksVersion() + "and restart.");
@@ -740,7 +810,9 @@ public class EditLog {
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
-                case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
+                case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
+                case OperationType.OP_ALTER_TABLE_PROPERTIES:
+                case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
                     globalStateMgr.replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
@@ -1051,6 +1123,41 @@ public class EditLog {
         logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
     }
 
+    public void logCreateWarehouse(Warehouse warehouse) {
+        logEdit(OperationType.OP_CREATE_WH, warehouse);
+    }
+
+    public void logAddCluster(AlterWhClusterOplog log) {
+        logEdit(OperationType.OP_ALTER_WH_ADD_CLUSTER, log);
+    }
+
+    public void logRemoveCluster(AlterWhClusterOplog log) {
+        logEdit(OperationType.OP_ALTER_WH_REMOVE_CLUSTER, log);
+    }
+
+    public void logModifyWhProperty(AlterWhPropertyOplog log) {
+        logEdit(OperationType.OP_ALTER_WH_MOD_PROP, log);
+    }
+
+    public void logSuspendWarehouse(OpWarehouseLog log) {
+        logEdit(OperationType.OP_SUSPEND_WH, log);
+    }
+
+    public void logResumeWarehouse(ResumeWarehouseLog log) {
+        logEdit(OperationType.OP_RESUME_WH, log);
+    }
+
+    public void logDropWarehouse(OpWarehouseLog log) {
+        logEdit(OperationType.OP_DROP_WH, log);
+    }
+    public void logSaveAutoIncrementId(AutoIncrementInfo info) {
+        logEdit(OperationType.OP_SAVE_AUTO_INCREMENT_ID, info);
+    }
+
+    public void logSaveDeleteAutoIncrementId(AutoIncrementInfo info) {
+        logEdit(OperationType.OP_DELETE_AUTO_INCREMENT_ID, info);
+    }
+
     public void logCreateDb(Database db) {
         logEdit(OperationType.OP_CREATE_DB, db);
     }
@@ -1319,9 +1426,12 @@ public class EditLog {
         logEdit(OperationType.OP_EXPORT_CREATE, job);
     }
 
-    public void logExportUpdateState(long jobId, ExportJob.JobState newState) {
-        ExportJob.StateTransfer transfer = new ExportJob.StateTransfer(jobId, newState);
-        logEdit(OperationType.OP_EXPORT_UPDATE_STATE, transfer);
+    public void logExportUpdateState(long jobId, ExportJob.JobState newState,
+                                     List<Pair<TNetworkAddress, String>> snapshotPaths, String exportTempPath,
+                                     Set<String> exportedFiles, ExportFailMsg failMsg) {
+        ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState,
+                snapshotPaths, exportTempPath, exportedFiles, failMsg);
+        logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
     }
 
     public void logUpdateClusterAndBackendState(BackendIdsUpdateInfo info) {
@@ -1477,6 +1587,10 @@ public class EditLog {
         logEdit(OperationType.OP_MODIFY_IN_MEMORY, info);
     }
 
+    public void logModifyConstraint(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY, info);
+    }
+
     public void logModifyEnablePersistentIndex(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX, info);
     }
@@ -1629,12 +1743,10 @@ public class EditLog {
     }
 
     public void logUpdateRolePrivilege(
-            long roleId,
-            RolePrivilegeCollection privilegeCollection,
+            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified,
             short pluginId,
             short pluginVersion) {
-        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
-                roleId, privilegeCollection, pluginId, pluginVersion);
+        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
         logUpdateRolePrivilege(info);
     }
 
@@ -1643,12 +1755,10 @@ public class EditLog {
     }
 
     public void logDropRole(
-            long roleId,
-            RolePrivilegeCollection privilegeCollection,
+            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified,
             short pluginId,
             short pluginVersion) {
-        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
-                roleId, privilegeCollection, pluginId, pluginVersion);
+        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
         logEdit(OperationType.OP_DROP_ROLE_V2, info);
     }
 
@@ -1672,4 +1782,7 @@ public class EditLog {
         logEdit(OperationType.OP_MV_EPOCH_UPDATE, epoch);
     }
 
+    public void logAlterTableProperties(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
+    }
 }

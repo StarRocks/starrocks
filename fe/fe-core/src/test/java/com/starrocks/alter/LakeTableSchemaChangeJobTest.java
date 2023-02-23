@@ -90,7 +90,8 @@ public class LakeTableSchemaChangeJobTest {
     public void before() throws Exception {
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<Long> createShards(int shardCount, int replicaNum, FilePathInfo path, FileCacheInfo cache, long groupId)
+            public List<Long> createShards(int shardCount, FilePathInfo path, FileCacheInfo cache, long groupId,
+                    List<Long> matchShardIds)
                 throws DdlException {
                 for (int i = 0; i < shardCount; i++) {
                     shadowTabletIds.add(GlobalStateMgr.getCurrentState().getNextId());
@@ -694,6 +695,11 @@ public class LakeTableSchemaChangeJobTest {
         // Does not support cancel job in FINISHED_REWRITING state.
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+
+        // Drop the table, now it's ok to cancel the job
+        db.dropTable(table.getName());
+        schemaChangeJob.cancel("table does not exist anymore");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test

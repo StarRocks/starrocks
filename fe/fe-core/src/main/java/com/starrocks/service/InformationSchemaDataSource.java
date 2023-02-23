@@ -18,7 +18,6 @@ package com.starrocks.service;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -32,15 +31,16 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TGetTablesConfigRequest;
@@ -78,7 +78,7 @@ public class InformationSchemaDataSource {
             try {
                 matcher = PatternMatcher.createMysqlPattern(authInfo.getPattern(),
                         CaseSensibility.DATABASE.getCaseSensibility());
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 throw new TException("Pattern is in bad format: " + authInfo.getPattern());
             }
         }
@@ -95,7 +95,7 @@ public class InformationSchemaDataSource {
         }
         for (String fullName : dbNames) {
             if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, fullName)) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
                     continue;
                 }
             } else {
@@ -259,7 +259,7 @@ public class InformationSchemaDataSource {
         }
         String pkSb = Joiner.on(", ").join(keysColumnNames);
         tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
-                                       || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
+                || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
         tableConfigInfo.setPartition_key(partitionKeySb.toString());
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");
@@ -348,10 +348,10 @@ public class InformationSchemaDataSource {
             case HIVE:
             case ICEBERG:
             case HUDI:
-            case LAKE:
             case ELASTICSEARCH:
             case JDBC:
                 return "EXTERNAL TABLE";
+            case LAKE:
             case OLAP:
             case OLAP_EXTERNAL:
                 return "BASE TABLE";

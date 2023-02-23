@@ -47,6 +47,15 @@ Status SchemaHelper::list_table_status(const std::string& ip, const int32_t port
             [&request, &result](FrontendServiceConnection& client) { client->listTableStatus(*result, request); });
 }
 
+Status SchemaHelper::list_materialized_view_status(const std::string& ip, const int32_t port,
+                                                   const TGetTablesParams& request,
+                                                   TListMaterializedViewStatusResult* result) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(ip, port,
+                                                       [&request, &result](FrontendServiceConnection& client) {
+                                                           client->listMaterializedViewStatus(*result, request);
+                                                       });
+}
+
 Status SchemaHelper::get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                      TGetTablesInfoResponse* response) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(

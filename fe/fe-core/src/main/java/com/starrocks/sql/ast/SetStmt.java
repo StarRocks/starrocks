@@ -12,27 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
 public class SetStmt extends StatementBase {
-    private final List<SetVar> setVars;
+    private final List<SetListItem> setListItems;
 
-    public SetStmt(List<SetVar> setVars) {
-        this.setVars = setVars;
+    public SetStmt(List<SetListItem> setListItems) {
+        this(setListItems, NodePosition.ZERO);
     }
 
-    public List<SetVar> getSetVars() {
-        return setVars;
+    public SetStmt(List<SetListItem> setListItems, NodePosition pos) {
+        super(pos);
+        this.setListItems = setListItems;
+    }
+
+    public List<SetListItem> getSetListItems() {
+        return setListItems;
     }
 
     @Override
     public boolean needAuditEncryption() {
-        for (SetVar var : setVars) {
+        for (SetListItem var : setListItems) {
             if (var instanceof SetPassVar) {
                 return true;
             }
@@ -42,11 +47,11 @@ public class SetStmt extends StatementBase {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        if (setVars != null) {
-            for (SetVar var : setVars) {
+        if (setListItems != null) {
+            for (SetListItem var : setListItems) {
                 if (var instanceof SetPassVar) {
                     return RedirectStatus.FORWARD_WITH_SYNC;
-                } else if (var.getType() == SetType.GLOBAL) {
+                } else if (var instanceof SystemVariable && ((SystemVariable) var).getType() == SetType.GLOBAL) {
                     return RedirectStatus.FORWARD_WITH_SYNC;
                 }
             }

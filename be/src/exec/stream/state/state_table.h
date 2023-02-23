@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "column/stream_chunk.h"
 #include "common/status.h"
-#include "exec/stream/stream_fdw.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/tablet.h"
@@ -24,6 +24,12 @@ namespace starrocks::stream {
 
 using ChunkIteratorPtrOr = StatusOr<ChunkIteratorPtr>;
 using ChunkPtrOr = StatusOr<ChunkPtr>;
+
+// TODO: Maybe we can put `found`/`filter` into Chunk later.
+struct StateTableResult {
+    std::vector<bool> found;
+    ChunkPtr result_chunk;
+};
 
 /**
  * `StateTable` is used in Incremental MV, stateful operators will use`StateTable` to keep its
@@ -34,31 +40,37 @@ class StateTable {
 public:
     virtual ~StateTable() = default;
 
-    virtual Status init() = 0;
     virtual Status prepare(RuntimeState* state) = 0;
     virtual Status open(RuntimeState* state) = 0;
 
-    // The queried key must be the primary keys of state table which may contain multi columns.
-    // `seek` must only return one row for the primary keys.
-    virtual ChunkPtrOr seek(const DatumRow& key) const = 0;
-
     // The batch api of `seek` which all the keys must be primary keys of state table.
     // NOTE: The count of the result of `seek` must be exactly same to the input keys' count.
-    virtual std::vector<ChunkPtrOr> seek(const std::vector<DatumRow>& keys) const = 0;
+    // NOTE: The queried key must be the primary keys of state table which may contain multi columns.
+    // `seek` must only return one row for the primary keys.
+    virtual Status seek(const Columns& keys, StateTableResult& values) const = 0;
+
+    // Seek with selection, only seek values when selection's flag is true.
+    virtual Status seek(const Columns& keys, const std::vector<uint8_t>& selection, StateTableResult& values) const = 0;
+
+    // If `projection_columns` is not empty, only output all needed projection_columns in values.
+    virtual Status seek(const Columns& keys, const std::vector<std::string>& projection_columns,
+                        StateTableResult& values) const = 0;
 
     // The queried key must be the prefix of the primary keys. Result may contain multi rows, so
-    // use ChunkIterator to fetch all results.
-    virtual ChunkIteratorPtrOr prefix_scan(const DatumRow& key) const = 0;
+    // use ChunkIterator to fetch all results. result will output all non-key columns.
+    virtual ChunkIteratorPtrOr prefix_scan(const Columns& keys, size_t row_idx) const = 0;
 
-    // The batch api of `prefix_scan`.
-    // NOTE: The count of the result of `prefix_scan` must be exactly same to the input keys' count.
-    virtual std::vector<ChunkIteratorPtrOr> prefix_scan(const std::vector<DatumRow>& keys) const = 0;
+    // If `projection_columns` is not empty, only output all needed projection_columns in values.
+    virtual ChunkIteratorPtrOr prefix_scan(const std::vector<std::string>& projection_columns, const Columns& keys,
+                                           size_t row_idx) const = 0;
 
     // Flush the input chunk into the state table: StreamChunk contains the ops columns.
-    virtual Status flush(RuntimeState* state, StreamChunk* chunk) = 0;
+    virtual Status write(RuntimeState* state, const StreamChunkPtr& chunk) = 0;
 
     // Commit the flushed state data to be used in the later transaction.
     virtual Status commit(RuntimeState* state) = 0;
+
+    virtual Status reset_epoch(RuntimeState* state) = 0;
 };
 
 } // namespace starrocks::stream

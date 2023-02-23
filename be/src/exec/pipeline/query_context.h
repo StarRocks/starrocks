@@ -118,6 +118,7 @@ public:
 
     // Some statistic about the query, including cpu, scan_rows, scan_bytes
     int64_t mem_cost_bytes() const { return _mem_tracker->peak_consumption(); }
+    int64_t current_mem_usage_bytes() const { return _mem_tracker->consumption(); }
     void incr_cpu_cost(int64_t cost) {
         _total_cpu_cost_ns += cost;
         _delta_cpu_cost_ns += cost;

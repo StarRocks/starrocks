@@ -105,26 +105,20 @@ public:
                                                             const SortExecExprs& sort_exec_exprs,
                                                             const std::vector<OrderByType>& order_by_types);
 
-    virtual void setup_runtime(RuntimeProfile* profile);
+    virtual void setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker);
 
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
     virtual Status done(RuntimeState* state) = 0;
+
     // get_next only works after done().
     virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;
 
     virtual std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) { return nullptr; }
 
-    // Return sorted data in multiple runs(Avoid merge them into a big chunk)
-    virtual SortedRuns get_sorted_runs() = 0;
-
     // Return accurate output rows of this operator
     virtual size_t get_output_rows() const = 0;
-
-    Status finish(RuntimeState* state);
-
-    bool sink_complete();
 
     virtual int64_t mem_usage() const = 0;
 
@@ -145,35 +139,33 @@ protected:
     RuntimeProfile::Counter* _sort_timer = nullptr;
     RuntimeProfile::Counter* _merge_timer = nullptr;
     RuntimeProfile::Counter* _output_timer = nullptr;
-
-    std::atomic<bool> _is_sink_complete = false;
 };
 
 namespace detail {
 struct SortRuntimeFilterBuilder {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     JoinRuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc) {
         auto data_column = ColumnHelper::get_data_column(column.get());
-        auto runtime_data_column = down_cast<RunTimeColumnType<ptype>*>(data_column);
+        auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];
         if (asc) {
-            return RuntimeBloomFilter<ptype>::template create_with_range<false>(pool, data);
+            return RuntimeBloomFilter<ltype>::template create_with_range<false>(pool, data);
         } else {
-            return RuntimeBloomFilter<ptype>::template create_with_range<true>(pool, data);
+            return RuntimeBloomFilter<ltype>::template create_with_range<true>(pool, data);
         }
     }
 };
 
 struct SortRuntimeFilterUpdater {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     std::nullptr_t operator()(JoinRuntimeFilter* filter, const ColumnPtr& column, int rid, bool asc) {
         auto data_column = ColumnHelper::get_data_column(column.get());
-        auto runtime_data_column = down_cast<RunTimeColumnType<ptype>*>(data_column);
+        auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];
         if (asc) {
-            down_cast<RuntimeBloomFilter<ptype>*>(filter)->template update_min_max<false>(data);
+            down_cast<RuntimeBloomFilter<ltype>*>(filter)->template update_min_max<false>(data);
         } else {
-            down_cast<RuntimeBloomFilter<ptype>*>(filter)->template update_min_max<true>(data);
+            down_cast<RuntimeBloomFilter<ltype>*>(filter)->template update_min_max<true>(data);
         }
         return nullptr;
     }

@@ -28,20 +28,21 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
@@ -63,22 +64,7 @@ public class CreateTableAnalyzer {
 
     private static final String DEFAULT_CHARSET_NAME = "utf8";
 
-    private static final String DEFAULT_ENGINE_NAME = "olap";
-
     private static final String ELASTICSEARCH = "elasticsearch";
-
-    public enum EngineType {
-        OLAP,
-        MYSQL,
-        BROKER,
-        ELASTICSEARCH,
-        HIVE,
-        ICEBERG,
-        HUDI,
-        JDBC,
-        STARROCKS,
-        FILE
-    }
 
     public enum CharsetType {
         UTF8,
@@ -87,11 +73,17 @@ public class CreateTableAnalyzer {
 
     private static String analyzeEngineName(String engineName) {
         if (Strings.isNullOrEmpty(engineName)) {
-            return DEFAULT_ENGINE_NAME;
+            return EngineType.defaultEngine().name();
         }
 
-        if (engineName.equalsIgnoreCase(CreateTableStmt.LAKE_ENGINE_NAME) && !Config.use_staros) {
-            throw new SemanticException("Engine %s needs 'use_staros = true' config in fe.conf", engineName);
+        if (engineName.equalsIgnoreCase(EngineType.STARROCKS.name()) &&
+                GlobalStateMgr.getCurrentState().isSharedNothingMode()) {
+            throw new SemanticException("Engine %s needs 'run_mode = shared_data' config in fe.conf", engineName);
+        }
+
+        if (engineName.equalsIgnoreCase(EngineType.OLAP.name()) &&
+                GlobalStateMgr.getCurrentState().isSharedDataMode()) {
+            throw new SemanticException("Disallow create OLAP table in this cluster");
         }
 
         try {
@@ -139,6 +131,19 @@ public class CreateTableAnalyzer {
             }
         }
         List<ColumnDef> columnDefs = statement.getColumnDefs();
+        int autoIncrementColumnCount = 0;
+        for (ColumnDef colDef : columnDefs) {
+            if (colDef.isAutoIncrement()) {
+                autoIncrementColumnCount++;
+                if (colDef.getType() != Type.BIGINT) {
+                    throw new IllegalArgumentException("The AUTO_INCREMENT column must be BIGINT");
+                }
+            }
+
+            if (autoIncrementColumnCount > 1) {
+                throw new IllegalArgumentException("More than one AUTO_INCREMENT column defined in CREATE TABLE Statement");
+            }
+        }
         PartitionDesc partitionDesc = statement.getPartitionDesc();
         // analyze key desc
         if (statement.isOlapOrLakeEngine()) {
@@ -163,8 +168,8 @@ public class CreateTableAnalyzer {
                 } else {
                     for (ColumnDef columnDef : columnDefs) {
                         keyLength += columnDef.getType().getIndexSize();
-                        if (keysColumnNames.size() >= FeConstants.shortkey_max_column_count
-                                || keyLength > FeConstants.shortkey_maxsize_bytes) {
+                        if (keysColumnNames.size() >= FeConstants.SHORTKEY_MAX_COLUMN_COUNT
+                                || keyLength > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
                             if (keysColumnNames.size() == 0
                                     && columnDef.getType().getPrimitiveType().isCharFamily()) {
                                 keysColumnNames.add(columnDef.getName());
@@ -279,7 +284,7 @@ public class CreateTableAnalyzer {
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
-                } else if (partitionDesc instanceof ExpressionPartitionDesc && Config.enable_expression_partition) {
+                } else if (partitionDesc instanceof ExpressionPartitionDesc) {
                     ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
                     try {
                         expressionPartitionDesc.analyze(columnDefs, properties);
@@ -367,5 +372,4 @@ public class CreateTableAnalyzer {
             }
         }
     }
-
 }

@@ -161,7 +161,7 @@ public class StatisticExecutor {
         context.setThreadLocalInfo();
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
 
-        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, false, TResultSinkType.STATISTIC);
+        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
@@ -264,7 +264,7 @@ public class StatisticExecutor {
 
     private List<TStatisticData> executeDQL(ConnectContext context, String sql) {
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
-        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, true, TResultSinkType.STATISTIC);
+        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {

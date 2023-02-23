@@ -37,7 +37,6 @@ package com.starrocks.journal;
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
@@ -70,7 +69,10 @@ import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
+import com.starrocks.persist.AlterWhClusterOplog;
+import com.starrocks.persist.AlterWhPropertyOplog;
 import com.starrocks.persist.AuthUpgradeInfo;
+import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDropInfo;
@@ -96,6 +98,7 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
+import com.starrocks.persist.OpWarehouseLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
@@ -106,6 +109,7 @@ import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.ResourceGroupOpEntry;
+import com.starrocks.persist.ResumeWarehouseLog;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
@@ -125,6 +129,7 @@ import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -134,6 +139,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -191,6 +197,38 @@ public class JournalEntity implements Writable {
             case OperationType.OP_DROP_REPOSITORY: {
                 data = new Text();
                 ((Text) data).readFields(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_WH: {
+                data = Warehouse.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_SUSPEND_WH:
+            case OperationType.OP_DROP_WH: {
+                data = OpWarehouseLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_RESUME_WH: {
+                data = ResumeWarehouseLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ALTER_WH_ADD_CLUSTER:
+            case OperationType.OP_ALTER_WH_REMOVE_CLUSTER: {
+                data = AlterWhClusterOplog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ALTER_WH_MOD_PROP: {
+                data = AlterWhPropertyOplog.read(in);
+            }
+            case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
+            case OperationType.OP_DELETE_AUTO_INCREMENT_ID: {
+                data = new AutoIncrementInfo(null);
+                ((AutoIncrementInfo) data).read(in);
                 isRead = true;
                 break;
             }
@@ -330,6 +368,10 @@ public class JournalEntity implements Writable {
             case OperationType.OP_EXPORT_UPDATE_STATE:
                 data = new ExportJob.StateTransfer();
                 ((ExportJob.StateTransfer) data).readFields(in);
+                isRead = true;
+                break;
+            case OperationType.OP_EXPORT_UPDATE_INFO:
+                data = ExportJob.ExportUpdateInfo.read(in);
                 isRead = true;
                 break;
             case OperationType.OP_FINISH_DELETE:
@@ -609,7 +651,9 @@ public class JournalEntity implements Writable {
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
-            case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
+            case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
+            case OperationType.OP_ALTER_TABLE_PROPERTIES:
+            case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
                 data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;
                 break;

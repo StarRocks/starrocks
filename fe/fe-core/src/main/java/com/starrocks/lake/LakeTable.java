@@ -50,11 +50,6 @@ import java.util.Map;
 
 /**
  * Metadata for StarRocks lake table
- * <p>
- * Currently, storage group is table level, which stores all the tablets data and metadata of this table.
- * Format: service storage uri (from StarOS) + table id
- * <p>
- * TODO: support table api like Iceberg
  */
 public class LakeTable extends OlapTable {
 
@@ -175,8 +170,8 @@ public class LakeTable extends OlapTable {
 
         List<Long> shardIds = null;
         try {
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, replicationNum, fsInfo, cacheInfo,
-                    shardGroupId);
+            // Ignore the parameter replicationNum
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, shardGroupId);
         } catch (DdlException e) {
             LOG.error(e.getMessage());
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
@@ -190,17 +185,14 @@ public class LakeTable extends OlapTable {
 
     @Override
     public Short getDefaultReplicationNum() {
-        if (tableProperty != null) {
-            return tableProperty.getReplicationNum();
-        }
+        // Unlike OlapTable, LakeTable will ignore the user provided "replication_num" parameter.
         return 1;
     }
 
     // used in colocate table index, return an empty list for LakeTable
     @Override
     public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
-        List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
-        return backendsPerBucketSeq;
+        return Lists.newArrayList();
     }
 
     public List<Long> getShardGroupIds() {

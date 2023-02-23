@@ -41,6 +41,25 @@ public class PhysicalUnionOperator extends PhysicalSetOperation {
     }
 
     @Override
+    public int hashCode() {
+        return super.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (!super.equals(o)) {
+            return false;
+        }
+
+        PhysicalUnionOperator that = (PhysicalUnionOperator) o;
+        return isUnionAll == that.isUnionAll;
+    }
+
+    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitPhysicalUnion(this, context);
     }

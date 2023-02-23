@@ -1193,9 +1193,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             ColumnRefSet leftChildColumns = predicateOperator.getChild(0).getUsedColumns();
             ColumnRefSet rightChildColumns = predicateOperator.getChild(1).getUsedColumns();
             Set<Integer> leftChildRelationIds =
-                    leftChildColumns.getStream().mapToObj(columnRefFactory::getRelationId).collect(Collectors.toSet());
+                    leftChildColumns.getStream().map(columnRefFactory::getRelationId).collect(Collectors.toSet());
             Set<Integer> rightChildRelationIds =
-                    rightChildColumns.getStream().mapToObj(columnRefFactory::getRelationId)
+                    rightChildColumns.getStream().map(columnRefFactory::getRelationId)
                             .collect(Collectors.toSet());
 
             // Check that the predicate is complex, such as t1.a + t2.b = t3.c is complex predicate

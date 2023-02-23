@@ -14,7 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
@@ -31,7 +30,6 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -40,6 +38,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -51,6 +50,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
@@ -74,8 +74,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.server.CatalogMgr.isInternalCatalog;
-
 /**
  * meta structure for materialized view
  */
@@ -88,122 +86,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         ASYNC,
         MANUAL,
         INCREMENTAL
-    }
-
-    public static class BaseTableInfo {
-        @SerializedName(value = "catalogName")
-        private final String catalogName;
-
-        @SerializedName(value = "dbId")
-        private long dbId = -1;
-
-        @SerializedName(value = "tableId")
-        private long tableId = -1;
-
-        @SerializedName(value = "dbName")
-        private String dbName;
-
-        @SerializedName(value = "tableIdentifier")
-        private String tableIdentifier;
-
-        @SerializedName(value = "tableName")
-        private String tableName;
-
-        public BaseTableInfo(long dbId, String dbName, long tableId) {
-            this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-            this.dbId = dbId;
-            this.dbName = dbName;
-            this.tableId = tableId;
-        }
-
-        public BaseTableInfo(long dbId, long tableId) {
-            this(dbId, null, tableId);
-        }
-
-        public BaseTableInfo(String catalogName, String dbName, String tableIdentifier) {
-            this.catalogName = catalogName;
-            this.dbName = dbName;
-            this.tableIdentifier = tableIdentifier;
-            this.tableName = tableIdentifier.split(":")[0];
-        }
-
-        public String getTableInfoStr() {
-            if (isInternalCatalog(catalogName)) {
-                return Joiner.on(".").join(dbId, tableId);
-            } else {
-                return Joiner.on(".").join(catalogName, dbName, tableName);
-            }
-        }
-
-        public String getDbInfoStr() {
-            if (isInternalCatalog(catalogName)) {
-                return String.valueOf(dbId);
-            } else {
-                return Joiner.on(".").join(catalogName, dbName);
-            }
-        }
-
-        public String getCatalogName() {
-            return this.catalogName;
-        }
-
-        public String getDbName() {
-            return this.dbName;
-        }
-
-        public String getTableName() {
-            if (this.tableName != null) {
-                return this.tableName;
-            } else {
-                Table table = getTable();
-                return table == null ? null : table.getName();
-            }
-        }
-
-        public String getTableIdentifier() {
-            return this.tableIdentifier;
-        }
-
-        public long getDbId() {
-            return this.dbId;
-        }
-
-        public long getTableId() {
-            return this.tableId;
-        }
-
-        public Table getTable() {
-            if (isInternalCatalog(catalogName)) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-                if (db == null) {
-                    return null;
-                } else {
-                    return db.getTable(tableId);
-                }
-            } else {
-                if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
-                    LOG.warn("catalog {} not exist", catalogName);
-                    return null;
-                }
-                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
-                if (table == null) {
-                    LOG.warn("table {}.{}.{} not exist", catalogName, dbName, tableName);
-                    return null;
-                }
-                if (table.getTableIdentifier().equals(tableIdentifier)) {
-                    return table;
-                }
-                return null;
-            }
-        }
-
-        public Database getDb() {
-            if (isInternalCatalog(catalogName)) {
-                return GlobalStateMgr.getCurrentState().getDb(dbId);
-            } else {
-                return GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-            }
-        }
     }
 
     public static class BasePartitionInfo {
@@ -305,6 +187,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         public void setTimeUnit(String timeUnit) {
             this.timeUnit = timeUnit;
+        }
+
+        @Override
+        public String toString() {
+            return "AsyncRefreshContext{" +
+                    "baseTableVisibleVersionMap=" + baseTableVisibleVersionMap +
+                    ", defineStartTime=" + defineStartTime +
+                    ", startTime=" + startTime +
+                    ", step=" + step +
+                    ", timeUnit='" + timeUnit + '\'' +
+                    '}';
         }
     }
 
@@ -463,6 +356,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     public Set<String> getUpdatedPartitionNamesOfTable(Table base) {
         return getUpdatedPartitionNamesOfTable(base, false);
     }
+
     public Set<String> getUpdatedPartitionNamesOfTable(Table base, boolean withMv) {
         if (!base.isLocalTable()) {
             // TODO(ywb): support external table refresh according to partition later
@@ -550,7 +444,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
 
-        for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
             // Do not set the active when table is null, it would be checked in MVActiveChecker
             Table table = baseTableInfo.getTable();
             if (table != null) {
@@ -562,6 +456,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 }
                 MvId mvId = new MvId(db.getId(), id);
                 table.addRelatedMaterializedView(mvId);
+
+                if (!table.isLocalTable()) {
+                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
+                            baseTableInfo.getCatalogName(), baseTableInfo.getDbName(),
+                            baseTableInfo.getTableIdentifier(),
+                            ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                    Sets.newHashSet(mvId)).build()
+                    );
+                }
             }
         }
         analyzePartitionInfo();
@@ -639,7 +542,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         if (tableProperty == null) {
             return true;
         }
-        List<TableName> excludedTriggerTables =  tableProperty.getExcludedTriggerTables();
+        List<TableName> excludedTriggerTables = tableProperty.getExcludedTriggerTables();
         if (excludedTriggerTables == null) {
             return true;
         }
@@ -766,12 +669,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     static {
         NEED_SHOW_PROPS = new ImmutableSet.Builder<String>()
-        .add(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
-        .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
-        .add(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
-        .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
-        .add(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
-        .build();
+                .add(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
+                .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
+                .add(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
+                .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
+                .add(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
+                .build();
     }
 
     public Map<String, String> getMaterializedViewPropMap() {
@@ -895,9 +798,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             mvPartitionMap.remove(deleted);
         }
         needRefreshMvPartitionNames.addAll(partitionDiff.getAdds().keySet());
-        for (Map.Entry<String, Range<PartitionKey>> addEntry : partitionDiff.getAdds().entrySet()) {
-            mvPartitionMap.put(addEntry.getKey(), addEntry.getValue());
-        }
+        mvPartitionMap.putAll(partitionDiff.getAdds());
 
         Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
                 .generatePartitionRefMap(basePartitionMap, mvPartitionMap);
@@ -928,7 +829,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             return SyncPartitionUtils.calcSyncSamePartition(basePartitionMap, mvPartitionMap);
         } else if (partitionExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-            String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue();
+            String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
             return SyncPartitionUtils.calcSyncRollupPartition(basePartitionMap, mvPartitionMap,
                     granularity, partitionColumn.getPrimitiveType());
         } else {

@@ -16,7 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 
 /**
  * grantRevokeClause
@@ -24,14 +24,19 @@ import com.starrocks.analysis.UserIdentity;
  * ;
  */
 public class GrantRevokeClause implements ParseNode {
-    private UserIdentity userIdentity;
-    private String roleName;
-    private boolean withGrantOption;
+    private final UserIdentity userIdentity;
+    private final String roleName;
 
-    public GrantRevokeClause(UserIdentity userIdentifier, String roleName, boolean withGrantOption) {
+    private final NodePosition pos;
+
+    public GrantRevokeClause(UserIdentity userIdentifier, String roleName) {
+        this(userIdentifier, roleName, NodePosition.ZERO);
+    }
+
+    public GrantRevokeClause(UserIdentity userIdentifier, String roleName, NodePosition pos) {
+        this.pos = pos;
         this.userIdentity = userIdentifier;
         this.roleName = roleName;
-        this.withGrantOption = withGrantOption;
     }
 
     public UserIdentity getUserIdentity() {
@@ -42,12 +47,8 @@ public class GrantRevokeClause implements ParseNode {
         return roleName;
     }
 
-    public boolean isWithGrantOption() {
-        return withGrantOption;
-    }
-
     @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return null;
+    public NodePosition getPos() {
+        return pos;
     }
 }

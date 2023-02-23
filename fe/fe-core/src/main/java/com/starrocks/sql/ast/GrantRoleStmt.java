@@ -15,18 +15,33 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.List;
 
 // GRANT rolex TO userx
 // GRANT role1 TO ROLE role2
 // share the same parameter and check logic with RevokeRoleStmt
 public class GrantRoleStmt extends BaseGrantRevokeRoleStmt {
 
-    public GrantRoleStmt(String granteeRole, UserIdentity userIdent) {
-        super(granteeRole, userIdent, "GRANT", "TO");
+    public GrantRoleStmt(List<String> granteeRole, UserIdentity userIdent) {
+        super(granteeRole, userIdent);
     }
 
-    public GrantRoleStmt(String granteeRole, String role) {
-        super(granteeRole, role, "GRANT", "TO");
+    public GrantRoleStmt(List<String> granteeRole, UserIdentity userIdent, NodePosition pos) {
+        super(granteeRole, userIdent, pos);
+    }
+
+    public GrantRoleStmt(List<String> granteeRole, String role) {
+        super(granteeRole, role);
+    }
+
+    public GrantRoleStmt(List<String> granteeRole, String role, NodePosition pos) {
+        super(granteeRole, role, pos);
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitGrantRoleStatement(this, context);
     }
 }

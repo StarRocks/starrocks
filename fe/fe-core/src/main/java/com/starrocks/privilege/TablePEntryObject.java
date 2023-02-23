@@ -16,72 +16,113 @@
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalCatalog;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.commons.lang3.StringUtils;
+import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 public class TablePEntryObject implements PEntryObject {
-    @SerializedName(value = "d")
-    protected long databaseId;
-    @SerializedName(value = "t")
-    protected long tableId;
+    public static final long ALL_CATALOGS_ID = -10000;
+    public static final String ALL_DATABASES_UUID = "ALL_DATABASES_UUID"; // represent all databases
+    public static final String ALL_TABLES_UUID = "ALL_TABLES_UUID"; // represent all tables
 
-    protected static final long ALL_DATABASE_ID = -2; // -2 represent all databases
-    protected static final long ALL_TABLES_ID = -3; // -3 represent all tables
+    @SerializedName(value = "ci")
+    private long catalogId;
+    @SerializedName(value = "d")
+    protected String databaseUUID;
+    @SerializedName(value = "t")
+    protected String tableUUID;
+
+    protected TablePEntryObject(long catalogId, String databaseUUID, String tableUUID) {
+        this.catalogId = catalogId;
+        this.tableUUID = tableUUID;
+        this.databaseUUID = databaseUUID;
+    }
+
+    protected TablePEntryObject(String databaseUUID, String tableUUID) {
+        this.catalogId = InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
+        this.tableUUID = tableUUID;
+        this.databaseUUID = databaseUUID;
+    }
+
+    public String getDatabaseUUID() {
+        return databaseUUID;
+    }
+
+    public String getTableUUID() {
+        return tableUUID;
+    }
+
+    public long getCatalogId() {
+        return catalogId;
+    }
 
     public static TablePEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
-        if (tokens.size() != 2) {
-            throw new PrivilegeException("invalid object tokens, should have two: " + tokens);
+        String catalogName = null;
+        long catalogId;
+        if (tokens.size() == 3) {
+            // This is true only when we are initializing built-in roles like root and db_admin
+            if (tokens.get(0).equals("*")) {
+                return new TablePEntryObject(ALL_CATALOGS_ID, ALL_DATABASES_UUID, ALL_TABLES_UUID);
+            }
+            catalogName = tokens.get(0);
+            tokens = tokens.subList(1, tokens.size());
+        } else if (tokens.size() != 2) {
+            throw new PrivilegeException(
+                    "invalid object tokens, should have two or three elements, current: " + tokens);
         }
-        Database database = mgr.getDb(tokens.get(0));
-        if (database == null) {
-            throw new PrivilegeException("cannot find db: " + tokens.get(0));
-        }
-        Table table = database.getTable(tokens.get(1));
-        if (table == null) {
-            throw new PrivilegeException("cannot find table " + tokens.get(1) + " in db " + tokens.get(0));
-        }
-        return new TablePEntryObject(database.getId(), table.getId());
-    }
 
-    public static TablePEntryObject generate(
-            GlobalStateMgr mgr, List<String> allTypes, String restrictType, String restrictName)
-            throws PrivilegeException {
-        if (allTypes.size() == 1) {
-            if (StringUtils.isEmpty(restrictType)
-                    || !restrictType.equals(PrivilegeType.DATABASE.toString())
-                    || StringUtils.isEmpty(restrictName)) {
-                throw new PrivilegeException("ALL TABLES must be restricted with database!");
-            }
-
-            Database database = mgr.getDb(restrictName);
-            if (database == null) {
-                throw new PrivilegeException("cannot find db: " + restrictName);
-            }
-            return new TablePEntryObject(database.getId(), ALL_TABLES_ID);
-        } else if (allTypes.size() == 2) {
-            if (!allTypes.get(1).equals(PrivilegeType.DATABASE.getPlural())) {
-                throw new PrivilegeException(
-                        "ALL TABLES must be restricted with ALL DATABASES instead of ALL " + allTypes.get(1));
-            }
-            return new TablePEntryObject(ALL_DATABASE_ID, ALL_TABLES_ID);
+        // Default to internal_catalog when no catalog explicitly selected.
+        if (catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
+            catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+            catalogId = InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
         } else {
-            throw new PrivilegeException("invalid ALL statement for tables!");
+            Catalog catalog = mgr.getCatalogMgr().getCatalogByName(catalogName);
+            if (catalog == null) {
+                throw new PrivObjNotFoundException("cannot find catalog: " + catalogName);
+            }
+            catalogId = catalog.getId();
         }
-    }
 
-    protected TablePEntryObject(long databaseId, long tableId) {
-        this.tableId = tableId;
-        this.databaseId = databaseId;
+        String dbUUID;
+        String tblUUID;
+
+        if (tokens.get(0).equals("*")) {
+            dbUUID = ALL_DATABASES_UUID;
+            tblUUID = ALL_TABLES_UUID;
+        } else {
+            Database database = mgr.getMetadataMgr().getDb(catalogName, tokens.get(0));
+            if (database == null) {
+                throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
+            }
+            dbUUID = database.getUUID();
+
+            if (tokens.get(1).equals("*")) {
+                tblUUID = ALL_TABLES_UUID;
+            } else {
+                Table table = mgr.getMetadataMgr().getTable(catalogName, database.getOriginName(), tokens.get(1));
+                if (table == null) {
+                    throw new PrivObjNotFoundException("cannot find table " +
+                            tokens.get(1) + " in db " + tokens.get(0));
+                }
+                tblUUID = table.getUUID();
+            }
+        }
+
+        return new TablePEntryObject(catalogId, dbUUID, tblUUID);
     }
 
     /**
      * if the current table matches other table, including fuzzy matching.
-     *
+     * <p>
      * this(db1.tbl1), other(db1.tbl1) -> true
      * this(db1.tbl1), other(db1.ALL) -> true
      * this(db1.ALL), other(db1.tbl1) -> false
@@ -92,28 +133,49 @@ public class TablePEntryObject implements PEntryObject {
             return false;
         }
         TablePEntryObject other = (TablePEntryObject) obj;
-        if (other.databaseId == ALL_DATABASE_ID) {
+        if (other.catalogId == ALL_CATALOGS_ID) {
             return true;
         }
-        if (other.tableId == ALL_TABLES_ID) {
-            return databaseId == other.databaseId;
+        if (Objects.equals(other.databaseUUID, ALL_DATABASES_UUID)) {
+            return this.catalogId == other.catalogId;
         }
-        return other.databaseId == databaseId && other.tableId == tableId;
+        if (Objects.equals(other.tableUUID, ALL_TABLES_UUID)) {
+            return this.catalogId == other.catalogId && Objects.equals(this.databaseUUID, other.databaseUUID);
+        }
+        return this.catalogId == other.catalogId &&
+                Objects.equals(other.databaseUUID, this.databaseUUID) &&
+                Objects.equals(other.tableUUID, this.tableUUID);
     }
 
     @Override
     public boolean isFuzzyMatching() {
-        return databaseId == ALL_DATABASE_ID || tableId == ALL_TABLES_ID;
+        return catalogId == ALL_CATALOGS_ID ||
+                Objects.equals(databaseUUID, ALL_DATABASES_UUID) ||
+                Objects.equals(tableUUID, ALL_TABLES_UUID);
     }
-
 
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getDbIncludeRecycleBin(this.databaseId);
-        if (db == null) {
-            return false;
+        Database db;
+        if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
+            db = globalStateMgr.getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
+            if (db == null) {
+                return false;
+            }
+            return globalStateMgr.getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
+        } else {
+            Optional<Catalog> catalog = globalStateMgr.getCatalogMgr().getCatalogById(catalogId);
+            if (!catalog.isPresent()) {
+                return false;
+            }
+            String dbName = ExternalCatalog.getDbNameFromUUID(databaseUUID);
+            String tblName = ExternalCatalog.getDbNameFromUUID(tableUUID);
+            db = globalStateMgr.getMetadataMgr().getDb(catalog.get().getName(), dbName);
+            if (db == null) {
+                return false;
+            }
+            return globalStateMgr.getMetadataMgr().getTable(catalog.get().getName(), dbName, tblName) != null;
         }
-        return globalStateMgr.getTableIncludeRecycleBin(db, this.tableId) != null;
     }
 
     @Override
@@ -121,14 +183,34 @@ public class TablePEntryObject implements PEntryObject {
         if (!(obj instanceof TablePEntryObject)) {
             throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());
         }
-        TablePEntryObject o = (TablePEntryObject) obj;
 
-        if (this.databaseId > o.databaseId) {
-            return 1;
-        } else if (this.databaseId < o.databaseId) {
+        TablePEntryObject o = (TablePEntryObject) obj;
+        if (this.catalogId == o.catalogId) {
+            // Always put the fuzzy matching object at the front of the privilege entry list
+            // when sorting in ascendant order.
+            if (Objects.equals(this.databaseUUID, o.databaseUUID)) {
+                if (Objects.equals(this.tableUUID, o.tableUUID)) {
+                    return 0;
+                } else if (Objects.equals(this.tableUUID, ALL_TABLES_UUID)) {
+                    return -1;
+                } else if (Objects.equals(o.tableUUID, ALL_TABLES_UUID)) {
+                    return 1;
+                } else {
+                    return this.tableUUID.compareTo(o.tableUUID);
+                }
+            } else if (Objects.equals(this.databaseUUID, ALL_DATABASES_UUID)) {
+                return -1;
+            } else if (Objects.equals(o.databaseUUID, ALL_DATABASES_UUID)) {
+                return 1;
+            } else {
+                return this.databaseUUID.compareTo(o.databaseUUID);
+            }
+        } else if (this.catalogId == ALL_CATALOGS_ID) {
             return -1;
+        } else if (o.catalogId == ALL_CATALOGS_ID) {
+            return 1;
         } else {
-            return Long.compare(this.tableId, o.tableId);
+            return (int) (this.catalogId - o.catalogId);
         }
     }
 
@@ -141,16 +223,60 @@ public class TablePEntryObject implements PEntryObject {
             return false;
         }
         TablePEntryObject that = (TablePEntryObject) o;
-        return databaseId == that.databaseId && tableId == that.tableId;
+        return this.catalogId == that.catalogId &&
+                Objects.equals(databaseUUID, that.databaseUUID) &&
+                Objects.equals(tableUUID, that.tableUUID);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseId, tableId);
+        return Objects.hash(catalogId, databaseUUID, tableUUID);
     }
 
     @Override
     public PEntryObject clone() {
-        return new TablePEntryObject(databaseId, tableId);
+        return new TablePEntryObject(catalogId, databaseUUID, tableUUID);
+    }
+
+    protected String toStringImpl(String plural) {
+        StringBuilder sb = new StringBuilder();
+
+        if (Objects.equals(getDatabaseUUID(), TablePEntryObject.ALL_DATABASES_UUID)) {
+            sb.append("ALL ").append(plural).append(" IN ALL DATABASES");
+        } else {
+            String dbName;
+            Database database = null;
+            if (CatalogMgr.isInternalCatalog(catalogId)) {
+                database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(getDatabaseUUID()));
+                if (database == null) {
+                    throw new MetaNotFoundException("Cannot find database : " + databaseUUID);
+                }
+                dbName = database.getFullName();
+            } else {
+                dbName = ExternalCatalog.getDbNameFromUUID(databaseUUID);
+            }
+
+            if (Objects.equals(getTableUUID(), TablePEntryObject.ALL_TABLES_UUID)) {
+                sb.append("ALL ").append(plural).append(" IN DATABASE ").append(dbName);
+            } else {
+                String tblName = null;
+                if (CatalogMgr.isInternalCatalog(catalogId)) {
+                    Table table = database.getTable(Long.parseLong(getTableUUID()));
+                    if (table == null) {
+                        throw new MetaNotFoundException("Cannot find table : " + tableUUID);
+                    }
+                    tblName = table.getName();
+                } else {
+                    tblName = ExternalCatalog.getTableNameFromUUID(tableUUID);
+                }
+                sb.append(dbName).append(".").append(tblName);
+            }
+        }
+        return sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        return toStringImpl("TABLES");
     }
 }

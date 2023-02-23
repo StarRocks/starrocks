@@ -26,7 +26,7 @@ This topic uses curl as an example to describe how to load data by using Stream 
 
 - We recommend that you add an `Expect` header field and specify its value as `100-continue`, as in `"Expect:100-continue"`. This helps prevent unnecessary data transfers and reduce resource overheads in case your job request is denied.
 
-Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../../../sql-reference/sql-statements/keywords.md).
 
 ## Parameters
 
@@ -126,7 +126,7 @@ The following table describes the optional parameters.
 | strict_mode      | No       | Specifies whether to enable the strict mode. Valid values: `true` and `false`. Default value: `false`.  The value `true` specifies to enable the strict mode, and the value `false` specifies to disable the strict mode. |
 | timezone         | No       | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../administration/timezone.md). |
 | load_mem_limit   | No       | The maximum amount of memory that can be provisioned to the load job. Unit: bytes. By default, the maximum memory size for a load job is 2 GB. The value of this parameter cannot exceed the maximum amount of memory that can be provisioned to each BE. |
-| merge_condition  | No       | Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a larger value than the destination data record in the specified column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md). <br/>**NOTE**<br/>The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key model support conditional updates. |
+| merge_condition  | No       | Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a larger or equal value than the destination data record in the specified column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md). <br/>**NOTE**<br/>The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key model support conditional updates. |
 
 ## Column mapping
 

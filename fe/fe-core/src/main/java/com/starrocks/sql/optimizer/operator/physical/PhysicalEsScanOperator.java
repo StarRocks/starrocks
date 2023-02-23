@@ -28,7 +28,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 public class PhysicalEsScanOperator extends PhysicalScanOperator {
     private final List<EsShardPartitions> selectedIndex;
@@ -55,25 +54,5 @@ public class PhysicalEsScanOperator extends PhysicalScanOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalEsScan(optExpression, context);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        PhysicalEsScanOperator that = (PhysicalEsScanOperator) o;
-        return Objects.equals(selectedIndex, that.selectedIndex);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), selectedIndex);
     }
 }

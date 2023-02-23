@@ -959,14 +959,15 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 throw new SchedException(Status.UNRECOVERABLE, "tablet does not exist");
             }
 
+            String finishInfo = "";
             if (cloneTask.isLocal()) {
                 unprotectedFinishLocalMigration(request);
             } else {
-                unprotectedFinishClone(request, db, partition, replicationNum);
+                finishInfo = unprotectedFinishClone(request, db, partition, replicationNum);
             }
 
             state = State.FINISHED;
-            LOG.info("clone finished: {}", this);
+            LOG.info("clone finished: {} {}", this, finishInfo);
         } catch (SchedException e) {
             // if failed to too many times, remove this task
             ++failedRunningCounter;
@@ -1001,8 +1002,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         replica.updateVersion(reportedTablet.version);
     }
 
-    private void unprotectedFinishClone(TFinishTaskRequest request, Database db, Partition partition,
-                                        short replicationNum) throws SchedException {
+    private String unprotectedFinishClone(TFinishTaskRequest request, Database db, Partition partition,
+                                          short replicationNum) throws SchedException {
         List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
         Pair<TabletStatus, TabletSchedCtx.Priority> pair = tablet.getHealthStatusWithPriority(
                 infoService, visibleVersion, replicationNum,
@@ -1068,6 +1069,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             // so we keep it state unchanged, and log update replica
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
         }
+        return String.format("version:%d min_readable_version:%d", reportedTablet.getVersion(),
+                reportedTablet.getMin_readable_version());
     }
 
     /*
@@ -1085,7 +1088,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
      * eg:
      *    A tablet has been scheduled for 5 times and all were failed. its priority will be downgraded. And if it is
      *    scheduled for 5 times and all are failed again, it will be downgraded again, until to the LOW.
-     *    And than, because of LOW, this tablet can not be scheduled for a long time, and it will be upgraded
+     *    And then, because of LOW, this tablet can not be scheduled for a long time, and it will be upgraded
      *    to NORMAL, if still not being scheduled, it will be upgraded up to VERY_HIGH.
      *
      * return true if dynamic priority changed
@@ -1150,8 +1153,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         List<String> result = Lists.newArrayList();
         result.add(String.valueOf(tabletId));
         result.add(type.name());
-        result.add(storageMedium == null ? FeConstants.null_string : storageMedium.name());
-        result.add(tabletStatus == null ? FeConstants.null_string : tabletStatus.name());
+        result.add(storageMedium == null ? FeConstants.NULL_STRING : storageMedium.name());
+        result.add(tabletStatus == null ? FeConstants.NULL_STRING : tabletStatus.name());
         result.add(state.name());
         result.add(origPriority.name());
         result.add(dynamicPriority.name());
@@ -1164,7 +1167,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         result.add(TimeUtils.longToTimeString(lastSchedTime));
         result.add(TimeUtils.longToTimeString(lastVisitedTime));
         result.add(TimeUtils.longToTimeString(finishedTime));
-        result.add(copyTimeMs > 0 ? String.valueOf(copySize / copyTimeMs / 1000.0) : FeConstants.null_string);
+        result.add(copyTimeMs > 0 ? String.valueOf(copySize / copyTimeMs / 1000.0) : FeConstants.NULL_STRING);
         result.add(String.valueOf(failedSchedCounter));
         result.add(String.valueOf(failedRunningCounter));
         result.add(TimeUtils.longToTimeString(lastAdjustPrioTime));

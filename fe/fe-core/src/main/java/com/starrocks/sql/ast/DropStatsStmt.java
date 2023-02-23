@@ -17,11 +17,17 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 public class DropStatsStmt extends StatementBase {
     private final TableName tbl;
 
     public DropStatsStmt(TableName tbl) {
+        this(tbl, NodePosition.ZERO);
+    }
+
+    public DropStatsStmt(TableName tbl, NodePosition pos) {
+        super(pos);
         this.tbl = tbl;
     }
 

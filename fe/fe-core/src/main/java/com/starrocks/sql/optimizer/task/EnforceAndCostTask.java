@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.task;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -45,7 +44,6 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -391,15 +389,11 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     }
 
     private boolean computeCurrentGroupStatistics() {
-        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
         if (groupExpression.getInputs().stream().anyMatch(group -> group.getStatistics() == null)) {
             return false;
         }
 
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
-                context.getOptimizerContext().getColumnRefFactory(), context.getOptimizerContext());
-        statisticsCalculator.estimatorStats();
-        groupExpression.getGroup().setStatistics(expressionContext.getStatistics());
+        Preconditions.checkNotNull(groupExpression.getGroup().getStatistics());
         return true;
     }
 

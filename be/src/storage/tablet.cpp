@@ -44,8 +44,11 @@
 #include <utility>
 
 #include "common/tracer.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
+#include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "storage/binlog_builder.h"
 #include "storage/compaction_candidate.h"
 #include "storage/compaction_context.h"
 #include "storage/compaction_manager.h"
@@ -136,6 +139,12 @@ Status Tablet::_init_once_action() {
         _inc_rs_version_map[version] = std::move(rowset);
     }
 
+    if (keys_type() == DUP_KEYS) {
+        std::shared_ptr<DupKeyRowsetFetcher> row_fetcher = std::make_shared<DupKeyRowsetFetcher>(*this);
+        _binlog_manager = std::make_unique<BinlogManager>(tablet_id(), schema_hash_path(), config::binlog_file_max_size,
+                                                          config::binlog_page_max_size,
+                                                          tablet_schema().compression_type(), row_fetcher);
+    }
     return Status::OK();
 }
 
@@ -246,7 +255,7 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     // Otherwise, the version shoud be not contained in any existing rowset.
     RETURN_IF_ERROR(_contains_version(rowset->version()));
 
-    RETURN_IF_ERROR(_tablet_meta->add_rs_meta(rowset->rowset_meta()));
+    _tablet_meta->add_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
     _timestamped_version_tracker.add_version(rowset->version());
 
@@ -351,17 +360,86 @@ RowsetSharedPtr Tablet::rowset_with_max_version() const {
     return iter->second;
 }
 
-// add inc rowset should not persist tablet meta, because it will be persisted when publish txn.
+bool Tablet::binlog_enable() {
+    auto config = _tablet_meta->get_binlog_config();
+    return config != nullptr && config->binlog_enable;
+}
+
+StatusOr<bool> Tablet::prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version) {
+    if (!binlog_enable()) {
+        return false;
+    }
+
+    // binlog needs to get segment information such as the number of rows in a segment,
+    // so binlog will fail if loading rowset failed
+    Status st = rowset->load();
+    if (!st.ok()) {
+        rowset->close();
+        LOG(WARNING) << "Fail to load rowset for binlog, tablet:" << tablet_id() << " rowset:" << rowset->rowset_id()
+                     << st;
+        return Status::InternalError(fmt::format("fail to load rowset for binlog {}", rowset->rowset_id().to_string()));
+    }
+
+    auto status_or = _binlog_manager->begin_ingestion(version);
+    if (!status_or.ok()) {
+        rowset->close();
+        if (status_or.status().is_already_exist()) {
+            return false;
+        }
+        return status_or.status();
+    }
+    std::shared_ptr<BinlogBuildResult> result = std::make_shared<BinlogBuildResult>();
+    Status status = BinlogBuilder::build_duplicate_key(tablet_id(), version, rowset, status_or.value(), result.get());
+    if (!st.ok()) {
+        _binlog_manager->abort_ingestion(version, result);
+        rowset->close();
+        LOG(WARNING) << "Fail to build binlog, tablet:" << tablet_id() << " rowset: " << rowset->rowset_id() << st;
+        return Status::InternalError(
+                fmt::format("Fail to build binlog for rowset {}", rowset->rowset_id().to_string()));
+    }
+    _binlog_manager->precommit_ingestion(version, result);
+
+    return true;
+}
+
+void Tablet::commit_binlog(int64_t version) {
+    if (binlog_enable()) {
+        _binlog_manager->commit_ingestion(version);
+    }
+}
+
+void Tablet::abort_binlog(const RowsetSharedPtr& rowset, int64_t version) {
+    _binlog_manager->delete_ingestion(version);
+    rowset->close();
+}
+
 Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     CHECK(!_updates) << "updatable tablet should not call add_inc_rowset";
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);
 
+    Version rowset_version(version, version);
+    // Status::OK() means the full data set does not contain the version
+    Status contain_status = _contains_version(rowset_version);
+    bool need_binlog = false;
+    if (contain_status.ok()) {
+        ASSIGN_OR_RETURN(need_binlog, prepare_binlog_if_needed(rowset, version));
+    }
+
     // rowset is already set version here, memory is changed, if save failed it maybe a fatal error
-    rowset->make_visible({version, version});
+    rowset->make_visible(rowset_version);
     auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+    // No matter whether contains the version, the rowset meta should always be saved. TxnManager::publish_txn
+    // will remove the in-memory txn information if Status::AlreadlyExist, but not the committed rowset meta
+    // (RowsetStatePB = COMMITTED) saved in rocksdb. Here modify the rowset to visible, and save it again
+    // so that it can be cleaned up via StorageEngine::_clean_unused_rowset_metas, although it's not added to
+    // the tablet meta. _clean_unused_rowset_metas only cleans visible rowsets
     auto st = RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset_meta_pb);
     if (!st.ok()) {
+        if (need_binlog) {
+            abort_binlog(rowset, version);
+        }
+
         LOG(WARNING) << "Fail to save committed rowset. "
                      << "tablet_id: " << tablet_id() << ", txn_id: " << rowset->txn_id()
                      << ", rowset_id: " << rowset->rowset_id();
@@ -369,11 +447,20 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
                 fmt::format("Fail to save committed rowset. tablet_id: {}, txn_id: {}", tablet_id(), rowset->txn_id()));
     }
 
-    RETURN_IF_ERROR(_contains_version(rowset->version()));
-    RETURN_IF_ERROR(_tablet_meta->add_rs_meta(rowset->rowset_meta()));
-    RETURN_IF_ERROR(_tablet_meta->add_inc_rs_meta(rowset->rowset_meta()));
+    if (!contain_status.ok()) {
+        return contain_status;
+    }
+
+    _tablet_meta->add_rs_meta(rowset->rowset_meta());
+    _tablet_meta->add_inc_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
     _inc_rs_version_map[rowset->version()] = rowset;
+    if (need_binlog) {
+        // BinlogManager#commit_ingestion needs the data disk size of rowset, and will
+        // look up _inc_rs_version_map for the rowset, so should commit binlog after
+        // _inc_rs_version_map is updated
+        commit_binlog(version);
+    }
 
     _timestamped_version_tracker.add_version(rowset->version());
     if (config::enable_event_based_compaction_framework) {
@@ -518,13 +605,17 @@ Status Tablet::capture_consistent_versions(const Version& spec_version, std::vec
         std::vector<Version> missed_versions;
         calc_missed_versions_unlocked(spec_version.second, &missed_versions);
         if (missed_versions.empty()) {
-            auto msg = fmt::format("version already been compacted. tablet_id: {}, version: {}",
-                                   _tablet_meta->tablet_id(), spec_version.second);
+            auto msg = fmt::format(
+                    "capture_consistent_versions error: version already been compacted. tablet_id: {}, version: {} "
+                    "tablet_max_version:{}",
+                    _tablet_meta->tablet_id(), spec_version.second, max_continuous_version());
             LOG(WARNING) << msg;
             return Status::VersionAlreadyMerged(msg);
         } else {
-            auto msg = fmt::format("version not found. tablet_id: {}, version: {}", _tablet_meta->tablet_id(),
-                                   spec_version.second);
+            auto msg = fmt::format(
+                    "capture_consistent_versions error: version not found. tablet_id: {}, version: {} "
+                    "tablet_max_version:{}",
+                    _tablet_meta->tablet_id(), spec_version.second, max_continuous_version());
             RATE_LIMIT_BY_TAG(tablet_id(), LOG(WARNING) << msg, 1000);
             RATE_LIMIT_BY_TAG(tablet_id(), _print_missed_versions(missed_versions), 1000);
             return Status::NotFound(msg);
@@ -1125,9 +1216,9 @@ void Tablet::generate_tablet_meta_copy_unlocked(const TabletMetaSharedPtr& new_t
     new_tablet_meta->init_from_pb(&tablet_meta_pb);
 }
 
-Status Tablet::rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
+Status Tablet::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time) {
     CHECK(_updates) << "updates should exists";
-    return _updates->rowset_commit(version, rowset);
+    return _updates->rowset_commit(version, rowset, wait_time);
 }
 
 void Tablet::on_shutdown() {
@@ -1202,8 +1293,7 @@ bool Tablet::need_compaction() {
     std::lock_guard lock(_compaction_task_lock);
     if (_compaction_task == nullptr && _enable_compaction) {
         _compaction_context->type = INVALID_COMPACTION;
-        if (_compaction_context != nullptr &&
-            _compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
+        if (_compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             // if there is running task, return false
             // else, return true
             return true;
@@ -1216,8 +1306,7 @@ bool Tablet::force_base_compaction() {
     std::lock_guard lock(_compaction_task_lock);
     if (_compaction_task == nullptr && _enable_compaction) {
         _compaction_context->type = BASE_COMPACTION;
-        if (_compaction_context != nullptr &&
-            _compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
+        if (_compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             return true;
         }
     }
@@ -1251,6 +1340,26 @@ void Tablet::reset_compaction() {
 bool Tablet::enable_compaction() {
     std::lock_guard lock(_compaction_task_lock);
     return _enable_compaction;
+}
+
+void Tablet::get_basic_info(TabletBasicInfo& info) {
+    std::shared_lock rdlock(_meta_lock);
+    info.table_id = _tablet_meta->table_id();
+    info.partition_id = _tablet_meta->partition_id();
+    info.tablet_id = _tablet_meta->tablet_id();
+    info.create_time = _tablet_meta->creation_time();
+    info.state = _state;
+    info.type = keys_type();
+    if (_updates != nullptr) {
+        _updates->get_basic_info_extra(info);
+    } else {
+        info.num_version = _tablet_meta->version_count();
+        info.max_version = _timestamped_version_tracker.get_max_continuous_version();
+        info.min_version = _timestamped_version_tracker.get_min_readable_version();
+        info.num_rowset = _tablet_meta->version_count();
+        info.num_row = _tablet_meta->num_rows();
+        info.data_size = _tablet_meta->tablet_footprint();
+    }
 }
 
 } // namespace starrocks

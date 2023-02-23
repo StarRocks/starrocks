@@ -116,6 +116,10 @@ fi
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
+if [[ -z ${USE_AVX512} ]]; then
+    # Disable it by default
+    USE_AVX512=OFF
+fi
 echo "Build Backend UT"
 
 CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/ut_build_${CMAKE_BUILD_TYPE}
@@ -140,7 +144,7 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -DSTARROCKS_HOME=${STARROCKS_HOME} \
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
               -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-              -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+              -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
               -DUSE_STAROS=${USE_STAROS} -DWITH_GCOV=${WITH_GCOV} \
               -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
@@ -148,14 +152,14 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
               -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
               -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
-              -Dstarlet_DIR=${STARLET_INSTALL_DIR}/starlet_install/lib64/cmake ..
+              -Dstarlet_DIR=${STARLET_INSTALL_DIR}/starlet_install/lib/cmake ..
 else
   ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
               -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
               -DSTARROCKS_HOME=${STARROCKS_HOME} \
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
               -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-              -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+              -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
               -DWITH_GCOV=${WITH_GCOV} \
               -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
@@ -241,7 +245,7 @@ if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
   if [ ${DRY_RUN} -eq 0 ]; then
     if [ -x ${GTEST_PARALLEL} ]; then
         ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test \
-            --gtest_catch_exceptions=0 --gtest_filter=${TEST_NAME} \
+            --gtest_filter=${TEST_NAME} \
             --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
     else
         ${STARROCKS_TEST_BINARY_DIR}/starrocks_test $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
