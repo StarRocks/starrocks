@@ -328,7 +328,8 @@ public class PlanFragmentBuilder {
                 FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, fragment);
                 normalizer.normalize();
             }
-        } else if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableRuntimeAdaptiveDop()) {
+        } else if (ConnectContext.get() != null &&
+                ConnectContext.get().getSessionVariable().isEnableRuntimeAdaptiveDop()) {
             for (PlanFragment fragment : fragments) {
                 if (fragment.canUseRuntimeAdaptiveDop()) {
                     fragment.enableAdaptiveDop();
@@ -1111,12 +1112,28 @@ public class PlanFragmentBuilder {
                                 case "TABLE_NAME":
                                     scanNode.setSchemaTable(constantOperator.getVarchar());
                                     break;
+                                case "BE_ID":
+                                    scanNode.setBeId(constantOperator.getBigint());
+                                    break;
+                                case "TABLE_ID":
+                                    scanNode.setTableId(constantOperator.getBigint());
+                                    break;
+                                case "PARTITION_ID":
+                                    scanNode.setPartitionId(constantOperator.getBigint());
+                                    break;
+                                case "TABLET_ID":
+                                    scanNode.setTabletId(constantOperator.getBigint());
+                                    break;
                                 default:
                                     break;
                             }
                         }
                     }
                 }
+            }
+
+            if (scanNode.isBeSchemaTable()) {
+                scanNode.computeBeScanRanges();
             }
 
             context.getScanNodes().add(scanNode);
@@ -2305,6 +2322,7 @@ public class PlanFragmentBuilder {
                     partitionExprs,
                     orderByElements,
                     node.getAnalyticWindow(),
+                    node.isUseHashBasedPartition(),
                     null, outputTupleDesc, null, null,
                     context.getDescTbl().createTupleDescriptor());
             analyticEvalNode.setSubstitutedPartitionExprs(partitionExprs);

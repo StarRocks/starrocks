@@ -20,6 +20,7 @@
 
 #include "common/status.h"
 #include "common/tracer.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/stl_util.h"
@@ -2431,6 +2432,13 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
                      << " tablet:" << _tablet.tablet_id() << " base_tablet:" << base_tablet->tablet_id();
         return Status::InternalError("link_from: max_version < request version");
     }
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "link_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        return Status::OK();
+    }
     vector<RowsetSharedPtr> rowsets;
     EditVersion version;
     Status st = base_tablet->updates()->get_applied_rowsets(request_version, &rowsets, &version);
@@ -2525,6 +2533,13 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
     }
 
     std::unique_lock wrlock(_tablet.get_header_lock());
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "link_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        return Status::OK();
+    }
     st = kv_store->write_batch(&wb);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << st;
@@ -2565,6 +2580,13 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
                      << " < alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
         return Status::InternalError("convert_from: max_version < request_version");
+    }
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "convert_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        return Status::OK();
     }
     std::vector<RowsetSharedPtr> src_rowsets;
     EditVersion version;
@@ -2687,6 +2709,13 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     }
 
     std::unique_lock wrlock(_tablet.get_header_lock());
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "convert_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        return Status::OK();
+    }
     status = kv_store->write_batch(&wb);
     if (!status.ok()) {
         LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << status;
@@ -2772,6 +2801,13 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                      << " < alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
         return Status::InternalError("reorder_from: max_version < request_version");
+    }
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "reorder_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        return Status::OK();
     }
     std::vector<RowsetSharedPtr> src_rowsets;
     EditVersion version;
@@ -2945,6 +2981,13 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     }
 
     std::unique_lock wrlock(_tablet.get_header_lock());
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "reorder_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        return Status::OK();
+    }
     status = kv_store->write_batch(&wb);
     if (!status.ok()) {
         LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << status;
@@ -3031,6 +3074,44 @@ Status TabletUpdates::check_and_remove_rowset() {
         return Status::InternalError(msg);
     }
     return Status::OK();
+}
+
+void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
+    vector<uint32_t> rowsets;
+    {
+        std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            LOG(WARNING) << "tablet delete when get_tablet_info_extra tablet:" << _tablet.tablet_id();
+            return;
+        }
+        info.num_version = _edit_version_infos.size();
+        info.min_version = _edit_version_infos[0]->version.major();
+        auto& v = _edit_version_infos[_edit_version_infos.size() - 1];
+        info.max_version = v->version.major();
+        info.num_rowset = v->rowsets.size();
+        rowsets = v->rowsets;
+    }
+    int64_t total_row = 0;
+    int64_t total_size = 0;
+    {
+        std::lock_guard lg(_rowset_stats_lock);
+        for (uint32_t rowsetid : rowsets) {
+            auto itr = _rowset_stats.find(rowsetid);
+            if (itr != _rowset_stats.end()) {
+                // TODO(cbl): also report num deletes
+                total_row += itr->second->num_rows;
+                total_size += itr->second->byte_size;
+            }
+        }
+    }
+    info.num_row = total_row;
+    info.data_size = total_size;
+    auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
+    auto index_entry = index_cache.get(_tablet.tablet_id());
+    if (index_entry != nullptr) {
+        info.index_mem = index_entry->size();
+        index_cache.release(index_entry);
+    }
 }
 
 void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
