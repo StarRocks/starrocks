@@ -433,7 +433,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * enable_global_runtime_filter
 
-  Whether to enable global runtime filter (RF for short). RF filters data during runtime. Data filtering often occurs in the Join stage. During multi-table joins, optimizations such as predicate pushdown are used to filter data, in order to reduce the number of scanned rows for Join and the I/O in the Shuffle stage, thereby improving the query performance.
+  Whether to enable global runtime filter (RF for short). RF filters data at runtime. Data filtering often occurs in the Join stage. During multi-table joins, optimizations such as predicate pushdown are used to filter data, in order to reduce the number of scanned rows for Join and the I/O in the Shuffle stage, thereby improving the query performance.
 
   StarRocks offers two types of RF: Local RF and Global RF. Local RF is suitable for Broadcast Hash Join and Global RF is suitable for Shuffle Join.
 
