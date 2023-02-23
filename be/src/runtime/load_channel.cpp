@@ -108,7 +108,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
             } else {
                 channel = new_local_tablets_channel(this, key, _mem_tracker.get());
             }
-            if (st = channel->open(request, _schema); st.ok()) {
+            if (st = channel->open(request, _schema, request.is_incremental()); st.ok()) {
                 _tablets_channels.insert({index_id, std::move(channel)});
             }
         } else if (request.is_incremental()) {
