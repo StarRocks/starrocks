@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -26,6 +27,8 @@ import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -154,26 +157,36 @@ public class ResourceGroupMgr implements Writable {
         return userParts[userParts.length - 1];
     }
 
-    private String getUnqualifiedRole(ConnectContext ctx) {
+    private List<String> getUnqualifiedRole(ConnectContext ctx) {
         Preconditions.checkArgument(ctx != null);
-        String roleName = null;
+
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             try {
-                List<String> roleNameList = GlobalStateMgr.getCurrentState().getPrivilegeManager()
-                        .getRoleNamesByUser(ctx.getCurrentUserIdentity());
-                roleNameList =
-                        roleNameList.stream().filter(r -> !PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(r))
-                                .collect(Collectors.toList());
-                if (roleNameList.isEmpty()) {
-                    return null;
-                } else {
-                    return roleNameList.get(0);
+                PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+                List<String> validRoles = new ArrayList<>();
+
+                Set<Long> activeRoles = ctx.getCurrentRoleIds();
+                if (activeRoles == null) {
+                    activeRoles = manager.getRoleIdsByUser(ctx.getCurrentUserIdentity());
                 }
+
+                for (Long roleId : activeRoles) {
+                    RolePrivilegeCollection rolePrivilegeCollection =
+                            manager.getRolePrivilegeCollectionUnlocked(roleId, false);
+                    if (rolePrivilegeCollection != null) {
+                        validRoles.add(rolePrivilegeCollection.getName());
+                    }
+                }
+
+                return validRoles.stream().filter(r -> !PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(r))
+                        .collect(Collectors.toList());
             } catch (PrivilegeException e) {
                 LOG.info("getUnqualifiedRole failed for resource group, error message: " + e.getMessage());
                 return null;
             }
         }
+
+        String roleName = null;
         String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()
                 .getRoleName(ctx.getCurrentUserIdentity());
         if (qualifiedRoleName != null) {
@@ -181,7 +194,7 @@ public class ResourceGroupMgr implements Writable {
             String[] roleParts = qualifiedRoleName.split(":");
             roleName = roleParts[roleParts.length - 1];
         }
-        return roleName;
+        return Lists.newArrayList(roleName);
     }
 
     public List<List<String>> showAllResourceGroups(ConnectContext ctx, Boolean isListAll) {
@@ -194,9 +207,9 @@ public class ResourceGroupMgr implements Writable {
                         .flatMap(Collection::stream).collect(Collectors.toList());
             } else {
                 String user = getUnqualifiedUser(ctx);
-                String role = getUnqualifiedRole(ctx);
+                List<String> activeRoles = getUnqualifiedRole(ctx);
                 String remoteIp = ctx.getRemoteIP();
-                return resourceGroupList.stream().map(rg -> rg.showVisible(user, role, remoteIp))
+                return resourceGroupList.stream().map(rg -> rg.showVisible(user, activeRoles, remoteIp))
                         .flatMap(Collection::stream).collect(Collectors.toList());
             }
         } finally {
@@ -502,7 +515,7 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public TWorkGroup chooseResourceGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType, Set<Long> databases) {
-        String role = getUnqualifiedRole(ctx);
+        List<String> activeRoles = getUnqualifiedRole(ctx);
 
         readLock();
         try {
@@ -513,7 +526,7 @@ public class ResourceGroupMgr implements Writable {
             if (shortQueryResourceGroup != null) {
                 List<ResourceGroupClassifier> shortQueryClassifierList =
                         shortQueryResourceGroup.classifiers.stream().filter(
-                                        f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
+                                        f -> f.isSatisfied(user, activeRoles, queryType, remoteIp, databases))
                                 .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
                                 .collect(Collectors.toList());
                 if (!shortQueryClassifierList.isEmpty()) {
@@ -522,7 +535,7 @@ public class ResourceGroupMgr implements Writable {
             }
 
             List<ResourceGroupClassifier> classifierList =
-                    classifierMap.values().stream().filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
+                    classifierMap.values().stream().filter(f -> f.isSatisfied(user, activeRoles, queryType, remoteIp, databases))
                             .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
                             .collect(Collectors.toList());
             if (classifierList.isEmpty()) {
