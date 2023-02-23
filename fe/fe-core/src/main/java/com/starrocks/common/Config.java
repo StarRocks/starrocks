@@ -1847,7 +1847,7 @@ public class Config extends ConfigBase {
      * Each automatic partition will create a hidden partition, which is not displayed to the user by default.
      * Sometimes this display can be enabled to check problems.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean enable_display_shadow_partitions = false;
 
     @ConfField
