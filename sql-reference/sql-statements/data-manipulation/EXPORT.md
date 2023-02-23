@@ -47,13 +47,14 @@ WITH BROKER
   ```
 
   配置项：
-  | **Property**     | **Description**                                              |
+
+  | **配置项**         | **描述**                                                     |
   | ---------------- | ------------------------------------------------------------ |
-  | column_separator | 指定导出文件的列分隔符。默认值：`\t`。                            |
-  | line_delimiter   | 指定导出文件的行分隔符。默认值：`\n`。                            |
+  | column_separator | 指定导出文件的列分隔符。默认值：`\t`。                       |
+  | line_delimiter   | 指定导出文件的行分隔符。默认值：`\n`。                       |
   | load_mem_limit   | 指定导出任务在单个 BE 节点上的内存使用上限。单位：字节。默认内存使用上限为 2 GB。 |
-  | timeout          | 指定导出任务的超时时间。单位：秒。默认值：`86400`（1 天）。     |
-  | include_query_id | 指定导出文件名中是否包含 `query_id`。取值范围：`true` 和 `false`。默认值：`true`。`true` 表示包含，`false` 表示不包含。   |
+  | timeout          | 指定导出任务的超时时间。单位：秒。默认值：`86400`（1 天）。  |
+  | include_query_id | 指定导出文件名中是否包含 `query_id`。取值范围：`true` 和 `false`。默认值：`true`。`true` 表示包含，`false` 表示不包含。 |
 
 - `WITH BROKER`
 
