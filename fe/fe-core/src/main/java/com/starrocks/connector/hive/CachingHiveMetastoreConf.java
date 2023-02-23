@@ -15,7 +15,8 @@
 
 package com.starrocks.connector.hive;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.config.ExternalCatlogConfig;
+import com.starrocks.common.config.PropertyUtil;
 
 import java.util.Map;
 
@@ -29,12 +30,13 @@ public class CachingHiveMetastoreConf {
     private final boolean enableListNamesCache;
 
     public CachingHiveMetastoreConf(Map<String, String> conf) {
-        this.cacheTtlSec = Long.parseLong(conf.getOrDefault("metastore_cache_ttl_sec",
-                String.valueOf(Config.hive_meta_cache_ttl_s)));
-        this.cacheRefreshIntervalSec = Long.parseLong(conf.getOrDefault("metastore_cache_refresh_interval_sec",
-                String.valueOf(Config.hive_meta_cache_refresh_interval_s)));
-        this.enableListNamesCache = Boolean.parseBoolean(conf.getOrDefault("enable_cache_list_names",
-                "false"));
+        this.cacheTtlSec = PropertyUtil.propertyAsLong(conf, ExternalCatlogConfig.HIVE_META_CACHE_TTL_S.key(),
+                ExternalCatlogConfig.HIVE_META_CACHE_TTL_S.defaultValue());
+        this.cacheRefreshIntervalSec = PropertyUtil.propertyAsLong(conf,
+                ExternalCatlogConfig.METASTORE_CACHE_REFRESH_INTERVAL_SEC.key(),
+                ExternalCatlogConfig.METASTORE_CACHE_REFRESH_INTERVAL_SEC.defaultValue());
+        this.enableListNamesCache = PropertyUtil.propertyAsBoolean(conf, ExternalCatlogConfig.ENABLE_CACHE_LIST_NAMES.key(),
+                ExternalCatlogConfig.ENABLE_CACHE_LIST_NAMES.defaultValue());
     }
 
     public long getCacheTtlSec() {

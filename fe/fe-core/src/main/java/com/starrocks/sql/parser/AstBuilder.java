@@ -1381,7 +1381,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.properties() != null) {
             List<Property> propertyList = visit(context.properties().property(), Property.class);
             for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
+                properties.put(property.getKey().trim(), property.getValue().trim());
             }
         }
         return new CreateCatalogStmt(catalogName, comment, properties);
