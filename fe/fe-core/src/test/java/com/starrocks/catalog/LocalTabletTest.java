@@ -213,7 +213,7 @@ public class LocalTabletTest {
         tablet.addReplica(replica1, false);
         tablet.addReplica(replica2, false);
 
-        Assert.assertEquals(tablet.getBackends().size() , 2);
+        Assert.assertEquals(tablet.getBackends().size(), 2);
 
     }
 }
