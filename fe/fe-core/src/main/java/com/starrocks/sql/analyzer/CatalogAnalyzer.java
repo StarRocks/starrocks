@@ -31,6 +31,10 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
 import static com.starrocks.sql.ast.CreateCatalogStmt.TYPE;
 
 public class CatalogAnalyzer {
+    private static final String CATALOG = "CATALOG";
+
+    private static final String WHITESPACE = "\\s+";
+
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new CatalogAnalyzerVisitor().visit(stmt, session);
     }
@@ -84,12 +88,12 @@ public class CatalogAnalyzer {
 
         @Override
         public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
-            if (Strings.isNullOrEmpty(statement.getCatalogAndItsName())) {
+            if (Strings.isNullOrEmpty(statement.getCatalogParts())) {
                 throw new SemanticException("'catalog name' can not be null or empty");
             }
 
-            String[] catalogAndItsName = statement.getCatalogAndItsName().split("\\s+");
-            if (catalogAndItsName.length == 0 || !catalogAndItsName[0].equalsIgnoreCase("CATALOG")) {
+            String[] catalogAndItsName = statement.getCatalogParts().split(WHITESPACE);
+            if (catalogAndItsName.length == 0 || !catalogAndItsName[0].equalsIgnoreCase(CATALOG)) {
                 throw new SemanticException("'catalog name' should start with 'catalog'");
             }
 
@@ -98,6 +102,7 @@ public class CatalogAnalyzer {
             }
 
             FeNameFormat.checkCatalogName(catalogAndItsName[1]);
+            statement.setCatalogName(catalogAndItsName[1]);
 
             return null;
         }

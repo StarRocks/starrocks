@@ -19,19 +19,29 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 public class UseCatalogStmt extends StatementBase {
-    private final String catalogAndItsName;
+    private final String catalogParts;
 
-    public UseCatalogStmt(String catalogAndItsName) {
-        this(catalogAndItsName, NodePosition.ZERO);
+    private String catalogName;
+
+    public UseCatalogStmt(String catalogParts) {
+        this(catalogParts, NodePosition.ZERO);
     }
 
-    public UseCatalogStmt(String catalogAndItsName, NodePosition pos) {
+    public UseCatalogStmt(String catalogParts, NodePosition pos) {
         super(pos);
-        this.catalogAndItsName = catalogAndItsName;
+        this.catalogParts = catalogParts;
     }
 
-    public String getCatalogAndItsName() {
-        return catalogAndItsName;
+    public String getCatalogParts() {
+        return catalogParts;
+    }
+
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
     }
 
     @Override
