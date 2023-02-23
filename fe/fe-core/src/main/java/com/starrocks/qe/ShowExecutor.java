@@ -515,7 +515,12 @@ public class ShowExecutor {
             resultRow.add(mvTable.getName());
             resultRow.add(dbName);
             // refresh_type
-            resultRow.add(String.valueOf(mvTable.getRefreshScheme().getType()));
+            MaterializedView.MvRefreshScheme refreshScheme = mvTable.getRefreshScheme();
+            if (refreshScheme == null) {
+                resultRow.add("UNKNOWN");
+            } else {
+                resultRow.add(String.valueOf(mvTable.getRefreshScheme().getType()));
+            }
             // is_active
             resultRow.add(String.valueOf(mvTable.isActive()));
             // task run status
