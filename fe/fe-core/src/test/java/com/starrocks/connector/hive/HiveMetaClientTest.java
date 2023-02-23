@@ -94,7 +94,7 @@ public class HiveMetaClientTest {
     @Test
     public void testGetHiveClient() {
         HiveConf hiveConf = new HiveConf();
-        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:9030");
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90303");
         HiveMetaClient client = new HiveMetaClient(hiveConf);
         try {
             client.getAllDatabaseNames();
@@ -123,7 +123,7 @@ public class HiveMetaClientTest {
         };
 
         HiveConf hiveConf = new HiveConf();
-        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:9030");
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
         HiveMetaClient client = new HiveMetaClient(hiveConf);
         try {
             client.getTable("db", "tbl");
