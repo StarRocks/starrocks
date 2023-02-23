@@ -42,7 +42,7 @@ FROM events;
 
 ### Window clause
 
-The window clause is used to specify a range of rows for operations ( the previous and later lines based on the current line). It supports the following syntaxes – AVG(), COUNT(), FIRST_VALUE(), LAST_VALUE() and SUM(). For MAX() and MIN(), the window clause can specify the start to `UNBOUNDED PRECEDING`.
+The window clause is used to specify a range of rows for operations (the preceding and following rows based on the current row). It supports the following syntaxes: AVG(), COUNT(), FIRST_VALUE(), LAST_VALUE(), and SUM(). For MAX() and MIN(), the window clause can specify the start to `UNBOUNDED PRECEDING`.
 
 Syntax:
 
@@ -367,7 +367,7 @@ Returns the value of the row that lags the current row by `offset` rows. This fu
 Syntax:
 
 ~~~Haskell
-LAG(expr[, offset[, default]])
+LAG(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ~~~
 
@@ -377,7 +377,9 @@ Parameters:
 * `offset`: the offset. It must be a **positive integer**. If this parameter is not specified, 1 is the default.
 * `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
 
-Example:
+`IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the value of the destination row is NULL. If you specify IGNORE NULLS, the most recent non-null value that precedes the current row is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
+
+Example 1: lag function without specifying IGNORE NULLS
 
 Calculate the `closing_price` of the previous day. In this example, `default` is set to 0, which means 0 is returned if no matching row is found.
 
@@ -409,6 +411,38 @@ Output:
 ~~~
 
 The first row shows what happens when there is no previous row. The function returns the ***`default`*** value 0.
+
+Example 2: lag function with IGNORE NULLS specified
+
+~~~SQL
+CREATE TABLE test_tbl (col_1 INT, col_2 INT)
+DISTRIBUTED BY HASH(col_1) BUCKETS 3;
+
+INSERT INTO test_tbl VALUES 
+    (1, 5),
+    (2, 4),
+    (3, NULL),
+    (4, 2),
+    (5, NULL),
+    (6, NULL),
+    (7, 6);
+~~~
+
+~~~Plain
+SELECT col_1, col_2, LAG(col_2 IGNORE NULLS) OVER (ORDER BY col_1) 
+FROM test_tbl ORDER BY col_1;
++-------+-------+---------------------------------------+
+| col_1 | col_2 | lag(col_2) OVER (ORDER BY col_1 ASC ) |
++-------+-------+---------------------------------------+
+|     1 |     5 |                                  NULL |
+|     2 |     4 |                                     5 |
+|     3 |  NULL |                                     4 |
+|     4 |     2 |                                     4 |
+|     5 |  NULL |                                     2 |
+|     6 |  NULL |                                     2 |
+|     7 |     6 |                                     2 |
++-------+-------+---------------------------------------+
+~~~
 
 ### LAST_VALUE()
 
@@ -456,7 +490,7 @@ Data types that can be queried by `lead()` are the same as those supported by [l
 Syntax：
 
 ~~~Haskell
-LEAD(expr[, offset[, default]])
+LEAD(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ~~~
 
@@ -466,7 +500,9 @@ Parameters：
 * `offset`: the offset. It must be a positive integer. If this parameter is not specified, 1 is the default.
 * `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
 
-Example：
+`IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the value of the destination row is NULL. If you specify IGNORE NULLS, the most recent non-null value that follows the current row is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
+
+Example 1：
 
 Calculate the trending of closing prices between two days, that is, whether the price of the next day is higher or lower. `default` is set to 0, which means 0 is returned if no matching row is found.
 
@@ -496,6 +532,38 @@ Output
 | JDR          | 2014-09-18 00:00:00 | 14.75         | flat or lower |
 | JDR          | 2014-09-19 00:00:00 | 13.98         | flat or lower |
 +--------------+---------------------+---------------+---------------+
+~~~
+
+Example 2: lead function with IGNORE NULLS specified
+
+~~~SQL
+CREATE TABLE test_tbl (col_1 INT, col_2 INT)
+DISTRIBUTED BY HASH(col_1) BUCKETS 3;
+
+INSERT INTO test_tbl VALUES 
+    (1, 5),
+    (2, 4),
+    (3, NULL),
+    (4, 2),
+    (5, NULL),
+    (6, NULL),
+    (7, 6);
+~~~
+
+~~~Plain
+SELECT col_1, col_2, LEAD(col_2 IGNORE NULLS) OVER (ORDER BY col_1) 
+FROM test_tbl ORDER BY col_1;
++-------+-------+----------------------------------------+
+| col_1 | col_2 | lead(col_2) OVER (ORDER BY col_1 ASC ) |
++-------+-------+----------------------------------------+
+|     1 |     5 |                                      4 |
+|     2 |     4 |                                      2 |
+|     3 |  NULL |                                      2 |
+|     4 |     2 |                                      6 |
+|     5 |  NULL |                                      6 |
+|     6 |  NULL |                                      6 |
+|     7 |     6 |                                   NULL |
++-------+-------+----------------------------------------+
 ~~~
 
 ### MAX()
