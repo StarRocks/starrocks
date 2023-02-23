@@ -786,10 +786,11 @@ public class MaterializedViewRewriter {
                     rewriteScalarOp = columnRewriter.rewriteViewToQueryWithQueryEc(rewritten);
                 }
 
-                // if rewriteScalarOp == rewritten, it means the rewritten can not be mapped from mv to query
+                // if rewriteScalarOp == rewritten and !rewritten.getUsedColumns().isEmpty(),
+                // it means the rewritten can not be mapped from mv to query.
                 // and ColumnRefOperator may conflict between mv and query(same id but not same name),
                 // so do not put it into the reversedMap
-                if (rewriteScalarOp != rewritten) {
+                if (rewriteScalarOp != rewritten || rewritten.getUsedColumns().isEmpty()) {
                     reversedMap.put(rewriteScalarOp, entry.getKey());
                 }
             } else {
