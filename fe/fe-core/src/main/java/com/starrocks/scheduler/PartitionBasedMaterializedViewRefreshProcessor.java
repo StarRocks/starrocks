@@ -143,6 +143,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 // 3. generate insert stmt
                 // 4. generate insert ExecPlan
 
+                // refresh external table meta cache before check the partition changed
+                refreshExternalTable(context);
                 // check whether there are partition changes for base tables, eg: partition rename
                 // retry to sync partitions if any base table changed the partition infos
                 if (checkBaseTablePartitionChange()) {
@@ -155,8 +157,6 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     continue;
                 }
                 checked = true;
-                // refresh external table meta cache
-                refreshExternalTable(context);
                 Set<String> partitionsToRefresh = getPartitionsToRefreshForMaterializedView(context.getProperties());
                 if (partitionsToRefresh.isEmpty()) {
                     LOG.info("no partitions to refresh for materialized view {}", materializedView.getName());
@@ -673,6 +673,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 if (table == null) {
                     return true;
                 }
+                Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
+                Column partitionColumn = partitionTableAndColumn.second;
 
                 if (snapshotTable.isOlapTable()) {
                     OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
@@ -705,8 +707,11 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                         if  (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
                             return false;
                         }
-                        Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
-                        Column partitionColumn = partitionTableAndColumn.second;
+
+                        // For Non-partition based base table, it's not necessary to check the partition changed.
+                        if (!snapshotTable.containColumn(partitionColumn.getName())) {
+                            continue;
+                        }
 
                         Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
                                 getPartitionRange(snapshotTable, partitionColumn);
@@ -730,8 +735,11 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                         if  (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
                             return false;
                         }
-                        Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
-                        Column partitionColumn = partitionTableAndColumn.second;
+
+                        // For Non-partition based base table, it's not necessary to check the partition changed.
+                        if (!snapShotIcebergTable.containColumn(partitionColumn.getName())) {
+                            continue;
+                        }
 
                         Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
                                 getPartitionRange(snapshotTable, partitionColumn);
