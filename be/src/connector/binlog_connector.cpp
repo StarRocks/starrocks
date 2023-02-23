@@ -44,6 +44,14 @@ Status BinlogDataSource::open(RuntimeState* state) {
     const TBinlogScanNode& binlog_scan_node = _provider->_binlog_scan_node;
     _runtime_state = state;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(binlog_scan_node.tuple_id);
+
+#ifndef NDEBUG
+    // for ut
+    if (state->fragment_ctx()->is_stream_test()) {
+        return Status::OK();
+    }
+#endif
+
     ASSIGN_OR_RETURN(_tablet, _get_tablet())
     ASSIGN_OR_RETURN(_binlog_read_schema, _build_binlog_schema())
     VLOG(2) << "Tablet id " << _tablet->tablet_uid() << ", version " << _scan_range.offset.version << ", seq_id "
@@ -55,9 +63,34 @@ void BinlogDataSource::close(RuntimeState* state) {}
 
 Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_cpu_time_ns);
-    _init_chunk(chunk, state->chunk_size());
+
+#ifndef NDEBUG
+    // for ut
+    if (state->fragment_ctx()->is_stream_test()) {
+        return _mock_chunk_test(chunk);
+    }
+#endif
+
     // TODO replace with BinlogReader
+    _init_chunk(chunk, state->chunk_size());
     return _mock_chunk(chunk->get());
+}
+
+Status BinlogDataSource::set_offset(int64_t table_version, int64_t changelog_id) {
+    // todo return _binlog_reader->seek(table_version, changelog_id);
+    _chunk_num = 0;
+
+    _table_version = table_version;
+    _changelog_id = changelog_id;
+    return Status::OK();
+}
+
+Status BinlogDataSource::reset_status() {
+    _rows_read_number = 0;
+    _bytes_read = 0;
+    _cpu_time_ns = 0;
+    _is_stream_pipeline = true;
+    return Status::OK();
 }
 
 BinlogMetaFieldMap BinlogDataSource::_build_binlog_meta_fields(ColumnId start_cid) {
@@ -175,6 +208,35 @@ Status BinlogDataSource::_mock_chunk(Chunk* chunk) {
     return Status::OK();
 }
 
+Status BinlogDataSource::_mock_chunk_test(ChunkPtr* chunk) {
+    VLOG_ROW << "[binlog data source] mock_chunk:";
+    int32_t num = _chunk_num.fetch_add(1, std::memory_order_relaxed);
+    if (num >= 1) {
+        return Status::EndOfFile(fmt::format("Has sent {} chunks", num));
+    }
+    auto chunk_temp = std::make_shared<Chunk>();
+    int64_t start = 0;
+    int64_t step = 1;
+    int64_t ndv_count = 100;
+    for (auto idx = 0; idx < 2; idx++) {
+        auto column = Int64Column::create();
+        for (int64_t i = 0; i < 4; i++) {
+            start += step;
+            VLOG_ROW << "Append col:" << idx << ", row:" << start;
+            column->append(start % ndv_count);
+        }
+        chunk_temp->append_column(column, SlotId(idx));
+    }
+
+    // ops
+    auto ops = Int8Column::create();
+    for (int64_t i = 0; i < 1; i++) {
+        ops->append(0);
+    }
+    *chunk = StreamChunkConverter::make_stream_chunk(std::move(chunk_temp), std::move(ops));
+    return Status::OK();
+}
+
 StatusOr<TabletSharedPtr> BinlogDataSource::_get_tablet() {
     TTabletId tablet_id = _scan_range.tablet_id;
     std::string err;
@@ -200,6 +262,14 @@ int64_t BinlogDataSource::num_bytes_read() const {
 }
 
 int64_t BinlogDataSource::cpu_time_spent() const {
+    return _cpu_time_ns;
+}
+
+int64_t BinlogDataSource::num_rows_read_in_epoch() const {
+    return _rows_read_number;
+}
+
+int64_t BinlogDataSource::cpu_time_spent_in_epoch() const {
     return _cpu_time_ns;
 }
 
