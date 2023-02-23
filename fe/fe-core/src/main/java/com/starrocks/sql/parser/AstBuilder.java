@@ -2279,6 +2279,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> files = context.srcFiles.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue())
                 .collect(toList());
         ColumnSeparator colSep = getColumnSeparator(context.colSep);
+        RowDelimiter rowDelimiter = getRowDelimiter(context.rowSep);
         String format = null;
         if (context.format != null) {
             if (context.format.identifier() != null) {
@@ -2328,7 +2329,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
         }
-        return new DataDescription(dstTableName, partitionNames, files, colList, colSep, null, format,
+        return new DataDescription(dstTableName, partitionNames, files, colList, colSep, rowDelimiter, format,
                 colFromPath, context.NEGATIVE() != null, colMappingList, whereExpr, csvFormat);
     }
 
@@ -2336,6 +2337,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context != null) {
             String sep = ((StringLiteral) visit(context)).getValue();
             return new ColumnSeparator(sep);
+        }
+        return null;
+    }
+
+    private RowDelimiter getRowDelimiter(StarRocksParser.StringContext context) {
+        if (context != null) {
+            String sep = ((StringLiteral) visit(context)).getValue();
+            return new RowDelimiter(sep);
         }
         return null;
     }
