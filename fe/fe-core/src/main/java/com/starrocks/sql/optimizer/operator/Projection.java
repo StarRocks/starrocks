@@ -33,6 +33,15 @@ public class Projection {
     // common sub operators firstly in BE
     private final Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap;
 
+    public void setNeedReuseLambdaExpr(boolean needReuseLambdaExpr) {
+        this.needReuseLambdaExpr = needReuseLambdaExpr;
+    }
+
+    public boolean needReuseLambdaExpr() {
+        return needReuseLambdaExpr;
+    }
+    private boolean needReuseLambdaExpr;
+
     public Projection(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
         this.columnRefMap = columnRefMap;
         this.commonSubOperatorMap = new HashMap<>();
@@ -46,6 +55,17 @@ public class Projection {
         } else {
             this.commonSubOperatorMap = commonSubOperatorMap;
         }
+    }
+
+    public Projection(Map<ColumnRefOperator, ScalarOperator> columnRefMap,
+                      Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap, boolean needReuseLambdaExpr) {
+        this.columnRefMap = columnRefMap;
+        if (commonSubOperatorMap == null) {
+            this.commonSubOperatorMap = new HashMap<>();
+        } else {
+            this.commonSubOperatorMap = commonSubOperatorMap;
+        }
+        this.needReuseLambdaExpr = needReuseLambdaExpr;
     }
 
     public List<ColumnRefOperator> getOutputColumns() {
