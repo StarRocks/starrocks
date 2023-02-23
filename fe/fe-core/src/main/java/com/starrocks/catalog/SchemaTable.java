@@ -58,6 +58,10 @@ public class SchemaTable extends Table {
     private static final int MAX_FIELD_VARCHARLENGTH = 65535;
     private static final int MY_CS_NAME_SIZE = 32;
 
+    public static boolean isBeSchemaTable(String name) {
+        return name.startsWith("be_");
+    }
+
     protected SchemaTable(long id, String name, TableType type, List<Column> baseSchema) {
         super(id, name, type, baseSchema);
     }
