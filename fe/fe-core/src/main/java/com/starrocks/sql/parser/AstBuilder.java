@@ -1283,7 +1283,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     checkAndExtractPartitionCol((FunctionCallExpr) expr);
                     expressionPartitionDesc = new ExpressionPartitionDesc(expr);
                 } else {
-                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), expr.getPos());
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            expr.getPos());
                 }
             }
 
@@ -5586,8 +5587,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     startTime = tempStartTime;
                     defineStartTime = true;
                 } catch (AnalysisException e) {
-                    throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(stringLiteral.getStringValue())
-                            , timePos);
+                    throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(stringLiteral.getStringValue()),
+                            timePos);
                 }
 
                 intervalLiteral = (IntervalLiteral) visit(context.interval());
