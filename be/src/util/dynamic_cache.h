@@ -305,6 +305,12 @@ public:
         return ret;
     }
 
+    void try_evict() {
+        std::lock_guard<std::mutex> lg(_lock);
+        _evict();
+        return;
+    }
+
 private:
     bool _evict() {
         auto itr = _list.begin();
