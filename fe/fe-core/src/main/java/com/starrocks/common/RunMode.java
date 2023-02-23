@@ -12,19 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+package com.starrocks.common;
 
-#include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/stream_chunk.h"
-
-namespace starrocks::stream {
-
-using Int8ColumnPtr = Int8Column::Ptr;
-using UInt8ColumnPtr = UInt8Column::Ptr;
-
-using DatumRow = std::vector<Datum>;
-using DatumRowPtr = std::shared_ptr<DatumRow>;
-using DatumRowOpt = std::optional<DatumRow>;
-
-} // namespace starrocks::stream
+public enum RunMode {
+    SHARED_DATA,
+    SHARED_NOTHING;
+}

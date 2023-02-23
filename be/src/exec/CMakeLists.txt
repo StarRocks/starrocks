@@ -115,6 +115,7 @@ set(EXEC_FILES
     schema_scanner/schema_schema_privileges_scanner.cpp
     schema_scanner/schema_table_privileges_scanner.cpp
     schema_scanner/schema_tables_config_scanner.cpp
+    schema_scanner/schema_be_tablets_scanner.cpp
     schema_scanner/schema_helper.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
@@ -212,6 +213,9 @@ set(EXEC_FILES
     pipeline/set/intersect_build_sink_operator.cpp
     pipeline/set/intersect_probe_sink_operator.cpp
     pipeline/set/intersect_output_source_operator.cpp
+    pipeline/hash_partition_context.cpp
+    pipeline/hash_partition_sink_operator.cpp
+    pipeline/hash_partition_source_operator.cpp
     pipeline/adaptive/collect_stats_sink_operator.cpp
     pipeline/adaptive/collect_stats_source_operator.cpp
     pipeline/adaptive/collect_stats_context.cpp
@@ -228,8 +232,12 @@ set(EXEC_FILES
     query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
     query_cache/ticket_checker.cpp
+    spill/spiller.cpp
+    spill/spiller_factory.cpp
+    spill/spilled_stream.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
+    stream/aggregate/agg_group_state.cpp
     stream/aggregate/stream_aggregator.cpp
     stream/aggregate/stream_aggregate_operator.cpp
     stream/stream_aggregate_node.cpp)

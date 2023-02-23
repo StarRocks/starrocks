@@ -20,6 +20,7 @@ namespace starrocks::pipeline {
 
 struct AdaptiveDopParam {
     size_t max_block_rows_per_driver_seq = 0;
+    int64_t max_output_amplification_factor = 0;
 };
 
 } // namespace starrocks::pipeline

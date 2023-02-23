@@ -41,6 +41,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -61,9 +62,9 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.RunMode;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
@@ -84,6 +85,7 @@ import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
@@ -204,7 +206,7 @@ public class ShowExecutorTest {
             }
         };
 
-        MaterializedView.BaseTableInfo baseTableInfo = new MaterializedView.BaseTableInfo(
+        BaseTableInfo baseTableInfo = new BaseTableInfo(
                 "default_catalog", "testDb", "testTbl");
 
         // mock materialized view
@@ -765,7 +767,8 @@ public class ShowExecutorTest {
             }
         };
 
-        Config.integrate_starmgr = true;
+        globalStateMgr.setRunMode(RunMode.SHARED_DATA);
+
         ShowBackendsStmt stmt = new ShowBackendsStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
@@ -783,7 +786,7 @@ public class ShowExecutorTest {
         Assert.assertEquals("0", resultSet.getString(23));
         Assert.assertEquals("5", resultSet.getString(27));
 
-        Config.integrate_starmgr = false;
+        globalStateMgr.setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
@@ -814,7 +817,7 @@ public class ShowExecutorTest {
         };
 
 
-        Config.integrate_starmgr = true;
+        globalStateMgr.setRunMode(RunMode.SHARED_DATA);
 
         ShowComputeNodesStmt stmt = new ShowComputeNodesStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -832,7 +835,7 @@ public class ShowExecutorTest {
         Assert.assertEquals("1.00 %", resultSet.getString(15));
         Assert.assertEquals("3.0 %", resultSet.getString(16));
 
-        Config.integrate_starmgr = false;
+        globalStateMgr.setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
@@ -1113,5 +1116,21 @@ public class ShowExecutorTest {
                 "comment \"hive_test\"\n" +
                 "PROPERTIES (\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
                 "\"type\"  =  \"hive\"\n)", resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowGrants() throws Exception {
+        ShowGrantsStmt stmt = new ShowGrantsStmt("root");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        resultSet.getResultRows().forEach(System.out::println);
+        String expectString1 = "root, null, GRANT CREATE_TABLE, DROP, ALTER, CREATE_VIEW, CREATE_FUNCTION, " +
+                "CREATE_MATERIALIZED_VIEW ON ALL DATABASES TO ROLE 'root'";
+        Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
+                l.toString().contains(expectString1)));
+        String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +
+                "UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
+        Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
+                l.toString().contains(expectString2)));
     }
 }

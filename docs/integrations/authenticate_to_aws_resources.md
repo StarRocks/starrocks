@@ -147,7 +147,7 @@ You need to create an IAM user and attach the policy provided in the "[Access AW
 
 The following figure provides a high-level explanation of the differences in mechanism between instance profile-based credential, assumed role-based credential, and IAM user-based credential in StarRocks.
 
-![Comparison between credential methods](../assets/credential_method_comparison.png)
+![Comparison between credential methods](../assets/authenticate_s3_credential_methods.png)
 
 ## Build connections with AWS resources
 
@@ -174,10 +174,10 @@ Creating an external catalog in your StarRocks cluster means building integratio
 
 StarRocks supports the following types of catalogs:
 
-- [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md)
 - [Hive catalog](../data_source/catalog/hive_catalog.md)
-- [Hudi catalog](../data_source/catalog/hudi_catalog.md)
 - [Iceberg catalog](../data_source/catalog/iceberg_catalog.md)
+- [Hudi catalog](../data_source/catalog/hudi_catalog.md)
+- [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md)
 
 The following examples create a Hive catalog named `hive_catalog_hms` or `hive_catalog_glue`, depending on the type of metastore you use, to query data from your Hive cluster. For detailed syntax and parameters, see [Hive catalog](../data_source/catalog/hive_catalog.md).
 

@@ -17,11 +17,17 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ImportWhereStmt extends StatementBase {
     private final Expr expr;
 
     public ImportWhereStmt(Expr expr) {
+        this(expr, NodePosition.ZERO);
+    }
+
+    public ImportWhereStmt(Expr expr, NodePosition pos) {
+        super(pos);
         this.expr = expr;
     }
 

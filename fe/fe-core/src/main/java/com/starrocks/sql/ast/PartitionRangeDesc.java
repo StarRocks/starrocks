@@ -16,12 +16,20 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.parser.NodePosition;
 
 public class PartitionRangeDesc implements ParseNode {
     private final String partitionStart;
     private final String partitionEnd;
 
+    private final NodePosition pos;
+
     public PartitionRangeDesc(String partitionStart, String partitionEnd) {
+        this(partitionStart, partitionEnd, NodePosition.ZERO);
+    }
+
+    public PartitionRangeDesc(String partitionStart, String partitionEnd, NodePosition pos) {
+        this.pos = pos;
         this.partitionStart = partitionStart;
         this.partitionEnd = partitionEnd;
     }
@@ -32,5 +40,10 @@ public class PartitionRangeDesc implements ParseNode {
 
     public String getPartitionEnd() {
         return partitionEnd;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

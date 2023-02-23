@@ -29,6 +29,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
@@ -63,6 +64,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 public class PrivilegeStmtAnalyzerV2 {
     private PrivilegeStmtAnalyzerV2() {
@@ -206,47 +208,24 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
-            String roleName = stmt.getQualifiedRole();
-            FeNameFormat.checkRoleName(roleName, true, "Can not create role");
-            if (privilegeManager.checkRoleExists(roleName) && !stmt.isIfNotExists()) {
-                throw new SemanticException("Operation CREATE ROLE failed for " + roleName + " : role already exists");
+            for (String roleName : stmt.getRoles()) {
+                FeNameFormat.checkRoleName(roleName, true, "Can not create role");
+                if (privilegeManager.checkRoleExists(roleName) && !stmt.isIfNotExists()) {
+                    throw new SemanticException("Operation CREATE ROLE failed for " + roleName + " : role already exists");
+                }
             }
             return null;
         }
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
-            String roleName = stmt.getQualifiedRole();
-            FeNameFormat.checkRoleName(roleName, true, "Can not create role");
-            if (!privilegeManager.checkRoleExists(roleName) && !stmt.isIfExists()) {
-                throw new SemanticException("Operation DROP ROLE failed for " + roleName + " : role not exists");
+            for (String roleName : stmt.getRoles()) {
+                FeNameFormat.checkRoleName(roleName, true, "Can not create role");
+                if (!privilegeManager.checkRoleExists(roleName) && !stmt.isIfExists()) {
+                    throw new SemanticException("Operation DROP ROLE failed for " + roleName + " : role not exists");
+                }
             }
             return null;
-        }
-
-        private FunctionName parseFunctionName(BaseGrantRevokePrivilegeStmt stmt)
-                throws PrivilegeException, AnalysisException {
-            stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
-            String[] name = stmt.getFunctionName().split("\\.");
-            FunctionName functionName;
-            if (stmt.getObjectType() == ObjectType.GLOBAL_FUNCTION) {
-                if (name.length != 1) {
-                    throw new SemanticException("global function has no database");
-                }
-                functionName = new FunctionName(name[0]);
-                functionName.setAsGlobalFunction();
-            } else {
-                if (name.length == 2) {
-                    functionName = new FunctionName(name[0], name[1]);
-                } else {
-                    String dbName = ConnectContext.get().getDatabase();
-                    if (dbName.equals("")) {
-                        throw new SemanticException("database not selected");
-                    }
-                    functionName = new FunctionName(dbName, name[0]);
-                }
-            }
-            return functionName;
         }
 
         private PEntryObject parseFunctionObject(BaseGrantRevokePrivilegeStmt stmt, FunctionSearchDesc searchDesc)
@@ -345,15 +324,28 @@ public class PrivilegeStmtAnalyzerV2 {
                                 objectList.add(privilegeManager.generateObject(stmt.getObjectType(), tokens));
                             }
                         }
-                    } else if (stmt.getFunctionArgsDef() != null) {
-                        FunctionName functionName = parseFunctionName(stmt);
-                        FunctionArgsDef argsDef = stmt.getFunctionArgsDef();
-                        argsDef.analyze();
-                        FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
-                                argsDef.getArgTypes(),
-                                argsDef.isVariadic());
-                        PEntryObject object = parseFunctionObject(stmt, searchDesc);
-                        objectList.add(object);
+                    } else if (stmt.getFunctions() != null) {
+                        stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
+
+                        for (Pair<FunctionName, FunctionArgsDef> f : stmt.getFunctions()) {
+                            FunctionName functionName = f.first;
+                            if (functionName.getDb() == null) {
+                                String dbName = ConnectContext.get().getDatabase();
+                                if (dbName.equals("")) {
+                                    throw new SemanticException("database not selected");
+                                }
+                                functionName.setDb(dbName);
+                            }
+
+                            FunctionArgsDef argsDef = f.second;
+                            argsDef.analyze();
+                            FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
+                                    argsDef.getArgTypes(),
+                                    argsDef.isVariadic());
+                            PEntryObject object = parseFunctionObject(stmt, searchDesc);
+                            objectList.add(object);
+                        }
+
                     } else {
                         // all statement
                         // TABLES -> TABLE
@@ -415,10 +407,22 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdentifier(), true);
-            for (String roleName : stmt.getRoles()) {
-                validRoleName(roleName, "Cannot set role", true);
+            analyseUser(stmt.getUserIdentity(), true);
+            try {
+                for (String roleName : stmt.getRoles()) {
+                    validRoleName(roleName, "Cannot set role", true);
+
+                    Long roleId = privilegeManager.getRoleIdByNameAllowNull(roleName);
+                    Set<Long> roleIdsForUser = privilegeManager.getRoleIdsByUser(stmt.getUserIdentity());
+                    if (roleId == null || !roleIdsForUser.contains(roleId)) {
+                        throw new SemanticException("Role " + roleName + " is not granted to " +
+                                stmt.getUserIdentity().toString());
+                    }
+                }
+            } catch (PrivilegeException e) {
+                throw new SemanticException(e.getMessage());
             }
+
             return null;
         }
 
@@ -430,8 +434,8 @@ public class PrivilegeStmtAnalyzerV2 {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            if (stmt.getUserIdent() != null) {
-                analyseUser(stmt.getUserIdent(), true);
+            if (stmt.getUserIdentity() != null) {
+                analyseUser(stmt.getUserIdentity(), true);
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to user", true));
             } else {

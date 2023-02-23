@@ -16,6 +16,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -38,6 +39,12 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
     protected byte[] scramblePassword;
 
     public BaseCreateAlterUserStmt(UserDesc userDesc, SetRoleType setRoleType, List<String> defaultRoles) {
+        this(userDesc, setRoleType, defaultRoles, NodePosition.ZERO);
+    }
+
+    public BaseCreateAlterUserStmt(UserDesc userDesc, SetRoleType setRoleType, List<String> defaultRoles,
+                                   NodePosition pos) {
+        super(pos);
         this.userIdentity = userDesc.getUserIdentity();
         this.password = userDesc.getPassword();
         this.isPasswordPlain = userDesc.isPasswordPlain();

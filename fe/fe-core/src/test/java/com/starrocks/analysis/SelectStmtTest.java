@@ -34,15 +34,9 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
-import com.starrocks.planner.PlanNode;
-import com.starrocks.planner.ProjectNode;
-import com.starrocks.planner.UnionNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
@@ -254,6 +248,27 @@ public class SelectStmtTest {
                 "select cast('abcdef' as varchar) k1, cast('deadbeef' as varchar(1999)) k2";
         for (String sql : Arrays.asList(sql0, sql1, sql2)) {
             assertNoCastStringAsStringInPlan(sql);
+        }
+    }
+
+    @Test
+    public void testCatalogFunSupport() throws Exception {
+        String sql = "select current_catalog()";
+        starRocksAssert.query(sql).explainQuery();
+        sql = "select current_catalog";
+        starRocksAssert.query(sql).explainQuery();
+
+    }
+
+    @Test
+    public void testBanSubqueryAppearsInLeftSideChildOfInPredicates()
+            throws Exception {
+        String sql = "select k1, count(k2) from db1.tbl1 group by k1 " +
+                "having (exists (select k1 from db1.tbl1 where NULL)) in (select k1 from db1.tbl1 where NULL);";
+        try {
+            UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Subquery in left-side child of in-predicate is not supported"));
         }
     }
 }

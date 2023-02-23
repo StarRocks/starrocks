@@ -73,8 +73,10 @@ public class AnalyzeSubqueryTest {
         analyzeFail("select v1 from t0 where v2 in ((select v4 from t1 where v3 = v5), (select v4 from t1 where v3 = v5))",
                 "In Predicate only support literal expression list");
 
-        analyzeFail("SELECT * FROM T WHERE A IN 1, 2", "You have an error in your SQL syntax");
-        analyzeFail("SELECT * FROM T WHERE A IN 1", "You have an error in your SQL syntax");
+        analyzeFail("SELECT * FROM T WHERE A IN 1, 2", "Getting syntax error at line 1, column 27." +
+                " Detail message: No viable statement for input '1'");
+        analyzeFail("SELECT * FROM T WHERE A IN 1", "Getting syntax error at line 1, column 27." +
+                " Detail message: No viable statement for input '1'");
     }
 
     @Test

@@ -54,6 +54,7 @@ import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.binlog.BinlogManager;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.CatalogIdGenerator;
@@ -68,6 +69,7 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
@@ -116,6 +118,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.RunMode;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
@@ -202,6 +205,7 @@ import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
@@ -306,6 +310,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
@@ -488,6 +493,20 @@ public class GlobalStateMgr {
 
     private ConfigRefreshDaemon configRefreshDaemon;
 
+    private RunMode runMode = RunMode.SHARED_NOTHING;
+
+    public boolean isSharedNothingMode() {
+        return runMode.equals(RunMode.SHARED_NOTHING);
+    }
+
+    public boolean isSharedDataMode() {
+        return runMode.equals(RunMode.SHARED_DATA);
+    }
+
+    public void setRunMode(RunMode runmode) {
+        this.runMode = runmode;
+    }
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -646,8 +665,14 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
 
-        if (Config.use_staros) {
+        if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_DATA.name())) {
+            runMode = RunMode.SHARED_DATA;
             this.starOSAgent = new StarOSAgent();
+        } else if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_NOTHING.name())) {
+            runMode = RunMode.SHARED_NOTHING;
+        } else {
+            LOG.error("Invalid run_mode config: {}, should be shared_data or shared_nothing", Config.run_mode);
+            System.exit(-1);
         }
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
@@ -969,7 +994,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (Config.use_staros && !starOSAgent.init(null)) {
+        if (isSharedDataMode() && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -1168,7 +1193,7 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
-        if (Config.integrate_starmgr) {
+        if (isSharedDataMode()) {
             // register service to starMgr
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
@@ -1235,7 +1260,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
         taskRunStateSynchronizer.start();
 
-        if (Config.use_staros) {
+        if (isSharedDataMode()) {
             shardDeleter.start();
         }
     }
@@ -1259,7 +1284,7 @@ public class GlobalStateMgr {
 
         // domain resolver
         domainResolver.start();
-        if (Config.use_staros) {
+        if (isSharedDataMode()) {
             compactionManager.start();
         }
         configRefreshDaemon.start();
@@ -1407,7 +1432,7 @@ public class GlobalStateMgr {
         for (String dbName : dbNames) {
             Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
             for (MaterializedView mv : db.getMaterializedViews()) {
-                for (MaterializedView.BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+                for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
                     Table table = baseTableInfo.getTable();
                     if (table == null) {
                         LOG.warn("tableName :{} do not exist. set materialized view:{} to invalid",
@@ -2402,6 +2427,51 @@ public class GlobalStateMgr {
                             .append("\" = \"");
                     sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
                 }
+
+                // unique constraint
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT))) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                            .append("\" = \"");
+                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)).append("\"");
+                }
+
+                // foreign key constraint
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT))) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                            .append("\" = \"");
+                    List<ForeignKeyConstraint> constraints = olapTable.getForeignKeyConstraints();
+                    List<String> constraintStrs = Lists.newArrayList();
+                    for (ForeignKeyConstraint constraint : constraints) {
+                        BaseTableInfo parentTableInfo = constraint.getParentTableInfo();
+                        StringBuilder constraintSb = new StringBuilder();
+                        constraintSb.append("(");
+                        String baseColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+                                .stream().map(pair -> pair.first).collect(Collectors.toList()));
+                        constraintSb.append(baseColumns);
+                        constraintSb.append(")");
+                        constraintSb.append(" REFERENCES ");
+                        if (parentTableInfo.getCatalogName().equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+                            Database parentDb = GlobalStateMgr.getCurrentState().getDb(parentTableInfo.getDbId());
+                            constraintSb.append(parentDb.getFullName());
+                            constraintSb.append(".");
+                            Table parentTable = parentDb.getTable(parentTableInfo.getTableId());
+                            constraintSb.append(parentTable.getName());
+                        } else {
+                            constraintSb.append(parentTableInfo);
+                        }
+
+                        constraintSb.append("(");
+                        String parentColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+                                .stream().map(pair -> pair.second).collect(Collectors.toList()));
+                        constraintSb.append(parentColumns);
+                        constraintSb.append(")");
+                        constraintStrs.add(constraintSb.toString());
+                    }
+
+                    sb.append(Joiner.on(";").join(constraintStrs)).append("\"");
+                }
             }
 
             // compression type
@@ -3149,6 +3219,10 @@ public class GlobalStateMgr {
         localMetastore.modifyBinlogMeta(db, table, binlogConfig);
     }
 
+    public void modifyTableConstraint(Database db, String tableName, Map<String, String> properties) throws DdlException {
+        localMetastore.modifyTableConstraint(db, tableName, properties);
+    }
+
     public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
         localMetastore.setHasForbitGlobalDict(dbName, tableName, isForbit);
     }
@@ -3188,7 +3262,7 @@ public class GlobalStateMgr {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
         if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+                !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
         }
         ctx.setCurrentCatalog(newCatalogName);
@@ -3212,7 +3286,7 @@ public class GlobalStateMgr {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }
             if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                    !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+                    !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
             }
             ctx.setCurrentCatalog(newCatalogName);
@@ -3228,7 +3302,7 @@ public class GlobalStateMgr {
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(ctx, dbName)) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, dbName)) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                             ctx.getQualifiedUser(), dbName);
                 }
@@ -3681,6 +3755,16 @@ public class GlobalStateMgr {
             streamLoadManager.cleanOldStreamLoadTasks();
         } catch (Throwable t) {
             LOG.warn("delete handler remove old delete info failed", t);
+        }
+        try {
+            taskManager.removeExpiredTasks();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean expire tasks failed", t);
+        }
+        try {
+            taskManager.removeExpiredTaskRuns();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean expire task runs history failed", t);
         }
     }
 

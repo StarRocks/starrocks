@@ -12,18 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "exec/spill/spiller_factory.h"
 
-package com.starrocks.sql.parser;
+#include <memory>
+#include <mutex>
 
-import static java.lang.String.format;
+#include "common/statusor.h"
+#include "exec/spill/spiller.h"
+#include "exec/spill/spiller_path_provider.h"
 
-public class OperationNotAllowedException extends ParsingException {
-
-    public OperationNotAllowedException(String message) {
-        super(message);
-    }
-
-    public OperationNotAllowedException(String formatString, Object... args) {
-        super(format(formatString, args));
-    }
+namespace starrocks {
+std::shared_ptr<Spiller> SpillerFactory::create(const SpilledOptions& options) {
+    std::lock_guard guard(_mutex);
+    auto spiller = std::make_shared<Spiller>(options, shared_from_this());
+    _spillers.emplace_back(spiller);
+    return spiller;
 }
+
+SpillerFactoryPtr make_spilled_factory() {
+    return std::make_shared<SpillerFactory>();
+}
+
+} // namespace starrocks

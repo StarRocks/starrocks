@@ -25,6 +25,7 @@ import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // Show rollup statement, used to show rollup information of one table.
 //
@@ -57,20 +58,21 @@ public class ShowMaterializedViewStmt extends ShowStmt {
     private Expr where;
 
     public ShowMaterializedViewStmt(String db) {
-        this.db = db;
-        this.pattern = null;
-        this.where = null;
+        this(db, null, null, NodePosition.ZERO);
     }
 
     public ShowMaterializedViewStmt(String db, String pattern) {
-        this.db = db;
-        this.pattern = pattern;
-        this.where = null;
+        this(db, pattern, null, NodePosition.ZERO);
     }
 
     public ShowMaterializedViewStmt(String db, Expr where) {
+        this(db, null, where, NodePosition.ZERO);
+    }
+
+    public ShowMaterializedViewStmt(String db, String pattern, Expr where, NodePosition pos) {
+        super(pos);
         this.db = db;
-        this.pattern = null;
+        this.pattern = pattern;
         this.where = where;
     }
 

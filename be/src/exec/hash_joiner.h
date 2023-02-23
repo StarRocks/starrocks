@@ -109,12 +109,11 @@ struct HashJoinerParam {
     std::set<SlotId> _output_slots;
 
     const TJoinDistributionMode::type _distribution_mode;
-    bool _is_buildable = false;
 };
 
 class HashJoiner final : public pipeline::ContextWithDependency {
 public:
-    explicit HashJoiner(const HashJoinerParam& param, const std::vector<HashJoinerPtr>& read_only_join_probers);
+    explicit HashJoiner(const HashJoinerParam& param);
 
     ~HashJoiner() override {
         if (_runtime_state != nullptr) {
@@ -164,14 +163,16 @@ public:
 
     void reference_hash_table(HashJoiner* src_join_builder);
 
-    bool is_buildable() const { return _is_buildable; }
-
     // These two methods are used only by the hash join builder.
-    void set_builder_finished();
     void set_prober_finished();
+    void incr_prober() { ++_num_probers; }
+    void decr_prober(RuntimeState* state);
+    bool has_referenced_hash_table() const { return _has_referenced_hash_table; }
+
     Columns string_key_columns() { return _string_key_columns; }
     Status reset_probe(RuntimeState* state);
-    const std::vector<HashJoinerPtr>& get_read_only_join_probers() { return _read_only_join_probers; }
+
+    size_t avg_keys_perf_bucket() const;
 
 private:
     static bool _has_null(const ColumnPtr& column);
@@ -208,7 +209,6 @@ private:
 
     void _short_circuit_break() {
         if (_phase == HashJoinPhase::EOS) {
-            set_builder_finished();
             return;
         }
 
@@ -218,7 +218,6 @@ private:
              _join_type == TJoinOp::RIGHT_SEMI_JOIN || _join_type == TJoinOp::RIGHT_ANTI_JOIN ||
              _join_type == TJoinOp::RIGHT_OUTER_JOIN)) {
             _phase = HashJoinPhase::EOS;
-            set_builder_finished();
             return;
         }
 
@@ -232,7 +231,6 @@ private:
                 // TODO: This reserved field will be removed in the implementation mechanism in the future.
                 // at that time, you can directly use Column::has_null() to judge
                 _phase = HashJoinPhase::EOS;
-                set_builder_finished();
             }
         }
     }
@@ -391,11 +389,12 @@ private:
     bool _ht_has_remain = false;
     // right table have not output data for right outer join/right semi join/right anti join/full outer join
 
-    const bool _is_buildable;
+    bool _has_referenced_hash_table = false;
 
     // These two fields are used only by the hash join builder.
-    const std::vector<HashJoinerPtr>& _read_only_join_probers;
-    std::atomic<size_t> _num_unfinished_probers = 0;
+    size_t _num_probers = 0;
+    std::atomic<size_t> _num_finished_probers = 0;
+    std::atomic<size_t> _num_closed_probers = 0;
 
     // Profile for hash join builder.
     RuntimeProfile::Counter* _build_ht_timer = nullptr;

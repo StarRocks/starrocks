@@ -15,6 +15,7 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
@@ -23,7 +24,6 @@ import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetDefaultRoleExecutor;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -166,7 +166,7 @@ public class AuthenticationManagerTest {
 
     @Test
     public void testCreateUserWithDefaultRole() throws Exception {
-        AuthenticationManager masterManager = new AuthenticationManager();
+        AuthenticationManager masterManager = ctx.getGlobalStateMgr().getAuthenticationManager();
         PrivilegeManager privilegeManager = ctx.getGlobalStateMgr().getPrivilegeManager();
 
         String sql = "create role test_r1";
@@ -223,7 +223,7 @@ public class AuthenticationManagerTest {
             setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AnalysisException e) {
             Assert.assertEquals("Role test_r3 is not granted to 'test_u3'@'%'", e.getMessage());
         }
 

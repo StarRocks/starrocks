@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.Map;
 
 public class CreateRepositoryStmt extends DdlStmt {
@@ -27,6 +29,12 @@ public class CreateRepositoryStmt extends DdlStmt {
 
     public CreateRepositoryStmt(boolean isReadOnly, String name, String brokerName, String location,
                                 Map<String, String> properties) {
+        this(isReadOnly, name, brokerName, location, properties, NodePosition.ZERO);
+    }
+
+    public CreateRepositoryStmt(boolean isReadOnly, String name, String brokerName, String location,
+                                Map<String, String> properties, NodePosition pos) {
+        super(pos);
         this.isReadOnly = isReadOnly;
         this.name = name;
         this.brokerName = brokerName;

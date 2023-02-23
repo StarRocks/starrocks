@@ -15,7 +15,10 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.common.Pair;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -31,8 +34,18 @@ public class GrantRevokePrivilegeObjects implements ParseNode {
     private String dbName;
 
     //UnResolved AST used in syntax grantPrivWithFunc
-    private FunctionArgsDef functionArgsDef;
-    private String functionName;
+    private List<Pair<FunctionName, FunctionArgsDef>> functions;
+
+    private final NodePosition pos;
+
+    public GrantRevokePrivilegeObjects() {
+        this(NodePosition.ZERO);
+    }
+
+    public GrantRevokePrivilegeObjects(NodePosition pos) {
+        this.pos = pos;
+    }
+
 
     public List<List<String>> getPrivilegeObjectNameTokensList() {
         return privilegeObjectNameTokensList;
@@ -63,19 +76,16 @@ public class GrantRevokePrivilegeObjects implements ParseNode {
         this.dbName = dbName;
     }
 
-    public String getFunctionName() {
-        return functionName;
+    public List<Pair<FunctionName, FunctionArgsDef>> getFunctions() {
+        return functions;
     }
 
-    public void setFunctionName(String functionName) {
-        this.functionName = functionName;
+    public void setFunctions(List<Pair<FunctionName, FunctionArgsDef>> functions) {
+        this.functions = functions;
     }
 
-    public FunctionArgsDef getFunctionArgsDef() {
-        return functionArgsDef;
-    }
-
-    public void setFunctionArgsDef(FunctionArgsDef functionArgsDef) {
-        this.functionArgsDef = functionArgsDef;
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

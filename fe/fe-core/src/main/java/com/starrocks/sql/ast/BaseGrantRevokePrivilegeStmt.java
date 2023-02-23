@@ -16,12 +16,15 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
+import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -48,6 +51,15 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
             String objectTypeUnResolved,
             GrantRevokeClause clause,
             GrantRevokePrivilegeObjects objects) {
+        this(privilegeTypeUnResolved, objectTypeUnResolved, clause, objects, NodePosition.ZERO);
+    }
+
+    public BaseGrantRevokePrivilegeStmt(
+            List<String> privilegeTypeUnResolved,
+            String objectTypeUnResolved,
+            GrantRevokeClause clause,
+            GrantRevokePrivilegeObjects objects, NodePosition pos) {
+        super(pos);
         this.privilegeTypeUnResolved = privilegeTypeUnResolved;
         this.objectTypeUnResolved = objectTypeUnResolved;
         this.clause = clause;
@@ -80,12 +92,8 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return objects.getUserPrivilegeObjectList();
     }
 
-    public FunctionArgsDef getFunctionArgsDef() {
-        return objects.getFunctionArgsDef();
-    }
-
-    public String getFunctionName() {
-        return objects.getFunctionName();
+    public List<Pair<FunctionName, FunctionArgsDef>> getFunctions() {
+        return objects.getFunctions();
     }
 
     public void setPrivBitSet(PrivBitSet privBitSet) {

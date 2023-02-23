@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.ast.ShowAlterStmt.AlterType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -56,6 +57,11 @@ public class CancelAlterTableStmt extends CancelStmt {
     }
 
     public CancelAlterTableStmt(AlterType alterType, TableName dbTableName, List<Long> alterJobIdList) {
+        this(alterType, dbTableName, alterJobIdList, NodePosition.ZERO);
+    }
+
+    public CancelAlterTableStmt(AlterType alterType, TableName dbTableName, List<Long> alterJobIdList, NodePosition pos) {
+        super(pos);
         this.alterType = alterType;
         this.dbTableName = dbTableName;
         this.alterJobIdList = alterJobIdList;

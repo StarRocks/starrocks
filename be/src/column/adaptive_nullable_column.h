@@ -541,9 +541,9 @@ public:
         return _data_column->container_memory_usage() + _null_column->container_memory_usage();
     }
 
-    size_t element_memory_usage(size_t from, size_t size) const override {
+    size_t reference_memory_usage(size_t from, size_t size) const override {
         materialized_nullable();
-        return NullableColumn::element_memory_usage(from, size);
+        return NullableColumn::reference_memory_usage(from, size);
     }
 
     std::string debug_item(size_t idx) const override {
@@ -567,7 +567,7 @@ public:
         }
     }
 
-    void materialized_nullable() const {
+    void materialized_nullable() const override {
         if (_state == State::kMaterialized) {
             return;
         }

@@ -18,10 +18,11 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.List;
@@ -53,7 +54,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     protected String inlineViewDef;
 
     private String simpleViewDef;
-    private List<MaterializedView.BaseTableInfo> baseTableInfos;
+    private List<BaseTableInfo> baseTableInfos;
 
     // Maintenance information
     ExecPlan maintenancePlan;
@@ -69,6 +70,15 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
                                            DistributionDesc distributionDesc, Map<String, String> properties,
                                            QueryStatement queryStatement) {
+        this(tableName, ifNotExists, comment, refreshSchemeDesc, expressionPartitionDesc, distributionDesc,
+                properties, queryStatement, NodePosition.ZERO);
+    }
+
+    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
+                                           RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
+                                           DistributionDesc distributionDesc, Map<String, String> properties,
+                                           QueryStatement queryStatement, NodePosition pos) {
+        super(pos);
         this.tableName = tableName;
         this.ifNotExists = ifNotExists;
         this.comment = comment;
@@ -175,11 +185,11 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.mvColumnItems = mvColumnItems;
     }
 
-    public List<MaterializedView.BaseTableInfo> getBaseTableInfos() {
+    public List<BaseTableInfo> getBaseTableInfos() {
         return baseTableInfos;
     }
 
-    public void setBaseTableInfos(List<MaterializedView.BaseTableInfo> baseTableInfos) {
+    public void setBaseTableInfos(List<BaseTableInfo> baseTableInfos) {
         this.baseTableInfos = baseTableInfos;
     }
 

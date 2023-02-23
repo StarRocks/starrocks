@@ -35,12 +35,17 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSchemaScanNode;
 import com.starrocks.thrift.TUserIdentity;
@@ -57,6 +62,13 @@ public class SchemaScanNode extends ScanNode {
     private String schemaWild;
     private String frontendIP;
     private int frontendPort;
+
+    // only used for BE related schema scans
+    private Long beId = null;
+    private Long tableId = null;
+    private Long partitionId = null;
+    private Long tabletId = null;
+    private List<TScanRangeLocations> beScanRanges = null;
 
     public void setSchemaDb(String schemaDb) {
         this.schemaDb = schemaDb;
@@ -136,6 +148,56 @@ public class SchemaScanNode extends ScanNode {
 
         TUserIdentity tCurrentUser = ConnectContext.get().getCurrentUserIdentity().toThrift();
         msg.schema_scan_node.setCurrent_user_ident(tCurrentUser);
+
+        if (tableId != null) {
+            msg.schema_scan_node.setTable_id(tableId);
+        }
+
+        if (partitionId != null) {
+            msg.schema_scan_node.setPartition_id(partitionId);
+        }
+
+        if (tabletId != null) {
+            msg.schema_scan_node.setTablet_id(tabletId);
+        }
+    }
+
+    public void setBeId(long beId) {
+        this.beId = beId;
+    }
+
+    public void setTableId(long tableId) {
+        this.tableId = tableId;
+    }
+
+    public void setPartitionId(long partitionId) {
+        this.partitionId = partitionId;
+    }
+
+    public void setTabletId(long tabletId) {
+        this.tabletId = tabletId;
+    }
+
+    public boolean isBeSchemaTable() {
+        return tableName.startsWith("be_");
+    }
+
+    public void computeBeScanRanges() {
+        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+            // if user specifies BE id, we try to scan all BEs(including bad BE)
+            // if user doesn't specify BE id, we only scan live BEs
+            if ((be.isAlive() && beId == null) || be.getId() == beId) {
+                if (beScanRanges == null) {
+                    beScanRanges = Lists.newArrayList();
+                }
+                TScanRangeLocations locations = new TScanRangeLocations();
+                TScanRangeLocation location = new TScanRangeLocation();
+                location.setBackend_id(be.getId());
+                location.setServer(new TNetworkAddress(be.getHost(), be.getBePort()));
+                locations.addToLocations(location);
+                beScanRanges.add(locations);
+            }
+        }
     }
 
     /**
@@ -144,12 +206,12 @@ public class SchemaScanNode extends ScanNode {
      */
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return null;
+        return beScanRanges;
     }
 
     @Override
     public int getNumInstances() {
-        return 1;
+        return beScanRanges == null ? 1 : beScanRanges.size();
     }
 
     @Override

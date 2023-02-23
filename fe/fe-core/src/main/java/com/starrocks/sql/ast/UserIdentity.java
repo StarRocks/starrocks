@@ -46,6 +46,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TUserIdentity;
 
 import java.io.DataInput;
@@ -62,6 +63,8 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
     @SerializedName("isDomain")
     private boolean isDomain;
 
+    private final NodePosition pos;
+
     public static final UserIdentity ROOT;
 
     static {
@@ -72,6 +75,7 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
      * Allow empty construction for gson
      */
     public UserIdentity() {
+        pos = NodePosition.ZERO;
     }
 
     public UserIdentity(String user, String host) {
@@ -79,6 +83,11 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
     }
 
     public UserIdentity(String user, String host, boolean isDomain) {
+        this(user, host, isDomain, NodePosition.ZERO);
+    }
+
+    public UserIdentity(String user, String host, boolean isDomain, NodePosition pos) {
+        this.pos = pos;
         this.user = user;
         this.host = Strings.emptyToNull(host);
         this.isDomain = isDomain;
@@ -216,5 +225,10 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
     @Override
     public void gsonPostProcess() throws IOException {
         user = ClusterNamespace.getNameFromFullName(user);
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

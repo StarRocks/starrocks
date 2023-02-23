@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.List;
@@ -29,7 +30,7 @@ import java.util.Set;
 public class RewriteContext {
     private final OptExpression queryExpression;
     private final PredicateSplit queryPredicateSplit;
-    private final EquivalenceClasses queryEquivalenceClasses;
+    private EquivalenceClasses queryEquivalenceClasses;
     // key is table relation id
     private final Map<Integer, List<ColumnRefOperator>> queryRelationIdToColumns;
     private final ColumnRefFactory queryRefFactory;
@@ -94,6 +95,10 @@ public class RewriteContext {
         return queryEquivalenceClasses;
     }
 
+    public void setQueryEquivalenceClasses(EquivalenceClasses queryEquivalenceClasses) {
+        this.queryEquivalenceClasses = queryEquivalenceClasses;
+    }
+
     public Map<Integer, List<ColumnRefOperator>> getQueryRelationIdToColumns() {
         return queryRelationIdToColumns;
     }
@@ -140,5 +145,9 @@ public class RewriteContext {
 
     public Set<ColumnRefOperator> getQueryColumnSet() {
         return queryColumnSet;
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getMVColumnRefToScalarOp() {
+        return MvUtils.getColumnRefMap(getMvExpression(), getMvRefFactory());
     }
 }

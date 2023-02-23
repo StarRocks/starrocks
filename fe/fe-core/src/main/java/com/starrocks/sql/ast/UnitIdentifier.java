@@ -16,15 +16,28 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.parser.NodePosition;
 
 public class UnitIdentifier implements ParseNode {
     private final String description;
 
+    private final NodePosition pos;
+
     public UnitIdentifier(String description) {
+        this(description, NodePosition.ZERO);
+    }
+
+    public UnitIdentifier(String description, NodePosition pos) {
+        this.pos = pos;
         this.description = description.toUpperCase();
     }
 
     public String getDescription() {
         return description;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

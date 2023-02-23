@@ -32,7 +32,6 @@ statement
     : queryStatement
 
     // Warehouse Statement
-    | useWarehouseStatement
     | createWarehouseStatement
     | dropWarehouseStatement
     | showWarehousesStatement
@@ -249,6 +248,7 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
+    | setWarehouseStatement
 
     //Unsupported Statement
     | unsupportedStatement
@@ -619,10 +619,6 @@ createWarehouseStatement
 
 showWarehousesStatement
     : SHOW WAREHOUSES ((LIKE pattern=string) | (WHERE expression))?
-    ;
-
-useWarehouseStatement
-    : USE WAREHOUSE identifierOrString
     ;
 
 dropWarehouseStatement
@@ -1233,11 +1229,11 @@ executeAsStatement
     ;
 
 createRoleStatement
-    : CREATE ROLE (IF NOT EXISTS)? identifierOrString
+    : CREATE ROLE (IF NOT EXISTS)? roleList
     ;
 
 dropRoleStatement
-    : DROP ROLE (IF EXISTS)? identifierOrString
+    : DROP ROLE (IF EXISTS)? roleList
     ;
 
 showRolesStatement
@@ -1273,7 +1269,7 @@ grantPrivilegeStatement
     | GRANT privilegeTypeList ON privObjectNameList TO grantRevokeClause (WITH GRANT OPTION)?           #grantTablePrivBrief
     | GRANT privilegeTypeList ON privObjectType (privObjectNameList)?
         TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithType
-    | GRANT privilegeTypeList ON GLOBAL? privObjectType qualifiedName '(' typeList ')'
+    | GRANT privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithFunc
     | GRANT privilegeTypeList ON ALL privObjectType
         (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? TO grantRevokeClause
@@ -1286,7 +1282,7 @@ revokePrivilegeStatement
     | REVOKE privilegeTypeList ON privObjectNameList FROM grantRevokeClause                             #revokeTablePrivBrief
     | REVOKE privilegeTypeList ON privObjectType (privObjectNameList)?
         FROM grantRevokeClause                                                                          #revokePrivWithType
-    | REVOKE privilegeTypeList ON GLOBAL? privObjectType qualifiedName '(' typeList ')'
+    | REVOKE privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         FROM grantRevokeClause                                                                          #revokePrivWithFunc
     | REVOKE privilegeTypeList ON ALL privObjectType
         (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? FROM grantRevokeClause                #revokeOnAll
@@ -1310,6 +1306,10 @@ privObjectName
 
 privObjectNameList
     : privObjectName (',' privObjectName)*
+    ;
+
+privFunctionObjectNameList
+    : qualifiedName '(' typeList ')' (',' qualifiedName '(' typeList ')')*
     ;
 
 privilegeTypeList
@@ -1487,6 +1487,10 @@ setUserPropertyStatement
 
 roleList
     : identifierOrString (',' identifierOrString)*
+    ;
+
+setWarehouseStatement
+    : SET WAREHOUSE identifierOrString
     ;
 
 unsupportedStatement
@@ -1817,6 +1821,7 @@ informationFunctionExpression
     | name = CONNECTION_ID '(' ')'
     | name = CURRENT_USER ('(' ')')?
     | name = CURRENT_ROLE '(' ')'
+    | name = CURRENT_CATALOG ('(' ')')?
     ;
 
 specialDateTimeExpression
@@ -1869,7 +1874,7 @@ whenClause
 
 over
     : OVER '('
-        (PARTITION BY partition+=expression (',' partition+=expression)*)?
+        (bracketHint? PARTITION BY partition+=expression (',' partition+=expression)*)?
         (ORDER BY sortItem (',' sortItem)*)?
         windowFrame?
       ')'

@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
@@ -26,6 +27,12 @@ public class CreateWarehouseStmt extends DdlStmt {
     public CreateWarehouseStmt(boolean ifNotExists,
                                String warehouseName,
                                Map<String, String> properties) {
+        this(ifNotExists, warehouseName, properties, NodePosition.ZERO);
+    }
+
+    public CreateWarehouseStmt(boolean ifNotExists, String warehouseName, Map<String, String> properties,
+                               NodePosition pos) {
+        super(pos);
         this.ifNotExists = ifNotExists;
         this.warehouseName = warehouseName;
         this.properties = properties;

@@ -37,7 +37,7 @@ Broker Load supports the following data file formats:
 > For CSV data, take note of the following points:
 >
 > - You can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
-> - Null values are denoted by using `\\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\\N` in the second column to denote a null value. This means the record must be compiled as `a,\\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
+> - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
 
 ## Supported storage systems
 
@@ -126,7 +126,7 @@ LOAD LABEL test_db.label1
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
-
+    ,
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
@@ -154,7 +154,7 @@ LOAD LABEL test_db.label2
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
-    
+    ,
     DATA INFILE("s3a://bucket_s3/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
@@ -184,7 +184,7 @@ LOAD LABEL test_db.label3
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
-    
+    ,
     DATA INFILE("s3a://bucket_gcs/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","

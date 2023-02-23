@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.parser.NodePosition;
 
 /*
  *  SHOW ALL GRANTS;
@@ -60,12 +61,16 @@ public class ShowGrantsStmt extends ShowStmt {
     private final String role;
 
     public ShowGrantsStmt(UserIdentity userIdent) {
-        this.userIdent = userIdent;
-        this.role = null;
+        this(userIdent, null, NodePosition.ZERO);
     }
 
     public ShowGrantsStmt(String role) {
-        this.userIdent = null;
+        this(null, role, NodePosition.ZERO);
+    }
+
+    public ShowGrantsStmt(UserIdentity userIdent, String role, NodePosition pos) {
+        super(pos);
+        this.userIdent = userIdent;
         this.role = role;
     }
 

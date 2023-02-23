@@ -156,8 +156,10 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     _fragment_ctx->set_is_stream_pipeline(is_stream_pipeline);
     if (request.common().__isset.adaptive_dop_param) {
         _fragment_ctx->set_enable_adaptive_dop(true);
-        const auto& tparam = request.common().adaptive_dop_param;
-        _fragment_ctx->adaptive_dop_param().max_block_rows_per_driver_seq = tparam.max_block_rows_per_driver_seq;
+        const auto& tadaptive_dop_param = request.common().adaptive_dop_param;
+        auto& adaptive_dop_param = _fragment_ctx->adaptive_dop_param();
+        adaptive_dop_param.max_block_rows_per_driver_seq = tadaptive_dop_param.max_block_rows_per_driver_seq;
+        adaptive_dop_param.max_output_amplification_factor = tadaptive_dop_param.max_output_amplification_factor;
     }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
@@ -535,10 +537,6 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         }
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, tsink, fragment.output_exprs, params,
                                                    request.sender_id(), plan->row_desc(), &datasink));
-        RuntimeProfile* sink_profile = datasink->profile();
-        if (sink_profile != nullptr) {
-            runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
-        }
         RETURN_IF_ERROR(_decompose_data_sink_to_operator(runtime_state, &context, request, datasink, tsink,
                                                          fragment.output_exprs));
     }
@@ -829,10 +827,6 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             RETURN_IF_ERROR(st);
             if (sink != nullptr) {
                 RETURN_IF_ERROR(sink->init(thrift_sink, runtime_state));
-            }
-            RuntimeProfile* sink_profile = sink->profile();
-            if (sink_profile != nullptr) {
-                runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
             }
             tablet_sinks.emplace_back(std::move(sink));
         }

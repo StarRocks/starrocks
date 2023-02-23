@@ -15,6 +15,7 @@
 package com.starrocks.sql.common;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.RunMode;
 
 public enum EngineType {
     OLAP,
@@ -29,6 +30,9 @@ public enum EngineType {
     FILE;
 
     public static EngineType defaultEngine() {
-        return Config.use_staros ? STARROCKS : OLAP;
+        if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_DATA.name())) {
+            return STARROCKS;
+        }
+        return OLAP;
     }
 }

@@ -24,10 +24,20 @@ FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
 
 FROM ubuntu:22.04
 
-RUN apt-get update -y \
-        && apt-get install -y --no-install-recommends binutils-dev default-jdk python2 \
-           mysql-client curl vim tree net-tools less \
-        && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends binutils-dev default-jdk python2 \
+           mysql-client curl vim tree net-tools less
+
+# Install timezone data. This is needed by Starrocks broker load.
+RUN apt-get install -yq tzdata && \
+    ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
+    dpkg-reconfigure -f noninteractive tzdata
+
+# Install perf tool for low-level performance debug
+RUN apt-get install -yq linux-tools-common linux-tools-generic
+RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc
+
+RUN rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/lib/jvm/default-java
 
@@ -39,7 +49,7 @@ WORKDIR $STARROCKS_ROOT
 COPY --from=artifacts /release/be_artifacts/ $STARROCKS_ROOT/
 
 # Copy be k8s scripts to the runtime container image
-COPY docker/bin/be_* $STARROCKS_ROOT/
+COPY docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
 
 # Create directory for BE storage
 RUN mkdir -p $STARROCKS_ROOT/be/storage

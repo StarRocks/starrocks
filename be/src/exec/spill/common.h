@@ -12,29 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast;
+#pragma once
 
-import com.starrocks.analysis.RedirectStatus;
+// #define TRACE_SPILL_LOG VLOG_QUERY
+#define TRACE_SPILL_LOG VLOG(1)
 
-public class UseWarehouseStmt extends StatementBase {
-    private final String warehouseName;
+#define AUTO_DEL_SPILL_FILE true
 
-    public UseWarehouseStmt(String warehouseName) {
-        this.warehouseName = warehouseName;
-    }
-
-    public String getWarehouseName() {
-        return warehouseName;
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitUseWarehouseStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
-    }
-}
-
+#define AUTO_DEL_SPILL_DIR true
