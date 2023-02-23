@@ -2,19 +2,19 @@
 
 ## 功能
 
-返回具有指定长度的字符串的右边部分，长度的单位为「utf8 字符」。
+从字符串右边部分返回指定长度的字符，长度的单位为「utf8 字符」。函数别名为 [right](right.md)。
 
 ## 语法
 
 ```Haskell
-strright(str, len)
+VARCHAR strright(VARCHAR str, INT len)
 ```
 
 ## 参数说明
 
-`str`: 支持的数据类型为 VARCHAR。
+`str`: 待处理的字符串，支持的数据类型为 VARCHAR。
 
-`len`: 支持的数据类型为 INT。
+`len`: 要返回的字符长度，支持的数据类型为 INT。
 
 ## 返回值说明
 
@@ -24,9 +24,9 @@ strright(str, len)
 
 ```Plain Text
 MySQL > select strright("Hello starrocks",5);
-+--------------------------+
++------------------------------+
 |strright('Hello starrocks', 5)|
-+--------------------------+
-| rocks                    |
-+--------------------------+
++------------------------------+
+| rocks                        |
++------------------------------+
 ```
