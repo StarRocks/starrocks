@@ -80,6 +80,9 @@ Status OlapSchemaScanContext::_prepare_params(RuntimeState* state) {
     if (_tnode.schema_scan_node.__isset.tablet_id) {
         _param->tablet_id = _tnode.schema_scan_node.tablet_id;
     }
+    if (_tnode.schema_scan_node.__isset.txn_id) {
+        _param->txn_id = _tnode.schema_scan_node.txn_id;
+    }
 
     return Status::OK();
 }
