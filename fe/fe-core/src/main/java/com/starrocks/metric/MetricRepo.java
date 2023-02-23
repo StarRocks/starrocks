@@ -37,9 +37,13 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.backup.AbstractJob;
+import com.starrocks.backup.BackupJob;
+import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -408,6 +412,22 @@ public final class MetricRepo {
         COUNTER_UNFINISHED_RESTORE_JOB = new LongCounterMetric("unfinished_restore_job", MetricUnit.REQUESTS,
         "current unfinished restore job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);
+        List<Database> dbs = Lists.newArrayList();
+        if (GlobalStateMgr.getCurrentState().getIdToDb() != null) {
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
+                dbs.add(entry.getValue());
+            }
+
+            for (Database db : dbs) {
+                AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
+                if (jobI instanceof BackupJob && !((BackupJob) jobI).isDone()) {
+                    COUNTER_UNFINISHED_BACKUP_JOB.increase(1L);
+                } else if (jobI instanceof RestoreJob && !((RestoreJob) jobI).isDone()) {
+                    COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
+                }
+
+            }
+        }
 
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));
