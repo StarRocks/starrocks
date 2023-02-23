@@ -1040,9 +1040,9 @@ TEST_F(FileReaderTest, TestTwoNestedLevelArray) {
             {""},
     };
 
-    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(_file_col_not_null_path));
+    ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
