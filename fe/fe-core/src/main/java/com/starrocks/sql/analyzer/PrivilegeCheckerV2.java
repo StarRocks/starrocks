@@ -813,7 +813,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
-            String catalogName = statement.getCatalogAndItsName().split("\\s+")[1];
+            String catalogName = statement.getCatalogName();
             // No authorization check for using default_catalog
             if (CatalogMgr.isInternalCatalog(catalogName)) {
                 return null;
