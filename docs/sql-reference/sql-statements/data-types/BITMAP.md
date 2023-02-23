@@ -1,8 +1,8 @@
 # BITMAP
 
-BITMAP is often used to accelerate count distinct. It is similar but more accurate in count distinct than HyperLogLog (HLL). BITMAP consumes more memory and disk resources. It supports only aggregation of INT data. If you want to apply bitmap to string data, you must map the data using the dictionary.
+BITMAP is often used to accelerate count distinct. It is similar but more accurate in count distinct than HyperLogLog (HLL). BITMAP consumes more memory and disk resources. It supports only aggregation of INT data. If you want to apply bitmap to string data, you must map the data using the low-cardinality dictionary.
 
-This topic provide a simple example on how to create a BITMAP column and use bitmap functions to aggregate data for that column. For detailed function definitions or more Bitmap functions, see "Bitmap functions".
+This topic provides a simple example on how to create a BITMAP column and use bitmap functions to aggregate data for that column. For detailed function definitions or more Bitmap functions, see "Bitmap functions".
 
 ## Create a table
 
