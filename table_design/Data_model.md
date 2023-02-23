@@ -344,9 +344,9 @@ PROPERTIES("replication_num" = "3",
   - 在建表语句中，主键必须定义在其他列之前。
   - 主键通过 `PRIMARY KEY` 定义。
   - 主键必须满足唯一性约束，且列的值不会修改。本示例中主键为 `dt`、`order_id`。
-  - 支持主键的数据类型为 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、STRING、VARCHAR、DATE、DATETIME，且不允许为 NULL。
+  - 支持主键的数据类型为 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DATE、DATETIME、VARCHAR/STRING，且不允许为 NULL 值。
   - 分区列和分桶列必须在主键中。
-  - 合理设置主键的列数和长度，以节约内存。建议主键为占用内存空间较少的数据类型，例如 INT、BIGINT 等，暂时不建议为 VARCHAR。
+  - 合理设置主键的列数和长度，以节约内存。建议主键为占用内存空间较少的数据类型，例如 INT、BIGINT 等，暂时不建议为 VARCHAR/STRING。
   - 在建表前，建议根据主键的数据类型和表的行数来预估主键索引占用内存空间，以避免出现内存溢出。以下示例说明主键索引占用内存空间的计算方式：
     - 假设存在主键模型，排序键为`dt`、`id`，数据类型为 DATE（4 个字节）、BIGINT（8 个字节）。则排序键占 12 个字节。
     - 假设该表的热数据有 1000 万行，存储为三个副本。
@@ -354,7 +354,7 @@ PROPERTIES("replication_num" = "3",
 - `enable_persistent_index`：是否持久化主键索引，同时使用磁盘和内存存储主键索引，避免主键索引占用过大内存空间。通常情况下，持久化主键索引后，主键索引所占内存为之前的 1/10。您可以在建表时，在`PROPERTIES`中配置该参数，取值范围为 `true` 或者 `false`（默认值）。
 
    > - 建表后，如果您需要修改该参数，请参见 ALTER TABLE [修改表的属性](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md#修改-table-的属性) 。
-   > - 主键必须为定长的数据类型（CHAR 除外），不支持为可变长的数据类型（例如 VARCHAR）。
+   > - 开启持久化索引，支持主键的类型为 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DATE、DATETIME，**暂不支持为 VARCHAR/STRING**，且不允许为 NULL 值。
    > - 如果磁盘为固态硬盘 SSD，则建议设置为 `true`。
    > - 自 2.3.0 版本起，StarRocks 支持配置该参数。
 
