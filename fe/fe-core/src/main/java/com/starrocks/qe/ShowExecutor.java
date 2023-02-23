@@ -513,6 +513,128 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(stmt.getMetaData(), rowSets);
     }
 
+<<<<<<< HEAD
+=======
+    public static List<List<String>> listMaterializedViewStatus(
+            String dbName,
+            List<MaterializedView> materializedViews,
+            List<Pair<OlapTable, MaterializedIndex>> singleTableMVs) {
+        List<List<String>> rowSets = Lists.newArrayList();
+
+        // Now there are two MV cases:
+        //  1. Table's type is MATERIALIZED_VIEW, this is the new MV type which the MV table is separated from
+        //     the base table and supports multi table in MV definition.
+        //  2. Table's type is OLAP, this is the old MV type which the MV table is associated with the base
+        //     table and only supports single table in MV definition.
+        // TODO: Unify the two cases into one.
+        Map<String, TaskRunStatus> mvNameTaskMap;
+        if (materializedViews.isEmpty()) {
+            mvNameTaskMap = Maps.newHashMap();
+        } else {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            TaskManager taskManager = globalStateMgr.getTaskManager();
+            mvNameTaskMap = taskManager.showMVLastRefreshTaskRunStatus(dbName);
+        }
+        for (MaterializedView mvTable : materializedViews) {
+            long mvId = mvTable.getId();
+            TaskRunStatus taskStatus = mvNameTaskMap.get(TaskBuilder.getMvTaskName(mvId));
+            ArrayList<String> resultRow = new ArrayList<>();
+            resultRow.add(String.valueOf(mvId));
+            resultRow.add(mvTable.getName());
+            resultRow.add(dbName);
+            // refresh_type
+            MaterializedView.MvRefreshScheme refreshScheme = mvTable.getRefreshScheme();
+            if (refreshScheme == null) {
+                resultRow.add("UNKNOWN");
+            } else {
+                resultRow.add(String.valueOf(mvTable.getRefreshScheme().getType()));
+            }
+            // is_active
+            resultRow.add(String.valueOf(mvTable.isActive()));
+            // task run status
+            setTaskRunStatus(resultRow, taskStatus);
+            resultRow.add(mvTable.getMaterializedViewDdlStmt(true));
+            resultRow.add(String.valueOf(mvTable.getRowCount()));
+            rowSets.add(resultRow);
+        }
+
+        for (Pair<OlapTable, MaterializedIndex> singleTableMV : singleTableMVs) {
+            OlapTable olapTable = singleTableMV.first;
+            MaterializedIndex mvIdx = singleTableMV.second;
+
+            ArrayList<String> resultRow = new ArrayList<>();
+            MaterializedIndexMeta mvMeta = olapTable.getVisibleIndexIdToMeta().get(mvIdx.getId());
+            resultRow.add(String.valueOf(mvIdx.getId()));
+            resultRow.add(olapTable.getIndexNameById(mvIdx.getId()));
+            resultRow.add(dbName);
+            // refresh_type
+            resultRow.add("ROLLUP");
+            // is_active
+            resultRow.add(String.valueOf(true));
+            setTaskRunStatus(resultRow, null);
+            if (mvMeta.getOriginStmt() == null) {
+                StringBuilder originStmtBuilder = new StringBuilder(
+                        "create materialized view " + olapTable.getIndexNameById(mvIdx.getId()) +
+                                " as select ");
+                String groupByString = "";
+                for (Column column : mvMeta.getSchema()) {
+                    if (column.isKey()) {
+                        groupByString += column.getName() + ",";
+                    }
+                }
+                originStmtBuilder.append(groupByString);
+                for (Column column : mvMeta.getSchema()) {
+                    if (!column.isKey()) {
+                        originStmtBuilder.append(column.getAggregationType().toString()).append("(")
+                                .append(column.getName()).append(")").append(",");
+                    }
+                }
+                originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+                originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
+                        .append(groupByString);
+                originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+                resultRow.add(originStmtBuilder.toString());
+            } else {
+                resultRow.add(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
+                        .replaceAll("[ ]+", " "));
+            }
+            resultRow.add(String.valueOf(mvIdx.getRowCount()));
+            rowSets.add(resultRow);
+        }
+        return rowSets;
+    }
+
+    private static void setTaskRunStatus(List<String> resultRow, TaskRunStatus taskStatus) {
+        if (taskStatus != null) {
+            // last_refresh_start_time
+            resultRow.add(String.valueOf(TimeUtils.longToTimeString(taskStatus.getCreateTime())));
+            // last_refresh_finished_time
+            resultRow.add(String.valueOf(TimeUtils.longToTimeString(taskStatus.getFinishTime())));
+            // last_refresh_duration(s)
+            resultRow.add(String.valueOf((taskStatus.getFinishTime() - taskStatus.getCreateTime()) / 1000));
+            // last_refresh_state
+            resultRow.add(String.valueOf(taskStatus.getState()));
+            // inactive_code
+            resultRow.add(String.valueOf(taskStatus.getErrorCode()));
+            // inactive_reason
+            resultRow.add(taskStatus.getErrorMessage());
+        } else {
+            // last_refresh_start_time
+            resultRow.add("");
+            // last_refresh_finished_time
+            resultRow.add("");
+            // last_refresh_duration
+            resultRow.add("");
+            // last_refresh_state
+            resultRow.add("");
+            // inactive_code
+            resultRow.add("");
+            // inactive_reason
+            resultRow.add("");
+        }
+    }
+
+>>>>>>> 4a206aa8b (Added the ability to work when the Mv refresh type is unexpectedly null (#18306))
     // Handle show process list
     private void handleShowProcesslist() {
         ShowProcesslistStmt showStmt = (ShowProcesslistStmt) stmt;
