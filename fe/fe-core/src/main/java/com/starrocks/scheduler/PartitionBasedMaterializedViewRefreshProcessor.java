@@ -673,8 +673,6 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 if (table == null) {
                     return true;
                 }
-                Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
-                Column partitionColumn = partitionTableAndColumn.second;
 
                 if (snapshotTable.isOlapTable()) {
                     OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
@@ -708,6 +706,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                             return false;
                         }
 
+                        Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
+                        Column partitionColumn = partitionTableAndColumn.second;
                         // For Non-partition based base table, it's not necessary to check the partition changed.
                         if (!snapshotTable.containColumn(partitionColumn.getName())) {
                             continue;
@@ -736,6 +736,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                             return false;
                         }
 
+                        Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
+                        Column partitionColumn = partitionTableAndColumn.second;
                         // For Non-partition based base table, it's not necessary to check the partition changed.
                         if (!snapShotIcebergTable.containColumn(partitionColumn.getName())) {
                             continue;
