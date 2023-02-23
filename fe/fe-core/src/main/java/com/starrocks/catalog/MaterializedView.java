@@ -14,7 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
@@ -75,8 +74,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.server.CatalogMgr.isInternalCatalog;
-
 /**
  * meta structure for materialized view
  */
@@ -89,122 +86,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         ASYNC,
         MANUAL,
         INCREMENTAL
-    }
-
-    public static class BaseTableInfo {
-        @SerializedName(value = "catalogName")
-        private final String catalogName;
-
-        @SerializedName(value = "dbId")
-        private long dbId = -1;
-
-        @SerializedName(value = "tableId")
-        private long tableId = -1;
-
-        @SerializedName(value = "dbName")
-        private String dbName;
-
-        @SerializedName(value = "tableIdentifier")
-        private String tableIdentifier;
-
-        @SerializedName(value = "tableName")
-        private String tableName;
-
-        public BaseTableInfo(long dbId, String dbName, long tableId) {
-            this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-            this.dbId = dbId;
-            this.dbName = dbName;
-            this.tableId = tableId;
-        }
-
-        public BaseTableInfo(long dbId, long tableId) {
-            this(dbId, null, tableId);
-        }
-
-        public BaseTableInfo(String catalogName, String dbName, String tableIdentifier) {
-            this.catalogName = catalogName;
-            this.dbName = dbName;
-            this.tableIdentifier = tableIdentifier;
-            this.tableName = tableIdentifier.split(":")[0];
-        }
-
-        public String getTableInfoStr() {
-            if (isInternalCatalog(catalogName)) {
-                return Joiner.on(".").join(dbId, tableId);
-            } else {
-                return Joiner.on(".").join(catalogName, dbName, tableName);
-            }
-        }
-
-        public String getDbInfoStr() {
-            if (isInternalCatalog(catalogName)) {
-                return String.valueOf(dbId);
-            } else {
-                return Joiner.on(".").join(catalogName, dbName);
-            }
-        }
-
-        public String getCatalogName() {
-            return this.catalogName;
-        }
-
-        public String getDbName() {
-            return this.dbName != null ? this.dbName : getDb().getFullName();
-        }
-
-        public String getTableName() {
-            if (this.tableName != null) {
-                return this.tableName;
-            } else {
-                Table table = getTable();
-                return table == null ? null : table.getName();
-            }
-        }
-
-        public String getTableIdentifier() {
-            return this.tableIdentifier;
-        }
-
-        public long getDbId() {
-            return this.dbId;
-        }
-
-        public long getTableId() {
-            return this.tableId;
-        }
-
-        public Table getTable() {
-            if (isInternalCatalog(catalogName)) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-                if (db == null) {
-                    return null;
-                } else {
-                    return db.getTable(tableId);
-                }
-            } else {
-                if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
-                    LOG.warn("catalog {} not exist", catalogName);
-                    return null;
-                }
-                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
-                if (table == null) {
-                    LOG.warn("table {}.{}.{} not exist", catalogName, dbName, tableName);
-                    return null;
-                }
-                if (table.getTableIdentifier().equals(tableIdentifier)) {
-                    return table;
-                }
-                return null;
-            }
-        }
-
-        public Database getDb() {
-            if (isInternalCatalog(catalogName)) {
-                return GlobalStateMgr.getCurrentState().getDb(dbId);
-            } else {
-                return GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-            }
-        }
     }
 
     public static class BasePartitionInfo {
@@ -563,7 +444,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
 
-        for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
             // Do not set the active when table is null, it would be checked in MVActiveChecker
             Table table = baseTableInfo.getTable();
             if (table != null) {
