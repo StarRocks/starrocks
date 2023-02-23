@@ -601,12 +601,6 @@
   + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmark.md)
 + 开发指南
   + [使用 debuginfo 文件进行调试](/developers/debuginfo.md)
-<<<<<<< HEAD
-+ 外部系统集成
-  + [概述](./integrations/intro.md)
-  + [配置 AWS 认证方式](./integrations/authenticate_to_aws_resources.md)
-=======
->>>>>>> cd1cfb0 ([Doc] adjust catalog docs sequence (#4524))
 + Release Notes
   + [v2.5](/release_notes/release-2.5.md)
   + [v2.4](/release_notes/release-2.4.md)
