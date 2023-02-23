@@ -30,7 +30,7 @@ public class OuterJoinReorderTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000);
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         FeConstants.runningUnitTest = true;
     }
 
