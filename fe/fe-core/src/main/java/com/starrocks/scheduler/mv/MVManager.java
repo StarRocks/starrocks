@@ -205,7 +205,8 @@ public class MVManager {
      * Stop the maintenance job for MV after dropped
      */
     public void stopMaintainMV(MaterializedView view) {
-        if (!view.getRefreshScheme().isIncremental()) {
+        MaterializedView.MvRefreshScheme refreshScheme = view.getRefreshScheme();
+        if (refreshScheme != null && !refreshScheme.isIncremental()) {
             return;
         }
         MVMaintenanceJob job = getJob(view.getMvId());
