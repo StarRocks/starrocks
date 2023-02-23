@@ -245,11 +245,11 @@
       + [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md)
     + 数据类型
       + 数值类型
+        + [TINYINT](/sql-reference/sql-statements/data-types/TINYINT.md)
+        + [SMALLINT](/sql-reference/sql-statements/data-types/SMALLINT.md)
+        + [INT](/sql-reference/sql-statements/data-types/INT.md)
         + [BIGINT](/sql-reference/sql-statements/data-types/BIGINT.md)
         + [LARGEINT](/sql-reference/sql-statements/data-types/LARGEINT.md)
-        + [SMALLINT](/sql-reference/sql-statements/data-types/SMALLINT.md)
-        + [TINYINT](/sql-reference/sql-statements/data-types/TINYINT.md)
-        + [INT](/sql-reference/sql-statements/data-types/INT.md)
         + [DECIMAL](/sql-reference/sql-statements/data-types/DECIMAL.md)
         + [DOUBLE](/sql-reference/sql-statements/data-types/DOUBLE.md)
         + [FLOAT](/sql-reference/sql-statements/data-types/FLOAT.md)
