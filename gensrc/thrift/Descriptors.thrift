@@ -138,7 +138,7 @@ enum TSchemaTableType {
     SCH_TASK_RUNS,
     SCH_VERBOSE_SESSION_VARIABLES,
     SCH_BE_TABLETS,
-    SCH_INVALID
+    SCH_BE_METRICS
 }
 
 enum THdfsCompression {
