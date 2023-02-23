@@ -71,6 +71,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -784,6 +785,10 @@ public class ShowExecutor {
             try {
                 for (Table tbl : db.getTables()) {
                     if (matcher != null && !matcher.match(tbl.getName())) {
+                        continue;
+                    }
+                    // hide BE schema tables from user to prevent misuse
+                    if (tbl instanceof SchemaTable && SchemaTable.isBeSchemaTable(tbl.getName())) {
                         continue;
                     }
                     // check tbl privs
@@ -2378,7 +2383,6 @@ public class ShowExecutor {
 
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
     }
-
 
     private List<List<String>> doPredicate(ShowStmt showStmt,
                                            ShowResultSetMetaData showResultSetMetaData,
