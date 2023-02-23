@@ -155,6 +155,19 @@ public class SchemaTable extends Table {
                                     .column("PRIVILEGE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("IS_GRANTABLE", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .build()))
+                    .put("column_privileges", new SchemaTable(
+                            SystemId.COLUMN_PRIVILEGES_ID,
+                            "column_privileges",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLE_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("COLUMN_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PRIVILEGE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("IS_GRANTABLE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
                     .put("referential_constraints", new SchemaTable(
                             SystemId.REFERENTIAL_CONSTRAINTS_ID,
                             "referential_constraints",
