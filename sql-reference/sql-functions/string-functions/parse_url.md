@@ -15,6 +15,7 @@ parse_url(expr1,expr2);
 `expr1`: 目标 URL，支持的数据类型为 VARCHAR。
 
 `expr2`: 待提取的信息，支持的数据类型为 VARCHAR。取值如下，注意取值**大小写敏感**：
+
     - PROTOCOL
     - HOST
     - PATH
@@ -22,7 +23,7 @@ parse_url(expr1,expr2);
     - AUTHORITY
     - FILE
     - USERINFO
-    - QUERY（不支持返回 QUERY 里面的特定参数）。
+    - QUERY（不支持返回 QUERY 里面的特定参数。如果您想返回特定参数，可以配合 [trim](../sql-reference/sql-functions/string-functions/trim.md) 函数使用）。
 
 ## 返回值说明
 
@@ -51,4 +52,12 @@ select parse_url('http://facebook.com/path/p1.php?query=1', 'QUERY');
 +---------------------------------------------------------------+
 | query=1                                                       |
 +---------------------------------------------------------------+
+
+select trim(parse_url('http://facebook.com/path/p1.php?query=1', 'QUERY'),'query='); 
++-------------------------------------------------------------------------------+
+| trim(parse_url('http://facebook.com/path/p1.php?query=1', 'QUERY'), 'query=') |
++-------------------------------------------------------------------------------+
+| 1                                                                             |
++-------------------------------------------------------------------------------+
+
 ```
