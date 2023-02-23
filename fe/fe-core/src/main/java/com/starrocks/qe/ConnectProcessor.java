@@ -268,7 +268,13 @@ public class ConnectProcessor {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
-        String sql = parsedStmt.getOrigStmt().originStmt;
+        String sql;
+        if (!ctx.getState().isQuery() && parsedStmt.needAuditEncryption()) {
+            sql = AstToStringBuilder.toString(parsedStmt);
+        } else {
+            sql = parsedStmt.getOrigStmt().originStmt;
+        }
+
         boolean isQuery = parsedStmt instanceof QueryStatement;
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(ctx.getQueryId()),
