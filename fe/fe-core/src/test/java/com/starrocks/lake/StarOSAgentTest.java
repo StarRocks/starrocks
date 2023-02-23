@@ -176,6 +176,40 @@ public class StarOSAgentTest {
     }
 
     @Test
+    public void testAddWillRemovePreviousWorker() throws Exception {
+        final String workerHost = "127.0.0.1:8090";
+        final long workerId1 = 10;
+        final long workerId2 = 11;
+        new Expectations() {
+            {
+                client.addWorker("1", workerHost);
+                minTimes = 1;
+                result = workerId1;
+            }
+        };
+
+        long backendId = 5;
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        starosAgent.addWorker(backendId, workerHost);
+        Assert.assertEquals(workerId1, starosAgent.getWorkerIdByBackendId(backendId));
+
+        final String workerHost2 = "127.0.0.1:8091";
+        new Expectations() {
+            {
+                client.addWorker("1", workerHost2);
+                minTimes = 1;
+                result = workerId2;
+
+                client.removeWorker("1", workerId1);
+                minTimes = 1;
+                result = null;
+            }
+        };
+        starosAgent.addWorker(backendId, workerHost2);
+        Assert.assertEquals(workerId2, starosAgent.getWorkerIdByBackendId(backendId));
+    }
+
+    @Test
     public void testAddWorkerException() throws Exception {
         new Expectations() {
             {

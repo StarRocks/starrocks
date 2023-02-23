@@ -216,10 +216,27 @@ public class StarOSAgent {
                     LOG.info("worker {} already added in starMgr", workerId);
                 }
             }
+            tryRemovePreviousWorker(backendId);
             workerToId.put(workerIpPort, workerId);
             workerToBackend.put(workerId, backendId);
             LOG.info("add worker {} success, backendId is {}", workerId, backendId);
         }
+    }
+
+    // remove previous worker with same backend id
+    private void tryRemovePreviousWorker(long backendId) {
+        long prevWorkerId = getWorkerIdByBackendIdInternal(backendId);
+        if (prevWorkerId < 0) {
+            return;
+        }
+        try {
+            client.removeWorker(serviceId, prevWorkerId);
+        } catch (StarClientException e) {
+            // TODO: fix this corner case later in star mgr
+            LOG.error("Failed to remove worker {} with backend id {}. error: {}", prevWorkerId, backendId, e.getMessage());
+        }
+        workerToBackend.remove(prevWorkerId);
+        workerToId.entrySet().removeIf(e -> e.getValue() == prevWorkerId);
     }
 
     public void removeWorker(String workerIpPort) throws DdlException {
@@ -252,15 +269,19 @@ public class StarOSAgent {
 
     public long getWorkerIdByBackendId(long backendId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            long workerId = -1;
-            for (Map.Entry<Long, Long> entry : workerToBackend.entrySet()) {
-                if (entry.getValue() == backendId) {
-                    workerId = entry.getKey();
-                    break;
-                }
-            }
-            return workerId;
+            return getWorkerIdByBackendIdInternal(backendId);
         }
+    }
+
+    private long getWorkerIdByBackendIdInternal(long backendId) {
+        long workerId = -1;
+        for (Map.Entry<Long, Long> entry : workerToBackend.entrySet()) {
+            if (entry.getValue() == backendId) {
+                workerId = entry.getKey();
+                break;
+            }
+        }
+        return workerId;
     }
 
     public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
