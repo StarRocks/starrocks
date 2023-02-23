@@ -2,7 +2,7 @@
 
 ## StarRocks 用于访问 AWS 资源的认证鉴权方式介绍
 
-## Instance Profile 认证鉴权
+### Instance Profile 认证鉴权
 
 通过 Instance Profile，您可以让 StarRocks 集群直接从 AWS EC2 虚拟机继承 Instance Profile 的权限。在该模式下，任何能够登录到集群的用户都可以根据 AWS IAM 策略配置，对相关的 AWS 资源执行授权范围内允许的操作（例如 AWS S3 指定 Bucket 的读写操作）。
 
@@ -158,8 +158,8 @@ StarRocks 中 Instance Profile、Assumed Role、以及 IAM User 三种认证方�
 在 StarRocks 需要与 AWS Glue 进行集成的各类场景下，例如在创建 External Catalog 时，AWS Glue 的认证参数都需要参考下述进行配置：
 
 - 如果基于 Instance Profile 进行认证和鉴权，则需要把 `aws.glue.use_instance_profile` 设置为 `true`。
-- 如果基于 Assumed Role 进行认证和鉴权，则需要把 `aws.glue.use_instance_profile` 设置为 `true`，并在 `aws.glue.iam_role_arn` 中填入用于访问 AWS S3 的 Assumed Role 的 ARN。
-- 如果基于 IAM User 进行认证和鉴权，则需要把 `aws.glue.use_instance_profile` 设置为 `false`，并在 `aws.s3.access_key` 和 `aws.s3.secret_key` 中分别填入 AWS IAM User 的 Access Key 和 Secret Key。
+- 如果基于 Assumed Role 进行认证和鉴权，则需要把 `aws.glue.use_instance_profile` 设置为 `true`，并在 `aws.glue.iam_role_arn` 中填入用于访问 AWS Glue 的 Assumed Role 的 ARN。
+- 如果基于 IAM User 进行认证和鉴权，则需要把 `aws.glue.use_instance_profile` 设置为 `false`，并在 `aws.glue.access_key` 和 `aws.glue.secret_key` 中分别填入 AWS IAM User 的 Access Key 和 Secret Key。
 
 ## 集成示例
 
@@ -219,7 +219,7 @@ StarRocks 支持以下四种 External Catalog：
   (
       "type" = "hive",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "<arn:aws:iam::081976408565:role/test_s3_role>",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2",
       "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
   );
@@ -233,11 +233,11 @@ StarRocks 支持以下四种 External Catalog：
   (
       "type" = "hive",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "<arn:aws:iam::081976408565:role/test_s3_role>",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
-      "aws.glue.iam_role_arn" = "<arn:aws:iam::081976408565:role/test_glue_role>",
+      "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
       "aws.glue.region" = "us-west-2"
   );
   ```
@@ -318,7 +318,7 @@ PROPERTIES
     "path" = "s3://starrocks-test/",
     "format" = "ORC",
     "aws.s3.use_instance_profile"="true",
-    "aws.s3.iam_role_arn"="<arn:aws:iam::081976408565:role/test_s3_role>",
+    "aws.s3.iam_role_arn"="arn:aws:iam::081976408565:role/test_s3_role",
     "aws.s3.region"="us-west-2"
 );
 ```
