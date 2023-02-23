@@ -52,9 +52,9 @@ Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON 格式的数据。
 
 - **多个导入任务并行进行，消费 Kafka 多个分区的消息，导入至 StarRocks**
 
-  - **调度和提交导入任务**：FE 定时调度任务执行队列中的导入任务，分配给选定的 Coordinator BE。调度导入任务的时间间隔由 `max_batch_interval` 参数，并且 FE 会尽可能均匀地向所有 BE 分配导入任务。有关 `max_batch_interval` 参数的详细介绍，请参见  [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example)。
+  - **调度和提交导入任务**：FE 定时调度任务执行队列中的导入任务，分配给选定的 Coordinator BE。调度导入任务的时间间隔由 `max_batch_interval` 参数，并且 FE 会尽可能均匀地向所有 BE 分配导入任务。有关 `max_batch_interval` 参数的详细介绍，请参见  [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md#job_properties)。
 
-  - **执行导入任务**：Coordinator BE 执行导入任务，消费分区的消息，解析并过滤数据。导入任务需要消费足够多的消息，或者消费足够长时间。消费时间和消费的数据量由 FE 配置项 `max_routine_load_batch_size`、`routine_load_task_consume_second`决定，有关该配置项的更多说明，请参见 [配置参数](../administration/Configuration.md#导入和导出相关动态参数)。然后，Coordinator BE 将消息分发至相关 Executor BE 节点， Executor BE 节点将消息写入磁盘。
+  - **执行导入任务**：Coordinator BE 执行导入任务，消费分区的消息，解析并过滤数据。导入任务需要消费足够多的消息，或者消费足够长时间。消费时间和消费的数据量由 FE 配置项 `max_routine_load_batch_size`、`routine_load_task_consume_second`决定，有关该配置项的更多说明，请参见 [配置参数](../administration/Configuration.md#导入和导出)。然后，Coordinator BE 将消息分发至相关 Executor BE 节点， Executor BE 节点将消息写入磁盘。
 
     > StarRocks 可以通过无认证、SSL 认证、SASL 认证机制连接 Kafka。
 
@@ -66,7 +66,7 @@ Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON 格式的数据。
 
 ## 创建导入作业
 
-这里通过两个简单的示例，介绍如何通过 Routine Load 持续消费 Kafka 中 CSV 和 JSON 格式的数据，并导入至 StarRocks 中。有关创建 Routine Load 的详细语法和参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example)。
+这里通过两个简单的示例，介绍如何通过 Routine Load 持续消费 Kafka 中 CSV 和 JSON 格式的数据，并导入至 StarRocks 中。有关创建 Routine Load 的详细语法和参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
 
 ### 导入 CSV 数据
 
@@ -149,7 +149,7 @@ FROM KAFKA
     "property.kafka_default_offsets" = "OFFSET_BEGINNING"
   ```
 
-  更多参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example)。
+  更多参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md#data_sourcedata_source_properties)。
 
 - **数据转换**
 
@@ -163,15 +163,15 @@ FROM KAFKA
 
   当分区数量较多，并且 BE 节点数量充足时，如果您期望加快导入速度，则可以增加实际任务并行度，将一个导入作业分成尽可能多的导入任务并行执行。
 
-  实际任务并行度由如下多个参数组成的公式决定。如果需要增加实际任务并行度，您可以在创建Routine Load 导入作业时为单个导入作业设置较高的期望任务并行度 `desired_concurrent_number` ，以及设置较高的  Routine Load 导入作业的默认最大任务并行度的`max_routine_load_task_concurrent_num` ，该参数为 FE 动态参数，详细说明，请参见 [配置参数](../administration/Configuration.md#导入和导出相关动态参数)。此时实际任务并行度上限为存活 BE 节点数量或者指定分区数量。
+  实际任务并行度由如下多个参数组成的公式决定。如果需要增加实际任务并行度，您可以在创建Routine Load 导入作业时为单个导入作业设置较高的期望任务并行度 `desired_concurrent_number` ，以及设置较高的  Routine Load 导入作业的默认最大任务并行度的`max_routine_load_task_concurrent_num` ，该参数为 FE 动态参数，详细说明，请参见 [配置参数](../administration/Configuration.md#导入和导出)。此时实际任务并行度上限为存活 BE 节点数量或者指定分区数量。
 
   本示例中存活 BE 数量为 5， 指定分区数量为 5，`max_routine_load_task_concurrent_num` 为默认值 `5`，如果需要增加实际任务并发度至上限，则需要将 `desired_concurrent_number` 为 `5`（默认值为 3），计算出实际任务并行度为 5。
 
   ```Plain
     min(aliveBeNum, partitionNum, desired_concurrent_number, max_routine_load_task_concurrent_num)
   ```
-
-  更多参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example)。更多调整导入速度的说明，请参见 [Routine Load 常见问题](../faq/loading/Routine_load_faq.md)。
+  
+  更多调整导入速度的说明，请参见 [Routine Load 常见问题](../faq/loading/Routine_load_faq.md)。
 
 ### 导入 JSON 数据
 
@@ -251,7 +251,7 @@ FROM KAFKA
 
 执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md)，查看名称为  `example_tbl2_ordertest2` 的导入作业的信息，比如导入作业状态`State`，导入作业的统计信息`Statistic`（消费的总数据行数、已导入的行数等），消费的分区及进度`Progress`等。
 
-如果导入作业状态自动变为 **PAUSED**，则可能为导入任务错误行数超过阈值。错误行数阈值的设置方式，请参考 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)。您可以参考`ReasonOfStateChanged`、`ErrorLogUrls`报错进行排查和修复。修复后您可以使用 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md)，恢复 **PAUSED** 状态的导入作业。
+如果导入作业状态自动变为 **PAUSED**，则可能为导入任务错误行数超过阈值。错误行数阈值的设置方式，请参考 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md#job_properties)。您可以参考`ReasonOfStateChanged`、`ErrorLogUrls`报错进行排查和修复。修复后您可以使用 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md)，恢复 **PAUSED** 状态的导入作业。
 
 如果导入作业状态为 **CANCELLED**，则可能为导入任务执行遇到异常（如表被删除）。您可以参考`ReasonOfStateChanged`、`ErrorLogUrls`报错进行排查和修复。但是修复后，您无法恢复 **CANCELLED** 状态的导入作业。
 
