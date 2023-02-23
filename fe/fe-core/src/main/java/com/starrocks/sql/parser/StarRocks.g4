@@ -1051,6 +1051,7 @@ dataDesc
         INTO TABLE dstTableName=identifier
         partitions=partitionNames?
         (COLUMNS TERMINATED BY colSep=string)?
+        (ROWS TERMINATED BY rowSep=string)?
         format=fileFormat?
         (formatPropsField=formatProps)?
         colList=columnAliases?
