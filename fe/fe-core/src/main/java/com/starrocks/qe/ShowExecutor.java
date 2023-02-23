@@ -53,6 +53,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -576,6 +577,10 @@ public class ShowExecutor {
                     if (matcher != null && !matcher.match(tbl.getName())) {
                         continue;
                     }
+                    // hide BE schema tables from user to prevent misuse
+                    if (tbl instanceof SchemaTable && SchemaTable.isBeSchemaTable(tbl.getName())) {
+                        continue;
+                    }
                     // check tbl privs
                     if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
                         if (!PrivilegeManager.checkAnyActionOnTable(ctx, db.getFullName(), tbl.getName())) {
@@ -745,7 +750,7 @@ public class ShowExecutor {
     private String toMysqlDDL(Column column) {
         StringBuilder sb = new StringBuilder();
         sb.append("  `").append(column.getName()).append("` ");
-        switch (column.getType().getPrimitiveType())  {
+        switch (column.getType().getPrimitiveType()) {
             case TINYINT:
                 sb.append("tinyint(4)");
                 break;
@@ -781,7 +786,7 @@ public class ShowExecutor {
                 sb.append("binary(1048576)");
         }
         sb.append(" DEFAULT NULL");
-        return  sb.toString();
+        return sb.toString();
     }
 
     private void showCreateInternalCatalogTable(ShowCreateTableStmt showStmt) throws AnalysisException {
