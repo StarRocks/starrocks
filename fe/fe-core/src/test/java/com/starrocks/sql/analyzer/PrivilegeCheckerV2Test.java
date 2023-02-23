@@ -2347,24 +2347,13 @@ public class PrivilegeCheckerV2Test {
         String expectError = "Access denied for user 'test' to database 'db1'";
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(showSql, starRocksAssert.getCtx());
         ctxToTestUser();
-        try {
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
-            Assert.fail();
-        } catch (SemanticException e) {
-            System.out.println(e.getMessage() + ", sql: " + showSql);
-            Assert.assertTrue(e.getMessage().contains(expectError));
-        }
+        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+
         ctxToRoot();
         grantOrRevoke("grant create_materialized_view on DATABASE db1 to test");
         expectError = "You need any privilege on any TABLE/VIEW/MV in database";
         ctxToTestUser();
-        try {
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
-            Assert.fail();
-        } catch (SemanticException e) {
-            System.out.println(e.getMessage() + ", sql: " + showSql);
-            Assert.assertTrue(e.getMessage().contains(expectError));
-        }
+        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
         ctxToRoot();
         grantOrRevoke("grant select on db1.tbl1 to test");
         PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());

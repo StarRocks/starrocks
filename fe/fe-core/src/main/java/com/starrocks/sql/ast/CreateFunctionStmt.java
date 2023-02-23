@@ -253,6 +253,10 @@ public class CreateFunctionStmt extends DdlStmt {
         return function;
     }
 
+    public void setFunction(Function function) {
+        this.function = function;
+    }
+
     public void analyze(ConnectContext context) throws AnalysisException {
         analyzeCommon(context.getDatabase());
         Preconditions.checkArgument(isStarrocksJar);

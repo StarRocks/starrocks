@@ -13,23 +13,34 @@
 // limitations under the License.
 package com.starrocks.qe;
 
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InformationFunction;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.Type;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzerV2;
+import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
+import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.spark.sql.AnalysisException;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -109,7 +120,7 @@ public class RBACExecutorTest {
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
         Assert.assertEquals("[[r0, null, GRANT 'r1', 'r2' TO  ROLE r0]," +
-                " [r0, default_catalog, GRANT SELECT ON TABLE db.tbl0 TO ROLE 'r0']]",
+                        " [r0, default_catalog, GRANT SELECT ON TABLE db.tbl0 TO ROLE 'r0']]",
                 resultSet.getResultRows().toString());
     }
 
@@ -202,5 +213,60 @@ public class RBACExecutorTest {
                 "revoke r1 from u1", ctx), ctx);
         Assert.assertFalse(PrivilegeActions.checkTableAction(ctx, "db", "tbl0", PrivilegeType.SELECT));
         Assert.assertFalse(PrivilegeActions.checkTableAction(ctx, "db", "tbl1", PrivilegeType.SELECT));
+    }
+
+    @Test
+    public void testShowFunctionsWithPriv() throws Exception {
+        new MockUp<CreateFunctionStmt>() {
+            @Mock
+            public void analyze(ConnectContext context) throws AnalysisException {
+            }
+        };
+
+        new MockUp<PrivilegeStmtAnalyzerV2>() {
+            @Mock
+            public void analyze(ConnectContext context) throws AnalysisException {
+            }
+        };
+
+        String createSql = "CREATE FUNCTION db.MY_UDF_JSON_GET(string, string) RETURNS string " +
+                "properties ( " +
+                "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
+                ")";
+
+        CreateFunctionStmt statement = (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
+
+        Type[] arg = new Type[1];
+        arg[0] = Type.INT;
+        Function function = ScalarFunction.createUdf(new FunctionName("db", "MY_UDF_JSON_GET"), arg, Type.INT,
+                false, TFunctionBinaryType.SRJAR,
+                "objectFile", "mainClass.getCanonicalName()", "", "");
+        function.setChecksum("checksum");
+
+        statement.setFunction(function);
+        DDLStmtExecutor.execute(statement, ctx);
+
+        ShowFunctionsStmt stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertEquals("[[my_udf_json_get]]", resultSet.getResultRows().toString());
+
+        ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
+        executor = new ShowExecutor(ctx, stmt);
+        resultSet = executor.execute();
+        Assert.assertEquals("[]", resultSet.getResultRows().toString());
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant usage on function db.my_udf_json_get(int) to u1", ctx), ctx);
+        stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
+        executor = new ShowExecutor(ctx, stmt);
+        resultSet = executor.execute();
+        Assert.assertEquals("[[my_udf_json_get]]", resultSet.getResultRows().toString());
+
+        stmt = new ShowFunctionsStmt("db", true, false, false, null, null);
+        executor = new ShowExecutor(ctx, stmt);
+        resultSet = executor.execute();
+        Assert.assertTrue(resultSet.getResultRows().size() > 0);
     }
 }

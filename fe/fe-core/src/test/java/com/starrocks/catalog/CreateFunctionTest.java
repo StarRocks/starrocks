@@ -78,5 +78,4 @@ public class CreateFunctionTest {
         Assert.assertEquals(newFunction.getTableFnReturnTypes(), retTypes);
         Assert.assertEquals(newFunction.getTableFnReturnTypes(), retTypes);
     }
-
 }
