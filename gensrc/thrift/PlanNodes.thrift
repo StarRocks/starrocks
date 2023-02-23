@@ -383,6 +383,7 @@ struct TSchemaScanNode {
   12: optional i64 table_id
   13: optional i64 partition_id
   14: optional i64 tablet_id
+  15: optional i64 txn_id
 }
 
 struct TOlapScanNode {
