@@ -1669,7 +1669,7 @@ public class CreateMaterializedViewTest {
 
     @Test
     // partition by expr is still not supported.
-    public void testAsSelectItemAlias3() throws Exception {
+    public void testAsSelectItemAlias3() {
         String sql = "create materialized view testAsSelectItemAlias3 " +
                 "partition by date_trunc('month',tbl1.k1) " +
                 "distributed by hash(k2) buckets 10 " +
@@ -1684,15 +1684,13 @@ public class CreateMaterializedViewTest {
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Materialized view partition exp: " +
                     "`tbl1`.`k1` must related to column"));
-        } finally {
-            dropMv("testAsSelectItemAlias3");
         }
     }
 
     @Test
     // distribution by expr is still not supported.
-    public void testAsSelectItemAlias4() throws Exception {
-        String sql = "create materialized view testAsSelectItemAlias1 " +
+    public void testAsSelectItemAlias4() {
+        String sql = "create materialized view testAsSelectItemAlias4 " +
                 "partition by k1 " +
                 "distributed by hash(date_trunc('month',tbl1.k1)) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
@@ -1704,8 +1702,8 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("You have an error in your SQL syntax; check the manual that " +
-                    "corresponds to your MySQL server version for the right syntax to use near '(' at line 1"));
+            Assert.assertTrue(e.getMessage()
+                    .contains("No viable statement for input '(', please check the SQL Reference"));
         }
     }
 
