@@ -275,6 +275,10 @@ public class ScalarOperatorsReuse {
 
 
         private int collectCommonOperatorsByDepth(int depth, ScalarOperator operator) {
+            // a lambda function like  x->x+1 can't be reused anymore.
+            if (operator instanceof LambdaFunctionOperator) {
+                return depth;
+            }
             Set<ScalarOperator> operators = getOperatorsByDepth(depth, operatorsByDepth);
             Set<ColumnRefOperator> lambdaArgumentsID = Sets.newHashSet();
             isLambdaDependent = false;
@@ -304,12 +308,6 @@ public class ScalarOperatorsReuse {
 
             return collectCommonOperatorsByDepth(scalarOperator.getChildren().stream().map(argument ->
                     argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1), scalarOperator);
-        }
-
-        @Override
-        public Integer visitLambdaFunctionOperator(LambdaFunctionOperator scalarOperator, Void context) {
-            return collectCommonOperatorsByDepth(scalarOperator.getLambdaExpr().accept(this, null),
-                    scalarOperator.getLambdaExpr());
         }
 
         @Override
