@@ -22,6 +22,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -379,5 +380,19 @@ public class ListPartitionInfo extends PartitionInfo {
     public void moveRangeFromTempToFormal(long tempPartitionId) {
         super.moveRangeFromTempToFormal(tempPartitionId);
         idToIsTempPartition.computeIfPresent(tempPartitionId, (k, v) -> false);
+    }
+
+    public void addPartition(long partitionId, DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                             StorageCacheInfo storageCacheInfo, List<String> values,
+                             List<List<String>> multiValues) throws AnalysisException {
+        super.addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageCacheInfo);
+        if (multiValues != null && multiValues.size() > 0) {
+            this.idToMultiValues.put(partitionId, multiValues);
+            this.setMultiLiteralExprValues(partitionId, multiValues);
+        }
+        if (values != null && values.size() > 0) {
+            this.idToValues.put(partitionId, values);
+            this.setLiteralExprValues(partitionId, values);
+        }
     }
 }

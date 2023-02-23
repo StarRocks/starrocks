@@ -19,6 +19,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -82,6 +88,19 @@ public class ListPartitionInfoTest {
     public void testListPartitionQueryPlan() throws Exception {
         String sql = "SELECT * FROM t_recharge_detail";
         starRocksAssert.query(sql).explainQuery();
+    }
+
+    @Test
+    public void testTruncateWithPartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String truncateSql = "truncate table t_recharge_detail partition(p1)";
+        TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateSql, ctx);
+        GlobalStateMgr.getCurrentState().truncateTable(truncateTableStmt);
+        String showSql = "show partitions from t_recharge_detail;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(showSql, ctx);
+        StmtExecutor executor = new StmtExecutor(ctx, statementBase);
+        executor.execute();
+        Assert.assertNotEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
     }
 
     @Test

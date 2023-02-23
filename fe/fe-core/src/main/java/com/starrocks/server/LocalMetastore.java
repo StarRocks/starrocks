@@ -4751,9 +4751,7 @@ public class LocalMetastore implements ConnectorMetadata {
             Partition oldPartition = olapTable.replacePartition(newPartition);
             // save old tablets to be removed
             for (MaterializedIndex index : oldPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                index.getTablets().stream().forEach(t -> {
-                    oldTabletIds.add(t.getId());
-                });
+                index.getTablets().forEach(t -> oldTabletIds.add(t.getId()));
             }
         }
 
