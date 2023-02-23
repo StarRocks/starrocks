@@ -247,4 +247,8 @@
 - 【Preview】提供集群管理工具 StarGo，提供集群部署、启停、升级、回滚、多集群管理等多种能力。相关文档，请参见[通过 StarGo 部署 StarRocks 集群](../administration/stargo.md)。
 - 部署或者升级至 2.3 版本，默认开启 Pipeline 执行引擎，预期在高并发小查询、复杂大查询场景下获得明显的性能优势。如果使用 2.3 版本时遇到明显的性能回退，则可以通过设置 `SET GLOBAL enable_pipeline_engine = false;`，关闭 Pipeline 执行引擎。
 - [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md) 语句兼容 MySQL语法，显示授权 GRANT 语句。
-- 建议单个 schema change 任务数据占用内存上限memory_limitation_per_thread_for_schema_change( BE 配置项) 保持为默认值 2 GB，数据超过上限后写入磁盘。因此如果您之前调大该参数，则建议恢复为 2 GB，否则可能会出现单个 schema change 任务数据占用大量内存的问题。  
+- 建议单个 Schema Change 任务数据占用内存上限 `memory_limitation_per_thread_for_schema_change`(BE 配置项)保持为默认值 2 GB，数据超过上限后写入磁盘。因此如果您之前调大该参数，则建议恢复为 2 GB，否则可能会出现单个 Schema Change 任务数据占用大量内存的问题。
+
+### 升级注意事项
+
+升级后如果碰到问题需要回滚，请在 **fe.conf** 文件中增加 `ignore_unknown_log_id=true`。这是因为新版本的元数据日志新增了类型，如果不加这个参数，则无法回滚。最好等做完 checkpoint 之后再设置 `ignore_unknown_log_id=false` 并重启 FE，恢复正常配置。
