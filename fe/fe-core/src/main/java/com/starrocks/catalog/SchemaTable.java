@@ -537,6 +537,26 @@ public class SchemaTable extends Table {
                                     .column("LABELS", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("VALUE", ScalarType.createType(PrimitiveType.BIGINT))
                                     .build()))
+                    .put("be_txns", new SchemaTable(
+                            SystemId.BE_TXNS_ID,
+                            "be_txns",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("LOAD_ID", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TXN_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("PARTITION_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TABLET_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CREATE_TIME", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("COMMIT_TIME", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("PUBLISH_TIME", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("ROWSET_ID", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("NUM_SEGMENT", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NUM_DELFILE", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NUM_ROW", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("DATA_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .build()))
                     .build();
 
     public static class Builder {
@@ -626,7 +646,9 @@ public class SchemaTable extends Table {
         SCH_BE_TABLETS("BE_TABLETS", "BE_TABLETS",
                 TSchemaTableType.SCH_BE_TABLETS),
         SCH_BE_METRICS("BE_METRICS", "BE_METRICS",
-                TSchemaTableType.SCH_BE_METRICS);
+                TSchemaTableType.SCH_BE_METRICS),
+        SCH_BE_TXNS("BE_TXNS", "BE_TXNS",
+                TSchemaTableType.SCH_BE_TXNS);
 
         private final String description;
         private final String tableName;

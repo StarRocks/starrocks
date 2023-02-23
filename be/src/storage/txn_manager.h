@@ -66,10 +66,13 @@
 
 namespace starrocks {
 
+class TxnInfo;
+
 struct TabletTxnInfo {
     PUniqueId load_id;
     RowsetSharedPtr rowset;
-    int64_t creation_time;
+    int64_t creation_time{0};
+    int64_t commit_time{0};
 
     TabletTxnInfo(PUniqueId load_id, RowsetSharedPtr rowset)
             : load_id(std::move(load_id)), rowset(std::move(rowset)), creation_time(UnixSeconds()) {}
@@ -144,6 +147,8 @@ public:
                                             const TabletUid& tablet_uid);
 
     void get_partition_ids(const TTransactionId transaction_id, std::vector<TPartitionId>* partition_ids);
+
+    void get_txn_infos(int64_t txn_id, int64_t tablet_id, std::vector<TxnInfo>& txn_infos);
 
 private:
     using TxnKey = std::pair<int64_t, int64_t>; // partition_id, transaction_id;
