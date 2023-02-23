@@ -1779,29 +1779,6 @@ public class Config extends ConfigBase {
     public static int heartbeat_retry_times = 3;
 
     /**
-     * Temporary use, it will be removed later.
-     * Set true if using StarOS to manage tablets for StarRocks lake table.
-     */
-    @ConfField
-    public static String starmgr_address = "127.0.0.1:6090";
-    @ConfField
-    public static String starmgr_s3_bucket = "";
-    @ConfField
-    public static String starmgr_s3_region = "";
-    @ConfField
-    public static String starmgr_s3_endpoint = "";
-    @ConfField
-    public static String starmgr_aws_credential_type = "simple";
-    @ConfField
-    public static String starmgr_simple_credential_access_key_id = "";
-    @ConfField
-    public static String starmgr_simple_credential_access_key_secret = "";
-    @ConfField
-    public static String starmgr_assume_role_credential_arn = "";
-    @ConfField
-    public static String starmgr_assume_role_credential_external_id = "";
-
-    /**
      * shared_data: means run on cloud-native
      * shared_nothing: means run on local
      * hybrid: run on both, not support yet.
@@ -1821,18 +1798,61 @@ public class Config extends ConfigBase {
     @ConfField
     public static long shard_deleter_run_interval_sec = 600L;
 
-    @ConfField
-    public static String hdfs_url = "";
-
-    /* default file store type used */
-    @ConfField
-    public static String default_fs_type = "S3";
-
+    // ***********************************************************
+    // * BEGIN: Cloud native meta server related configurations
+    // ***********************************************************
     /**
-     * starmgr disable auto shard balance or not
+     * Cloud native meta server rpc listen port
      */
     @ConfField
-    public static boolean starmgr_disable_shard_balance = false;
+    public static int cloud_native_meta_port = 6090;
+    // remote storage related configuration
+    /**
+     * storage type for cloud native table. Available options: "S3", "HDFS", case-sensitive
+     */
+    @ConfField
+    public static String cloud_native_storage_type = "S3";
+
+    // HDFS storage configuration
+    /**
+     * cloud native storage: hdfs storage url
+     */
+    public static String cloud_native_hdfs_url = "";
+
+    // AWS S3 storage configuration
+    @ConfField
+    public static String cloud_native_aws_s3_bucket = "";
+    @ConfField
+    public static String cloud_native_aws_s3_region = "";
+    @ConfField
+    public static String cloud_native_aws_s3_endpoint = "";
+    /**
+     * Sub path to used for the backend storage
+     */
+    @ConfField
+    public static String cloud_native_aws_s3_path = "";
+    // AWS credential configuration
+    /**
+     * AWS credential type, can be one of the following value, case-sensitive
+     * - "simple"
+     * - "instance_profile"
+     * - "assume_role"
+     */
+    @ConfField
+    public static String cloud_native_aws_credential_type = "simple";
+    // Configurations for aws credential_type = "simple"
+    @ConfField
+    public static String cloud_native_simple_credential_access_key_id = "";
+    @ConfField
+    public static String cloud_native_simple_credential_access_key_secret = "";
+    // Configurations for aws credential_type = "assume_role"
+    @ConfField
+    public static String cloud_native_assume_role_credential_arn = "";
+    @ConfField
+    public static String cloud_native_assume_role_credential_external_id = "";
+    // ***********************************************************
+    // * END: of Cloud native meta server related configurations
+    // ***********************************************************
 
     /**
      * default storage cache ttl of lake table

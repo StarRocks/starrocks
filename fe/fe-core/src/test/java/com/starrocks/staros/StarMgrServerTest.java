@@ -40,12 +40,12 @@ public class StarMgrServerTest {
 
     @Before
     public void setUp() {
-        Config.starmgr_s3_bucket = "abc";
+        Config.cloud_native_aws_s3_bucket = "abc";
     }
 
     @After
     public void tearDown() {
-        Config.starmgr_s3_bucket = "";
+        Config.cloud_native_aws_s3_bucket = "";
     }
 
     @Test
