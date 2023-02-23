@@ -179,7 +179,11 @@ ConnectorChunkSource::~ConnectorChunkSource() {
 Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
-    _ck_acc.set_max_size(state->chunk_size());
+    if (_limit != -1 && _limit < state->chunk_size()) {
+        _ck_acc.set_max_size(_limit);
+    } else {
+        _ck_acc.set_max_size(state->chunk_size());
+    }
     if (config::connector_min_max_predicate_from_runtime_filter_enable) {
         _data_source->parse_runtime_filters(state);
     }
