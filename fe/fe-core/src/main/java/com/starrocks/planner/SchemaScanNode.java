@@ -38,6 +38,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.SchemaTable;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -179,7 +180,7 @@ public class SchemaScanNode extends ScanNode {
     }
 
     public boolean isBeSchemaTable() {
-        return tableName.startsWith("be_");
+        return SchemaTable.isBeSchemaTable(tableName);
     }
 
     public void computeBeScanRanges() {
