@@ -15,6 +15,7 @@
 #include "exec/schema_scanner.h"
 
 #include "column/type_traits.h"
+#include "exec/schema_scanner/schema_be_configs_scanner.h"
 #include "exec/schema_scanner/schema_be_metrics_scanner.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
@@ -123,6 +124,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaBeMetricsScanner>();
     case TSchemaTableType::SCH_BE_TXNS:
         return std::make_unique<SchemaBeTxnsScanner>();
+    case TSchemaTableType::SCH_BE_CONFIGS:
+        return std::make_unique<SchemaBeConfigsScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
