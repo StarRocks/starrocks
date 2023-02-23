@@ -269,7 +269,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   (
       "type" = "iceberg",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "<arn:aws:iam::081976408565:role/test_s3_role>",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2",
       "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
   );
@@ -283,11 +283,11 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   (
       "type" = "iceberg",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "<arn:aws:iam::081976408565:role/test_s3_role>",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
-      "aws.glue.iam_role_arn" = "<arn:aws:iam::081976408565:role/test_glue_role>",
+      "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
       "aws.glue.region" = "us-west-2"
   );
   ```
