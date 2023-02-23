@@ -18,6 +18,7 @@
 
 #include <vector>
 
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
@@ -54,6 +55,7 @@ Status StreamPipelineTest::prepare() {
             std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
                                            _request.query_options, _request.query_globals, _exec_env));
     _fragment_ctx->set_is_stream_pipeline(true);
+    _fragment_ctx->set_is_stream_test(true);
 
     _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
@@ -65,6 +67,7 @@ Status StreamPipelineTest::prepare() {
     _runtime_state->set_fragment_ctx(_fragment_ctx);
 
     _obj_pool = _runtime_state->obj_pool();
+    _pipeline_context = _obj_pool->add(new pipeline::PipelineBuilderContext(_fragment_ctx, _degree_of_parallelism, true));
 
     DCHECK(_pipeline_builder != nullptr);
     _pipelines.clear();
@@ -74,16 +77,22 @@ Status StreamPipelineTest::prepare() {
 
     const auto& pipelines = _fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
+
+    // morsel queue
+    starrocks::pipeline::MorselQueueFactoryMap& morsel_queues = _fragment_ctx->morsel_queue_factories();
+    for (const auto& pipeline : pipelines) {
+        if (pipeline->source_operator_factory()->with_morsels()) {
+            auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
+            DCHECK(morsel_queues.count(source_id));
+            auto& morsel_queue_factory = morsel_queues[source_id];
+
+            pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
+        }
+    }
+
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
         pipeline->instantiate_drivers(_fragment_ctx->runtime_state());
-        for (auto& driver : pipeline->drivers()) {
-            for (auto& op : driver->operators()) {
-                if (auto* stream_source_op = dynamic_cast<GeneratorStreamSourceOperator*>(op.get())) {
-                    _tablet_ids.push_back(stream_source_op->tablet_id());
-                }
-            }
-        }
     }
 
     // prepare epoch manager

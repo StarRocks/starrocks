@@ -101,6 +101,9 @@ public:
             auto str_version = _scan_range->internal_scan_range.version;
             _version = strtol(str_version.c_str(), nullptr, 10);
         }
+        if (_scan_range->__isset.binlog_scan_range) {
+            _tablet_id = _scan_range->binlog_scan_range.tablet_id;
+        }
     }
 
     ScanMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range)
