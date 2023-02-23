@@ -673,6 +673,17 @@ public class ShowExecutor {
             List<Comparable> row = function.getInfo(showStmt.getIsVerbose());
             // like predicate
             if (showStmt.getWild() == null || showStmt.like(function.functionName())) {
+                if (showStmt.getIsGlobal()) {
+                    if (!PrivilegeActions.checkAnyActionOnGlobalFunction(connectContext, function.getSignature())) {
+                        continue;
+                    }
+                } else if (!showStmt.getIsBuiltin()) {
+                    if (!PrivilegeActions.checkAnyActionOnFunction(connectContext,
+                            showStmt.getDbName(), function.getSignature())) {
+                        continue;
+                    }
+                }
+
                 rowSet.add(row);
             }
         }
