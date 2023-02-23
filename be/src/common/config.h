@@ -904,4 +904,6 @@ CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 
 CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache=128M}");
 
+CONF_mInt64(txn_info_history_size, "20000");
+
 } // namespace starrocks::config

@@ -56,6 +56,7 @@ public class SchemaScanNode extends ScanNode {
     private Long tableId = null;
     private Long partitionId = null;
     private Long tabletId = null;
+    private Long txnId = null;
     private List<TScanRangeLocations> beScanRanges = null;
 
     public void setSchemaDb(String schemaDb) {
@@ -164,6 +165,10 @@ public class SchemaScanNode extends ScanNode {
 
     public void setTabletId(long tabletId) {
         this.tabletId = tabletId;
+    }
+
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
     }
 
     public boolean isBeSchemaTable() {
