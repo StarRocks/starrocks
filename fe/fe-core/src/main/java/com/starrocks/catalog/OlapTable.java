@@ -55,6 +55,7 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -1601,12 +1602,24 @@ public class OlapTable extends Table {
         boolean isInMemory = partitionInfo.getIsInMemory(oldPartition.getId());
         StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(oldPartition.getId());
 
-        if (partitionInfo.getType() == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
                     replicationNum, isInMemory, storageCacheInfo);
+        } else if (partitionInfo.getType() == PartitionType.LIST) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+            List<String> values = listPartitionInfo.getIdToValues().get(oldPartition.getId());
+            List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(oldPartition.getId());
+            listPartitionInfo.dropPartition(oldPartition.getId());
+            try {
+                listPartitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory,
+                        storageCacheInfo, values, multiValues);
+            } catch (AnalysisException ex) {
+                LOG.warn("failed to add list partition", ex);
+                throw new SemanticException(ex.getMessage());
+            }
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
             partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageCacheInfo);
