@@ -643,7 +643,8 @@ public class AnalyzerUtils {
             try {
                 beginDateTimeFormat = DateUtils.probeFormat(partitionValue);
                 beginTime = DateUtils.parseStringWithDefaultHSM(partitionValue, beginDateTimeFormat);
-
+                // The start date here is passed by BE through function calculation,
+                // so it must be the start date of a certain partition.
                 switch (granularity.toLowerCase()) {
                     case "hour":
                         beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);

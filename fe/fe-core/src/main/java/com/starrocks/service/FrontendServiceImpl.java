@@ -1684,11 +1684,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             IntLiteral intervalLiteral = (IntLiteral) intervalExpr;
             granularity = granularityLiteral.getStringValue();
             interval = intervalLiteral.getLongValue();
-            if (interval != 1) {
-                errorStatus.setError_msgs(Lists.newArrayList("time_slice interval only support 1 currently."));
-                result.setStatus(errorStatus);
-                return result;
-            }
         } else {
             errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support data_trunc function."));
             result.setStatus(errorStatus);
