@@ -216,7 +216,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
                     if (tableName.getTbl().equals("tbl1")) {
                         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
                         for (Partition partition : tbl1.getPartitions()) {
