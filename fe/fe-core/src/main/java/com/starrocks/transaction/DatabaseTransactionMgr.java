@@ -1135,7 +1135,7 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
                 partitionCommitInfo.setVersion(partition.getNextVersion());
-                partitionCommitInfo.setVersionTime(commitTs);
+                partitionCommitInfo.setVersionTime(table.isLakeTable() ? 0 : commitTs);
             }
         }
 
