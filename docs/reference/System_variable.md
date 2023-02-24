@@ -430,3 +430,20 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 * wait_timeout
 
   Used to set the connection timeout for idle connections. When an idle connection does not interact with StarRocks for that length of time, StarRocks will actively disconnect the link. The default value is 8 hours, in seconds.
+
+* enable_global_runtime_filter
+
+  Whether to enable global runtime filter (RF for short). RF filters data at runtime. Data filtering often occurs in the Join stage. During multi-table joins, optimizations such as predicate pushdown are used to filter data, in order to reduce the number of scanned rows for Join and the I/O in the Shuffle stage, thereby improving the query performance.
+
+  StarRocks offers two types of RF: Local RF and Global RF. Local RF is suitable for Broadcast Hash Join and Global RF is suitable for Shuffle Join.
+
+  Default value: `true`, which means global RF is enabled. If this feature is disabled, global RF does not take effect. Local RF can still work.
+
+* enable_multicolumn_global_runtime_filter
+
+  Whether to enable multi-column global runtime filter. Default value: `false`, which means multi-column global RF is disabled.
+
+  If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join conditions:
+
+  * If this feature is disabled, only Local RF works.
+  * If this feature is enabled, multi-column Global RF takes effect and carries `multi-column` in the partition by clause.
