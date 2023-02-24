@@ -21,7 +21,7 @@ import org.apache.logging.log4j.Logger;
 public class RunMode {
     public static final RunMode SHARED_NOTHING = new RunMode("shared_nothing", true, false, false);
     public static final RunMode SHARED_DATA = new RunMode("shared_data", false, true, true);
-    public static final RunMode HYBRID = new RunMode("hybrid", true, true, false);
+    public static final RunMode HYBRID = new RunMode("experimental_hybrid", true, true, false);
     private static final Logger LOG = LogManager.getLogger(RunMode.class);
     private static RunMode currentRunMode = SHARED_NOTHING;
 
