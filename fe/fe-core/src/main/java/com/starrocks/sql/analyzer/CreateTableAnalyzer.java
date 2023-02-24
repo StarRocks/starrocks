@@ -36,7 +36,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;

@@ -796,7 +796,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         if (stmt.isOlapEngine()) {
-            createOlapTable(db, stmt);
+            createOlapOrLakeTable(db, stmt);
             return;
         } else if (engineName.equalsIgnoreCase("mysql")) {
             createMysqlTable(db, stmt);
@@ -2009,7 +2009,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     // Create olap table and related base index synchronously.
     // when run on shared-data mode, olap table needs to get storage group from StarMgr.
-    private void createOlapTable(Database db, CreateTableStmt stmt) throws DdlException {
+    private void createOlapOrLakeTable(Database db, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
         LOG.debug("begin create olap table: {}", tableName);
 
@@ -2113,7 +2113,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 distributionInfo.setBucketNum(bucketNum);
             }
 
-            if (stmt.isOlapEngine() && GlobalStateMgr.getCurrentState().isSharedDataMode()) {
+            if (stmt.isOlapEngine() && RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
 
                 // storage cache property
@@ -2236,7 +2236,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         if (table.hasAutoIncrementColumn() && stmt.isOlapEngine()
-                && GlobalStateMgr.getCurrentState().isSharedDataMode()) {
+                && RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             throw new DdlException("Table with AUTO_INCREMENT column can not be lake table");
         }
 
@@ -2368,7 +2368,7 @@ public class LocalMetastore implements ConnectorMetadata {
         table.setStorageFormat(storageFormat);
 
         // get storage volume
-        String storageVolume = GlobalStateMgr.getCurrentState().isSharedDataMode() ? "default" : "local";
+        String storageVolume = RunMode.getCurrentRunMode().isAllowCreateLakeTable() ? "default" : "local";
         table.setStorageVolume(storageVolume);
 
         // get compression type

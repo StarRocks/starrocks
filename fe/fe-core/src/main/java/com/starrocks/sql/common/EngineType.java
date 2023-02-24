@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.common;
 
-import com.starrocks.server.RunMode;
-
 public enum EngineType {
     OLAP,
     MYSQL,
