@@ -281,7 +281,90 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
+<<<<<<< HEAD
         // --------------------------------------- Plugin Statement --------------------------------------------------------
+=======
+        @Override
+        public Void visitShowResourceStatement(ShowResourcesStmt statement, ConnectContext context) {
+            // `show resources` only show resource that user has any privilege on, we will check it in
+            // the execution logic, not here, see `handleShowResources()` for details.
+            return null;
+        }
+
+        // --------------------------------- Resource Group Statement -------------------------------------
+        public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(
+                    context, PrivilegeType.CREATE_RESOURCE_GROUP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "CREATE_RESOURCE_GROUP");
+            }
+            return null;
+        }
+
+        public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkResourceGroupAction(
+                    context, statement.getName(), PrivilegeType.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+            }
+            return null;
+        }
+
+        public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkResourceGroupAction(
+                    context, statement.getName(), PrivilegeType.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
+            }
+            return null;
+        }
+
+        public Void visitShowResourceGroupStatement(ShowResourceGroupStmt statement, ConnectContext context) {
+            // we don't check privilege for `show resource groups` statement
+            return null;
+        }
+
+        // --------------------------------- Catalog Statement --------------------------------------------
+
+        @Override
+        public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+            String catalogName = statement.getCatalogName();
+            // No authorization check for using default_catalog
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                return null;
+            }
+            if (!PrivilegeActions.checkAnyActionOnCatalog(context, catalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), catalogName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.CREATE_EXTERNAL_CATALOG)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), statement.getCatalogName());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkCatalogAction(context, statement.getName(), PrivilegeType.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), statement.getName());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
+            // `show catalogs` only show catalog that user has any privilege on, we will check it in
+            // the execution logic, not here, see `handleShowCatalogs()` for details.
+            return null;
+        }
+
+        // --------------------------------------- Plugin Statement ---------------------------------------
+>>>>>>> 8edd06fff ([BugFix] Fix mysql client unable to change current catalog (#18266))
 
         @Override
         public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {

@@ -65,10 +65,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     public R visitShowDatabasesStatement(ShowDbStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -265,6 +261,17 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+<<<<<<< HEAD
+=======
+    public R visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+>>>>>>> 8edd06fff ([BugFix] Fix mysql client unable to change current catalog (#18266))
     // ------------------------------------------- DML Statement -------------------------------------------------------
 
     public R visitInsertStatement(InsertStmt statement, C context) {

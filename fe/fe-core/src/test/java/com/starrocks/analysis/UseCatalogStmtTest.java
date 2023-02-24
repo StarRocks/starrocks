@@ -34,13 +34,13 @@ public class UseCatalogStmtTest {
 
     @Test
     public void testParserAndAnalyzer() {
-        String sql = "USE catalog hive_catalog";
+        String sql = "USE 'catalog hive_catalog'";
         AnalyzeTestUtil.analyzeSuccess(sql);
 
-        String sql_2 = "USE catalog default_catalog";
+        String sql_2 = "USE 'catalog default_catalog'";
         AnalyzeTestUtil.analyzeSuccess(sql_2);
 
-        String sql_3 = "USE xxxx default_catalog";
+        String sql_3 = "USE 'xxxx default_catalog'";
         AnalyzeTestUtil.analyzeFail(sql_3);
     }
 
@@ -59,21 +59,26 @@ public class UseCatalogStmtTest {
         };
 
         ctx.setQueryId(UUIDUtil.genUUID());
+<<<<<<< HEAD
         StmtExecutor executor = new StmtExecutor(ctx, "use catalog hive_catalog");
+=======
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        StmtExecutor executor = new StmtExecutor(ctx, "use 'catalog hive_catalog'");
+>>>>>>> 8edd06fff ([BugFix] Fix mysql client unable to change current catalog (#18266))
         executor.execute();
 
         Assert.assertEquals("hive_catalog", ctx.getCurrentCatalog());
 
-        executor = new StmtExecutor(ctx, "use catalog default_catalog");
+        executor = new StmtExecutor(ctx, "use 'catalog default_catalog'");
         executor.execute();
 
         Assert.assertEquals("default_catalog", ctx.getCurrentCatalog());
 
-        executor = new StmtExecutor(ctx, "use xxx default_catalog");
+        executor = new StmtExecutor(ctx, "use 'xxx default_catalog'");
         executor.execute();
         Assert.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
 
-        executor = new StmtExecutor(ctx, "use catalog default_catalog xxx");
+        executor = new StmtExecutor(ctx, "use 'catalog default_catalog xxx'");
         executor.execute();
         Assert.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
     }
