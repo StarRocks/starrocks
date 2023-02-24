@@ -1,6 +1,6 @@
 # 导入通用常见问题
 
-## 1. 为什么会发生 "close index channel failed" 和 "too many tablet versions" 错误？应该如何处理？
+## 1. 发生 "close index channel failed" 和 "too many tablet versions" 错误应该如何处理？
 
 上述报错是因为导入频率太快，数据没能及时合并 (Compaction) ，从而导致版本数超过支持的最大未合并版本数。默认支持的最大未合并版本数为 1000。可以通过如下方法解决上述报错：
 
@@ -16,7 +16,7 @@
 
   修改完成后，需要观察内存和 I/O，确保内存和 I/O 正常。
 
-## 2. 为什么会发生 "Label Already Exists" 错误？应该如何处理？
+## 2. 发生 "Label Already Exists" 错误应该如何处理？
 
 StarRocks 集群中同一个数据库内已经有一个具有相同标签的导入作业执行成功或正在执行。原因如下：
 
@@ -26,11 +26,15 @@ StarRocks 集群中同一个数据库内已经有一个具有相同标签的导�
 
 - 使用标签搜索主 FE 的日志，看是否存在同一个标签出现了两次的情况。如果有，就说明客户端重复提交了该请求。
 
-    > 说明：StarRocks 集群中导入作业的标签不区分导入方式。因此，可能存在不同的导入作业使用了相同标签的问题。
+  > **说明**
+  >
+  > StarRocks 集群中导入作业的标签不区分导入方式。因此，可能存在不同的导入作业使用了相同标签的问题。
 
 - 运行 SHOW LOAD WHERE LABEL = "xxx" 语句，查看是否已经存在具有标签相同、且处于 **FINISHED** 状态的导入作业。
 
-    > 说明：其中 `xxx` 为待检查的标签字符串。
+  > **说明**
+  >
+  > 其中 `xxx` 为待检查的标签字符串。
 
 建议根据当前请求导入的数据量，计算出大致的导入耗时，并根据导入超时时间来适当地调大客户端的请求超时时间，从而避免客户端多次提交该请求。
 
@@ -68,6 +72,26 @@ StarRocks 集群中同一个数据库内已经有一个具有相同标签的导�
   
   待导入数据文件中某行的分区列的值不在分区范围内。
 
+<<<<<<< HEAD
 ## 4. 导入过程中，发生远端程序呼叫（Remote Procedure Call，简称 RPC）超时问题应该如何处理？
 
 检查 BE 配置文件 **be.conf** 中 `write_buffer_size` 参数的设置。该参数用于控制 BE 上内存块的大小阈值，默认阈值为 100 MB。如果阈值过大，可能会导致远端程序呼叫（Remote Procedure Call，简称 RPC）超时，这时候需要配合 BE 配置文件中的 `tablet_writer_rpc_timeout_sec` 参数来适当地调整 `write_buffer_size` 参数的取值。请参见 [BE 配置](/loading/Loading_intro.md)。
+=======
+## 4. 导入过程中，发生 RPC 超时应该如何处理？
+
+检查 BE 配置文件 **be.conf** 中 `write_buffer_size` 参数的设置。该参数用于控制 BE 上内存块的大小阈值，默认阈值为 100 MB。如果阈值过大，可能会导致远程过程调用（Remote Procedure Call，简称 RPC）超时，这时候需要配合 BE 配置文件中的 `tablet_writer_rpc_timeout_sec` 参数来适当地调整 `write_buffer_size` 参数的取值。请参见 [BE 配置](/loading/Loading_intro.md#be-配置)。
+
+## 5. 导入作业报错 `Value count does not match column count` 应该怎么处理？
+
+导入作业失败，通过查看错误详情 URL 发现返回 `Value count does not match column count` 错误，提示解析源数据得到的列数与目标表的列数不匹配：
+
+```Java
+Error: Value count does not match column count. Expect 3, but got 1. Row: 2023-01-01T18:29:00Z,cpu0,80.99
+Error: Value count does not match column count. Expect 3, but got 1. Row: 2023-01-01T18:29:10Z,cpu1,75.23
+Error: Value count does not match column count. Expect 3, but got 1. Row: 2023-01-01T18:29:20Z,cpu2,59.44
+```
+
+发生该错误的原因是导入命令或导入语句中指定的列分隔符与源数据中的列分隔符不一致。例如上面示例中，源数据为 CSV 格式，包括三列，列分隔符为逗号 (`,`)，但是导入命令或导入语句中却指定制表符 (`\t`) 作为列分隔符，最终导致源数据的三列数据解析成了一列数据。
+
+修改导入命令或导入语句中的列分隔符为逗号 (`,`)，然后再次尝试执行导入。
+>>>>>>> 2263e48 ([Doc] add column count mismatch faq (#4575))
