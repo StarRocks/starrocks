@@ -69,3 +69,5 @@ You can add, reduce, and delete bloom filter indexes by using the [ALTER TABLE](
     ```SQL
     ALTER TABLE table1 SET ("bloom_filter_columns" = "");
     ```
+
+> Note: Altering an index is an asynchronous operation. You can view the progress of this operation by executing [SHOW ALTER TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md). You can run only one alter index task on a table each time.
