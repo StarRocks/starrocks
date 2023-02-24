@@ -596,9 +596,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         columnStatisticMap.put("par_date", partitionColumnStats2);
 
         List<RemoteFileInfo> partitions = Lists.newArrayList();
-        partitions.add(new RemoteFileInfo(null, ImmutableList.of(), null));
-        partitions.add(new RemoteFileInfo(null, ImmutableList.of(), null));
-        partitions.add(new RemoteFileInfo(null, ImmutableList.of(), null));
+        partitionNames.forEach(k -> partitions.add(new RemoteFileInfo(null, ImmutableList.of(), null)));
 
         mockTables.put(t1.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(t1, MOCKED_HIVE_CATALOG_NAME),
                 partitionNames, (long) rowCount, columnStatisticMap, partitions));
