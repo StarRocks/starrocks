@@ -153,39 +153,12 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
         const std::string& col = jsonpath[i].key;
         int index = jsonpath[i].idx;
 
-        /*
-         * 梳理下现在的问题：
-         * 如果当前的path的col是*, 表示要检索union字段：
-         * 
-         * [{
-            "k1":"v2",
-            "kind":"server",
-            "keyname":{
-                "int":20
-            }
-            }]
-
-            [{
-            "k1":"v2",
-            "kind":"server",
-            "keyname": null
-            }]
-
-            {"keyname": null}
-            {"keyname": {"int":20}}
-         * 比如我们当前在keyname对应的value域，而且操作符是*，类似这样：$.keyname.*
-         * 此时有两种情况，一种对应的value是null, 一种对应的是一个字典{"typename": value}
-         * 那就意味着这个value要么是null类型，要么是字典类型。
-         * 
-         *  
-         */
-
         // Since the simdjson::ondemand::object cannot be converted to simdjson::ondemand::value,
         // we have to do some special treatment for the second elem of json path.
         // If the key is not found in json object, simdjson::NO_SUCH_FIELD would be returned.
         if (i == 1) {
             if (col == "*") {
-                // 不应该出现这种模式的jsonpath: $.*
+                // There should be no jsonpath for this pattern, $.*
                 return Status::InvalidArgument(fmt::format("invalid json path: {}", jsonpath[i].key));
             } else {
                 HANDLE_SIMDJSON_ERROR(obj.find_field_unordered(col).get(tvalue),
@@ -193,6 +166,11 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
             }
         } else {
             if (col == "*") {
+                // There are always two patterns.
+                // 1. {"field_name": null}
+                // 2. {"field_name": {"field_type": data}}
+                // For pattern1, we just return null value.
+                // For pattern2, we get the first field of object as next value.
                 if (tvalue.is_null()) {
                     return Status::NotFound("null value");
                 }
@@ -200,9 +178,7 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
                     return Status::InvalidArgument(fmt::format("invalid json path: {}", jsonpath[i].key));
                 }
                 for (auto field : tvalue.get_object()) {
-                    std::string_view keyv = field.unescaped_key();
                     tvalue = field.value();
-                    std::cout << keyv << std::endl;
                     break;
                 }
             } else {
