@@ -53,6 +53,7 @@ import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -103,7 +104,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 return;
             }
 
-            if (GlobalStateMgr.getCurrentState().isSharedNothingMode()) {
+            if (!RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
                 publishVersionForOlapTable(readyTransactionStates);
                 return;
             }

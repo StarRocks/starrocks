@@ -60,7 +60,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.RunMode;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
@@ -75,6 +74,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -999,8 +999,14 @@ public class AlterTest {
             }
         };
 
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_lake_partition";
@@ -1044,8 +1050,6 @@ public class AlterTest {
         dropSQL = "drop table test_lake_partition";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
@@ -1086,8 +1090,14 @@ public class AlterTest {
             }
         };
 
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists site_access";
@@ -1134,8 +1144,6 @@ public class AlterTest {
         dropSQL = "drop table site_access";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
@@ -2027,8 +2035,14 @@ public class AlterTest {
             }
         };
 
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.new_table (\n" +
@@ -2098,8 +2112,6 @@ public class AlterTest {
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         file.delete();
-
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test(expected = DdlException.class)

@@ -36,7 +36,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
@@ -76,14 +76,12 @@ public class CreateTableAnalyzer {
             return EngineType.defaultEngine().name();
         }
 
-        if (engineName.equalsIgnoreCase(EngineType.STARROCKS.name()) &&
-                GlobalStateMgr.getCurrentState().isSharedNothingMode()) {
-            throw new SemanticException("Engine %s needs 'run_mode = shared_data' config in fe.conf", engineName);
+        if (engineName.equalsIgnoreCase(EngineType.STARROCKS.name()) && !RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+            throw new SemanticException("Disallow create STARROCKS table in current run mode\"{}\"", RunMode.getCurrentRunMode());
         }
 
-        if (engineName.equalsIgnoreCase(EngineType.OLAP.name()) &&
-                GlobalStateMgr.getCurrentState().isSharedDataMode()) {
-            throw new SemanticException("Disallow create OLAP table in this cluster");
+        if (engineName.equalsIgnoreCase(EngineType.OLAP.name()) && !RunMode.getCurrentRunMode().isAllowCreateOlapTable()) {
+            throw new SemanticException("Disallow create OLAP table in current run mode\"{}\"", RunMode.getCurrentRunMode());
         }
 
         try {

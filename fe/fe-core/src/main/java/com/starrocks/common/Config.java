@@ -1781,7 +1781,7 @@ public class Config extends ConfigBase {
     /**
      * shared_data: means run on cloud-native
      * shared_nothing: means run on local
-     * hybrid: run on both, not support yet.
+     * hybrid: run on both, not production ready, should only be used in test environment now.
      */
     @ConfField
     public static String run_mode = "shared_nothing";
