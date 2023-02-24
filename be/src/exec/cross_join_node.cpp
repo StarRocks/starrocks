@@ -638,7 +638,6 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     using namespace pipeline;
 
     // step 0: construct pipeline end with cross join right operator.
-    OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
     OpFactories right_ops = _children[1]->decompose_to_pipeline(context);
 
     // define a runtime filter holder
@@ -646,15 +645,9 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
-    // communication with CrossJoinLeft through shared_datas.
-    auto* right_source = down_cast<SourceOperatorFactory*>(right_ops[0].get());
-    auto* left_source = down_cast<SourceOperatorFactory*>(left_ops[0].get());
 
     // step 1: construct pipeline end with cross join left operator(cross join left maybe not sink operator).
-
     NLJoinContextParams context_params;
-    context_params.num_left_probers = left_source->degree_of_parallelism();
-    context_params.num_right_sinkers = right_source->degree_of_parallelism();
     context_params.plan_node_id = _id;
     context_params.rf_hub = context->fragment_context()->runtime_filter_hub();
     context_params.rf_descs = std::move(_build_runtime_filters);
@@ -669,9 +662,13 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
             std::make_shared<NLJoinBuildOperatorFactory>(context->next_operator_id(), id(), cross_join_context);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(right_factory.get(), context, rc_rf_probe_collector);
+
     right_ops.emplace_back(std::move(right_factory));
     context->add_pipeline(right_ops);
+    context->push_dependent_pipeline(context->last_pipeline());
+    DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
 
+    OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
     // communication with CrossJoinRight through shared_data.
     auto left_factory = std::make_shared<NLJoinProbeOperatorFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),

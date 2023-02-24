@@ -39,12 +39,15 @@ NLJoinProbeOperator::NLJoinProbeOperator(OperatorFactory* factory, int32_t id, i
           _sql_join_conjuncts(sql_join_conjuncts),
           _join_conjuncts(join_conjuncts),
           _conjunct_ctxs(conjunct_ctxs),
-          _cross_join_context(cross_join_context) {
-    _cross_join_context->ref();
-}
+          _cross_join_context(cross_join_context) {}
 
 Status NLJoinProbeOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare(state));
+
     _runtime_state = state;
+
+    _cross_join_context->incr_prober();
+
     _output_accumulator.set_desired_size(state->chunk_size());
 
     _unique_metrics->add_info_string("JoinType", to_string(_join_op));
@@ -54,11 +57,11 @@ Status NLJoinProbeOperator::prepare(RuntimeState* state) {
     if (_is_left_join() || _is_left_anti_join()) {
         _permute_left_rows_counter = ADD_COUNTER(_unique_metrics, "PermuteLeftJoinRows", TUnit::UNIT);
     }
-    return Operator::prepare(state);
+    return Status::OK();
 }
 
 void NLJoinProbeOperator::close(RuntimeState* state) {
-    _cross_join_context->unref(state);
+    _cross_join_context->decr_prober(state);
     Operator::close(state);
 }
 
@@ -569,6 +572,9 @@ OperatorPtr NLJoinProbeOperatorFactory::create(int32_t degree_of_parallelism, in
 
 Status NLJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorWithDependencyFactory::prepare(state));
+
+    // Unref is called in _cross_join_context->decr_prober, when call probe operators have called decr_prober.
+    _cross_join_context->ref();
 
     _init_row_desc();
     RETURN_IF_ERROR(Expr::prepare(_join_conjuncts, state));
