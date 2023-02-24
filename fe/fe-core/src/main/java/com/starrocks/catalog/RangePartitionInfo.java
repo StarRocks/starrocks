@@ -231,6 +231,8 @@ public class RangePartitionInfo extends PartitionInfo {
         } catch (IllegalArgumentException e) {
             // Range.closedOpen may throw this if (lower > upper)
             throw new DdlException("Invalid key range: " + e.getMessage());
+        } catch (AnalysisException e) {
+            throw new DdlException("Invalid key range: " + e.getMessage());
         }
         idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
         idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
