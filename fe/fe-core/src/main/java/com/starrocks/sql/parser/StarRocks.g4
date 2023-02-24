@@ -261,7 +261,7 @@ useDatabaseStatement
     ;
 
 useCatalogStatement
-    : USE CATALOG identifierOrString
+    : USE string
     ;
 
 showDatabasesStatement
