@@ -557,6 +557,15 @@ public class SchemaTable extends Table {
                                     .column("DATA_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
                                     .column("VERSION", ScalarType.createType(PrimitiveType.BIGINT))
                                     .build()))
+                    .put("be_configs", new SchemaTable(
+                            SystemId.BE_CONFIGS_ID,
+                            "be_configs",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("VALUE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
                     .build();
 
     public static class Builder {
@@ -648,7 +657,9 @@ public class SchemaTable extends Table {
         SCH_BE_METRICS("BE_METRICS", "BE_METRICS",
                 TSchemaTableType.SCH_BE_METRICS),
         SCH_BE_TXNS("BE_TXNS", "BE_TXNS",
-                TSchemaTableType.SCH_BE_TXNS);
+                TSchemaTableType.SCH_BE_TXNS),
+
+        SCH_BE_CONFIGS("BE_CONFIGS", "BE_CONFIGS", TSchemaTableType.SCH_BE_CONFIGS);
 
         private final String description;
         private final String tableName;

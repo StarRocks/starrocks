@@ -118,6 +118,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_metrics_scanner.cpp
     schema_scanner/schema_be_tablets_scanner.cpp
     schema_scanner/schema_be_txns_scanner.cpp
+    schema_scanner/schema_be_configs_scanner.cpp
     schema_scanner/schema_helper.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
