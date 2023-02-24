@@ -17,6 +17,7 @@ package com.starrocks.sql.common;
 import static com.starrocks.sql.common.ErrorMsgProxy.BaseMessage;
 public interface ParserErrorMsg {
 
+    // --------- error in building AST phase ---------
     @BaseMessage("at line {0}, column {1}")
     String nodePositionPoint(int a0, int a1);
 
@@ -112,5 +113,8 @@ public interface ParserErrorMsg {
 
     @BaseMessage("Refresh start time must be after current time")
     String invalidStartTime();
+
+
+    // --------- error in analyzing phase ---------
 
 }

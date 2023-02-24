@@ -29,8 +29,6 @@ public class ErrorMsgProxy {
 
     public static final ParserErrorMsg PARSER_ERROR_MSG = create(ParserErrorMsg.class);
 
-    public static final AnalyzerErrorMsg ANALYZER_ERROR_MSG = create(AnalyzerErrorMsg.class);
-
     @SuppressWarnings("unchecked")
     private static <T> T create(Class<T> clazz) {
         return  (T) Proxy.newProxyInstance(clazz.getClassLoader(),
