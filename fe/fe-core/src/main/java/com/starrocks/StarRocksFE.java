@@ -53,6 +53,7 @@ import com.starrocks.leader.MetaHelper;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FeServer;
 import com.starrocks.service.FrontendOptions;
@@ -131,7 +132,7 @@ public class StarRocksFE {
             StateChangeExecutor.getInstance().setMetaContext(
                     GlobalStateMgr.getCurrentState().getMetaContext());
 
-            if (GlobalStateMgr.getCurrentState().isSharedDataMode()) {
+            if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
                 Journal journal = GlobalStateMgr.getCurrentState().getJournal();
                 if (journal instanceof BDBJEJournal) {
                     BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();

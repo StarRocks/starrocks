@@ -48,6 +48,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.persist.HbPackage;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 import com.starrocks.thrift.HeartbeatService;
@@ -243,7 +244,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                                     .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
                         }
                     } else {
-                        if (GlobalStateMgr.getCurrentState().isSharedDataMode() && !isReplay) {
+                        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable() && !isReplay) {
                             // addWorker
                             int starletPort = computeNode.getStarletPort();
                             if (starletPort != 0) {
