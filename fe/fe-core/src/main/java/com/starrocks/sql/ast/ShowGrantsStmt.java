@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -60,10 +61,12 @@ public class ShowGrantsStmt extends ShowStmt {
     private UserIdentity userIdent;
     private final String role;
 
+    @VisibleForTesting
     public ShowGrantsStmt(UserIdentity userIdent) {
         this(userIdent, null, NodePosition.ZERO);
     }
 
+    @VisibleForTesting
     public ShowGrantsStmt(String role) {
         this(null, role, NodePosition.ZERO);
     }

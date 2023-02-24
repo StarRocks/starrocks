@@ -12,22 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast;
+package com.starrocks.sql.common;
 
-import com.starrocks.sql.parser.NodePosition;
+public interface AnalyzerErrorMsg {
 
-import java.util.List;
-
-public class IntersectRelation extends SetOperationRelation {
-    public IntersectRelation(List<QueryRelation> relations, SetQualifier qualifier) {
-        super(relations, qualifier);
-    }
-
-    public IntersectRelation(List<QueryRelation> relations, SetQualifier qualifier, NodePosition pos) {
-        super(relations, qualifier, pos);
-    }
-
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitIntersect(this, context);
-    }
 }

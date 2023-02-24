@@ -53,8 +53,62 @@ public interface ParserErrorMsg {
     @BaseMessage("Invalid db name format ''{0}''")
     String invalidDbFormat(String a0);
 
+    @BaseMessage("Invalid table name format ''{0}''")
+    String invalidTableFormat(String a0);
+
     @BaseMessage("Invalid task name format ''{0}''")
     String invalidTaskFormat(String a0);
 
+    @BaseMessage("Invalid UDF function name ''{0}''")
+    String invalidUDFName(String a0);
+
+    @BaseMessage("Unsupported type specification: ''{0}''")
+    String unsupportedType(String a0);
+
+    @BaseMessage("The col ''{0}'' is nullable while all parts of primary key must be NOT NULL.")
+    String nullColFoundInPK(String a0);
+
+    @BaseMessage("Incorrect number of arguments in expr ''{0}''")
+    String wrongNumOfArgs(String a0);
+
+    @BaseMessage("Incorrect type/value of arguments in expr ''{0}''")
+    String wrongTypeOfArgs(String a0);
+
+    @BaseMessage("Unsupported expr ''{0}''")
+    String wrongExpr(String a0);
+
+    @BaseMessage("Cannot use duplicated {0} clause in building materialized view")
+    String duplicatedClause(String a0);
+
+    @BaseMessage("''{0}'' cannot support ''{1}'' in materialized view")
+    String forbidClauseInMV(String a0, String a1);
+
+    @BaseMessage("FE config ''{0}'' is disabled")
+    String feConfigDisable(String a0);
+
+    @BaseMessage("Sql to be add black list is empty")
+    String emptySql();
+
+    @BaseMessage("Column ''{0}'' can not be AUTO_INCREMENT when {1} COLUMN.")
+    String autoIncrementForbid(String a0, String a1);
+
+    @BaseMessage("No tables used")
+    String noTableUsed();
+
+    @BaseMessage("Invalid odbc scalar function ''{0}''")
+    String invalidOdbcFunc(String a0);
+
+    @BaseMessage("Invalid numeric literal {0}")
+    String invalidNumFormat(String a0);
+
+    @BaseMessage("Invalid numeric literal {0}")
+    String invalidDateFormat(String a0);
+
+    @BaseMessage("Numeric overflow {0}")
+    String numOverflow(String a0);
+
+    @BaseMessage("Invalid binary literal ''{0}''. Binary literal can only contain hexadecimal digits " +
+            "and must contain an even number of digits")
+    String invalidBinaryFormat(String a0);
 
 }

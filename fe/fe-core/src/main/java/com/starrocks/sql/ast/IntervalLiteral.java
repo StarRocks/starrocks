@@ -26,7 +26,7 @@ public class IntervalLiteral extends LiteralExpr {
     private final UnitIdentifier unitIdentifier;
 
     public IntervalLiteral(Expr value, UnitIdentifier unitIdentifier) {
-        this(value, unitIdentifier, NodePosition.ZERO);
+        this(value, unitIdentifier, value.getPos());
     }
 
     public IntervalLiteral(Expr value, UnitIdentifier unitIdentifier, NodePosition pos) {

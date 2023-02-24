@@ -23,6 +23,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -82,6 +83,16 @@ public class SelectRelation extends QueryRelation {
             Expr predicate,
             GroupByClause groupByClause,
             Expr having) {
+        this(selectList, fromRelation, predicate, groupByClause, having, NodePosition.ZERO);
+    }
+
+    public SelectRelation(
+            SelectList selectList,
+            Relation fromRelation,
+            Expr predicate,
+            GroupByClause groupByClause,
+            Expr having, NodePosition pos) {
+        super(pos);
         this.selectList = selectList;
         this.relation = fromRelation;
         this.predicate = predicate;
