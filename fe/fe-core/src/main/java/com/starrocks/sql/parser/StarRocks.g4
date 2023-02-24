@@ -88,7 +88,7 @@ statement
 
     // Materialized View Statement
     | createMaterializedViewStatement
-    | showMaterializedViewStatement
+    | showMaterializedViewsStatement
     | dropMaterializedViewStatement
     | alterMaterializedViewStatement
     | refreshMaterializedViewStatement
@@ -517,8 +517,8 @@ materializedViewDesc
     | properties
     ;
 
-showMaterializedViewStatement
-    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+showMaterializedViewsStatement
+    : SHOW MATERIALIZED VIEWS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 dropMaterializedViewStatement
@@ -2201,7 +2201,7 @@ nonReserved
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER | USERS
-    | VALUE | VARIABLES | VIEW | VERBOSE
+    | VALUE | VARIABLES | VIEW | VIEWS | VERBOSE
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
     | DOTDOTDOT

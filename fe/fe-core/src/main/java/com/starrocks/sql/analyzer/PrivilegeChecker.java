@@ -121,7 +121,7 @@ import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
-import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
@@ -773,10 +773,10 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowMaterializedViewStatement(ShowMaterializedViewStmt statement, ConnectContext session) {
+        public Void visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext session) {
             String db = statement.getDb();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEW",
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEWS",
                         session.getQualifiedUser(),
                         session.getRemoteIP(),
                         db);
