@@ -22,7 +22,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.SystemIdGenerator;
+import com.starrocks.common.SystemId;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -33,12 +33,12 @@ public class InfoSchemaDb extends Database {
     public static final String DATABASE_NAME = "information_schema";
 
     public InfoSchemaDb() {
-        super(SystemIdGenerator.getNextId(), DATABASE_NAME);
+        super(SystemId.INFORMATION_SCHEMA_DB_ID, DATABASE_NAME);
         initTables();
     }
 
     public InfoSchemaDb(String cluster) {
-        super(SystemIdGenerator.getNextId(), ClusterNamespace.getFullName(cluster, DATABASE_NAME));
+        super(SystemId.INFORMATION_SCHEMA_DB_ID, ClusterNamespace.getFullName(cluster, DATABASE_NAME));
         initTables();
     }
 
