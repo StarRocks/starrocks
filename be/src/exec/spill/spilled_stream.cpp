@@ -40,7 +40,8 @@ struct SpilledStreamConfig {
     static constexpr size_t chunk_buffer_max_size = 2;
 };
 
-// read chunk from spilled one by one
+// read chunk from spilled files one by one
+// A basic input stream for multiple files
 class SequentialFileStream final : public SpilledInputStream {
 public:
     SequentialFileStream(const SpillFormater& formater, std::vector<std::shared_ptr<SpillFile>> spilled_files)
@@ -88,6 +89,9 @@ void SequentialFileStream::close() {
     _readable.reset();
 }
 
+// spill stream with a chunk buffer
+// If caller don't want to read data synchronously,
+// we can wrap the inputstream in an buffered input stream and run the read_to_buffer task in another thread pool
 class BufferedSpilledStream final : public SpilledInputStream {
 public:
     BufferedSpilledStream(int capacity, std::shared_ptr<SpilledInputStream> stream)
@@ -96,9 +100,9 @@ public:
 
     bool buffer_fulled() const { return _chunk_buffer.get_size() == _capacity || eof(); }
 
-    bool has_chunk() const { return _chunk_buffer.get_size() > 0 || eof(); }
+    bool buffer_has_data() const { return _chunk_buffer.get_size() > 0 || eof(); }
 
-    bool is_ready() override { return has_chunk(); }
+    bool is_ready() override { return buffer_has_data(); }
 
     void close() override {}
 
@@ -138,7 +142,7 @@ StatusOr<ChunkUniquePtr> BufferedSpilledStream::read_from_buffer() {
 }
 
 StatusOr<ChunkUniquePtr> BufferedSpilledStream::read(SpillFormatContext& context) {
-    if (has_chunk()) {
+    if (buffer_has_data()) {
         return read_from_buffer();
     }
     return _raw_input_stream->read(context);
@@ -161,6 +165,7 @@ Status BufferedSpilledStream::read_to_buffer(SpillFormatContext& context) {
     }
 }
 
+// Combine multiple already ordered input streams and combine them into one globally ordered input stream
 class SortedFileStream final : public SpilledInputStream {
 public:
     SortedFileStream(SpilledInputStreamList streams, RuntimeState* state);
@@ -194,10 +199,10 @@ Status SortedFileStream::init(const SortExecExprs* sort_exprs, const SortDescs* 
         auto buffered_stream = _buffered_streams.back();
         auto chunk_provider = [buffered_stream, this](ChunkUniquePtr* out_chunk, bool* eos) {
             if (out_chunk == nullptr || eos == nullptr) {
-                return buffered_stream->has_chunk();
+                return buffered_stream->buffer_has_data();
             }
 
-            if (!buffered_stream->has_chunk()) {
+            if (!buffered_stream->buffer_has_data()) {
                 return false;
             }
 
@@ -238,6 +243,7 @@ StatusOr<ChunkUniquePtr> SortedFileStream::read(SpillFormatContext& context) {
     return std::make_unique<Chunk>();
 }
 
+// An IO task that can trigger a read
 class BufferedSpillReadTask final : public SpillRestoreTask {
 public:
     BufferedSpillReadTask(std::weak_ptr<SpillerFactory> factory,
