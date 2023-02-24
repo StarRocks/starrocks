@@ -42,6 +42,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 public class ListPartitionPruner implements PartitionPruner {
     private static final Logger LOG = LogManager.getLogger(ListPartitionPruner.class);
@@ -133,12 +134,9 @@ public class ListPartitionPruner implements PartitionPruner {
             noEvalConjuncts.addAll(partitionConjuncts);
             return null;
         }
-        if (specifyPartitionIds != null && !specifyPartitionIds.isEmpty()) {
-            return specifyPartitionIds;
-        }
         if (partitionConjuncts.isEmpty()) {
             // no conjuncts, notEvalConjuncts is empty
-            return null;
+            return specifyPartitionIds;
         }
 
         Set<Long> matches = null;
@@ -161,10 +159,23 @@ public class ListPartitionPruner implements PartitionPruner {
                 noEvalConjuncts.add(operator);
             }
         }
+        // Null represents the full set. If a partition is specified,
+        // the intersection of the full set and the specified partition is the specified partition.
+        // If a match is found, the intersection data is taken.
+        // If no partition is specified, the match result will be taken
         if (matches == null) {
-            return null;
+            if (specifyPartitionIds != null && !specifyPartitionIds.isEmpty()) {
+                return specifyPartitionIds;
+            } else {
+                return null;
+            }
         } else {
-            return new ArrayList<>(matches);
+            if (specifyPartitionIds != null && !specifyPartitionIds.isEmpty()) {
+                // intersect
+                return specifyPartitionIds.stream().filter(matches::contains).collect(Collectors.toList());
+            } else {
+                return new ArrayList<>(matches);
+            }
         }
     }
 
