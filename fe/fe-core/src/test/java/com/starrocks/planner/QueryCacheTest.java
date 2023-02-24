@@ -428,7 +428,7 @@ public class QueryCacheTest {
     }
 
     public static List<String> getSsbCreateTableSqlList() {
-        List<String> ssbTableNames = Lists.newArrayList("lineorder", "customer", "dates", "supplier", "part");
+        List<String> ssbTableNames = Lists.newArrayList("customer", "dates", "supplier", "part", "lineorder");
         ClassLoader loader = QueryCacheTest.class.getClassLoader();
         List<String> createTableSqlList = ssbTableNames.stream().map(n -> {
             try {

@@ -16,5 +16,6 @@ PROPERTIES (
     "replication_num" = "1",
     "colocate_with" = "groupa5",
     "in_memory" = "false",
+    "unique_constraints" = "p_partkey",
     "storage_format" = "DEFAULT"
 )
