@@ -1231,7 +1231,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         if (!MATERIALIZEDVIEW_REFRESHSCHEME_SUPPORT_UNIT_IDENTIFIERS.contains(unit)) {
             throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("Refresh interval unit", unit),
-                    asyncRefreshSchemeDesc.getPos());
+                    asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getPos());
         }
     }
 
@@ -1283,7 +1283,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     checkAndExtractPartitionCol((FunctionCallExpr) expr);
                     expressionPartitionDesc = new ExpressionPartitionDesc(expr);
                 } else {
-                    throw new IllegalArgumentException("Partition exp not supports:" + expr.toSql());
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), expr.getPos());
                 }
             }
 
@@ -3775,7 +3775,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         List<Long> tabletIds = Lists.newArrayList();
         if (context.tabletList() != null) {
-            stop = context.partitionNames().stop;
+            stop = context.tabletList().stop;
             tabletIds = context.tabletList().INTEGER_VALUE().stream().map(ParseTree::getText)
                     .map(Long::parseLong).collect(toList());
         }
@@ -5162,7 +5162,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             quotedText = context.BINARY_DOUBLE_QUOTED_TEXT().getText();
         }
-        return new VarBinaryLiteral(quotedText.substring(2, quotedText.length() - 1));
+        return new VarBinaryLiteral(quotedText.substring(2, quotedText.length() - 1), createPos(context));
     }
 
     private static String escapeBackSlash(String str) {
@@ -5291,7 +5291,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             SlotRef tmp = (SlotRef) base;
             List<String> parts = new ArrayList<>(tmp.getQualifiedName().getParts());
             parts.add(fieldName);
-            return new SlotRef(QualifiedName.of(parts));
+            return new SlotRef(QualifiedName.of(parts, pos));
         } else if (base instanceof SubfieldExpr) {
             // Merge multi-level subfield access
             SubfieldExpr subfieldExpr = (SubfieldExpr) base;
@@ -5313,7 +5313,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Identifier identifier = (Identifier) visit(context.identifier());
         List<String> parts = new ArrayList<>();
         parts.add(identifier.getValue());
-        QualifiedName qualifiedName = QualifiedName.of(parts);
+        QualifiedName qualifiedName = QualifiedName.of(parts, createPos(context));
         return new SlotRef(qualifiedName);
     }
 
@@ -5569,12 +5569,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitRefreshSchemeDesc(StarRocksParser.RefreshSchemeDescContext context) {
         LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
+        NodePosition pos = createPos(context);
         if (context.ASYNC() != null) {
-            if (context.START() != null && context.interval() == null) {
-                throw new SemanticException("Please input interval clause");
-            }
             boolean defineStartTime = false;
             if (context.START() != null) {
+                NodePosition timePos = createPos(context.string());
                 StringLiteral stringLiteral = (StringLiteral) visit(context.string());
                 DateTimeFormatter dateTimeFormatter = null;
                 try {
@@ -5582,29 +5581,28 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     LocalDateTime tempStartTime = DateUtils.
                             parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
                     if (tempStartTime.isBefore(LocalDateTime.now())) {
-                        throw new IllegalArgumentException("Refresh start must be after current time");
+                        throw new ParsingException(PARSER_ERROR_MSG.invalidStartTime(), timePos);
                     }
                     startTime = tempStartTime;
                     defineStartTime = true;
                 } catch (AnalysisException e) {
-                    throw new IllegalArgumentException(
-                            "Refresh start " +
-                                    stringLiteral.getStringValue() + " is incorrect");
+                    throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(stringLiteral.getStringValue())
+                            , timePos);
+                }
+
+                intervalLiteral = (IntervalLiteral) visit(context.interval());
+                if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
+                    String exprSql = intervalLiteral.getValue().toSql();
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(exprSql, "INTERVAL"),
+                            createPos(context.interval()));
                 }
             }
 
-            if (context.interval() != null) {
-                intervalLiteral = (IntervalLiteral) visit(context.interval());
-                if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
-                    throw new IllegalArgumentException(
-                            "Refresh every " + intervalLiteral.getValue() + " must be IntLiteral");
-                }
-            }
-            return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral);
+            return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral, pos);
         } else if (context.MANUAL() != null) {
-            return new ManualRefreshSchemeDesc();
+            return new ManualRefreshSchemeDesc(pos);
         } else if (context.INCREMENTAL() != null) {
-            return new IncrementalRefreshSchemeDesc();
+            return new IncrementalRefreshSchemeDesc(pos);
         }
         return null;
     }

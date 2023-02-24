@@ -68,10 +68,10 @@ public class VarBinaryLiteral extends LiteralExpr {
         super(pos);
         String hexString = WHITESPACE_MATCHER.removeFrom(value).toUpperCase(ENGLISH);
         if (!HEX_DIGIT_MATCHER.matchesAllOf(hexString)) {
-            throw new ParsingException(PARSER_ERROR_MSG.invalidBinaryFormat(value), pos);
+            throw new ParsingException(PARSER_ERROR_MSG.invalidBinaryFormat(), pos);
         }
         if (hexString.length() % 2 != 0) {
-            throw new ParsingException("Binary literal must contain an even number of digits" + value);
+            throw new ParsingException(PARSER_ERROR_MSG.invalidBinaryFormat(), pos);
         }
         this.type = Type.VARBINARY;
         this.value = BaseEncoding.base16().decode(hexString);

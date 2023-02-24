@@ -47,9 +47,6 @@ public interface ParserErrorMsg {
             "''expr_children_limit'' in BE conf")
     String argsOfExprExceedLimit(long a0, int a1);
 
-    @BaseMessage("Unsupported partition expression: ''{0}''")
-    String invalidPartitionExpr(String a0);
-
     @BaseMessage("Invalid db name format ''{0}''")
     String invalidDbFormat(String a0);
 
@@ -65,7 +62,7 @@ public interface ParserErrorMsg {
     @BaseMessage("Unsupported type specification: ''{0}''")
     String unsupportedType(String a0);
 
-    @BaseMessage("The col ''{0}'' is nullable while all parts of primary key must be NOT NULL.")
+    @BaseMessage("AUTO_INCREMENT column {0} must be NOT NULL")
     String nullColFoundInPK(String a0);
 
     @BaseMessage("Incorrect number of arguments in expr ''{0}''")
@@ -110,8 +107,10 @@ public interface ParserErrorMsg {
     @BaseMessage("Numeric overflow {0}")
     String numOverflow(String a0);
 
-    @BaseMessage("Invalid binary literal ''{0}''. Binary literal can only contain hexadecimal digits " +
-            "and must contain an even number of digits")
-    String invalidBinaryFormat(String a0);
+    @BaseMessage("Binary literal can only contain hexadecimal digits and an even number of digits")
+    String invalidBinaryFormat();
+
+    @BaseMessage("Refresh start time must be after current time")
+    String invalidStartTime();
 
 }
