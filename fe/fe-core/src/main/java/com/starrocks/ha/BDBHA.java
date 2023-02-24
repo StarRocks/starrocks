@@ -143,6 +143,12 @@ public class BDBHA implements HAProtocol {
     }
 
     @Override
+    public String getLeaderNodeName() {
+        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
+        return replicationGroupAdmin.getMasterNodeName();
+    }
+
+    @Override
     public List<InetSocketAddress> getObserverNodes() {
         ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
         if (replicationGroupAdmin == null) {
