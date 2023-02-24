@@ -692,14 +692,14 @@ public class SimpleExpressionAnalyzer {
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 fn.setArgsType(argumentTypes); // as accepting various types
                 fn.setIsNullable(false);
-            } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
+            } else if (FunctionSet.DECIMAL_ROUND_FUNCTIONS.contains(fnName) ||
                     Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
                 // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
                 // return decimal version even if the input parameters are not decimal, such as (INT, INT),
                 // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
                 // to go through `getDecimalV3Function` here
-                if (FunctionSet.varianceFunctions.contains(fnName)) {
+                if (FunctionSet.VARIANCE_FUNCTIONS.contains(fnName)) {
                     // When decimal values are too small, the stddev and variance alogrithm of decimal-version do not
                     // work incorrectly. because we use decimal128(38,9) multiplication in this algorithm,
                     // decimal128(38,9) * decimal128(38,9) produces a result of decimal128(38,9). if two numbers are
@@ -823,7 +823,7 @@ public class SimpleExpressionAnalyzer {
             return fn;
         }
 
-        Function getDecimalV3Function(FunctionCallExpr node, Type[] argumentTypes) {
+        public Function getDecimalV3Function(FunctionCallExpr node, Type[] argumentTypes) {
             Function fn;
             String fnName = node.getFnName().getFunction();
             Type commonType = DecimalV3FunctionAnalyzer.normalizeDecimalArgTypes(argumentTypes, fnName);
@@ -891,7 +891,7 @@ public class SimpleExpressionAnalyzer {
                 newFn.setUserVisible(fn.isUserVisible());
 
                 fn = newFn;
-            } else if (FunctionSet.decimalRoundFunctions.contains(fnName)) {
+            } else if (FunctionSet.DECIMAL_ROUND_FUNCTIONS.contains(fnName)) {
                 // Decimal version of truncate/round/round_up_to may change the scale, we need to calculate the scale of the return type
                 // And we need to downgrade to double version if second param is neither int literal nor SlotRef expression
                 List<Type> argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)

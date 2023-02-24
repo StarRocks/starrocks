@@ -70,27 +70,20 @@ public:
 
     DEFINE_VECTORIZED_FN(array_slice);
 
-#define DEFINE_ARRAY_OVERLAP_FN(NAME, LT)                                                               \
-    static StatusOr<ColumnPtr> array_overlap_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayOverlap<LT>::process(context, columns);                                             \
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_overlap(FunctionContext* context, const Columns& columns) {
+        return ArrayOverlap<type>::process(context, columns);
     }
-    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_OVERLAP_FN)
-#undef DEFINE_ARRAY_OVERLAP_FN
 
-#define DEFINE_ARRAY_INTERSECT_FN(NAME, LT)                                                               \
-    static StatusOr<ColumnPtr> array_intersect_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayIntersect<LT>::process(context, columns);                                             \
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_intersect(FunctionContext* context, const Columns& columns) {
+        return ArrayIntersect<type>::process(context, columns);
     }
-    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_INTERSECT_FN)
-#undef DEFINE_ARRAY_INTERSECT_FN
 
-#define DEFINE_ARRAY_SORT_FN(NAME, LT)                                                               \
-    static StatusOr<ColumnPtr> array_sort_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArraySort<LT>::process(context, columns);                                             \
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_sort(FunctionContext* context, const Columns& columns) {
+        return ArraySort<type>::process(context, columns);
     }
-    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SORT_FN)
-    DEFINE_ARRAY_SORT_FN(json, LogicalType::TYPE_JSON)
-#undef DEFINE_ARRAY_SORT_FN
 
 #define DEFINE_ARRAY_SORTBY_FN(NAME, LT)                                                               \
     static StatusOr<ColumnPtr> array_sortby_##NAME(FunctionContext* context, const Columns& columns) { \
@@ -100,70 +93,34 @@ public:
     DEFINE_ARRAY_SORTBY_FN(json, LogicalType::TYPE_JSON)
 #undef DEFINE_ARRAY_SORTBY_FN
 
-#define DEFINE_ARRAY_REVERSE_FN(NAME, LT)                                                               \
-    static StatusOr<ColumnPtr> array_reverse_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayReverse<LT>::process(context, columns);                                             \
-    }
-    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_REVERSE_FN)
-    DEFINE_ARRAY_REVERSE_FN(json, LogicalType::TYPE_JSON)
-#undef DEFINE_ARRAY_REVERSE_FN
-
-#define DEFINE_ARRAY_JOIN_FN(NAME)                                                                   \
-    static StatusOr<ColumnPtr> array_join_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayJoin::process(context, columns);                                                 \
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_reverse(FunctionContext* context, const Columns& columns) {
+        return ArrayReverse<type>::process(context, columns);
     }
 
-    DEFINE_ARRAY_JOIN_FN(varchar);
+    static StatusOr<ColumnPtr> array_join(FunctionContext* context, const Columns& columns) {
+        return ArrayJoin::process(context, columns);
+    }
 
-#undef DEFINE_ARRAY_JOIN_FN
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_sum(FunctionContext* context, const Columns& columns) {
+        return ArrayArithmetic::template array_arithmetic<type, ArithmeticType::SUM>(columns);
+    }
 
-    DEFINE_VECTORIZED_FN(array_sum_boolean);
-    DEFINE_VECTORIZED_FN(array_sum_tinyint);
-    DEFINE_VECTORIZED_FN(array_sum_smallint);
-    DEFINE_VECTORIZED_FN(array_sum_int);
-    DEFINE_VECTORIZED_FN(array_sum_bigint);
-    DEFINE_VECTORIZED_FN(array_sum_largeint);
-    DEFINE_VECTORIZED_FN(array_sum_float);
-    DEFINE_VECTORIZED_FN(array_sum_double);
-    DEFINE_VECTORIZED_FN(array_sum_decimalv2);
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_avg(FunctionContext* context, const Columns& columns) {
+        return ArrayArithmetic::template array_arithmetic<type, ArithmeticType::AVG>(columns);
+    }
 
-    DEFINE_VECTORIZED_FN(array_avg_boolean);
-    DEFINE_VECTORIZED_FN(array_avg_tinyint);
-    DEFINE_VECTORIZED_FN(array_avg_smallint);
-    DEFINE_VECTORIZED_FN(array_avg_int);
-    DEFINE_VECTORIZED_FN(array_avg_bigint);
-    DEFINE_VECTORIZED_FN(array_avg_largeint);
-    DEFINE_VECTORIZED_FN(array_avg_float);
-    DEFINE_VECTORIZED_FN(array_avg_double);
-    DEFINE_VECTORIZED_FN(array_avg_decimalv2);
-    DEFINE_VECTORIZED_FN(array_avg_date);
-    DEFINE_VECTORIZED_FN(array_avg_datetime);
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_min(FunctionContext* context, const Columns& columns) {
+        return ArrayArithmetic::template array_arithmetic<type, ArithmeticType::MIN>(columns);
+    }
 
-    DEFINE_VECTORIZED_FN(array_min_boolean);
-    DEFINE_VECTORIZED_FN(array_min_tinyint);
-    DEFINE_VECTORIZED_FN(array_min_smallint);
-    DEFINE_VECTORIZED_FN(array_min_int);
-    DEFINE_VECTORIZED_FN(array_min_bigint);
-    DEFINE_VECTORIZED_FN(array_min_largeint);
-    DEFINE_VECTORIZED_FN(array_min_float);
-    DEFINE_VECTORIZED_FN(array_min_double);
-    DEFINE_VECTORIZED_FN(array_min_decimalv2);
-    DEFINE_VECTORIZED_FN(array_min_date);
-    DEFINE_VECTORIZED_FN(array_min_datetime);
-    DEFINE_VECTORIZED_FN(array_min_varchar);
-
-    DEFINE_VECTORIZED_FN(array_max_boolean);
-    DEFINE_VECTORIZED_FN(array_max_tinyint);
-    DEFINE_VECTORIZED_FN(array_max_smallint);
-    DEFINE_VECTORIZED_FN(array_max_int);
-    DEFINE_VECTORIZED_FN(array_max_bigint);
-    DEFINE_VECTORIZED_FN(array_max_largeint);
-    DEFINE_VECTORIZED_FN(array_max_float);
-    DEFINE_VECTORIZED_FN(array_max_double);
-    DEFINE_VECTORIZED_FN(array_max_decimalv2);
-    DEFINE_VECTORIZED_FN(array_max_date);
-    DEFINE_VECTORIZED_FN(array_max_datetime);
-    DEFINE_VECTORIZED_FN(array_max_varchar);
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_max(FunctionContext* context, const Columns& columns) {
+        return ArrayArithmetic::template array_arithmetic<type, ArithmeticType::MAX>(columns);
+    }
 
     DEFINE_VECTORIZED_FN(concat);
 
@@ -174,32 +131,6 @@ public:
     DEFINE_VECTORIZED_FN(array_contains_all);
     DEFINE_VECTORIZED_FN(array_map);
     DEFINE_VECTORIZED_FN(array_filter);
-
-    enum ArithmeticType { SUM, AVG, MIN, MAX };
-
-private:
-    template <LogicalType column_type, ArithmeticType type>
-    static StatusOr<ColumnPtr> array_arithmetic(const Columns& columns);
-
-    template <LogicalType column_type, ArithmeticType type>
-    static StatusOr<ColumnPtr> _array_process_not_nullable(const Column* array_column, std::vector<uint8_t>* null_ptr);
-
-    template <LogicalType column_type, bool has_null, ArithmeticType type>
-    static StatusOr<ColumnPtr> _array_process_not_nullable_types(const Column* elements, const UInt32Column& offsets,
-                                                                 const NullColumn::Container* null_elements,
-                                                                 std::vector<uint8_t>* null_ptr);
-
-    template <LogicalType type>
-    static StatusOr<ColumnPtr> array_sum(const Columns& columns);
-
-    template <LogicalType type>
-    static StatusOr<ColumnPtr> array_avg(const Columns& columns);
-
-    template <LogicalType type>
-    static StatusOr<ColumnPtr> array_min(const Columns& columns);
-
-    template <LogicalType type>
-    static StatusOr<ColumnPtr> array_max(const Columns& columns);
 };
 
 } // namespace starrocks
