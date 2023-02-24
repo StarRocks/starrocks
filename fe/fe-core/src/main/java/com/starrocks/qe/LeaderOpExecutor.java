@@ -37,10 +37,12 @@ package com.starrocks.qe;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
@@ -134,9 +136,8 @@ public class LeaderOpExecutor {
 
     // Send request to Leader
     private void forward() throws Exception {
-        String leaderHost = ctx.getGlobalStateMgr().getLeaderIp();
-        int leaderRpcPort = ctx.getGlobalStateMgr().getLeaderRpcPort();
-        TNetworkAddress thriftAddress = new TNetworkAddress(leaderHost, leaderRpcPort);
+        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
+        TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
         TMasterOpRequest params = new TMasterOpRequest();
         params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         params.setSql(originStmt.originStmt);
