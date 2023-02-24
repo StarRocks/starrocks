@@ -118,7 +118,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.RunMode;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
@@ -493,20 +492,6 @@ public class GlobalStateMgr {
 
     private ConfigRefreshDaemon configRefreshDaemon;
 
-    private RunMode runMode = RunMode.SHARED_NOTHING;
-
-    public boolean isSharedNothingMode() {
-        return runMode.equals(RunMode.SHARED_NOTHING);
-    }
-
-    public boolean isSharedDataMode() {
-        return runMode.equals(RunMode.SHARED_DATA);
-    }
-
-    public void setRunMode(RunMode runmode) {
-        this.runMode = runmode;
-    }
-
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -583,6 +568,9 @@ public class GlobalStateMgr {
 
     // if isCkptGlobalState is true, it means that we should not collect thread pool metric
     private GlobalStateMgr(boolean isCkptGlobalState) {
+        if (!isCkptGlobalState) {
+            RunMode.detectRunMode();
+        }
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
@@ -664,17 +652,6 @@ public class GlobalStateMgr {
         this.pluginMgr = new PluginMgr();
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
-
-        if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_DATA.name())) {
-            runMode = RunMode.SHARED_DATA;
-            this.starOSAgent = new StarOSAgent();
-        } else if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_NOTHING.name())) {
-            runMode = RunMode.SHARED_NOTHING;
-        } else {
-            LOG.error("Invalid run_mode config: {}, should be shared_data or shared_nothing", Config.run_mode);
-            System.exit(-1);
-        }
-
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
@@ -994,7 +971,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (isSharedDataMode() && !starOSAgent.init(null)) {
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable() && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -1193,7 +1170,7 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
-        if (isSharedDataMode()) {
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             // register service to starMgr
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
@@ -1260,7 +1237,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
         taskRunStateSynchronizer.start();
 
-        if (isSharedDataMode()) {
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             shardDeleter.start();
         }
     }
@@ -1284,7 +1261,7 @@ public class GlobalStateMgr {
 
         // domain resolver
         domainResolver.start();
-        if (isSharedDataMode()) {
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             compactionManager.start();
         }
         configRefreshDaemon.start();

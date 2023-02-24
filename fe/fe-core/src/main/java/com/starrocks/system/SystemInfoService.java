@@ -67,6 +67,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
@@ -422,7 +423,7 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             // remove worker
-            if (GlobalStateMgr.getCurrentState().isSharedDataMode()) {
+            if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
                 long starletPort = droppedBackend.getStarletPort();
                 // only need to remove worker after be reported its staretPort
                 if (starletPort != 0) {
@@ -1025,7 +1026,7 @@ public class SystemInfoService {
         if (null != cluster) {
             cluster.removeBackend(backend.getId());
             // clear map in starosAgent
-            if (GlobalStateMgr.getCurrentState().isSharedDataMode()) {
+            if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
                 long starletPort = backend.getStarletPort();
                 if (starletPort == 0) {
                     return;
