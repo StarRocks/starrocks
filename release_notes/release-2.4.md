@@ -1,5 +1,38 @@
 # StarRocks version 2.4
 
+## 2.4.4
+
+发布日期：2023 年 2 月 24 日
+
+### 功能优化
+
+- 支持快速取消导入。 [#15514](https://github.com/StarRocks/starrocks/pull/15514) [#15398](https://github.com/StarRocks/starrocks/pull/15398) [#15969](https://github.com/StarRocks/starrocks/pull/15969)
+- 优化了 Compaction 框架的 CPU 使用率。 [#11747](https://github.com/StarRocks/starrocks/pull/11747)
+- 支持对缺失数据版本的 Tablet 进行 Cumulative Compaction。  [#17030](https://github.com/StarRocks/starrocks/pull/17030)
+
+### 问题修复
+
+修复了如下问题：
+
+- 创建动态分区时，指定非法 DATE 值时会导致系统创建大量动态分区。 [#17966](https://github.com/StarRocks/starrocks/pull/17966)
+- 无法使用默认的 HTTPS Port 连接到 Elasticsearch 外部表。 [#13726](https://github.com/StarRocks/starrocks/pull/13726)
+- Stream Load 事务超时后，BE 无法取消事务。 [#15738](https://github.com/StarRocks/starrocks/pull/15738)
+- 单个 BE 上的 Local Shuffle 聚合返回错误查询结果。 [#17845](https://github.com/StarRocks/starrocks/pull/17845)
+- 查询可能会失败，并返回错误消息 “wait_for_version version：failed：apply stopped”。 [#17848](https://github.com/StarRocks/starrocks/pull/17850)
+- OLAP Scan Bucket 表达式未被正确清除，导致返回错误的查询结果。 [#17666](https://github.com/StarRocks/starrocks/pull/17666)
+- Colocate 组内的动态分区表无法修改分桶数，并返回报错信息。 [#17418](https://github.com/StarRocks/starrocks/pull/17418)
+- 连接非 Leader FE 节点，发送请求 `USE <catalog_name>.<database_name>`，非 Leader 节点中将请求转发给 Leader FE 时，没有转发 `catalog_name`，导致 Leader FE 使用 `default_catalog`，因此无法找到对应的 database。 [#17302](https://github.com/StarRocks/starrocks/pull/17302)
+- 执行重写前 dictmapping 检查的逻辑错误。 [#17405](https://github.com/StarRocks/starrocks/pull/17405)
+- 如果 FE 向 BE 发送单次偶发的心跳，心跳连接超时，FE 会认为该 BE 不可用，最终导致该 BE 上的事务运行失败。 [#16386](https://github.com/StarRocks/starrocks/pull/16386)
+- 在 FE follower 上查询新克隆的 Tablet，`get_applied_rowsets` 失败。 [#17192](https://github.com/StarRocks/starrocks/pull/17192)
+- 在 FE follower 上执行 `SET variable = default` 导致空指针（NPE）。 [#17549](https://github.com/StarRocks/starrocks/pull/17549)
+- Projection 中的表达式不会被字典改写。 [#17558](https://github.com/StarRocks/starrocks/pull/17558)
+- 以周为粒度创建动态分区的逻辑错误。 [#17163](https://github.com/StarRocks/starrocks/pull/17163)
+- Local Shuffle 返回错误查询结果。 [#17130](https://github.com/StarRocks/starrocks/pull/17130)
+- 增量克隆可能会失败。 [#16930](https://github.com/StarRocks/starrocks/pull/16930)
+- 在一些情况下，CBO 比较算子是否相等的逻辑发生错误。 [#17199](https://github.com/StarRocks/starrocks/pull/17199) [#17227](https://github.com/StarRocks/starrocks/pull/17227)
+- 未检查和正确解析JuiceFS Schema 导致访问 JuiceFS 失败。 [#16940](https://github.com/StarRocks/starrocks/pull/16940)
+
 ## 2.4.3
 
 发布日期：2023 年 1 月 19 日
