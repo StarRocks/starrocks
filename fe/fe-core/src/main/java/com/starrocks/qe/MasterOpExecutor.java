@@ -26,10 +26,12 @@ import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -111,9 +113,8 @@ public class MasterOpExecutor {
 
     // Send request to Master
     private void forward() throws Exception {
-        String masterHost = ctx.getGlobalStateMgr().getMasterIp();
-        int masterRpcPort = ctx.getGlobalStateMgr().getMasterRpcPort();
-        TNetworkAddress thriftAddress = new TNetworkAddress(masterHost, masterRpcPort);
+        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
+        TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
         TMasterOpRequest params = new TMasterOpRequest();
         params.setCluster(ctx.getClusterName());
         params.setSql(originStmt.originStmt);

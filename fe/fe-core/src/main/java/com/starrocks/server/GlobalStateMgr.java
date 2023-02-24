@@ -2460,12 +2460,12 @@ public class GlobalStateMgr {
         return this.feType;
     }
 
-    public int getMasterRpcPort() {
-        return nodeMgr.getMasterRpcPort();
+    public Pair<String, Integer> getLeaderIpAndRpcPort() {
+        return nodeMgr.getLeaderIpAndRpcPort();
     }
 
-    public int getMasterHttpPort() {
-        return nodeMgr.getMasterHttpPort();
+    public Pair<String, Integer> getLeaderIpAndHttpPort() {
+        return nodeMgr.getLeaderIpAndHttpPort();
     }
 
     public String getMasterIp() {

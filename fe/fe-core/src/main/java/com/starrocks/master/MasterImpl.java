@@ -1202,9 +1202,8 @@ public class MasterImpl {
     }
 
     public TNetworkAddress masterAddr() {
-        String masterHost = GlobalStateMgr.getCurrentState().getMasterIp();
-        int masterRpcPort = GlobalStateMgr.getCurrentState().getMasterRpcPort();
-        return new TNetworkAddress(masterHost, masterRpcPort);
+        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
+        return new TNetworkAddress(ipAndPort.first, ipAndPort.second);
     }
 
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
