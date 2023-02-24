@@ -37,7 +37,7 @@ package com.starrocks.analysis;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
@@ -55,25 +55,25 @@ public class ShowMaterializedViewTest {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.setDatabase("testDb");
 
-        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("");
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("");
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("testDb", stmt.getDb());
-        checkShowMaterializedViewStmt(stmt);
+        checkShowMaterializedViewsStmt(stmt);
 
-        stmt = new ShowMaterializedViewStmt("abc", (String) null);
+        stmt = new ShowMaterializedViewsStmt("abc", (String) null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("abc", stmt.getDb());
-        checkShowMaterializedViewStmt(stmt);
+        checkShowMaterializedViewsStmt(stmt);
 
-        stmt = new ShowMaterializedViewStmt("abc", "bcd");
+        stmt = new ShowMaterializedViewsStmt("abc", "bcd");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("bcd", stmt.getPattern());
         Assert.assertEquals("abc", stmt.getDb());
-        checkShowMaterializedViewStmt(stmt);
+        checkShowMaterializedViewsStmt(stmt);
 
-        stmt = (ShowMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
-                "SHOW MATERIALIZED VIEW FROM abc where name = 'mv1';", ctx);
+        stmt = (ShowMaterializedViewsStmt) UtFrameUtils.parseStmtWithNewParser(
+                "SHOW MATERIALIZED VIEWS FROM abc where name = 'mv1';", ctx);
         Assert.assertEquals("abc", stmt.getDb());
         Assert.assertEquals(
                 "SELECT information_schema.materialized_views.MATERIALIZED_VIEW_ID AS id, " +
@@ -92,10 +92,10 @@ public class ShowMaterializedViewTest {
                         "FROM information_schema.materialized_views " +
                         "WHERE information_schema.materialized_views.TABLE_NAME = 'mv1'",
                 AstToStringBuilder.toString(stmt.toSelectStmt()));
-        checkShowMaterializedViewStmt(stmt);
+        checkShowMaterializedViewsStmt(stmt);
     }
 
-    private void checkShowMaterializedViewStmt(ShowMaterializedViewStmt stmt) {
+    private void checkShowMaterializedViewsStmt(ShowMaterializedViewsStmt stmt) {
         Assert.assertEquals(13, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("name", stmt.getMetaData().getColumn(1).getName());
@@ -115,7 +115,7 @@ public class ShowMaterializedViewTest {
     @Test(expected = SemanticException.class)
     public void testNoDb() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("");
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws");
     }
