@@ -18,6 +18,7 @@
 
 namespace starrocks::pipeline {
 
+/// ExceptContext.
 Status ExceptContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs) {
     _build_pool = std::make_unique<MemPool>();
 
@@ -39,15 +40,34 @@ void ExceptContext::close(RuntimeState* state) {
     }
 }
 
+void ExceptContext::incr_prober(size_t factory_idx) {
+    ++_num_probers_per_factory[factory_idx];
+}
+void ExceptContext::finish_probe_ht(size_t factory_idx) {
+    ++_num_finished_probers_per_factory[factory_idx];
+}
+
+bool ExceptContext::is_build_finished() const {
+    return _is_build_finished;
+}
+bool ExceptContext::is_probe_finished() const {
+    for (int i = 0; i < _num_probers_per_factory.size(); ++i) {
+        if (_num_probers_per_factory[i] == 0 || _num_finished_probers_per_factory[i] < _num_probers_per_factory[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 Status ExceptContext::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk,
-                                         const std::vector<ExprContext*>& dst_exprs) {
-    TRY_CATCH_BAD_ALLOC(_hash_set->build_set(state, chunk, dst_exprs, _build_pool.get()));
+                                         const std::vector<ExprContext*>& dst_exprs, ExceptBufferState* buffer_state) {
+    TRY_CATCH_BAD_ALLOC(_hash_set->build_set(state, chunk, dst_exprs, _build_pool.get(), buffer_state));
     return Status::OK();
 }
 
 Status ExceptContext::erase_chunk_from_ht(RuntimeState* state, const ChunkPtr& chunk,
-                                          const std::vector<ExprContext*>& dst_exprs) {
-    return _hash_set->erase_duplicate_row(state, chunk, dst_exprs);
+                                          const std::vector<ExprContext*>& dst_exprs, ExceptBufferState* buffer_state) {
+    return _hash_set->erase_duplicate_row(state, chunk, dst_exprs, buffer_state);
 }
 
 StatusOr<ChunkPtr> ExceptContext::pull_chunk(RuntimeState* state) {
@@ -81,6 +101,11 @@ StatusOr<ChunkPtr> ExceptContext::pull_chunk(RuntimeState* state) {
     }
 
     return std::move(dst_chunk);
+}
+
+/// ExceptPartitionContextFactory.
+ExceptContextPtr ExceptPartitionContextFactory::get(const int partition_id) {
+    return _partition_id2ctx[partition_id % _partition_id2ctx.size()];
 }
 
 } // namespace starrocks::pipeline
