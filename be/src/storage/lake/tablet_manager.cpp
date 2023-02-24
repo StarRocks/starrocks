@@ -402,6 +402,7 @@ Status TabletManager::put_txn_log(TxnLogPtr log) {
     }
     auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     auto txn_log_path = txn_log_location(log->tablet_id(), log->txn_id());
+    VLOG(5) << "Writing " << txn_log_path;
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(options, txn_log_path));
     RETURN_IF_ERROR(wf->append(log->SerializeAsString()));
     RETURN_IF_ERROR(wf->close());
@@ -653,7 +654,15 @@ Status TabletManager::publish_log_version(int64_t tablet_id, int64_t txn_id, int
     // TODO: use rename() API if supported by the underlying filesystem.
     auto st = fs::copy_file(txn_log_path, txn_vlog_path);
     if (st.is_not_found()) {
-        return fs::path_exist(txn_vlog_path) ? Status::OK() : st;
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
+        auto check_st = fs->path_exists(txn_vlog_path);
+        if (check_st.ok()) {
+            return Status::OK();
+        } else {
+            LOG_IF(WARNING, !check_st.is_not_found())
+                    << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
+            return st;
+        }
     } else if (!st.ok()) {
         return st;
     } else {
