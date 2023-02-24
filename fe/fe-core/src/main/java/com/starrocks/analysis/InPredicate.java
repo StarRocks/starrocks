@@ -89,6 +89,7 @@ public class InPredicate extends Predicate {
     }
 
     public InPredicate(Expr compareExpr, Expr subquery, boolean isNotIn, NodePosition pos) {
+        super(pos);
         Preconditions.checkNotNull(compareExpr);
         Preconditions.checkNotNull(subquery);
         children.add(compareExpr);
