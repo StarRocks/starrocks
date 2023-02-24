@@ -43,6 +43,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 /*
  * Version 2 of AlterJob, for replacing the old version of AlterJob.
@@ -301,6 +302,7 @@ public abstract class AlterJobV2 implements Writable {
         timeoutMs = in.readLong();
     }
 
+<<<<<<< HEAD
     /**
      * Schema change will build a new MaterializedIndexMeta, we need rebuild it(add extra original meta)
      * into it from original index meta. Otherwise, some necessary metas will be lost after fe restart.
@@ -320,4 +322,7 @@ public abstract class AlterJobV2 implements Writable {
             }
         }
     }
+=======
+    public abstract Optional<Long> getTransactionId();
+>>>>>>> ec453a2f18 ([BugFix] Make DatabaseTransactionMgr.getMinActiveTxnId() thread safe (#18414))
 }
