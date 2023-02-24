@@ -42,7 +42,7 @@ private:
     Status init_global_dicts(vectorized::TabletReaderParams* params);
     Status init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status init_scanner_columns(std::vector<uint32_t>& scanner_columns);
-    void decide_chunk_size();
+    void decide_chunk_size(bool has_predicate);
     Status init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                               const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     Status init_tablet_reader(RuntimeState* state);
@@ -320,8 +320,8 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
     return Status::OK();
 }
 
-void LakeDataSource::decide_chunk_size() {
-    if (_read_limit != -1 && _read_limit < _runtime_state->chunk_size()) {
+void LakeDataSource::decide_chunk_size(bool has_predicate) {
+    if (!has_predicate && _read_limit != -1 && _read_limit < _runtime_state->chunk_size()) {
         // Improve for select * from table limit x, x is small
         _params.chunk_size = _read_limit;
     } else {
@@ -340,7 +340,6 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache;
-    decide_chunk_size();
 
     PredicateParser parser(*_tablet_schema);
     std::vector<PredicatePtr> preds;
