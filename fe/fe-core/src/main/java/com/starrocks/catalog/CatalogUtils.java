@@ -98,15 +98,16 @@ public class CatalogUtils {
     }
 
     public static void checkPartitionValuesExistForReplaceListPartition(ListPartitionInfo listPartitionInfo,
-                                                                        Partition partition)
+                                                                        Partition tempPartition)
             throws DdlException {
         try {
             List<Long> partitionIds = listPartitionInfo.getPartitionIds(false);
             Map<Long, List<LiteralExpr>> literalExprValues = listPartitionInfo.getLiteralExprValues();
             Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = listPartitionInfo.getMultiLiteralExprValues();
 
-            List<LiteralExpr> literalExprs = listPartitionInfo.getLiteralExprValues().get(partition.getId());
-            List<List<LiteralExpr>> multiLiteral = listPartitionInfo.getMultiLiteralExprValues().get(partition.getId());
+            List<LiteralExpr> tempLiteralExpr = listPartitionInfo.getLiteralExprValues().get(tempPartition.getId());
+            List<List<LiteralExpr>> tempMultiLiteralExpr
+                    = listPartitionInfo.getMultiLiteralExprValues().get(tempPartition.getId());
             if (!literalExprValues.isEmpty()) {
                 listPartitionInfo.setBatchLiteralExprValues(listPartitionInfo.getIdToValues());
                 List<LiteralExpr> allLiteralExprValues = Lists.newArrayList();
@@ -115,11 +116,11 @@ public class CatalogUtils {
                         allLiteralExprValues.addAll(v);
                     }
                 });
-                if (literalExprs != null) {
-                    for (LiteralExpr item : literalExprs) {
+                if (tempLiteralExpr != null) {
+                    for (LiteralExpr item : tempLiteralExpr) {
                         for (LiteralExpr value : allLiteralExprValues) {
-                            if (item.getStringValue().equals(value.getStringValue())) {
-                                throw new DdlException("Duplicate partition value %s");
+                            if (!item.getStringValue().equals(value.getStringValue())) {
+                                throw new DdlException("partition value %s not exist");
                             }
                         }
                     }
@@ -132,26 +133,36 @@ public class CatalogUtils {
                         allMultiLiteralExprValues.addAll(v);
                     }
                 });
-
-                int partitionColSize = listPartitionInfo.getPartitionColumns().size();
-                for (List<LiteralExpr> itemExpr : multiLiteral) {
-                    for (List<LiteralExpr> valueExpr : allMultiLiteralExprValues) {
-                        int duplicatedSize = 0;
-                        for (int i = 0; i < itemExpr.size(); i++) {
-                            String itemValue = itemExpr.get(i).getStringValue();
-                            String value = valueExpr.get(i).getStringValue();
-                            if (value.equals(itemValue)) {
-                                duplicatedSize++;
-                            }
-                        }
-                        if (duplicatedSize == partitionColSize) {
-                            List<String> msg = itemExpr.stream()
-                                    .map(value -> ("\"" + value.getStringValue() + "\""))
-                                    .collect(Collectors.toList());
-                            throw new DdlException("Duplicate values " +
-                                    "(" + String.join(",", msg) + ") ");
+                List<String> tempPartitionValueList = new ArrayList<>();
+                for (List<LiteralExpr> tempItemExpr : tempMultiLiteralExpr) {
+                    for (LiteralExpr literalExpr : tempItemExpr) {
+                        tempPartitionValueList.add("\"" + literalExpr.getStringValue() + "\"");
+                    }
+                }
+                boolean partitionValueExists = false;
+                String tempPartitionValues = String.join(",", tempPartitionValueList);
+                for (List<LiteralExpr> valueExpr : allMultiLiteralExprValues) {
+                    List<String> targetPartitionValueList = new ArrayList<>();
+                    for (LiteralExpr literalExpr : valueExpr) {
+                        targetPartitionValueList.add("\"" + literalExpr.getStringValue() + "\"");
+                    }
+                    String targetPartitionValues = String.join(",", targetPartitionValueList);
+                    if (!targetPartitionValues.equals(tempPartitionValues)) {
+                        continue;
+                    }
+                    int checkNum = 0;
+                    for (int i = 0; i < targetPartitionValueList.size(); i++) {
+                        if (targetPartitionValueList.get(i).equals(tempPartitionValueList.get(i))) {
+                            checkNum++;
                         }
                     }
+                    if (checkNum == targetPartitionValueList.size()) {
+                        partitionValueExists = true;
+                        break;
+                    }
+                }
+                if (!partitionValueExists) {
+                    throw new DdlException("partition values " + "(" + tempPartitionValues + ") not exist ");
                 }
             }
         } catch (AnalysisException e) {
