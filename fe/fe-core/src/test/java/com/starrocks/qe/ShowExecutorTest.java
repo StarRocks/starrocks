@@ -64,7 +64,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.PatternMatcher;
-import com.starrocks.common.RunMode;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
@@ -73,6 +72,7 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
@@ -86,7 +86,7 @@ import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
-import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
@@ -767,7 +767,13 @@ public class ShowExecutorTest {
             }
         };
 
-        globalStateMgr.setRunMode(RunMode.SHARED_DATA);
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
 
         ShowBackendsStmt stmt = new ShowBackendsStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -785,8 +791,6 @@ public class ShowExecutorTest {
         Assert.assertEquals("1", resultSet.getString(0));
         Assert.assertEquals("0", resultSet.getString(23));
         Assert.assertEquals("5", resultSet.getString(27));
-
-        globalStateMgr.setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
@@ -816,8 +820,12 @@ public class ShowExecutorTest {
             }
         };
 
-
-        globalStateMgr.setRunMode(RunMode.SHARED_DATA);
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
 
         ShowComputeNodesStmt stmt = new ShowComputeNodesStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -834,8 +842,6 @@ public class ShowExecutorTest {
         Assert.assertEquals("10", resultSet.getString(14));
         Assert.assertEquals("1.00 %", resultSet.getString(15));
         Assert.assertEquals("3.0 %", resultSet.getString(16));
-
-        globalStateMgr.setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
@@ -946,7 +952,7 @@ public class ShowExecutorTest {
     @Test
     public void testShowMaterializedView() throws AnalysisException, DdlException {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("testDb", (String) null);
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("testDb", (String) null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         verifyShowMaterializedViewResult(resultSet);
@@ -954,7 +960,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowMaterializedViewFromUnknownDatabase() throws DdlException, AnalysisException {
-        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("emptyDb", (String) null);
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("emptyDb", (String) null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         expectedEx.expect(AnalysisException.class);
         expectedEx.expectMessage("Unknown database 'emptyDb'");
@@ -964,12 +970,12 @@ public class ShowExecutorTest {
     @Test
     public void testShowMaterializedViewPattern() throws AnalysisException, DdlException {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("testDb", "bcd%");
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("testDb", "bcd%");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         Assert.assertFalse(resultSet.next());
 
-        stmt = new ShowMaterializedViewStmt("testDb", "%test%");
+        stmt = new ShowMaterializedViewsStmt("testDb", "%test%");
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
         verifyShowMaterializedViewResult(resultSet);

@@ -311,7 +311,7 @@ import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
-import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowOpenTableStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
@@ -437,9 +437,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitUseCatalogStatement(StarRocksParser.UseCatalogStatementContext context) {
-        Identifier identifier = (Identifier) visit(context.identifierOrString());
-        String catalogName = identifier.getValue();
-        return new UseCatalogStmt(catalogName);
+        StringLiteral literal = (StringLiteral) visit(context.string());
+        return new UseCatalogStmt(literal.getValue());
     }
 
     @Override
@@ -1295,18 +1294,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowMaterializedViewStatement(StarRocksParser.ShowMaterializedViewStatementContext context) {
+    public ParseNode visitShowMaterializedViewsStatement(StarRocksParser.ShowMaterializedViewsStatementContext context) {
         String database = null;
         if (context.qualifiedName() != null) {
             database = getQualifiedName(context.qualifiedName()).toString();
         }
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            return new ShowMaterializedViewStmt(database, stringLiteral.getValue());
+            return new ShowMaterializedViewsStmt(database, stringLiteral.getValue());
         } else if (context.expression() != null) {
-            return new ShowMaterializedViewStmt(database, (Expr) visit(context.expression()));
+            return new ShowMaterializedViewsStmt(database, (Expr) visit(context.expression()));
         } else {
-            return new ShowMaterializedViewStmt(database);
+            return new ShowMaterializedViewsStmt(database);
         }
     }
 
@@ -4726,7 +4725,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private static List<Expr> getArgumentsForTimeSlice(Expr time, Expr value, String ident, String boundary) {
         List<Expr> exprs = Lists.newLinkedList();
         exprs.add(time);
-        exprs.add(value);
+        // IntLiteral may use TINYINT/SMALLINT/INT/BIGINT type
+        // but time_slice only support INT type when executed in BE
+        if (value instanceof IntLiteral) {
+            exprs.add(new IntLiteral(((IntLiteral) value).getValue(), Type.INT));
+        } else {
+            exprs.add(value);
+        }
         exprs.add(new StringLiteral(ident));
         exprs.add(new StringLiteral(boundary));
 

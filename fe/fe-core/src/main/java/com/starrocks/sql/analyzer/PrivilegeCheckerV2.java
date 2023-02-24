@@ -152,7 +152,7 @@ import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
-import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
@@ -813,13 +813,14 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+            String catalogName = statement.getCatalogName();
             // No authorization check for using default_catalog
-            if (CatalogMgr.isInternalCatalog(statement.getCatalogName())) {
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
                 return null;
             }
-            if (!PrivilegeActions.checkAnyActionOnCatalog(context, statement.getCatalogName())) {
+            if (!PrivilegeActions.checkAnyActionOnCatalog(context, catalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
-                        context.getQualifiedUser(), statement.getCatalogName());
+                        context.getQualifiedUser(), catalogName);
             }
             return null;
         }
@@ -1714,8 +1715,8 @@ public class PrivilegeCheckerV2 {
         }
 
         @Override
-        public Void visitShowMaterializedViewStatement(ShowMaterializedViewStmt statement, ConnectContext context) {
-            // `show Materialized View` show tables user (has select privilege & show mv user has any privilege),
+        public Void visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext context) {
+            // `show Materialized Views` show tables user (has select privilege & show mv user has any privilege),
             // we will check it in the execution logic, not here,
             // see `ShowExecutor#handleShowMaterializedView()` for details.
             return null;

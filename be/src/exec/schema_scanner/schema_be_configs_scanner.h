@@ -12,9 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.common;
+#pragma once
 
-public enum RunMode {
-    SHARED_DATA,
-    SHARED_NOTHING;
-}
+#include <cstdint>
+
+#include "exec/schema_scanner.h"
+#include "gen_cpp/FrontendService_types.h"
+
+namespace starrocks {
+
+class SchemaBeConfigsScanner : public SchemaScanner {
+public:
+    SchemaBeConfigsScanner();
+    ~SchemaBeConfigsScanner() override;
+
+    Status start(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
+
+private:
+    Status fill_chunk(ChunkPtr* chunk);
+
+    int64_t _be_id{0};
+    std::vector<std::pair<std::string, std::string>> _infos;
+    size_t _cur_idx{0};
+    static SchemaScanner::ColumnDesc _s_columns[];
+};
+
+} // namespace starrocks
