@@ -81,7 +81,10 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 | enable_collect_full_statistic         | BOOLEAN  | TRUE       | 是否开启自动全量统计信息采集。该参数默认打开。               |
 | statistic_collect_interval_sec        | LONG     | 300        | 自动定期任务中，检测数据更新的间隔，默认 5 分钟。单位：秒。  |
 | statistic_auto_collect_ratio          | FLOAT    | 0.8        | 自动统计信息的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动采集。 |
-| statistics_max_full_collect_data_size | INT      | 100        | 自动统计信息采集的最大分区的大小。单位：GB。如果某个分区超过该值，则放弃全量统计信息采集，转为对该表进行抽样采集。 |
+| statistics_max_full_collect_data_size | LONG     | 107374182400 | 自动统计信息采集的最大分区的大小。单位：Byte。如果某个分区超过该值，则放弃全量统计信息采集，转为对该表进行抽样采集。 |
+| statistic_collect_max_row_count_per_query | LONG | 5000000000   | 统计信息采集单次最多查询的数据行数。统计信息任务会按照该配置自动拆分为多次任务执行。 |
+| statistic_auto_analyze_start_time | STRING     | 00:00:00        | 用于配置自动全量采集的起始时间。取值范围：`00:00:00` ~ `23:59:59`。|
+| statistic_auto_analyze_end_time | STRING     | 23:59:59        | 用于配置自动全量采集的结束时间。取值范围：`00:00:00` ~ `23:59:59`。|
 
 ### 手动采集
 
@@ -389,7 +392,8 @@ KILL ANALYZE <ID>;
 | enable_statistic_collect             | BOOLEAN  | TRUE       | 是否采集统计信息。该参数默认打开。                           |
 | enable_collect_full_statistic        | BOOLEAN  | TRUE       | 是否开启自动全量统计信息采集。该参数默认打开。               |
 | statistic_auto_collect_ratio         | FLOAT    | 0.8        | 自动统计信息的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动采集。 |
-| statistic_max_full_collect_data_size | LONG     | 100        | 自动统计信息采集的最大分区大小。单位：GB。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。 |
+| statistic_max_full_collect_data_size | LONG     | 107374182400  | 自动统计信息采集的最大分区大小。单位：Byte。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。 |
+| statistic_collect_max_row_count_per_query | LONG | 5000000000   | 统计信息采集单次最多查询的数据行数。统计信息任务会按照该配置自动拆分为多次任务执行。 |
 | statistic_collect_interval_sec       | LONG     | 300        | 自动定期任务中，检测数据更新的间隔时间，默认为 5 分钟。单位：秒。 |
 | statistic_sample_collect_rows        | LONG     | 200000     | 最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。<br>如果参数取值超过了实际的表行数，默认进行全量采集。 |
 | statistic_collect_concurrency        | INT      | 3          | 手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。<br>超出的任务处于 PENDING 状态，等待调度。|
