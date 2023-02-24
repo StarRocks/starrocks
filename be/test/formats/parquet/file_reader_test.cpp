@@ -29,7 +29,7 @@ public:
     void SetUp() override {}
     void TearDown() override {}
 
-private:
+protected:
     std::unique_ptr<RandomAccessFile> _create_file(const std::string& file_path);
 
     HdfsScannerContext* _create_scan_context();
@@ -1011,6 +1011,67 @@ TEST_F(FileReaderTest, TestReadStructUpperColumns) {
     Slice s = char_col->get(0).get_slice();
     std::string res(s.data, s.size);
     EXPECT_EQ(res, "C");
+}
+
+TEST_F(FileReaderTest, TestTwoNestedLevelArray) {
+    // format:
+    // id: INT, b: ARRAY<ARRAY<INT>>
+    const std::string filepath = "./be/test/exec/test_data/parquet_data/two_level_nested_array.parquet";
+    auto file = _create_file(filepath);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(filepath));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_int = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+
+    TypeDescriptor type_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
+
+    TypeDescriptor type_array_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
+    type_array_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+    type_array.children.emplace_back(type_array_array);
+
+
+    SlotDesc slot_descs[] = {
+            {"id", type_int},
+            {"b", type_array},
+            {""},
+    };
+
+    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<vectorized::Chunk>();
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_int, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_array, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+
+    chunk->check_or_die();
+
+    EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
+    EXPECT_EQ("[2, [NULL]]", chunk->debug_row(1));
+    EXPECT_EQ("[3, [NULL, NULL, NULL]]", chunk->debug_row(2));
+    EXPECT_EQ("[4, [[1, 2, 3, 4], NULL, [1, 2, 3, 4]]]", chunk->debug_row(3));
+    EXPECT_EQ("[5, [[1, 2, 3, 4, 5]]]", chunk->debug_row(4));
+
+    {
+        while (!status.is_end_of_file()) {
+            chunk->reset();
+            status = file_reader->get_next(&chunk);
+            chunk->check_or_die();
+        }
+    }
 }
 
 } // namespace starrocks::parquet
