@@ -1621,37 +1621,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateRoutineLoadStatement(StarRocksParser.CreateRoutineLoadStatementContext context) {
-        QualifiedName dbName = null;
-        if (context.db != null) {
-            dbName = getQualifiedName(context.db);
-        }
-
         QualifiedName tableName = null;
         if (context.table != null) {
             tableName = getQualifiedName(context.table);
         }
 
-        String name = ((Identifier) visit(context.name)).getValue();
         List<StarRocksParser.LoadPropertiesContext> loadPropertiesContexts = context.loadProperties();
         List<ParseNode> loadPropertyList = getLoadPropertyList(loadPropertiesContexts);
         String typeName = context.source.getText();
         Map<String, String> jobProperties = getJobProperties(context.jobProperties());
         Map<String, String> dataSourceProperties = getDataSourceProperties(context.dataSourceProperties());
 
-        return new CreateRoutineLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
+        return new CreateRoutineLoadStmt(createLabelName(context.db, context.name),
                 tableName == null ? null : tableName.toString(), loadPropertyList, jobProperties, typeName,
                 dataSourceProperties, createPos(context));
     }
 
     @Override
     public ParseNode visitAlterRoutineLoadStatement(StarRocksParser.AlterRoutineLoadStatementContext context) {
-        QualifiedName dbName = null;
-        if (context.db != null) {
-            dbName = getQualifiedName(context.db);
-        }
         NodePosition pos = createPos(context);
-
-        String name = getIdentifierName(context.name);
         List<StarRocksParser.LoadPropertiesContext> loadPropertiesContexts = context.loadProperties();
         List<ParseNode> loadPropertyList = getLoadPropertyList(loadPropertiesContexts);
         Map<String, String> jobProperties = getJobProperties(context.jobProperties());
@@ -1662,26 +1650,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     getDataSourceProperties(context.dataSource().dataSourceProperties());
             RoutineLoadDataSourceProperties dataSource =
                     new RoutineLoadDataSourceProperties(typeName, dataSourceProperties, createPos(context.dataSource()));
-            return new AlterRoutineLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
+            return new AlterRoutineLoadStmt(createLabelName(context.db, context.name),
                     loadPropertyList, jobProperties, dataSource, pos);
         }
 
-        return new AlterRoutineLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
-                loadPropertyList, jobProperties, new RoutineLoadDataSourceProperties(), pos);
+        return new AlterRoutineLoadStmt(createLabelName(context.db, context.name), loadPropertyList, jobProperties,
+                new RoutineLoadDataSourceProperties(), pos);
     }
 
     @Override
     public ParseNode visitAlterLoadStatement(StarRocksParser.AlterLoadStatementContext context) {
-        QualifiedName dbName = null;
-        if (context.db != null) {
-            dbName = getQualifiedName(context.db);
-        }
-
-        String name = ((Identifier) visit(context.name)).getValue();
         Map<String, String> jobProperties = getJobProperties(context.jobProperties());
 
-        return new AlterLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
-                jobProperties, createPos(context));
+        return new AlterLoadStmt(createLabelName(context.db, context.name), jobProperties, createPos(context));
     }
 
     @Override
@@ -1703,13 +1684,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowRoutineLoadStatement(StarRocksParser.ShowRoutineLoadStatementContext context) {
         boolean isVerbose = context.ALL() != null;
         String database = null;
-        if (context.db != null) {
-            database = getQualifiedName(context.db).toString();
-        }
-        String name = null;
-        if (context.name != null) {
-            name = getIdentifierName(context.name);
-        }
         Expr where = null;
         if (context.expression() != null) {
             where = (Expr) visit(context.expression());
@@ -1723,8 +1697,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.limitElement() != null) {
             limitElement = (LimitElement) visit(context.limitElement());
         }
-        return new ShowRoutineLoadStmt(new LabelName(database, name), isVerbose, where, orderByElements, limitElement,
-                createPos(context));
+        return new ShowRoutineLoadStmt(createLabelName(context.db, context.name), isVerbose, where, orderByElements,
+                limitElement, createPos(context));
     }
 
     @Override
@@ -1745,13 +1719,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowStreamLoadStatement(StarRocksParser.ShowStreamLoadStatementContext context) {
         boolean isVerbose = context.ALL() != null;
         String database = null;
-        if (context.db != null) {
-            database = getQualifiedName(context.db).toString();
-        }
-        String name = null;
-        if (context.name != null) {
-            name = getIdentifierName(context.name);
-        }
         Expr where = null;
         if (context.expression() != null) {
             where = (Expr) visit(context.expression());
@@ -1765,8 +1732,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.limitElement() != null) {
             limitElement = (LimitElement) visit(context.limitElement());
         }
-        return new ShowStreamLoadStmt(new LabelName(database, name), isVerbose, where, orderByElements, limitElement,
-                createPos(context));
+        return new ShowStreamLoadStmt(createLabelName(context.db, context.name), isVerbose, where, orderByElements,
+                limitElement, createPos(context));
     }
 
     // ------------------------------------------- Admin Statement -----------------------------------------------------
@@ -1832,8 +1799,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             stop = context.partitionNames().stop;
             partitionNames = (PartitionNames) visit(context.partitionNames());
         }
-        return new AdminShowReplicaStatusStmt(new TableRef(targetTableName, null,
-                partitionNames, createPos(start, stop)),
+        return new AdminShowReplicaStatusStmt(
+                new TableRef(targetTableName, null, partitionNames, createPos(start, stop)),
                 where,
                 createPos(context));
     }
@@ -1865,8 +1832,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             stop = context.partitionNames().stop;
             partitionNames = (PartitionNames) visit(context.partitionNames());
         }
-        return new AdminCancelRepairTableStmt(new TableRef(targetTableName, null,
-                partitionNames, createPos(start, stop)),
+        return new AdminCancelRepairTableStmt(
+                new TableRef(targetTableName, null, partitionNames, createPos(start, stop)),
                 createPos(context));
     }
 
@@ -5070,6 +5037,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitIntegerValue(StarRocksParser.IntegerValueContext context) {
+        NodePosition pos = createPos(context);
         try {
             BigInteger intLiteral = new BigInteger(context.getText());
             // Note: val is positive, because we do not recognize minus character in 'IntegerLiteral'
@@ -5079,10 +5047,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             } else if (intLiteral.compareTo(LARGEINT_MAX_ABS) <= 0) {
                 return new LargeIntLiteral(intLiteral.toString());
             } else {
-                throw new ParsingException(PARSER_ERROR_MSG.numOverflow(context.getText()));
+                throw new ParsingException(PARSER_ERROR_MSG.numOverflow(context.getText()), pos);
             }
         } catch (NumberFormatException | AnalysisException e) {
-            throw new ParsingException(PARSER_ERROR_MSG.invalidNumFormat(context.getText()));
+            throw new ParsingException(PARSER_ERROR_MSG.invalidNumFormat(context.getText()), pos);
         }
     }
 
