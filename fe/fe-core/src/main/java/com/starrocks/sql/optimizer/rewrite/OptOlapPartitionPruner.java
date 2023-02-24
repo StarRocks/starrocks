@@ -220,8 +220,6 @@ public class OptOlapPartitionPruner {
                 }
                 partitionIds.add(part.getId());
             }
-        } else {
-            partitionIds = listPartitionInfo.getPartitionIds(false);
         }
 
         if (literalExprValuesMap != null && literalExprValuesMap.size() > 0) {
@@ -268,7 +266,7 @@ public class OptOlapPartitionPruner {
 
         List<ScalarOperator> scalarOperatorList = Utils.extractConjuncts(operator.getPredicate());
         PartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
-                columnToNullPartitions, scalarOperatorList);
+                columnToNullPartitions, scalarOperatorList, partitionIds);
         try {
             List<Long> prune = partitionPruner.prune();
             if (prune == null && isTemporaryPartitionPrune)  {

@@ -77,15 +77,17 @@ public class ListPartitionPruner implements PartitionPruner {
 
     private final Set<Long> allPartitions;
     private final List<ColumnRefOperator> partitionColumnRefs;
+    private final List<Long> specifyPartitionIds;
 
     public ListPartitionPruner(Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
                                Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
-                               List<ScalarOperator> partitionConjuncts) {
+                               List<ScalarOperator> partitionConjuncts, List<Long> specifyPartitionIds) {
         this.columnToPartitionValuesMap = columnToPartitionValuesMap;
         this.columnToNullPartitions = columnToNullPartitions;
         this.partitionConjuncts = partitionConjuncts;
         this.allPartitions = getAllPartitions();
         this.partitionColumnRefs = getPartitionColumnRefs();
+        this.specifyPartitionIds = specifyPartitionIds;
     }
 
     private Set<Long> getAllPartitions() {
@@ -126,10 +128,13 @@ public class ListPartitionPruner implements PartitionPruner {
         Preconditions.checkNotNull(columnToNullPartitions);
         Preconditions.checkArgument(columnToPartitionValuesMap.size() == columnToNullPartitions.size());
         Preconditions.checkNotNull(partitionConjuncts);
-        if (columnToPartitionValuesMap.isEmpty() && columnToNullPartitions.isEmpty()) {
+        if (columnToPartitionValuesMap.isEmpty()) {
             // no partition columns, notEvalConjuncts is same with conjuncts
             noEvalConjuncts.addAll(partitionConjuncts);
             return null;
+        }
+        if (specifyPartitionIds != null && !specifyPartitionIds.isEmpty()) {
+            return specifyPartitionIds;
         }
         if (partitionConjuncts.isEmpty()) {
             // no conjuncts, notEvalConjuncts is empty
