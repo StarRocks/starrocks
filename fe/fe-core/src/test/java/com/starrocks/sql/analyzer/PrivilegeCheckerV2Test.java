@@ -393,21 +393,21 @@ public class PrivilegeCheckerV2Test {
         // Anyone can use default_catalog, but can't use other external catalog without any action on it
         ctxToTestUser();
         PrivilegeCheckerV2.check(
-                UtFrameUtils.parseStmtWithNewParser("use catalog default_catalog", ctx), ctx);
+                UtFrameUtils.parseStmtWithNewParser("use 'catalog default_catalog'", ctx), ctx);
         try {
             PrivilegeCheckerV2.check(
-                    UtFrameUtils.parseStmtWithNewParser("use catalog test_ex_catalog", ctx), ctx);
+                    UtFrameUtils.parseStmtWithNewParser("use 'catalog test_ex_catalog'", ctx), ctx);
         } catch (SemanticException e) {
             Assert.assertTrue(e.getMessage().contains(
                     "Access denied for user 'test' to catalog"));
         }
         verifyGrantRevoke(
-                "use catalog test_ex_catalog",
+                "use 'catalog test_ex_catalog'",
                 "grant USAGE on catalog test_ex_catalog to test",
                 "revoke USAGE on catalog test_ex_catalog from test",
                 "Access denied for user 'test' to catalog");
         verifyGrantRevoke(
-                "use catalog test_ex_catalog",
+                "use 'catalog test_ex_catalog'",
                 "grant DROP on catalog test_ex_catalog to test",
                 "revoke DROP on catalog test_ex_catalog from test",
                 "Access denied for user 'test' to catalog");
