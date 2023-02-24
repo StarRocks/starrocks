@@ -20,6 +20,8 @@
 namespace starrocks {
 
 class ColumnPredicate;
+class PTabletReaderMultiGetRequest;
+class PTabletReaderMultiGetResult;
 
 // A tablet reader supports multiple get and scan snapshot reads
 // this class is used for remote accessible TableReader, do not confuse with TabletReader
@@ -36,6 +38,10 @@ public:
                      Chunk& values);
 
     // for detail document, see TableReader::scan
+    Status multi_get(const Chunk& keys, const std::vector<uint32_t>& value_column_ids, std::vector<bool>& found,
+                     Chunk& values);
+
+    // for detail document, see TableReader::scan
     StatusOr<ChunkIteratorPtr> scan(const std::vector<std::string>& value_columns,
                                     const std::vector<const ColumnPredicate*>& predicates);
 
@@ -43,6 +49,8 @@ private:
     TabletSharedPtr _tablet;
     int64_t _version{0};
 };
+
+Status handle_tablet_multi_get_rpc(const PTabletReaderMultiGetRequest& request, PTabletReaderMultiGetResult& result);
 
 // Manage remotely opened LocalTabletReaders
 class LocalTabletReaderManager {

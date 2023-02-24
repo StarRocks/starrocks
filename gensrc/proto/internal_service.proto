@@ -273,12 +273,10 @@ message PTabletReaderOpenRequest {
 
 message PTabletReaderOpenResult {
     optional StatusPB status = 1;
-    optional int64 reader_id = 2;
 }
 
 message PTabletReaderCloseRequest {
     optional PUniqueId id = 1;
-    optional int64 reader_id = 2;
 }
 
 message PTabletReaderCloseResult {
@@ -286,9 +284,10 @@ message PTabletReaderCloseResult {
 }
 
 message PTabletReaderMultiGetRequest {
-    optional PUniqueId id = 1;
-    optional ChunkPB keys = 2;
-    repeated string values_columns = 3;
+    optional int64 tablet_id = 1;
+    optional int64 version = 2;
+    optional ChunkPB keys = 3;
+    repeated string values_columns = 4;
 }
 
 message PTabletReaderMultiGetResult {
