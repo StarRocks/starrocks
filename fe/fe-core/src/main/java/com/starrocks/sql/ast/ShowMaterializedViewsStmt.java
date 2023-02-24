@@ -29,8 +29,8 @@ import com.starrocks.qe.ShowResultSetMetaData;
 // Show rollup statement, used to show rollup information of one table.
 //
 // Syntax:
-//      SHOW MATERIALIZED VIEW { FROM | IN } db
-public class ShowMaterializedViewStmt extends ShowStmt {
+//      SHOW MATERIALIZED VIEWS { FROM | IN } db
+public class ShowMaterializedViewsStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("id", ScalarType.createVarchar(50)))
@@ -56,21 +56,21 @@ public class ShowMaterializedViewStmt extends ShowStmt {
 
     private Expr where;
 
-    public ShowMaterializedViewStmt(String db) {
-        this.db = db;
-        this.pattern = null;
-        this.where = null;
+    public ShowMaterializedViewsStmt(String db) {
+        this(db, null, null);
     }
 
-    public ShowMaterializedViewStmt(String db, String pattern) {
+    public ShowMaterializedViewsStmt(String db, String pattern) {
+        this(db, pattern, null);
+    }
+
+    public ShowMaterializedViewsStmt(String db, Expr where) {
+        this(db, null, where);
+    }
+
+    public ShowMaterializedViewsStmt(String db, String pattern, Expr where) {
         this.db = db;
         this.pattern = pattern;
-        this.where = null;
-    }
-
-    public ShowMaterializedViewStmt(String db, Expr where) {
-        this.db = db;
-        this.pattern = null;
         this.where = where;
     }
 
