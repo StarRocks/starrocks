@@ -81,16 +81,19 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 std::lock_guard l(response_mtx);
                 response->mutable_compaction_scores()->insert({tablet_id, *res});
             } else {
-                LOG(WARNING) << "Fail to publish version for tablet " << tablet_id << ": " << res.status();
+                LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
+                             << " txn_id=" << txns[0];
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
             }
             latch.count_down();
+            VLOG(5) << "Published version. tablet_id=" << tablet_id << " txn_id=" << txns[0];
         };
 
         auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to submit publish version task: " << st;
+            LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
+                         << " txn_id=" << request->txn_ids()[0];
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
             latch.count_down();
