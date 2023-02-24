@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UseCatalogStmt;
 
 import java.util.Map;
 
@@ -30,6 +31,10 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
 import static com.starrocks.sql.ast.CreateCatalogStmt.TYPE;
 
 public class CatalogAnalyzer {
+    private static final String CATALOG = "CATALOG";
+
+    private static final String WHITESPACE = "\\s+";
+
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new CatalogAnalyzerVisitor().visit(stmt, session);
     }
@@ -77,6 +82,23 @@ public class CatalogAnalyzer {
             if (isResourceMappingCatalog(name)) {
                 throw new SemanticException("Can't drop the resource mapping catalog");
             }
+
+            return null;
+        }
+
+        @Override
+        public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+            if (Strings.isNullOrEmpty(statement.getCatalogParts())) {
+                throw new SemanticException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.");
+            }
+
+            String[] splitParts = statement.getCatalogParts().split(WHITESPACE);
+            if (!splitParts[0].equalsIgnoreCase(CATALOG) || splitParts.length != 2) {
+                throw new SemanticException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.");
+            }
+
+            FeNameFormat.checkCatalogName(splitParts[1]);
+            statement.setCatalogName(splitParts[1]);
 
             return null;
         }
