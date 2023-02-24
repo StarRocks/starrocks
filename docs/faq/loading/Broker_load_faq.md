@@ -4,20 +4,6 @@
 
 A successfully executed cannot be executed again. To execute the task again, you need to reinitiate it. This is because the imported labels are not reusable, avoiding loss or duplication of imported tasks. You can use show load to see the import history, then copy it, modify the label and re-import it.
 
-## Garbles in Broker Load
-
-Issue description:
-
-The load job reports errors. When you use the provided URL to view the error data, you can find garbles like below:
-
-```SQL
-Reason: column count mismatch, expect=6 real=1. src line: [��I have a pen,I have an apple];
-```
-
-**Solution:**
-
-The source data is not in UTF-8 encoding format, but StarRocks supports loading only data in UTF-8 encoding format. Convert the source data into UTF-8 encoding format and try again.
-
 ## In Broker Load, hdfs data import exceptional date fields (+8h)
 
 Issue description:
