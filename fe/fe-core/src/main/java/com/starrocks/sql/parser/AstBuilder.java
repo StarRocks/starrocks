@@ -4725,7 +4725,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private static List<Expr> getArgumentsForTimeSlice(Expr time, Expr value, String ident, String boundary) {
         List<Expr> exprs = Lists.newLinkedList();
         exprs.add(time);
-        exprs.add(value);
+        // IntLiteral may use TINYINT/SMALLINT/INT/BIGINT type
+        // but time_slice only support INT type when executed in BE
+        if (value instanceof IntLiteral) {
+            exprs.add(new IntLiteral(((IntLiteral) value).getValue(), Type.INT));
+        } else {
+            exprs.add(value);
+        }
         exprs.add(new StringLiteral(ident));
         exprs.add(new StringLiteral(boundary));
 
