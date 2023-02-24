@@ -55,6 +55,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 /*
  * Version 2 of AlterJob, for replacing the old version of AlterJob.
@@ -312,4 +313,6 @@ public abstract class AlterJobV2 implements Writable {
         finishedTimeMs = in.readLong();
         timeoutMs = in.readLong();
     }
+
+    public abstract Optional<Long> getTransactionId();
 }
