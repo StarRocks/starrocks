@@ -2135,7 +2135,7 @@ public class PrivilegeCheckerV2Test {
                 ") " +
                 "as select k1, db1.tbl1.k2 from db1.tbl1;";
         starRocksAssert.withMaterializedView(createSql);
-        String showBackupSql = "SHOW MATERIALIZED VIEW FROM db1;";
+        String showBackupSql = "SHOW MATERIALIZED VIEWS FROM db1;";
         StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showBackupSql, starRocksAssert.getCtx());
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
         ShowResultSet set = executor.execute();
