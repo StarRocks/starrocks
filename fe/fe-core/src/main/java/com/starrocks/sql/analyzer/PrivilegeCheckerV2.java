@@ -818,13 +818,14 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+            String catalogName = statement.getCatalogName();
             // No authorization check for using default_catalog
-            if (CatalogMgr.isInternalCatalog(statement.getCatalogName())) {
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
                 return null;
             }
             if (!PrivilegeManager.checkAnyActionOnCatalog(context, statement.getCatalogName())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
-                        context.getQualifiedUser(), statement.getCatalogName());
+                        context.getQualifiedUser(), catalogName);
             }
             return null;
         }
