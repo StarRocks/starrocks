@@ -373,8 +373,7 @@ TEST_F(StreamOperatorsTest, binlog_dop_1) {
             .epoch_id = 0, .max_exec_millis = -1, .max_scan_rows = -1, .trigger_mode = TriggerMode::MANUAL};
     DCHECK_IF_ERROR(start_epoch(_tablet_ids, epoch_info));
     DCHECK_IF_ERROR(wait_until_epoch_finished(epoch_info));
-    CheckResult(fetch_results<PrinterStreamSinkOperator>(epoch_info),
-                {{{1, 2, 3, 4}, {5, 6, 7, 8}}});
+    CheckResult(fetch_results<PrinterStreamSinkOperator>(epoch_info), {{{1, 2, 3, 4}, {5, 6, 7, 8}}});
     stop_mv();
 }
 
@@ -406,8 +405,7 @@ TEST_F(StreamOperatorsTest, binlog_dop_1_multi_epoch) {
                 .epoch_id = 0, .max_exec_millis = -1, .max_scan_rows = -1, .trigger_mode = TriggerMode::MANUAL};
         DCHECK_IF_ERROR(start_epoch(_tablet_ids, epoch_info));
         DCHECK_IF_ERROR(wait_until_epoch_finished(epoch_info));
-        CheckResult(fetch_results<PrinterStreamSinkOperator>(epoch_info),
-                    {{{1, 2, 3, 4}, {5, 6, 7, 8}}});
+        CheckResult(fetch_results<PrinterStreamSinkOperator>(epoch_info), {{{1, 2, 3, 4}, {5, 6, 7, 8}}});
     }
 
     stop_mv();
