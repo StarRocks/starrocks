@@ -23,6 +23,7 @@ package com.starrocks.http.rest;
 
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseAction;
@@ -126,8 +127,9 @@ public class RestBaseAction extends BaseAction {
         if (globalStateMgr.isMaster()) {
             return false;
         }
+        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getLeaderIpAndHttpPort();
         redirectTo(request, response,
-                new TNetworkAddress(globalStateMgr.getMasterIp(), globalStateMgr.getMasterHttpPort()));
+                new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
         return true;
     }
 }

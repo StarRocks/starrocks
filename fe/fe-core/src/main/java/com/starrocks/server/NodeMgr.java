@@ -835,25 +835,33 @@ public class NodeMgr {
         return this.nodeName;
     }
 
-    public int getMasterRpcPort() {
-        if (!stateMgr.isReady()) {
-            return 0;
+    public Pair<String, Integer> getLeaderIpAndRpcPort() {
+        if (stateMgr.isReady()) {
+            return new Pair<>(this.masterIp, this.masterRpcPort);
+        } else {
+            String leaderNodeName = stateMgr.getHaProtocol().getLeaderNodeName();
+            Frontend frontend = frontends.get(leaderNodeName);
+            return new Pair<>(frontend.getHost(), frontend.getRpcPort());
         }
-        return this.masterRpcPort;
     }
 
-    public int getMasterHttpPort() {
-        if (!stateMgr.isReady()) {
-            return 0;
+    public Pair<String, Integer> getLeaderIpAndHttpPort() {
+        if (stateMgr.isReady()) {
+            return new Pair<>(this.masterIp, this.masterHttpPort);
+        } else {
+            String leaderNodeName = stateMgr.getHaProtocol().getLeaderNodeName();
+            Frontend frontend = frontends.get(leaderNodeName);
+            return new Pair<>(frontend.getHost(), Config.http_port);
         }
-        return this.masterHttpPort;
     }
 
     public String getMasterIp() {
-        if (!stateMgr.isReady()) {
-            return "";
+        if (stateMgr.isReady()) {
+            return this.masterIp;
+        } else {
+            String leaderNodeName = stateMgr.getHaProtocol().getLeaderNodeName();
+            return frontends.get(leaderNodeName).getHost();
         }
-        return this.masterIp;
     }
 
     public void setMaster(MasterInfo info) {
