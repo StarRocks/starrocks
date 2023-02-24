@@ -297,6 +297,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     const auto& fragment = request.common().fragment;
     const auto dop = _calc_dop(exec_env, request);
     const auto& query_options = request.common().query_options;
+    const int chunk_size = runtime_state->chunk_size();
 
     bool enable_shared_scan = request.common().__isset.enable_shared_scan && request.common().enable_shared_scan;
     bool enable_tablet_internal_parallel =
@@ -407,11 +408,13 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
         if (scan_node->limit() > 0) {
-            // the upper bound of records we actually will scan is `limit * dop * io_parallelism`.
+            // The upper bound of records we actually will scan is `limit * dop * io_parallelism`.
             // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
-            // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
+            // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization.
+            // Some chunk sources scan `chunk_size` rows at a time, so normalize `limit` to be rounded up to `chunk_size`.
             logical_scan_limit += scan_node->limit();
-            physical_scan_limit += scan_node->limit() * dop * scan_node->io_tasks_per_scan_operator();
+            int64_t normalized_limit = (scan_node->limit() + chunk_size - 1) / chunk_size * chunk_size;
+            physical_scan_limit += normalized_limit * dop * scan_node->io_tasks_per_scan_operator();
         } else {
             // Not sure how many rows will be scan.
             logical_scan_limit = -1;
