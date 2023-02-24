@@ -1555,7 +1555,7 @@ public class OlapTable extends Table {
                 partition.setState(PartitionState.NORMAL);
                 for (MaterializedIndex idx : partition.getMaterializedIndices(extState)) {
                     idx.setState(IndexState.NORMAL);
-                    if (copied.isLakeTable()) {
+                    if (copied.isCloudNativeTable()) {
                         continue;
                     }
                     for (Tablet tablet : idx.getTablets()) {

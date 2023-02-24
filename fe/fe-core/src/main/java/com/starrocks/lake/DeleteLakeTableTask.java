@@ -16,6 +16,7 @@
 package com.starrocks.lake;
 
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.proto.DropTableRequest;
@@ -36,9 +37,10 @@ import java.util.concurrent.Future;
 class DeleteLakeTableTask implements Runnable {
     private static final Logger LOG = LogManager.getLogger(DeleteLakeTableTask.class);
 
-    private final LakeTable table;
+    // lake table or lake materialized view
+    private final OlapTable table;
 
-    DeleteLakeTableTask(LakeTable table) {
+    DeleteLakeTableTask(OlapTable table) {
         this.table = table;
     }
 
