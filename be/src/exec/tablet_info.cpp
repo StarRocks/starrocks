@@ -150,7 +150,10 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
     }
     _distributed_columns.resize(_distributed_slot_descs.size());
 
-    if (_t_param.__isset.partition_exprs) {
+    if (_t_param.__isset.partition_exprs && _t_param.partition_exprs.size() > 0) {
+        if (state == nullptr) {
+            return Status::InternalError("state is null when partition_exprs is not empty");
+        }
         RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, _t_param.partition_exprs, &_partitions_expr_ctxs, state));
     }
 

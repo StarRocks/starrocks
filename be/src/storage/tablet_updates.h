@@ -235,7 +235,7 @@ public:
     //          column 2 value@rssid:6 rowid:4,
     //   ]
     // ]
-    Status get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
+    Status get_column_values(const std::vector<uint32_t>& column_ids, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns, void* state);
 

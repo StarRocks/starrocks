@@ -135,6 +135,8 @@ private:
     std::vector<int> _encode_level;
 };
 
+StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::string_view buff);
+
 StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_desc, const ChunkPB& chunk_pb);
 
 } // namespace starrocks::serde
