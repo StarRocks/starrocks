@@ -1,5 +1,38 @@
 # StarRocks version 2.4
 
+## 2.4.4
+
+Release date: February 24, 2023
+
+### Improvements
+
+- Supports fast cancellation of load. [#15514](https://github.com/StarRocks/starrocks/pull/15514) [#15398](https://github.com/StarRocks/starrocks/pull/15398) [#15969](https://github.com/StarRocks/starrocks/pull/15969)
+- Optimized the CPU usage of the compaction framework. [#11747](https://github.com/StarRocks/starrocks/pull/11747)
+- Supports cumulative compaction on tablets with missing versions. [#17030](https://github.com/StarRocks/starrocks/pull/17030)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Excessive dynamic partitions are created when an invalid DATE value is specified. [#17966](https://github.com/StarRocks/starrocks/pull/17966)
+- Failure to connect to Elasticsearch external tables with the default HTTPS port. [#13726](https://github.com/StarRocks/starrocks/pull/13726)
+- BE failed to cancel a Stream Load transaction after the transaction times out. [#15738](https://github.com/StarRocks/starrocks/pull/15738)
+- Wrong query results are returned from a local shuffle aggregation on a single BE. [#17845](https://github.com/StarRocks/starrocks/pull/17845)
+- Queries may fail with the error message "wait_for_version version: failed: apply stopped". [#17848](https://github.com/StarRocks/starrocks/pull/17850)
+- Wrong query results are returned because OLAP scan bucket expressions are not correctly cleared. [#17666](https://github.com/StarRocks/starrocks/pull/17666)
+- The bucket number of dynamic partitioned tables in a Colocate Group cannot be modified and an error message is returned. [#17418](https://github.com/StarRocks/starrocks/pull/17418)
+- When you connect to a non-Leader FE node and send the SQL statement `USE <catalog_name>.<database_name>`, the non-Leader FE node forwards the SQL statement, with `<catalog_name>` excluded, to the Leader FE node. As a result, the Leader FE node chooses to use the `default_catalog` and eventually fails to find the specified database. [#17302](https://github.com/StarRocks/starrocks/pull/17302)
+- Incorrect logic for the dictmapping check before rewriting. [#17405](https://github.com/StarRocks/starrocks/pull/17405)
+- If an FE sends an occasional heartbeat to a BE, and the heartbeat connection times out, the FE considers the BE unavailable, leading to transaction failures on the BE. [#16386](https://github.com/StarRocks/starrocks/pull/16386)
+- `get_applied_rowsets` failed for queries on newly cloned tablets on a follower FE. [#17192](https://github.com/StarRocks/starrocks/pull/17192)
+- NPE caused by executing `SET variable = default` on a follower FE. [#17549](https://github.com/StarRocks/starrocks/pull/17549)
+- Expressions in projection are not rewritten by the dictionary. [#17558](https://github.com/StarRocks/starrocks/pull/17558)
+- Incorrect logic for creating dynamic partitions on weekly basis. [#17163](https://github.com/StarRocks/starrocks/pull/17163)
+- Wrong query results are returned from a local shuffle. [#17130](https://github.com/StarRocks/starrocks/pull/17130)
+- Incremental clones may fail. [#16930](https://github.com/StarRocks/starrocks/pull/16930)
+- In some cases, CBO may use incorrect logic to compare whether two operators are equivalent. [#17199](https://github.com/StarRocks/starrocks/pull/17199) [#17227](https://github.com/StarRocks/starrocks/pull/17227)
+- Failed to access JuiceFS because the JuiceFS schema is not checked and resolved properly. [#16940](https://github.com/StarRocks/starrocks/pull/16940)
+
 ## 2.4.3
 
 Release date: January 19, 2023
