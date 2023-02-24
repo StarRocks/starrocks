@@ -41,6 +41,7 @@ public:
                             std::shared_ptr<ExceptContext> except_ctx, const std::vector<ExprContext*>& dst_exprs)
             : Operator(factory, id, "except_build_sink", plan_node_id, driver_sequence),
               _except_ctx(std::move(except_ctx)),
+              _buffer_state(std::make_unique<ExceptBufferState>()),
               _dst_exprs(dst_exprs) {
         _except_ctx->ref();
     }
@@ -66,6 +67,7 @@ public:
 
 private:
     std::shared_ptr<ExceptContext> _except_ctx;
+    std::unique_ptr<ExceptBufferState> _buffer_state;
 
     const std::vector<ExprContext*>& _dst_exprs;
 
