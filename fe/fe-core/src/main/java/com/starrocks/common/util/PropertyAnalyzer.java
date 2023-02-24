@@ -61,6 +61,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
@@ -385,7 +386,7 @@ public class PropertyAnalyzer {
         // compute-storage-separation table will be created and in this case the replication_num will
         // be ignored, so there is no need to check whether the number of alive nodes is greater than the
         // replication_num.
-        if (GlobalStateMgr.getCurrentState().isSharedNothingMode()) {
+        if (!RunMode.getCurrentRunMode().isIgnoreReplicationNum()) {
             List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
             if (replicationNum > backendIds.size()) {
                 throw new AnalysisException("Replication num should be less than the number of available BE nodes. "

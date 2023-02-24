@@ -51,6 +51,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1009,7 +1010,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     private void constructLakeGroups(GlobalStateMgr globalStateMgr) {
-        if (!GlobalStateMgr.getCurrentState().isSharedDataMode()) {
+        if (!RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             return;
         }
 

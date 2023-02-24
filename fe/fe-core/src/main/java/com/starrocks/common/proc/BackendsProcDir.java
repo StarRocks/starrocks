@@ -47,6 +47,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
@@ -70,7 +71,7 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
                 .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
                 .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct");
-        if (GlobalStateMgr.getCurrentState().isSharedDataMode()) {
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             builder.add("StarletPort").add("WorkerId");
         }
         TITLE_NAMES = builder.build();
@@ -193,7 +194,7 @@ public class BackendsProcDir implements ProcDirInterface {
             backendInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
             backendInfo.add(String.format("%.1f", backend.getCpuUsedPermille() / 10.0) + " %");
 
-            if (GlobalStateMgr.getCurrentState().isSharedDataMode()) {
+            if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(backendId);
                 backendInfo.add(String.valueOf(workerId));

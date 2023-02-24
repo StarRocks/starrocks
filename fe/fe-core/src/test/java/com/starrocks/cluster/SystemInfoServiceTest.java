@@ -41,11 +41,11 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.RunMode;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DropBackendClause;
@@ -273,8 +273,12 @@ public class SystemInfoServiceTest {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }
 
-        // test removeWorker
-        globalStateMgr.setRunMode(RunMode.SHARED_DATA);
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
 
         StarOSAgent starosAgent = new StarOSAgent();
         new Expectations(starosAgent) {
@@ -321,8 +325,6 @@ public class SystemInfoServiceTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }
-
-        globalStateMgr.setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
