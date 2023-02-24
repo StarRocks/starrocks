@@ -14,9 +14,9 @@
 
 #include "column/column.h"
 
-#include "common/statusor.h"
-
 #include <fmt/format.h>
+
+#include "common/statusor.h"
 
 namespace starrocks {
 
