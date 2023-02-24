@@ -1,6 +1,6 @@
 # Data loading
 
-## 1. What do I do if the "close index channel failed" or "too many tablet versions" error occur?
+## 1. What do I do if the "close index channel failed" or "too many tablet versions" error occurs?
 
 You were running load jobs too frequently, and the data was not compacted in a timely manner. As a result, the number of data versions generated during loading exceeds the maximum number (which defaults to 1000) of data versions that are allowed. Use one of the following methods to resolve this issue:
 
