@@ -3256,6 +3256,10 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         l2.unlock();                     // _rowsets_lock
         _try_commit_pendings_unlocked(); // may acquire |_rowset_stats_lock| and |_rowsets_lock|
 
+        _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
+        _apply_version_changed.notify_all();
+        l1.unlock();
+
         // unload primary index
         auto manager = StorageEngine::instance()->update_manager();
         auto& index_cache = manager->index_cache();
@@ -3263,9 +3267,6 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
         index_entry->value().unload();
         index_cache.release(index_entry);
-        _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
-
-        _apply_version_changed.notify_all();
 
         LOG(INFO) << "load full snapshot done " << _debug_string(false);
 
