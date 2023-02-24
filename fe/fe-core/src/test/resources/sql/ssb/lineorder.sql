@@ -33,5 +33,6 @@ PROPERTIES (
     "replication_num" = "1",
     "colocate_with" = "groupa1",
     "in_memory" = "false",
+    "foreign_key_constraints" = "(lo_custkey) REFERENCES customer(c_custkey);(lo_partkey) REFERENCES part(p_partkey);(lo_suppkey) REFERENCES supplier(s_suppkey);(lo_orderdate) REFERENCES dates(d_datekey)",
     "storage_format" = "DEFAULT"
 )
