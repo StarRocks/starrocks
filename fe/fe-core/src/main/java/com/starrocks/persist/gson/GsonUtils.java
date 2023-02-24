@@ -93,6 +93,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.backup.LakeTableSnapshotInfo;
@@ -230,7 +231,8 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Table> TABLE_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(com.starrocks.catalog.Table.class, "clazz")
-            .registerSubtype(LakeTable.class, LakeTable.class.getSimpleName());
+            .registerSubtype(LakeTable.class, LakeTable.class.getSimpleName())
+            .registerSubtype(LakeMaterializedView.class, LakeMaterializedView.class.getSimpleName());
 
     private static final RuntimeTypeAdapterFactory<SnapshotInfo> SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(SnapshotInfo.class, "clazz")
