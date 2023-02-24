@@ -238,7 +238,7 @@ public class IcebergScanNode extends ScanNode {
         Map<StructLike, Long> partitionMap = Maps.newHashMap();
 
         for (CombinedScanTask combinedScanTask : IcebergUtil.getTableScan(
-                srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate).planTasks()) {
+                srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate, false).planTasks()) {
             for (FileScanTask task : combinedScanTask.files()) {
                 DataFile file = task.file();
                 LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
