@@ -257,4 +257,72 @@ TEST_F(StreamOperatorsTest, Test_StreamAggregator_MultiDop) {
     stop_mv();
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(StreamOperatorsTest, binlog_dop_1) {
+    DCHECK_IF_ERROR(start_mv([&]() {
+        _degree_of_parallelism = 1;
+        _pipeline_builder = [&](RuntimeState* state) {
+            auto* descs = _create_table_desc(2, 4);
+            auto tnode = _create_tplan_node(next_plan_node_id(), 0);
+            auto binlog_scan_node = std::make_shared<starrocks::ConnectorScanNode>(_obj_pool, *tnode, *descs);
+            _connector_node = binlog_scan_node;
+            Status status = binlog_scan_node->init(*tnode, _runtime_state);
+            auto scan_ranges = _create_binlog_scan_ranges(_degree_of_parallelism);
+            _generate_morse_queue(binlog_scan_node.get(), scan_ranges, _degree_of_parallelism);
+            OpFactories op_factories = binlog_scan_node->decompose_to_pipeline(_pipeline_context);
+            for (int i = 0; i < _degree_of_parallelism; i++) {
+                _tablet_ids.push_back(i);
+            }
+
+            op_factories.push_back(
+                    std::make_shared<PrinterStreamSinkOperatorFactory>(next_operator_id(), next_plan_node_id()));
+            _pipelines.push_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories));
+        };
+        return Status::OK();
+    }));
+
+    EpochInfo epoch_info{
+            .epoch_id = 0, .max_exec_millis = -1, .max_scan_rows = -1, .trigger_mode = TriggerMode::MANUAL};
+    DCHECK_IF_ERROR(start_epoch(_tablet_ids, epoch_info));
+    DCHECK_IF_ERROR(wait_until_epoch_finished(epoch_info));
+    CheckResult(fetch_results<PrinterStreamSinkOperator>(epoch_info), {{{1, 2, 3, 4}, {5, 6, 7, 8}}});
+    stop_mv();
+}
+
+TEST_F(StreamOperatorsTest, binlog_dop_1_multi_epoch) {
+    DCHECK_IF_ERROR(start_mv([&]() {
+        _degree_of_parallelism = 1;
+        _pipeline_builder = [&](RuntimeState* state) {
+            auto* descs = _create_table_desc(2, 4);
+            auto tnode = _create_tplan_node(next_plan_node_id(), 0);
+            auto binlog_scan_node = std::make_shared<starrocks::ConnectorScanNode>(_obj_pool, *tnode, *descs);
+            _connector_node = binlog_scan_node;
+            Status status = binlog_scan_node->init(*tnode, _runtime_state);
+            auto scan_ranges = _create_binlog_scan_ranges(_degree_of_parallelism);
+            _generate_morse_queue(binlog_scan_node.get(), scan_ranges, _degree_of_parallelism);
+            OpFactories op_factories = binlog_scan_node->decompose_to_pipeline(_pipeline_context);
+            for (int i = 0; i < _degree_of_parallelism; i++) {
+                _tablet_ids.push_back(i);
+            }
+
+            op_factories.push_back(
+                    std::make_shared<PrinterStreamSinkOperatorFactory>(next_operator_id(), next_plan_node_id()));
+            _pipelines.push_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories));
+        };
+        return Status::OK();
+    }));
+
+    for (auto i = 0; i < 3; i++) {
+        EpochInfo epoch_info{
+                .epoch_id = 0, .max_exec_millis = -1, .max_scan_rows = -1, .trigger_mode = TriggerMode::MANUAL};
+        DCHECK_IF_ERROR(start_epoch(_tablet_ids, epoch_info));
+        DCHECK_IF_ERROR(wait_until_epoch_finished(epoch_info));
+        CheckResult(fetch_results<PrinterStreamSinkOperator>(epoch_info), {{{1, 2, 3, 4}, {5, 6, 7, 8}}});
+    }
+
+    stop_mv();
+}
+
+>>>>>>> 510cefc20 ([BugFix] Fix forgot to implement StarletFileSystem::path_exists (#18413))
 } // namespace starrocks::stream

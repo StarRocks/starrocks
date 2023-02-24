@@ -65,6 +65,11 @@ Status StreamPipelineTest::prepare() {
     _runtime_state->set_fragment_ctx(_fragment_ctx);
 
     _obj_pool = _runtime_state->obj_pool();
+<<<<<<< HEAD
+=======
+    _pipeline_context =
+            _obj_pool->add(new pipeline::PipelineBuilderContext(_fragment_ctx, _degree_of_parallelism, true));
+>>>>>>> 510cefc20 ([BugFix] Fix forgot to implement StarletFileSystem::path_exists (#18413))
 
     DCHECK(_pipeline_builder != nullptr);
     _pipelines.clear();
