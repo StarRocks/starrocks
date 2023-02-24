@@ -22,6 +22,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
+#include "storage/chunk_helper.h"
 #include "util/coding.h"
 #include "util/raw_container.h"
 
@@ -236,6 +237,28 @@ StatusOr<Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, c
         }
     }
     return chunk;
+}
+
+StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::string_view buff) {
+    using ColumnHelper = ColumnHelper;
+    using Chunk = Chunk;
+
+    auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
+
+    uint32_t version = decode_fixed32_le(cur);
+    if (version != 1) {
+        return Status::Corruption("invalid version");
+    }
+    cur += 4;
+
+    uint32_t rows = decode_fixed32_le(cur);
+    cur += 4;
+
+    auto chunk = ChunkHelper::new_chunk(schema, rows);
+    for (auto& column : chunk->columns()) {
+        cur = ColumnArraySerde::deserialize(cur, column.get());
+    }
+    return Chunk(std::move(*chunk));
 }
 
 StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, int64_t* deserialized_bytes) {
