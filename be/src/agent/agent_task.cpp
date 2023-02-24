@@ -205,7 +205,11 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
         LOG(WARNING) << "create table failed. status: " << create_status.to_string()
                      << ", signature: " << agent_task_req->signature;
         status_code = TStatusCode::RUNTIME_ERROR;
-        error_msgs.emplace_back("create tablet " + create_status.get_error_msg());
+        if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+            error_msgs.emplace_back("create tablet failed");
+        } else {
+            error_msgs.emplace_back("create tablet " + create_status.get_error_msg());
+        }
     } else if (create_tablet_req.tablet_type != TTabletType::TABLET_TYPE_LAKE) {
         g_report_version.fetch_add(1, std::memory_order_relaxed);
         // get path hash of the created tablet
