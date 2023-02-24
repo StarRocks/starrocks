@@ -90,7 +90,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
-import static java.lang.Long.min;
 
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
@@ -248,12 +247,17 @@ public class DatabaseTransactionMgr {
         return infos;
     }
 
-    public long getMinActiveTxnId() {
-        long result = Long.MAX_VALUE;
-        for (Long txnId : idToRunningTransactionState.keySet()) {
-            result = min(result, txnId);
+    public Optional<Long> getMinActiveTxnId() {
+        readLock();
+        try {
+            if (idToRunningTransactionState.isEmpty()) {
+                return Optional.empty();
+            }
+            long minId = idToRunningTransactionState.keySet().stream().min(Comparator.comparing(Long::longValue)).get();
+            return Optional.of(minId);
+        } finally {
+            readUnlock();
         }
-        return result;
     }
 
     private void getTxnStateInfo(TransactionState txnState, List<String> info) {
