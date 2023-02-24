@@ -612,7 +612,7 @@ size_t OlapScanNode::_scanner_concurrency() {
     concurrency = std::min<int>(concurrency, _num_scanners);
     concurrency = std::min<int>(concurrency, kMaxConcurrency);
 
-    if (_olap_scan_node.__isset.max_parallel_scan_instance_num && _olap_scan_node.max_parallel_scan_instance_num > 1) {
+    if (_olap_scan_node.__isset.max_parallel_scan_instance_num && _olap_scan_node.max_parallel_scan_instance_num >= 1) {
         concurrency = std::min<int>(concurrency, _olap_scan_node.max_parallel_scan_instance_num);
     }
 
