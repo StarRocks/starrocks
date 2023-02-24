@@ -86,7 +86,7 @@ import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
-import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
@@ -946,7 +946,7 @@ public class ShowExecutorTest {
     @Test
     public void testShowMaterializedView() throws AnalysisException, DdlException {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("testDb", (String) null);
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("testDb", (String) null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         verifyShowMaterializedViewResult(resultSet);
@@ -954,7 +954,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowMaterializedViewFromUnknownDatabase() throws DdlException, AnalysisException {
-        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("emptyDb", (String) null);
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("emptyDb", (String) null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         expectedEx.expect(AnalysisException.class);
         expectedEx.expectMessage("Unknown database 'emptyDb'");
@@ -964,12 +964,12 @@ public class ShowExecutorTest {
     @Test
     public void testShowMaterializedViewPattern() throws AnalysisException, DdlException {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("testDb", "bcd%");
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("testDb", "bcd%");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         Assert.assertFalse(resultSet.next());
 
-        stmt = new ShowMaterializedViewStmt("testDb", "%test%");
+        stmt = new ShowMaterializedViewsStmt("testDb", "%test%");
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
         verifyShowMaterializedViewResult(resultSet);

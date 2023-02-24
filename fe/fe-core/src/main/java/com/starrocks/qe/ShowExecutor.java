@@ -168,7 +168,7 @@ import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
-import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
@@ -242,7 +242,7 @@ public class ShowExecutor {
     }
 
     public ShowResultSet execute() throws AnalysisException, DdlException {
-        if (stmt instanceof ShowMaterializedViewStmt) {
+        if (stmt instanceof ShowMaterializedViewsStmt) {
             handleShowMaterializedView();
         } else if (stmt instanceof ShowAuthorStmt) {
             handleShowAuthor();
@@ -422,8 +422,8 @@ public class ShowExecutor {
     }
 
     private void handleShowMaterializedView() throws AnalysisException {
-        ShowMaterializedViewStmt showMaterializedViewStmt = (ShowMaterializedViewStmt) stmt;
-        String dbName = showMaterializedViewStmt.getDb();
+        ShowMaterializedViewsStmt showMaterializedViewsStmt = (ShowMaterializedViewsStmt) stmt;
+        String dbName = showMaterializedViewsStmt.getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         MetaUtils.checkDbNullAndReport(db, dbName);
 
@@ -432,8 +432,8 @@ public class ShowExecutor {
         db.readLock();
         try {
             PatternMatcher matcher = null;
-            if (showMaterializedViewStmt.getPattern() != null) {
-                matcher = PatternMatcher.createMysqlPattern(showMaterializedViewStmt.getPattern(),
+            if (showMaterializedViewsStmt.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(showMaterializedViewsStmt.getPattern(),
                         CaseSensibility.TABLE.getCaseSensibility());
             }
 
