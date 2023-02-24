@@ -401,7 +401,17 @@ public:
     }
 
     Status path_exists(const std::string& path) override {
-        return Status::NotSupported("StarletFileSystem::path_exists");
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+
+        auto exists_or = (*fs_st)->exists(pair.first);
+        if (!exists_or.ok()) {
+            return to_status(exists_or.status());
+        }
+        return *exists_or ? Status::OK() : Status::NotFound(path);
     }
 
     Status get_children(const std::string& dir, std::vector<std::string>* file) override {
