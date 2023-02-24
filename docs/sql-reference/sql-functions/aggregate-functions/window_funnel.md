@@ -2,11 +2,7 @@
 
 ## Description
 
-<<<<<<< HEAD
-Searches for an event chain in a sliding window and calculates the maximum number of consecutive events in the event chain. This function is commonly used for conversion rate analysis.
-=======
 Searches for an event chain in a sliding window and calculates the maximum number of consecutive events in the event chain. This function is commonly used for analyzing conversion rate. It is supported from v2.3.
->>>>>>> c9bf0856e ([Doc] update variable, parse-url, bitmap, bloomfilter, dyna partition (#18407))
 
 This function works according to the following rules:
 
@@ -217,68 +213,7 @@ order by uid;
 ```
 
 `2` is returned because the "Pay" event disrupts the event chain and the event counter stops. The filtered event chain is "Browse-Click".
-<<<<<<< HEAD
-=======
-
-**Example 4**: Calculate the maximum number of consecutive events based on `uid`. The sliding window is 1900s, and filter modes `0` and `4` are used.
-
-This example uses table `action3`, in which data is sorted by `time`.
-
-```Plaintext
-select * from action3 order by time;
-+------+------------+---------------------+
-| uid  | event_type | time                |
-+------+------------+---------------------+
-| 1    | Browse     | 2020-01-02 11:00:00 |
-| 1    | Click      | 2020-01-02 11:00:01 |
-| 2    | Browse     | 2020-01-02 11:00:03 |
-| 1    | Order      | 2020-01-02 11:00:31 |
-| 2    | Click      | 2020-01-02 11:00:03 |
-| 2    | Order      | 2020-01-02 11:01:03 |
-+------+------------+---------------------+
-3 rows in set (0.02 sec)
-```
-
-Execute the following statement:
-
-```Plaintext
-select uid,
-       window_funnel(1900,time,0,[event_type='Browse', event_type='Click',
-        event_type='Order']) AS level
-from action3
-group by uid
-order by uid;
-+------+-------+
-| uid  | level |
-+------+-------+
-|    1 |     3 |
-|    2 |     3 |
-+------+-------+
-```
-
-`3` is returned for `uid = 1` and `uid = 2`.
-
-Change `mode` to `4` and execute the statement again.
-
-```Plaintext
-select uid,
-       window_funnel(1900,time,4,[event_type='Browse', event_type='Click',
-        event_type='Order']) AS level
-from action3
-group by uid
-order by uid;
-+------+-------+
-| uid  | level |
-+------+-------+
-|    1 |     3 |
-|    2 |     1 |
-+------+-------+
-1 row in set (0.02 sec)
-```
-
-`1` is returned for `uid = 2` because mode `4` (strictly increasing) is used. "Click" happens at the same second as "BROWSE". Therefore, "Click" and "Order" are not counted.
 
 ## Keywords
 
-window funnel, funnel, window_funnel
->>>>>>> c9bf0856e ([Doc] update variable, parse-url, bitmap, bloomfilter, dyna partition (#18407))
+funnel, window funnel, conversion, conversion rate
