@@ -946,25 +946,33 @@ public class NodeMgr {
         return this.nodeName;
     }
 
-    public int getLeaderRpcPort() {
-        if (!stateMgr.isReady()) {
-            return 0;
+    public Pair<String, Integer> getLeaderIpAndRpcPort() {
+        if (stateMgr.isReady()) {
+            return new Pair<>(this.leaderIp, this.leaderRpcPort);
+        } else {
+            String leaderNodeName = stateMgr.getHaProtocol().getLeaderNodeName();
+            Frontend frontend = frontends.get(leaderNodeName);
+            return new Pair<>(frontend.getHost(), frontend.getRpcPort());
         }
-        return this.leaderRpcPort;
     }
 
-    public int getLeaderHttpPort() {
-        if (!stateMgr.isReady()) {
-            return 0;
+    public Pair<String, Integer> getLeaderIpAndHttpPort() {
+        if (stateMgr.isReady()) {
+            return new Pair<>(this.leaderIp, this.leaderHttpPort);
+        } else {
+            String leaderNodeName = stateMgr.getHaProtocol().getLeaderNodeName();
+            Frontend frontend = frontends.get(leaderNodeName);
+            return new Pair<>(frontend.getHost(), Config.http_port);
         }
-        return this.leaderHttpPort;
     }
 
     public String getLeaderIp() {
-        if (!stateMgr.isReady()) {
-            return "";
+        if (stateMgr.isReady()) {
+            return this.leaderIp;
+        } else {
+            String leaderNodeName = stateMgr.getHaProtocol().getLeaderNodeName();
+            return frontends.get(leaderNodeName).getHost();
         }
-        return this.leaderIp;
     }
 
     public void setLeader(LeaderInfo info) {

@@ -26,6 +26,8 @@ public interface HAProtocol {
 
     InetSocketAddress getLeader();
 
+    String getLeaderNodeName();
+
     // get observer nodes in the current group
     List<InetSocketAddress> getObserverNodes();
 
