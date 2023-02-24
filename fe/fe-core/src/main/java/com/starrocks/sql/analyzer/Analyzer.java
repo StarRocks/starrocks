@@ -106,6 +106,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 
 public class Analyzer {
@@ -453,6 +454,12 @@ public class Analyzer {
 
         @Override
         public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
+            CatalogAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
             CatalogAnalyzer.analyze(statement, context);
             return null;
         }
