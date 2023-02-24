@@ -5558,7 +5558,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(stringLiteral.getStringValue()),
                             timePos);
                 }
+            }
 
+            if (context.interval() != null) {
                 intervalLiteral = (IntervalLiteral) visit(context.interval());
                 if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
                     String exprSql = intervalLiteral.getValue().toSql();
@@ -5566,7 +5568,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                             createPos(context.interval()));
                 }
             }
-
             return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral, pos);
         } else if (context.MANUAL() != null) {
             return new ManualRefreshSchemeDesc(pos);

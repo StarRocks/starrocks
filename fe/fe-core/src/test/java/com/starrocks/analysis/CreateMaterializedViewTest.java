@@ -455,7 +455,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
-        Assert.assertThrows(IllegalArgumentException.class,
+        Assert.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql2, connectContext));
 
         String sql3 = "create materialized view mv1\n" +
@@ -469,7 +469,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
-        Assert.assertThrows(IllegalArgumentException.class,
+        Assert.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql3, connectContext));
     }
 
@@ -763,7 +763,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Partition exp not supports:a + b", e.getMessage());
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Unsupported expr 'a + b' in PARTITION BY clause"));
         } finally {
             starRocksAssert.useDatabase("test");
         }
@@ -887,8 +887,8 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Unsupported expr 'date_trunc('month', date_trunc('month', ss))' " +
-                    "in PARTITION BY clause", e.getMessage());
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Unsupported expr 'date_trunc('month', " +
+                    "date_trunc('month', ss))' in PARTITION BY clause"));
         }
     }
 
@@ -1289,7 +1289,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Refresh start must be after current time", e.getMessage());
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Refresh start time must be after current time"));
         }
     }
 
