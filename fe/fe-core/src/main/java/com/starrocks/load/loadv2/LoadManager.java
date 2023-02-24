@@ -213,6 +213,9 @@ public class LoadManager implements Writable {
             return;
         }
         job.unprotectReadEndOperation(operation);
+
+        Catalog.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(job.id);
+
         LOG.info(new LogBuilder(LogKey.LOAD_JOB, operation.getId())
                 .add("operation", operation)
                 .add("msg", "replay end load job")
