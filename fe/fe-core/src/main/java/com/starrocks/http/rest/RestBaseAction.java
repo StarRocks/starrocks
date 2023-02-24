@@ -23,6 +23,7 @@ package com.starrocks.http.rest;
 
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseAction;
@@ -126,8 +127,13 @@ public class RestBaseAction extends BaseAction {
         if (globalStateMgr.isMaster()) {
             return false;
         }
+        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getLeaderIpAndHttpPort();
         redirectTo(request, response,
+<<<<<<< HEAD
                 new TNetworkAddress(globalStateMgr.getMasterIp(), globalStateMgr.getMasterHttpPort()));
+=======
+                new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
+>>>>>>> 9edd9c578 ([BugFix] Fix forward to leader failed when current node's meta is far behind leader's meta (#17576))
         return true;
     }
 }

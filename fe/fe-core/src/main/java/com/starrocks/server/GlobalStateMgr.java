@@ -2469,12 +2469,21 @@ public class GlobalStateMgr {
         return this.feType;
     }
 
+<<<<<<< HEAD
     public int getMasterRpcPort() {
         return nodeMgr.getMasterRpcPort();
     }
 
     public int getMasterHttpPort() {
         return nodeMgr.getMasterHttpPort();
+=======
+    public Pair<String, Integer> getLeaderIpAndRpcPort() {
+        return nodeMgr.getLeaderIpAndRpcPort();
+    }
+
+    public Pair<String, Integer> getLeaderIpAndHttpPort() {
+        return nodeMgr.getLeaderIpAndHttpPort();
+>>>>>>> 9edd9c578 ([BugFix] Fix forward to leader failed when current node's meta is far behind leader's meta (#17576))
     }
 
     public String getMasterIp() {

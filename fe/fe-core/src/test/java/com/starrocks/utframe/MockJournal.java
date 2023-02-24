@@ -137,6 +137,7 @@ public class MockJournal implements Journal {
         }
 
         @Override
+<<<<<<< HEAD
         public List<InetSocketAddress> getNoneLeaderNodes() {
             return Lists.newArrayList();
         }
@@ -152,6 +153,10 @@ public class MockJournal implements Journal {
         @Override
         public boolean isLeader() {
             return true;
+=======
+        public String getLeaderNodeName() {
+            return "";
+>>>>>>> 9edd9c578 ([BugFix] Fix forward to leader failed when current node's meta is far behind leader's meta (#17576))
         }
 
         @Override

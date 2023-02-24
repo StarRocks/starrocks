@@ -60,6 +60,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
@@ -1202,9 +1203,14 @@ public class MasterImpl {
     }
 
     public TNetworkAddress masterAddr() {
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/master/MasterImpl.java
         String masterHost = GlobalStateMgr.getCurrentState().getMasterIp();
         int masterRpcPort = GlobalStateMgr.getCurrentState().getMasterRpcPort();
         return new TNetworkAddress(masterHost, masterRpcPort);
+=======
+        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
+        return new TNetworkAddress(ipAndPort.first, ipAndPort.second);
+>>>>>>> 9edd9c578 ([BugFix] Fix forward to leader failed when current node's meta is far behind leader's meta (#17576)):fe/fe-core/src/main/java/com/starrocks/leader/LeaderImpl.java
     }
 
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {

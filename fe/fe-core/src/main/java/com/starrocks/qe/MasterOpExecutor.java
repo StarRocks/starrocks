@@ -26,10 +26,21 @@ import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.FrontendServiceProxy;
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/qe/MasterOpExecutor.java
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.SetListItem;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.system.SystemInfoService;
+>>>>>>> 9edd9c578 ([BugFix] Fix forward to leader failed when current node's meta is far behind leader's meta (#17576)):fe/fe-core/src/main/java/com/starrocks/qe/LeaderOpExecutor.java
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -111,9 +122,14 @@ public class MasterOpExecutor {
 
     // Send request to Master
     private void forward() throws Exception {
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/qe/MasterOpExecutor.java
         String masterHost = ctx.getGlobalStateMgr().getMasterIp();
         int masterRpcPort = ctx.getGlobalStateMgr().getMasterRpcPort();
         TNetworkAddress thriftAddress = new TNetworkAddress(masterHost, masterRpcPort);
+=======
+        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
+        TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
+>>>>>>> 9edd9c578 ([BugFix] Fix forward to leader failed when current node's meta is far behind leader's meta (#17576)):fe/fe-core/src/main/java/com/starrocks/qe/LeaderOpExecutor.java
         TMasterOpRequest params = new TMasterOpRequest();
         params.setCluster(ctx.getClusterName());
         params.setSql(originStmt.originStmt);

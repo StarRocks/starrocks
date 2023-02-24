@@ -27,6 +27,8 @@ public interface HAProtocol {
     // increase epoch number by one
     public boolean fencing();
 
+    String getLeaderNodeName();
+
     // get observer nodes in the current group
     public List<InetSocketAddress> getObserverNodes();
 

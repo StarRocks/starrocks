@@ -835,6 +835,7 @@ public class NodeMgr {
         return this.nodeName;
     }
 
+<<<<<<< HEAD
     public int getMasterRpcPort() {
         if (!stateMgr.isReady()) {
             return 0;
@@ -854,6 +855,35 @@ public class NodeMgr {
             return "";
         }
         return this.masterIp;
+=======
+    public Pair<String, Integer> getLeaderIpAndRpcPort() {
+        if (stateMgr.isReady()) {
+            return new Pair<>(this.leaderIp, this.leaderRpcPort);
+        } else {
+            String leaderNodeName = stateMgr.getHaProtocol().getLeaderNodeName();
+            Frontend frontend = frontends.get(leaderNodeName);
+            return new Pair<>(frontend.getHost(), frontend.getRpcPort());
+        }
+    }
+
+    public Pair<String, Integer> getLeaderIpAndHttpPort() {
+        if (stateMgr.isReady()) {
+            return new Pair<>(this.leaderIp, this.leaderHttpPort);
+        } else {
+            String leaderNodeName = stateMgr.getHaProtocol().getLeaderNodeName();
+            Frontend frontend = frontends.get(leaderNodeName);
+            return new Pair<>(frontend.getHost(), Config.http_port);
+        }
+    }
+
+    public String getLeaderIp() {
+        if (stateMgr.isReady()) {
+            return this.leaderIp;
+        } else {
+            String leaderNodeName = stateMgr.getHaProtocol().getLeaderNodeName();
+            return frontends.get(leaderNodeName).getHost();
+        }
+>>>>>>> 9edd9c578 ([BugFix] Fix forward to leader failed when current node's meta is far behind leader's meta (#17576))
     }
 
     public void setMaster(MasterInfo info) {

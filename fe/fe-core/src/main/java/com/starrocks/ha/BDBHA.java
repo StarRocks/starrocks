@@ -127,6 +127,24 @@ public class BDBHA implements HAProtocol {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public InetSocketAddress getLeader() {
+        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
+        String leaderName = replicationGroupAdmin.getMasterNodeName();
+        ReplicationGroup rg = replicationGroupAdmin.getGroup();
+        ReplicationNode rn = rg.getMember(leaderName);
+        return rn.getSocketAddress();
+    }
+
+    @Override
+    public String getLeaderNodeName() {
+        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
+        return replicationGroupAdmin.getMasterNodeName();
+    }
+
+    @Override
+>>>>>>> 9edd9c578 ([BugFix] Fix forward to leader failed when current node's meta is far behind leader's meta (#17576))
     public List<InetSocketAddress> getObserverNodes() {
         ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
         if (replicationGroupAdmin == null) {
