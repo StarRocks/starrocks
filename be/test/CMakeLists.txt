@@ -218,6 +218,7 @@ set(EXEC_FILES
         ./storage/storage_types_test.cpp
         ./storage/tablet_meta_test.cpp
         ./storage/tablet_meta_manager_test.cpp
+        ./storage/table_reader_remote_test.cpp
         ./storage/table_reader_test.cpp
         ./storage/table_schema_test.cpp
         ./storage/tablet_updates_test.cpp
