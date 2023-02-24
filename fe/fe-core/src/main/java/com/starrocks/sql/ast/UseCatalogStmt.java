@@ -18,6 +18,22 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
+/*
+  Use catalog specified by catalog name
+
+  syntax:
+      USE 'CATALOG catalog_name'
+      USE "CATALOG catalog_name"
+
+      Note:
+        A pair of single/double quotes are required
+
+      Examples:
+        USE 'CATALOG default_catalog'
+        use "catalog default_catalog"
+        USE 'catalog hive_metastore_catalog'
+        use "CATALOG hive_metastore_catalog"
+ */
 public class UseCatalogStmt extends StatementBase {
     private final String catalogParts;
 

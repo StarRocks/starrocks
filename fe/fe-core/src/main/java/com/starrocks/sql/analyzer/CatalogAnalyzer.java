@@ -89,20 +89,16 @@ public class CatalogAnalyzer {
         @Override
         public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
             if (Strings.isNullOrEmpty(statement.getCatalogParts())) {
-                throw new SemanticException("'catalog name' can not be null or empty");
+                throw new SemanticException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.");
             }
 
-            String[] catalogAndItsName = statement.getCatalogParts().split(WHITESPACE);
-            if (catalogAndItsName.length == 0 || !catalogAndItsName[0].equalsIgnoreCase(CATALOG)) {
-                throw new SemanticException("'catalog name' should start with 'catalog'");
+            String[] splitParts = statement.getCatalogParts().split(WHITESPACE);
+            if (!splitParts[0].equalsIgnoreCase(CATALOG) || splitParts.length != 2) {
+                throw new SemanticException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.");
             }
 
-            if (catalogAndItsName.length != 2) {
-                throw new SemanticException("'catalog name' should end with a catalog name");
-            }
-
-            FeNameFormat.checkCatalogName(catalogAndItsName[1]);
-            statement.setCatalogName(catalogAndItsName[1]);
+            FeNameFormat.checkCatalogName(splitParts[1]);
+            statement.setCatalogName(splitParts[1]);
 
             return null;
         }
