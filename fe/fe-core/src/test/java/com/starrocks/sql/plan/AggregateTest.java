@@ -2118,6 +2118,37 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testPruneGroupByKeysRule2() throws Exception {
+        String sql = "select 1 from test_all_type group by NULL " +
+                "having (NOT (((DROUND(0.09733420538671422) ) IS NOT NULL)))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 12> : 1\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 11: expr\n" +
+                "  |  having: dround(0.09733420538671422) IS NULL\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 11> : NULL");
+    }
+
+    @Test
+    public void testPruneGroupByKeysRule3() throws Exception {
+        String sql = "select count(*), sum(t1b) from test_all_type group by NULL " +
+                "having (NOT (((DROUND(0.09733420538671422) ) IS NOT NULL)))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 12> : 12: count\n" +
+                "  |  <slot 13> : 13: sum\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*), sum(2: t1b)\n" +
+                "  |  group by: 11: expr\n" +
+                "  |  having: dround(0.09733420538671422) IS NULL");
+    }
+
+    @Test
     public void testDistinctRewrite() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select count(distinct t1a), sum(t1c) from test_all_type group by t1b";
