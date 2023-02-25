@@ -109,6 +109,7 @@ public class NodeMgr {
 
     private int clusterId;
     private String token;
+    private String runMode;
     private String imageDir;
 
     private final List<Pair<String, Integer>> helperNodes = Lists.newArrayList();
@@ -200,6 +201,10 @@ public class NodeMgr {
         File roleFile = new File(this.imageDir, Storage.ROLE_FILE);
         File versionFile = new File(this.imageDir, Storage.VERSION_FILE);
 
+        boolean isVersionFileChanged = false;
+
+        Storage storage = new Storage(this.imageDir);
+
         // if helper node is point to self, or there is ROLE and VERSION file in local.
         // get the node type from local
         if (isMyself() || (roleFile.exists() && versionFile.exists())) {
@@ -224,7 +229,6 @@ public class NodeMgr {
             // FOLLOWER, which may cause UNDEFINED behavior.
             // Everything may be OK if the origin role is exactly FOLLOWER,
             // but if not, FE process will exit somehow.
-            Storage storage = new Storage(this.imageDir);
             if (!roleFile.exists()) {
                 // The very first time to start the first node of the cluster.
                 // It should became a Master node (Master node's role is also FOLLOWER, which means electable)
@@ -248,7 +252,6 @@ public class NodeMgr {
                     LOG.info("forward compatibility. role: {}, node name: {}", role.name(), nodeName);
                 }
             }
-
             Preconditions.checkNotNull(role);
             Preconditions.checkNotNull(nodeName);
 
@@ -257,7 +260,7 @@ public class NodeMgr {
                 token = Strings.isNullOrEmpty(Config.auth_token) ?
                         Storage.newToken() : Config.auth_token;
                 storage = new Storage(clusterId, token, this.imageDir);
-                storage.writeClusterIdAndToken();
+                isVersionFileChanged = true;
 
                 isFirstTimeStartUp = true;
                 Frontend self = new Frontend(role, nodeName, selfNode.first, selfNode.second);
@@ -272,10 +275,11 @@ public class NodeMgr {
                             Storage.newToken() : Config.auth_token;
                     LOG.info("new token={}", token);
                     storage.setToken(token);
-                    storage.writeClusterIdAndToken();
+                    isVersionFileChanged = true;
                 } else {
                     token = storage.getToken();
                 }
+                runMode = storage.getRunMode();
                 isFirstTimeStartUp = false;
             }
         } else {
@@ -303,7 +307,7 @@ public class NodeMgr {
 
             Pair<String, Integer> rightHelperNode = helperNodes.get(0);
 
-            Storage storage = new Storage(this.imageDir);
+            storage = new Storage(this.imageDir);
             if (roleFile.exists() && (role != storage.getRole() || !nodeName.equals(storage.getNodeName()))
                     || !roleFile.exists()) {
                 storage.writeFrontendRoleAndNodeName(role, nodeName);
@@ -311,7 +315,6 @@ public class NodeMgr {
             if (!versionFile.exists()) {
                 // If the version file doesn't exist, download it from helper node
                 if (!getVersionFileFromHelper(rightHelperNode)) {
-                    LOG.error("fail to download version file from " + rightHelperNode.first + " will exit.");
                     System.exit(-1);
                 }
 
@@ -320,14 +323,30 @@ public class NodeMgr {
                 storage = new Storage(this.imageDir);
                 clusterId = storage.getClusterID();
                 token = storage.getToken();
+                runMode = storage.getRunMode();
                 if (Strings.isNullOrEmpty(token)) {
                     token = Config.auth_token;
+                    isVersionFileChanged = true;
+                }
+                if (Strings.isNullOrEmpty(runMode)) {
+                    // The version of helper node is less than 3.0, run at SAHRED_NOTHING mode and save the run
+                    // mode in version file later.
+                    runMode = RunMode.SHARED_NOTHING.getName();
+                    storage.setRunMode(runMode);
+                    isVersionFileChanged = true;
                 }
             } else {
                 // If the version file exist, read the cluster id and check the
                 // id with helper node to make sure they are identical
                 clusterId = storage.getClusterID();
                 token = storage.getToken();
+                runMode = storage.getRunMode();
+                if (Strings.isNullOrEmpty(runMode)) {
+                    // No run mode saved in the version file, we're upgrading an old cluster of version less than 3.0.
+                    runMode = RunMode.SHARED_NOTHING.getName();
+                    storage.setRunMode(runMode);
+                    isVersionFileChanged = true; 
+                }
                 try {
                     URL idURL = new URL("http://" + rightHelperNode.first + ":" + Config.http_port + "/check");
                     HttpURLConnection conn = null;
@@ -340,11 +359,12 @@ public class NodeMgr {
                         LOG.error("cluster id is not equal with helper node {}. will exit.", rightHelperNode.first);
                         System.exit(-1);
                     }
+
                     String remoteToken = conn.getHeaderField(MetaBaseAction.TOKEN);
                     if (token == null && remoteToken != null) {
                         LOG.info("get token from helper node. token={}.", remoteToken);
                         token = remoteToken;
-                        storage.writeClusterIdAndToken();
+                        isVersionFileChanged = true;
                         storage.reload();
                     }
                     if (Config.enable_token_check) {
@@ -354,6 +374,18 @@ public class NodeMgr {
                             LOG.error("token is not equal with helper node {}. will exit.", rightHelperNode.first);
                             System.exit(-1);
                         }
+                    }
+
+                    String remoteRunMode = conn.getHeaderField(MetaBaseAction.RUN_MODE);
+                    if (Strings.isNullOrEmpty(remoteRunMode)) {
+                        // The version of helper node is less than 3.0
+                        remoteRunMode = RunMode.SHARED_NOTHING.getName();
+                    }
+
+                    if (!runMode.equalsIgnoreCase(remoteRunMode)) {
+                        LOG.error("Unmatched run mode with helper node {}: {} vs {}, will exit .",
+                                  rightHelperNode.first, runMode, remoteRunMode);
+                        System.exit(-1);
                     }
                 } catch (Exception e) {
                     LOG.warn("fail to check cluster_id and token with helper node.", e);
@@ -381,13 +413,37 @@ public class NodeMgr {
             System.exit(-1);
         }
 
+
+        if (Strings.isNullOrEmpty(runMode)) {
+            if (isFirstTimeStartUp) {
+                runMode = RunMode.getCurrentRunMode().getName();
+                storage.setRunMode(runMode);
+                isVersionFileChanged = true;
+            } else if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+                LOG.error("Upgrading from a cluster with version less than 3.0 to a cluster with run mode {} of " +
+                          "version 3.0 or above is disallowed. exit exit", RunMode.getCurrentRunMode().getName());
+                System.exit(-1);
+            }
+        } else if (!runMode.equalsIgnoreCase(RunMode.getCurrentRunMode().getName())) {
+            LOG.error("Unmatched run mode between config file and version file: {} vs {}. will exit! ",
+                      RunMode.getCurrentRunMode().getName(), runMode);
+            System.exit(-1);
+        } // else nothing to do
+
+        if (isVersionFileChanged) {
+            storage.writeVersionFile();
+        }
+
+        // Tell user current run_mode
+        LOG.info("Current run_mode is {}", runMode);
+
         isElectable = role.equals(FrontendNodeType.FOLLOWER);
 
         systemInfoMap.put(clusterId, systemInfo);
 
         Preconditions.checkState(helperNodes.size() == 1);
-        LOG.info("finished to get cluster id: {}, role: {} and node name: {}",
-                clusterId, role.name(), nodeName);
+        LOG.info("Got cluster id: {}, role: {}, node name: {} and run_mode: {}",
+                clusterId, role.name(), nodeName, runMode);
     }
 
     // Get the role info and node name from helper node.
@@ -638,15 +694,16 @@ public class NodeMgr {
     }
 
     private boolean getVersionFileFromHelper(Pair<String, Integer> helperNode) throws IOException {
+        String url = "http://" + helperNode.first + ":" + Config.http_port + "/version";
+        LOG.info("Downloading version file from {}", url);
         try {
-            String url = "http://" + helperNode.first + ":" + Config.http_port + "/version";
             File dir = new File(this.imageDir);
             MetaHelper.getRemoteFile(url, HTTP_TIMEOUT_SECOND * 1000,
                     MetaHelper.getOutputStream(Storage.VERSION_FILE, dir));
             MetaHelper.complete(Storage.VERSION_FILE, dir);
             return true;
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Fail to download version file from {}:{}", url, e.getMessage());
         }
 
         return false;
