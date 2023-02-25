@@ -208,7 +208,7 @@ public:
 
     inline static double time_to_literal(double time);
 
-    inline static Timestamp of_epoch_second(int seconds, int microseconds);
+    inline static Timestamp of_epoch_second(int64_t seconds, int64_t microseconds);
 
 public:
     // MAX_DATE | USECS_PER_DAY
@@ -301,7 +301,7 @@ Timestamp timestamp::to_time(Timestamp timestamp) {
 }
 
 JulianDate timestamp::to_julian(Timestamp timestamp) {
-    return static_cast<uint64_t>(timestamp) >> TIMESTAMP_BITS;
+    return static_cast<int64_t>(timestamp) >> TIMESTAMP_BITS;
 }
 
 void timestamp::to_date(Timestamp timestamp, int* year, int* month, int* day) {
@@ -376,8 +376,8 @@ double timestamp::time_to_literal(double time) {
     return hour * 10000 + minute * 100 + second;
 }
 
-Timestamp timestamp::of_epoch_second(int seconds, int nanoseconds) {
-    int days = seconds / SECS_PER_DAY;
+Timestamp timestamp::of_epoch_second(int64_t seconds, int64_t nanoseconds) {
+    int64_t days = seconds / SECS_PER_DAY;
     JulianDate jd = days + date::UNIX_EPOCH_JULIAN;
     return timestamp::from_julian_and_time(jd,
                                            seconds % SECS_PER_DAY * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC);

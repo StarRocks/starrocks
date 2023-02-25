@@ -604,7 +604,6 @@ Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
 
 Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparquet::SchemaElement& schema_element) {
     DCHECK_EQ(schema_element.type, tparquet::Type::INT64);
-
     if (schema_element.__isset.logicalType) {
         if (!schema_element.logicalType.__isset.TIMESTAMP) {
             std::stringstream ss;
@@ -616,6 +615,7 @@ Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparque
         _is_adjusted_to_utc = schema_element.logicalType.TIMESTAMP.isAdjustedToUTC;
 
         const auto& time_unit = schema_element.logicalType.TIMESTAMP.unit;
+
         if (time_unit.__isset.MILLIS) {
             _second_mask = 1000;
             _scale_to_nano_factor = 1000000;
@@ -682,9 +682,9 @@ Status Int64ToDateTimeConverter::_convert_to_timestamp_column(const ColumnPtr& s
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
-            Timestamp timestamp =
-                    timestamp::of_epoch_second(static_cast<int>(src_data[i] / _second_mask),
-                                               static_cast<int>((src_data[i] % _second_mask) * _scale_to_nano_factor));
+            Timestamp timestamp = timestamp::of_epoch_second(
+                    static_cast<int64_t>(src_data[i] / _second_mask),
+                    static_cast<int64_t>((src_data[i] % _second_mask) * _scale_to_nano_factor));
             dst_data[i].set_timestamp(_utc_to_local(timestamp));
         }
     }
