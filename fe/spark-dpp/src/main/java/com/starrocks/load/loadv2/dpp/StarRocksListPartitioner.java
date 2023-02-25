@@ -55,7 +55,7 @@ public class StarRocksListPartitioner extends Partitioner {
                 return i;
             }
         }
-        return 0;
+        return -1;
     }
 
     public static class PartitionListKey implements Serializable {

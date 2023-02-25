@@ -46,12 +46,18 @@ public class StarRocksRangePartitioner extends Partitioner {
         if (partitionType == PartitionType.UNPARTITIONED) {
             return 1;
         }
+        if (partitionType == PartitionType.LIST) {
+            return 0;
+        }
         return partitionInfo.partitions.size();
     }
 
     public int getPartition(Object var1) {
         PartitionType partitionType = PartitionType.getByType(partitionInfo.partitionType);
         if (partitionType == PartitionType.UNPARTITIONED) {
+            return 0;
+        }
+        if (partitionType == PartitionType.LIST) {
             return 0;
         }
         DppColumns key = (DppColumns) var1;
