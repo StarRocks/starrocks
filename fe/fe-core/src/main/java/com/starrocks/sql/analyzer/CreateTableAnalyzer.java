@@ -109,7 +109,7 @@ public class CreateTableAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
         }
 
-        final String engineName = analyzeEngineName(statement.getEngineName());
+        final String engineName = analyzeEngineName(statement.getEngineName()).toLowerCase();
         statement.setEngineName(engineName);
         statement.setCharsetName(analyzeCharsetName(statement.getCharsetName()).toLowerCase());
 
