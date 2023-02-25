@@ -66,10 +66,29 @@ struct MaxByDispatcherInner {
     }
 };
 
+template <LogicalType ret_type>
+struct MinByDispatcherInner {
+    template <LogicalType arg_type>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr ((lt_is_aggregate<arg_type> || lt_is_string<arg_type> || lt_is_json<arg_type>)&&(
+                              lt_is_aggregate<ret_type> || lt_is_string<ret_type> || lt_is_json<ret_type>)) {
+            resolver->add_aggregate_mapping_variadic<arg_type, ret_type, MinByAggregateData<arg_type>>(
+                    "min_by", true, AggregateFactory::MakeMinByAggregateFunction<arg_type>());
+        }
+    }
+};
+
 struct MaxByDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver, LogicalType ret_type) {
         type_dispatch_all(ret_type, MaxByDispatcherInner<lt>(), resolver);
+    }
+};
+
+struct MinByDispatcher {
+    template <LogicalType lt>
+    void operator()(AggregateFuncResolver* resolver, LogicalType ret_type) {
+        type_dispatch_all(ret_type, MinByDispatcherInner<lt>(), resolver);
     }
 };
 
@@ -79,6 +98,7 @@ void AggregateFuncResolver::register_minmaxany() {
     for (auto ret_type : minmax_types) {
         for (auto arg_type : minmax_types) {
             type_dispatch_all(arg_type, MaxByDispatcher(), this, ret_type);
+            type_dispatch_all(arg_type, MinByDispatcher(), this, ret_type);
         }
     }
 

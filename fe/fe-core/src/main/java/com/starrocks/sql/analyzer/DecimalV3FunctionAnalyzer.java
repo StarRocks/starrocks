@@ -93,7 +93,7 @@ public class DecimalV3FunctionAnalyzer {
             return Type.VARCHAR;
         }
 
-        if (FunctionSet.MAX_BY.equals(fnName)) {
+        if (FunctionSet.MAX_BY.equals(fnName) || FunctionSet.MIN_BY.equals(fnName)) {
             if (argTypes[0].isDecimalV3()) {
                 return ScalarType.createDecimalV3Type(argTypes[0].getPrimitiveType(),
                         argTypes[0].getPrecision(),
@@ -360,9 +360,10 @@ public class DecimalV3FunctionAnalyzer {
             }
             fn = DecimalV3FunctionAnalyzer
                     .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
-        } else if (DecimalV3FunctionAnalyzer.DECIMAL_UNARY_FUNCTION_SET.contains(fnName) ||
-                DecimalV3FunctionAnalyzer.DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName) ||
-                FunctionSet.IF.equals(fnName) || FunctionSet.MAX_BY.equals(fnName)) {
+        } else if (DecimalV3FunctionAnalyzer.DECIMAL_UNARY_FUNCTION_SET.contains(fnName)
+                || DecimalV3FunctionAnalyzer.DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName)
+                || FunctionSet.IF.equals(fnName) || FunctionSet.MAX_BY.equals(fnName)
+                || FunctionSet.MIN_BY.equals(fnName)) {
             // DecimalV3 types in resolved fn's argument should be converted into commonType so that right CastExprs
             // are interpolated into FunctionCallExpr's children whose type does match the corresponding argType of fn.
             List<Type> argTypes;
@@ -379,7 +380,7 @@ public class DecimalV3FunctionAnalyzer {
                 returnType = commonType;
             }
 
-            if (FunctionSet.MAX_BY.equals(fnName)) {
+            if (FunctionSet.MAX_BY.equals(fnName) || FunctionSet.MIN_BY.equals(fnName)) {
                 AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), Arrays.asList(argumentTypes),
                         returnType, Type.VARCHAR, fn.hasVarArgs());
                 newFn.setFunctionId(fn.getFunctionId());

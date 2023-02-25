@@ -227,12 +227,30 @@ public class FunctionAnalyzer {
 
         if (fnName.getFunction().equals(FunctionSet.MAX_BY)) {
             if (functionCallExpr.getChildren().size() != 2 || functionCallExpr.getChildren().isEmpty()) {
-                throw new SemanticException(
-                        "max_by requires two parameters: " + functionCallExpr.toSql());
+                throw new SemanticException("max_by requires two parameters: " + functionCallExpr.toSql());
             }
 
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
                 throw new SemanticException("max_by function args must be column");
+            }
+
+            fnParams.setIsDistinct(false);  // DISTINCT is meaningless here
+
+            Type sortKeyType = functionCallExpr.getChild(1).getType();
+            if (!sortKeyType.canApplyToNumeric()) {
+                throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+            }
+
+            return;
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.MIN_BY)) {
+            if (functionCallExpr.getChildren().size() != 2 || functionCallExpr.getChildren().isEmpty()) {
+                throw new SemanticException("min_by requires two parameters: " + functionCallExpr.toSql());
+            }
+
+            if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
+                throw new SemanticException("min_by function args must be column");
             }
 
             fnParams.setIsDistinct(false);  // DISTINCT is meaningless here
