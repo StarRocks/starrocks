@@ -102,7 +102,7 @@ public interface ParserErrorMsg {
     @BaseMessage("Invalid numeric literal {0}")
     String invalidNumFormat(String a0);
 
-    @BaseMessage("Invalid numeric literal {0}")
+    @BaseMessage("Invalid date literal {0}")
     String invalidDateFormat(String a0);
 
     @BaseMessage("Numeric overflow {0}")
