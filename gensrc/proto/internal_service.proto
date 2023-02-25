@@ -168,7 +168,7 @@ message PTabletWriterOpenRequest {
     optional bool abort_delete = 28;
     // before data load, the all current partitions will be opened
     // When the data load in progress, the partition created by automatic partition needs incremental open
-    optional bool is_incremental = 29;
+    optional bool is_incremental = 29 [default = false];
 };
 
 message PTabletWriterOpenResult {
