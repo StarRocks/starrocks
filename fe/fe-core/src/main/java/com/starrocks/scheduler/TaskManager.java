@@ -123,7 +123,7 @@ public class TaskManager {
     private void registerPeriodicalTask() {
         for (Task task : nameToTaskMap.values()) {
             if (task.getType() != Constants.TaskType.PERIODICAL) {
-                return;
+                continue;
             }
 
             TaskSchedule taskSchedule = task.getSchedule();
