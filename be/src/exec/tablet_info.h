@@ -102,6 +102,7 @@ public:
         for (auto& location : locations) {
             if (_tablets.count(location.tablet_id) == 0) {
                 _tablets.emplace(location.tablet_id, std::move(location));
+                VLOG(2) << "add location " << location;
             }
         }
     }
@@ -151,6 +152,8 @@ private:
 struct ChunkRow {
     ChunkRow() = default;
     ChunkRow(Columns* columns_, uint32_t index_) : columns(columns_), index(index_) {}
+
+    std::string debug_string();
 
     Columns* columns = nullptr;
     uint32_t index = 0;

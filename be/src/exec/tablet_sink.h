@@ -99,7 +99,7 @@ struct AddBatchCounter {
 
 class NodeChannel {
 public:
-    NodeChannel(OlapTableSink* parent, int64_t node_id);
+    NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental);
     ~NodeChannel() noexcept;
 
     // called before open, used to add tablet loacted in this backend
@@ -113,7 +113,7 @@ public:
     // if is_open_done() return true, open_wait() will not block
     // otherwise open_wait() will block
     void try_open();
-    void try_incremental_open(std::vector<PTabletWithPartition>& tablets);
+    void try_incremental_open();
     bool is_open_done();
     Status open_wait();
 
@@ -148,6 +148,8 @@ public:
     std::string print_load_info() const { return _load_info; }
     std::string name() const { return _name; }
     bool enable_colocate_mv_index() const { return _enable_colocate_mv_index; }
+
+    bool is_incremental() const { return _is_incremental; }
 
 private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
@@ -218,6 +220,8 @@ private:
     bool _enable_colocate_mv_index = config::enable_load_colocate_mv;
 
     WriteQuorumTypePB _write_quorum_type = WriteQuorumTypePB::MAJORITY;
+
+    bool _is_incremental;
 };
 
 class IndexChannel {
@@ -231,20 +235,21 @@ public:
         for (auto& it : _node_channels) {
             func(it.second.get());
         }
-        for (auto& it : _incremental_node_channels) {
-            func(it.second.get());
-        }
     }
 
     void for_each_initial_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
-            func(it.second.get());
+            if (!it.second->is_incremental()) {
+                func(it.second.get());
+            }
         }
     }
 
     void for_each_incremental_node_channel(const std::function<void(NodeChannel*)>& func) {
-        for (auto& it : _incremental_node_channels) {
-            func(it.second.get());
+        for (auto& it : _node_channels) {
+            if (it.second->is_incremental()) {
+                func(it.second.get());
+            }
         }
     }
 
@@ -254,7 +259,7 @@ public:
 
     bool has_intolerable_failure();
 
-    bool has_incremental_node_channel() { return !_incremental_node_channels.empty(); }
+    bool has_incremental_node_channel() const { return _has_incremental_node_channel; }
 
 private:
     friend class OlapTableSink;
@@ -272,7 +277,7 @@ private:
 
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
 
-    std::unordered_map<int64_t, std::unique_ptr<NodeChannel>> _incremental_node_channels;
+    bool _has_incremental_node_channel = false;
 };
 
 // Write data to Olap Table.
@@ -505,6 +510,8 @@ private:
     bool _enable_automatic_partition = false;
 
     bool _nonblocking_send_chunk = false;
+
+    bool _has_automatic_partition = false;
 
     std::atomic<bool> _is_automatic_partition_running = false;
     Status _automatic_partition_status;
