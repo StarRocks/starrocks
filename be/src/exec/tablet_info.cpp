@@ -26,6 +26,20 @@ namespace starrocks {
 
 static const std::string LOAD_OP_COLUMN = "__op";
 
+std::string ChunkRow::debug_string() {
+    std::stringstream os;
+    os << "index " << index << " [";
+    if (columns && columns->size() > 0) {
+        for (size_t col = 0; col < columns->size() - 1; ++col) {
+            os << (*columns)[col]->debug_item(index);
+            os << ", ";
+        }
+        os << (*columns)[columns->size() - 1]->debug_item(index);
+    }
+    os << "]";
+    return os.str();
+}
+
 void OlapTableIndexSchema::to_protobuf(POlapTableIndexSchema* pindex) const {
     pindex->set_id(index_id);
     pindex->set_schema_hash(schema_hash);
@@ -209,6 +223,8 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
         } else {
             _partitions_map.emplace(&part->end_key, part);
         }
+        VLOG(1) << "add partition:" << part->id << " start " << part->start_key.debug_string() << " end "
+                << part->end_key.debug_string();
     }
 
     return Status::OK();
@@ -229,6 +245,11 @@ void OlapTablePartitionParam::close(RuntimeState* state) {
 }
 
 Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNode>& t_exprs, ChunkRow* part_key) {
+    if (t_exprs.size() != _partition_columns.size()) {
+        return Status::InternalError(fmt::format("partition expr size {} not equal partition column size {}",
+                                                 t_exprs.size(), _partition_columns.size()));
+    }
+
     for (int i = 0; i < t_exprs.size(); i++) {
         const TExprNode& t_expr = t_exprs[i];
         const auto& type_desc = TypeDescriptor::from_thrift(t_expr.type);
@@ -361,6 +382,8 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
         }
         _partitions.emplace(part->id, part);
         _partitions_map.emplace(&part->end_key, part);
+        VLOG(1) << "add automatic partition:" << part->id << " start " << part->start_key.debug_string() << " end "
+                << part->end_key.debug_string();
     }
 
     return Status::OK();
@@ -403,9 +426,13 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                             return Status::InternalError("automatic partition only support single column partition.");
                         }
                         for (auto& column : *row.columns) {
+                            VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partion row "
+                                    << row.debug_string();
                             (*partition_not_exist_row_values)[0].emplace_back(column->debug_item(i));
                         }
                     } else {
+                        VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partion row "
+                                << row.debug_string();
                         (*partitions)[i] = nullptr;
                         (*selection)[i] = 0;
                         if (invalid_row_index != nullptr) {
@@ -421,9 +448,14 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                             return Status::InternalError("automatic partition only support single column partition.");
                         }
                         for (auto& column : *row.columns) {
+                            VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partion row "
+                                    << row.debug_string();
                             (*partition_not_exist_row_values)[0].emplace_back(column->debug_item(i));
                         }
                     } else {
+                        VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partion row "
+                                << row.debug_string() << " partition start " << it->second->start_key.debug_string()
+                                << " end " << it->second->end_key.debug_string();
                         (*partitions)[i] = nullptr;
                         (*selection)[i] = 0;
                         if (invalid_row_index != nullptr) {
