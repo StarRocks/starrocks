@@ -49,7 +49,7 @@ public:
     virtual ~TabletsChannel() = default;
 
     [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params,
-                                      std::shared_ptr<OlapTableSchemaParam> schema) = 0;
+                                      std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) = 0;
 
     virtual Status incremental_open(const PTabletWriterOpenRequest& params,
                                     std::shared_ptr<OlapTableSchemaParam> schema) = 0;
