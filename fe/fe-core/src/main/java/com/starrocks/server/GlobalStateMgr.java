@@ -583,6 +583,17 @@ public class GlobalStateMgr {
 
     // if isCkptGlobalState is true, it means that we should not collect thread pool metric
     private GlobalStateMgr(boolean isCkptGlobalState) {
+<<<<<<< HEAD
+=======
+        if (!isCkptGlobalState) {
+            RunMode.detectRunMode();
+        }
+
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+            this.starOSAgent = new StarOSAgent();
+        }
+
+>>>>>>> 02838af30 ([Enhancement] Persist run mode and check after restart (#18262))
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
