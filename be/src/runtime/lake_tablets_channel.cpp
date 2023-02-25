@@ -61,7 +61,8 @@ public:
 
     const TabletsChannelKey& key() const { return _key; }
 
-    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) override;
+    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
+                bool is_incremental) override;
 
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
@@ -177,7 +178,8 @@ LakeTabletsChannel::~LakeTabletsChannel() {
     _mem_pool.reset();
 }
 
-Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) {
+Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
+                                [[maybe_unused]] bool is_incremental) {
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
