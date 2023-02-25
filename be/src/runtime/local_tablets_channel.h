@@ -44,7 +44,8 @@ public:
 
     const TabletsChannelKey& key() const { return _key; }
 
-    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) override;
+    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
+                bool is_incremental) override;
 
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
@@ -190,6 +191,11 @@ private:
     bool _is_replicated_storage = false;
 
     std::unordered_map<int64_t, PNetworkAddress> _node_id_to_endpoint;
+
+    // Initially load tablets are not present on this node, so there will be no TabletsChannel.
+    // After the partition is created during data loading, there are some tablets of the new partitions on this node,
+    // so a TabletsChannel needs to be created, such that _is_incremental_channel=true
+    bool _is_incremental_channel = false;
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,

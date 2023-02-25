@@ -104,7 +104,7 @@ bool OlapTableSinkOperator::is_epoch_finishing() const {
 
 Status OlapTableSinkOperator::set_epoch_finishing(RuntimeState* state) {
     _is_epoch_finished = true;
-    if (_is_open_done) {
+    if (_is_open_done && !_automatic_partition_chunk) {
         // sink's open already finish, we can try_close
         return _sink->try_close(state);
     } else {

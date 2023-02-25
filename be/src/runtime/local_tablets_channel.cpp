@@ -70,14 +70,20 @@ LocalTabletsChannel::~LocalTabletsChannel() {
     _mem_pool.reset();
 }
 
-Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) {
+Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
+                                 bool is_incremental) {
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
     _tuple_desc = _schema->tuple_desc();
     _node_id = params.node_id();
 
-    _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
+    if (is_incremental) {
+        _num_remaining_senders.fetch_add(1, std::memory_order_release);
+        _is_incremental_channel = true;
+    } else {
+        _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
+    }
     _senders = std::vector<Sender>(params.num_senders());
 
     RETURN_IF_ERROR(_open_all_writers(params));
@@ -616,10 +622,15 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
     // update tablets
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
+    size_t incremental_tablet_num = 0;
+    std::stringstream ss;
+    ss << "incremental open delta writer ";
+
     for (const PTabletWithPartition& tablet : params.tablets()) {
         if (_delta_writers.count(tablet.tablet_id()) != 0) {
             continue;
         }
+        incremental_tablet_num++;
 
         DeltaWriterOptions options;
         options.tablet_id = tablet.tablet_id();
@@ -633,6 +644,9 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         options.index_id = _index_id;
         options.node_id = _node_id;
         options.timeout_ms = params.timeout_ms();
+        options.write_quorum = params.write_quorum();
+        options.miss_auto_increment_column = params.miss_auto_increment_column();
+        options.abort_delete = params.abort_delete();
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);
@@ -652,16 +666,12 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         RETURN_IF_ERROR(res.status());
         auto writer = std::move(res).value();
+        ss << "[" << tablet.tablet_id() << ":" << writer->replica_state() << "]";
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
     }
-    _s_tablet_writer_count += _delta_writers.size();
+    _s_tablet_writer_count += incremental_tablet_num;
 
-    std::stringstream ss;
-    ss << "open delta writer ";
-    for (auto& [tablet_id, delta_writer] : _delta_writers) {
-        ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
-    }
     LOG(INFO) << ss.str();
 
     auto it = _tablet_id_to_sorted_indexes.begin();
@@ -674,6 +684,11 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
     for (size_t i = 0; i < tablet_ids.size(); ++i) {
         _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
     }
+
+    if (_is_incremental_channel) {
+        _num_remaining_senders.fetch_add(1, std::memory_order_release);
+    }
+
     return Status::OK();
 }
 
