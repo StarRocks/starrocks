@@ -571,6 +571,11 @@ public class GlobalStateMgr {
         if (!isCkptGlobalState) {
             RunMode.detectRunMode();
         }
+
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+            this.starOSAgent = new StarOSAgent();
+        }
+
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();

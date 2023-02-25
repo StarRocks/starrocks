@@ -67,6 +67,7 @@ public class Storage {
     // version file props keys
     private static final String VERSION_PROP_CLUSTER_ID = "clusterId";
     private static final String VERSION_PROP_TOKEN = "token";
+    private static final String VERSION_PROP_RUN_MODE = "runMode";
     // role file props keys
     private static final String ROLE_PROP_FRONTEND_ROLE = "role";
     private static final String ROLE_PROP_NODE_NAME = "name";
@@ -75,6 +76,7 @@ public class Storage {
     // version file props values
     private int clusterID = 0;
     private String token;
+    private String runMode;
     // role file props values
     private FrontendNodeType role = FrontendNodeType.UNKNOWN;
     private String nodeName;
@@ -113,7 +115,11 @@ public class Storage {
                 if (prop.getProperty(VERSION_PROP_TOKEN) != null) {
                     token = prop.getProperty(VERSION_PROP_TOKEN);
                 }
+                if (prop.getProperty(VERSION_PROP_RUN_MODE) != null) {
+                    runMode = prop.getProperty(VERSION_PROP_RUN_MODE);
+                }
             }
+
         }
 
         File roleFile = getRoleFile();
@@ -161,6 +167,14 @@ public class Storage {
         this.token = token;
     }
 
+    public String getRunMode() {
+        return runMode;
+    }
+
+    public void setRunMode(String runMode) {
+        this.runMode = runMode;
+    }
+
     public FrontendNodeType getRole() {
         return role;
     }
@@ -197,17 +211,14 @@ public class Storage {
         return UUID.randomUUID().toString();
     }
 
-    private void setFields(Properties properties) throws IOException {
+    public void writeVersionFile() throws IOException {
+        Properties properties = new Properties();
         Preconditions.checkState(clusterID > 0);
         properties.setProperty(VERSION_PROP_CLUSTER_ID, String.valueOf(clusterID));
         if (!Strings.isNullOrEmpty(token)) {
             properties.setProperty(VERSION_PROP_TOKEN, token);
         }
-    }
-
-    public void writeClusterIdAndToken() throws IOException {
-        Properties properties = new Properties();
-        setFields(properties);
+        properties.setProperty(VERSION_PROP_RUN_MODE, runMode);
         try (RandomAccessFile file = new RandomAccessFile(new File(metaDir, VERSION_FILE), "rws")) {
             file.seek(0);
             try (FileOutputStream out = new FileOutputStream(file.getFD())) {
