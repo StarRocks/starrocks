@@ -117,17 +117,17 @@ public:
 
     void add_rowset(int64_t uid, RowsetSharedPtr rowset) {
         _rowsets[uid] = rowset;
-        _total_rowset_disk_size += rowset->data_disk_size();
+        _total_alive_rowset_size += rowset->data_disk_size();
     }
 
-    int64_t total_rowset_disk_size() { return _total_rowset_disk_size; }
+    int64_t total_rowset_disk_size() { return _total_alive_rowset_size; }
 
 private:
-    int64_t _total_rowset_disk_size = 0;
+    int64_t _total_alive_rowset_size = 0;
     std::unordered_map<int64_t, RowsetSharedPtr> _rowsets;
 };
 
-using LsnMap = std::map<int128_t, BinlogFileMetaPBPtr>;
+using LsnMap = std::map<int128_t, BinlogFilePtr>;
 using RowsetCountMap = std::unordered_map<int64_t, int32_t>;
 
 TEST_F(BinlogManagerTest, test_ingestion_commit) {
@@ -137,8 +137,8 @@ TEST_F(BinlogManagerTest, test_ingestion_commit) {
     std::shared_ptr<MockRowsetFetcher> rowset_fetcher = std::make_shared<MockRowsetFetcher>();
     std::shared_ptr<BinlogManager> binlog_manager = std::make_shared<BinlogManager>(
             std::rand(), _binlog_file_dir, max_file_size, max_page_size, compress_type, rowset_fetcher);
-    LsnMap& lsn_map = binlog_manager->file_metas();
-    RowsetCountMap& rowset_count_map = binlog_manager->rowset_count_map();
+    LsnMap& lsn_map = binlog_manager->alive_binlog_files();
+    RowsetCountMap& rowset_count_map = binlog_manager->alive_rowset_count_map();
     std::map<int64_t, BinlogFileMetaPBPtr> expect_file_metas;
     std::unordered_map<int64_t, std::unordered_set<int64_t>> version_to_file_ids;
     RowsetSharedPtr mock_rowset;
@@ -225,10 +225,10 @@ TEST_F(BinlogManagerTest, test_ingestion_commit) {
             BinlogFileMetaPBPtr meta = it.second;
             int128_t lsn = BinlogUtil::get_lsn(meta->start_version(), meta->start_seq_id());
             ASSERT_EQ(1, lsn_map.count(lsn));
-            ASSERT_EQ(meta.get(), lsn_map[lsn].get());
+            ASSERT_EQ(meta.get(), lsn_map[lsn]->file_meta().get());
             expect_binlog_file_size += meta->file_size();
         }
-        ASSERT_EQ(expect_binlog_file_size, binlog_manager->total_binlog_file_disk_size());
+        ASSERT_EQ(expect_binlog_file_size, binlog_manager->total_useful_binlog_file_size());
         ASSERT_EQ(version_to_file_ids.size(), rowset_count_map.size());
         for (auto it : version_to_file_ids) {
             int64_t file_id = it.first;
@@ -246,8 +246,8 @@ TEST_F(BinlogManagerTest, test_ingestion_abort) {
     std::shared_ptr<MockRowsetFetcher> rowset_fetcher = std::make_shared<MockRowsetFetcher>();
     std::shared_ptr<BinlogManager> binlog_manager = std::make_shared<BinlogManager>(
             std::rand(), _binlog_file_dir, max_file_size, max_page_size, compress_type, rowset_fetcher);
-    LsnMap& lsn_map = binlog_manager->file_metas();
-    RowsetCountMap& rowset_count_map = binlog_manager->rowset_count_map();
+    LsnMap& lsn_map = binlog_manager->alive_binlog_files();
+    RowsetCountMap& rowset_count_map = binlog_manager->alive_rowset_count_map();
     std::map<int64_t, BinlogFileMetaPBPtr> expect_file_metas;
     std::unordered_map<int64_t, std::unordered_set<int64_t>> version_to_file_ids;
     RowsetSharedPtr mock_rowset;
@@ -302,10 +302,10 @@ TEST_F(BinlogManagerTest, test_ingestion_abort) {
         BinlogFileMetaPBPtr meta = it.second;
         int128_t lsn = BinlogUtil::get_lsn(meta->start_version(), meta->start_seq_id());
         ASSERT_EQ(1, lsn_map.count(lsn));
-        ASSERT_EQ(meta.get(), lsn_map[lsn].get());
+        ASSERT_EQ(meta.get(), lsn_map[lsn]->file_meta().get());
         expect_binlog_file_size += meta->file_size();
     }
-    ASSERT_EQ(expect_binlog_file_size, binlog_manager->total_binlog_file_disk_size());
+    ASSERT_EQ(expect_binlog_file_size, binlog_manager->total_useful_binlog_file_size());
 
     ASSERT_EQ(version_to_file_ids.size(), rowset_count_map.size());
     for (auto it : version_to_file_ids) {
@@ -323,8 +323,8 @@ TEST_F(BinlogManagerTest, test_ingestion_delete) {
     std::shared_ptr<MockRowsetFetcher> rowset_fetcher = std::make_shared<MockRowsetFetcher>();
     std::shared_ptr<BinlogManager> binlog_manager = std::make_shared<BinlogManager>(
             std::rand(), _binlog_file_dir, max_file_size, max_page_size, compress_type, rowset_fetcher);
-    LsnMap& lsn_map = binlog_manager->file_metas();
-    RowsetCountMap& rowset_count_map = binlog_manager->rowset_count_map();
+    LsnMap& lsn_map = binlog_manager->alive_binlog_files();
+    RowsetCountMap& rowset_count_map = binlog_manager->alive_rowset_count_map();
     std::map<int64_t, BinlogFileMetaPBPtr> expect_file_metas;
     std::unordered_map<int64_t, std::unordered_set<int64_t>> version_to_file_ids;
     RowsetSharedPtr mock_rowset;
@@ -386,10 +386,10 @@ TEST_F(BinlogManagerTest, test_ingestion_delete) {
         BinlogFileMetaPBPtr meta = it.second;
         int128_t lsn = BinlogUtil::get_lsn(meta->start_version(), meta->start_seq_id());
         ASSERT_EQ(1, lsn_map.count(lsn));
-        ASSERT_EQ(meta.get(), lsn_map[lsn].get());
+        ASSERT_EQ(meta.get(), lsn_map[lsn]->file_meta().get());
         expect_binlog_file_size += meta->file_size();
     }
-    ASSERT_EQ(expect_binlog_file_size, binlog_manager->total_binlog_file_disk_size());
+    ASSERT_EQ(expect_binlog_file_size, binlog_manager->total_useful_binlog_file_size());
     ASSERT_EQ(version_to_file_ids.size(), rowset_count_map.size());
     for (auto it : version_to_file_ids) {
         int64_t fid = it.first;
