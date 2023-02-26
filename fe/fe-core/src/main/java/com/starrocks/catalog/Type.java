@@ -543,7 +543,7 @@ public abstract class Type implements Cloneable {
     /**
      * Used for Nest Type
      */
-    public void setSelectedField(int pos, boolean needSetChildren) {
+    public void setSelectedField(ComplexTypeAccessPath accessPath, boolean needSetChildren) {
         throw new IllegalStateException("setSelectedField() is not implemented for type " + toSql());
     }
 

@@ -593,6 +593,7 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setIsMaterialized(true);
                 if (slotDescriptor.getOriginType().isComplexType()) {
                     slotDescriptor.setOriginType(entry.getKey().getType());
+                    slotDescriptor.setType(entry.getKey().getType());
                 }
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
@@ -687,6 +688,7 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setIsMaterialized(true);
                 if (slotDescriptor.getOriginType().isComplexType()) {
                     slotDescriptor.setOriginType(entry.getKey().getType());
+                    slotDescriptor.setType(entry.getKey().getType());
                 }
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
