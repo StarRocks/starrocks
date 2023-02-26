@@ -300,7 +300,7 @@ Timestamp timestamp::to_time(Timestamp timestamp) {
 }
 
 JulianDate timestamp::to_julian(Timestamp timestamp) {
-    return static_cast<int64_t>(timestamp) >> TIMESTAMP_BITS;
+    return static_cast<uint64_t>(timestamp) >> TIMESTAMP_BITS;
 }
 
 void timestamp::to_date(Timestamp timestamp, int* year, int* month, int* day) {
