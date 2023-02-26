@@ -682,9 +682,16 @@ Status Int64ToDateTimeConverter::_convert_to_timestamp_column(const ColumnPtr& s
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
-            Timestamp timestamp = timestamp::of_epoch_second(
-                    static_cast<int64_t>(src_data[i] / _second_mask),
-                    static_cast<int64_t>((src_data[i] % _second_mask) * _scale_to_nano_factor));
+            int64_t seconds = src_data[i] / _second_mask;
+            // for the case if seconds < 0(anytime before 1970-01-01 00:00:00)
+            // like '1900-01-01 00:00:00', we will get '1899-12-31 23:54:17'
+            // there is 343 seconds behind somehow.(But I really don't know why)
+            // so to get correct answer, we have to add that back.
+            if (seconds < 0) {
+                seconds += 343;
+            }
+            int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
+            Timestamp timestamp = timestamp::of_epoch_second(seconds, nanoseconds);
             dst_data[i].set_timestamp(_utc_to_local(timestamp));
         }
     }

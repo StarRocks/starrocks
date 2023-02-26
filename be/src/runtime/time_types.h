@@ -18,7 +18,6 @@
 #include <string>
 
 #include "common/compiler_util.h"
-
 namespace starrocks {
 
 // Date: Julian Date -2000-01-01 ~ 9999-01-01
@@ -378,9 +377,13 @@ double timestamp::time_to_literal(double time) {
 
 Timestamp timestamp::of_epoch_second(int64_t seconds, int64_t nanoseconds) {
     int64_t days = seconds / SECS_PER_DAY;
+    int64_t secs = seconds - days * SECS_PER_DAY;
+    if (seconds < 0) {
+        days -= 1;
+        secs += SECS_PER_DAY;
+    }
     JulianDate jd = days + date::UNIX_EPOCH_JULIAN;
-    return timestamp::from_julian_and_time(jd,
-                                           seconds % SECS_PER_DAY * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC);
+    return timestamp::from_julian_and_time(jd, secs * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC);
 }
 
 struct JulianToDateEntry {
