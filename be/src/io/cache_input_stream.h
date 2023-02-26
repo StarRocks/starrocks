@@ -47,7 +47,7 @@ public:
 
     StatusOr<int64_t> get_size() override;
 
-    const Stats& stats() { return _stats;}
+    const Stats& stats() { return _stats; }
 
     void set_enable_populate_cache(bool v) { _enable_populate_cache = v; }
 
