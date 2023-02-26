@@ -59,11 +59,9 @@ public class StructTypePlanTest extends PlanTestBase {
 
     @Test
     public void testSubfieldWindow() throws Exception {
-        // TODO Can't pushdown
         String sql = "select c3.a, row_number() over (partition by c0 order by c2.a) from test";
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
-        assertVerbosePlanContains(sql,
-                "Pruned type: 4 <-> [STRUCT<a int(11), b int(11), c STRUCT<a int(11), b int(11)>, d ARRAY<int(11)>>]");
+        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "Pruned type: 4 <-> [STRUCT<a int(11)>]");
     }
 
     @Test
@@ -119,6 +117,9 @@ public class StructTypePlanTest extends PlanTestBase {
     public void testSubQuery() throws Exception {
         String sql = "select c2.a from (select c1, c2 from test) t";
         assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+        sql = "select t1.a, rn from (select c3.c as t1, row_number() over (partition by c0 order by c2.a) as rn from test) as t";
+        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]\n" +
+                "     Pruned type: 4 <-> [STRUCT<c STRUCT<a int(11)>>]");
     }
 
     @Test
@@ -146,6 +147,20 @@ public class StructTypePlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testExcept() throws Exception {
+        String sql = "select c2.a + 1 from test except select c3.a from test";
+        assertVerbosePlanContains(sql, "Pruned type: 9 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+    }
+
+    @Test
+    public void testIntersect() throws Exception {
+        String sql = "select c2.a + 1 from test intersect select c3.a from test";
+        assertVerbosePlanContains(sql, "Pruned type: 9 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+    }
+
+    @Test
     public void testLambda() throws Exception {
         String sql = "select array_map(x->x, [])";
         assertVerbosePlanContains(sql, "ARRAY<boolean>[]");
@@ -155,5 +170,7 @@ public class StructTypePlanTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
         sql = "select array_filter((x,y) -> x<y, c3.d, c3.d) from test";
         assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
+        sql = "select map_values(col_map), map_keys(col_map) from (select map_from_arrays([],[]) as col_map)A";
+        assertPlanContains(sql, "ARRAY<boolean>[], ARRAY<boolean>[]");
     }
 }
