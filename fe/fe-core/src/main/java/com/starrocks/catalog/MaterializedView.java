@@ -358,7 +358,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public Set<String> getUpdatedPartitionNamesOfTable(Table base, boolean withMv) {
-        if (!base.isLocalTable()) {
+        if (!base.isNativeTable()) {
             // TODO(ywb): support external table refresh according to partition later
             return Sets.newHashSet();
         }
@@ -448,7 +448,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             // Do not set the active when table is null, it would be checked in MVActiveChecker
             Table table = baseTableInfo.getTable();
             if (table != null) {
-                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                if (table.isMaterializedView() && !((MaterializedView) table).isActive()) {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
                     active = false;
@@ -457,7 +457,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 MvId mvId = new MvId(db.getId(), id);
                 table.addRelatedMaterializedView(mvId);
 
-                if (!table.isLocalTable()) {
+                if (!table.isNativeTable()) {
                     GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
                             baseTableInfo.getCatalogName(), baseTableInfo.getDbName(),
                             baseTableInfo.getTableIdentifier(),
@@ -560,6 +560,21 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return true;
     }
 
+    protected void appendBaseProperties(StringBuilder sb) {
+        Preconditions.checkNotNull(sb);
+
+        // replicationNum
+        Short replicationNum = this.getDefaultReplicationNum();
+        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
+        sb.append(replicationNum).append("\"");
+
+        // storageMedium
+        String storageMedium = this.getStorageMedium();
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                .append("\" = \"");
+        sb.append(storageMedium).append("\"");
+    }
+
     public String getMaterializedViewDdlStmt(boolean simple) {
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE MATERIALIZED VIEW `").append(this.getName()).append("`");
@@ -599,17 +614,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         // properties
         sb.append("\nPROPERTIES (\n");
-
-        // replicationNum
-        Short replicationNum = this.getDefaultReplicationNum();
-        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
-        sb.append(replicationNum).append("\"");
-
-        // storageMedium
-        String storageMedium = this.getStorageMedium();
-        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
-                .append("\" = \"");
-        sb.append(storageMedium).append("\"");
+        appendBaseProperties(sb);
 
         // storageCooldownTime
         Map<String, String> properties = this.getTableProperty().getProperties();
@@ -730,7 +735,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
                 // we can not judge whether mv based on external table is update-to-date,
                 // because we do not know that any changes in external table.
-                if (!table.isLocalTable()) {
+                if (!table.isNativeTable()) {
                     if (forceExternalTableQueryRewrite) {
                         // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
                         continue;
@@ -764,7 +769,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         boolean forceExternalTableQueryRewrite = isForceExternalTableQueryRewrite();
         for (BaseTableInfo tableInfo : baseTableInfos) {
             Table table = tableInfo.getTable();
-            if (!table.isLocalTable()) {
+            if (!table.isNativeTable()) {
                 if (forceExternalTableQueryRewrite) {
                     // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
                     continue;
