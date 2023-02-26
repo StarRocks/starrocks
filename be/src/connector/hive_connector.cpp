@@ -50,7 +50,8 @@ HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const TSc
 Status HiveDataSource::_check_all_slots_nullable() {
     for (const auto* slot : _tuple_desc->slots()) {
         if (!slot->is_nullable()) {
-            return Status::RuntimeError(fmt::format("All columns must be nullable for external table. Column '{}' is not nullable", slot->col_name()));
+            return Status::RuntimeError(fmt::format(
+                    "All columns must be nullable for external table. Column '{}' is not nullable", slot->col_name()));
         }
     }
     return Status::OK();
