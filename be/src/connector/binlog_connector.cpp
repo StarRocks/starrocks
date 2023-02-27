@@ -64,7 +64,8 @@ Status BinlogDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(_binlog_reader->init());
 
     VLOG(3) << "Open binlog connector, tablet: " << _tablet->full_name()
-            << ", binlog read schema: " << _binlog_read_schema << ", is_stream_pipeline: " << _is_stream_pipeline;
+            << ", binlog reader id: " << _binlog_reader->reader_id() << ", is_stream_pipeline: " << _is_stream_pipeline
+            << ", binlog read schema: " << _binlog_read_schema;
 
     return Status::OK();
 }
@@ -96,6 +97,7 @@ Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     _init_chunk(chunk, state->chunk_size());
     Status status = _binlog_reader->get_next(chunk, _max_version_exclusive);
     VLOG_IF(3, !status.ok()) << "Fail to read binlog, tablet: " << _tablet->full_name()
+                             << ", binlog reader id: " << _binlog_reader->reader_id()
                              << ", start_version: " << _start_version << ", _start_seq_id: " << _start_seq_id
                              << ", _max_version_exclusive: " << _max_version_exclusive << ", " << status;
     return status;
@@ -104,7 +106,8 @@ Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 Status BinlogDataSource::_prepare_non_stream_pipeline() {
     BinlogRange binlog_range = _tablet->binlog_manager()->current_binlog_range();
     if (binlog_range.is_empty()) {
-        VLOG(3) << "There is no binlog for tablet: " << _tablet->full_name();
+        VLOG(3) << "There is no binlog to scan, tablet: " << _tablet->full_name()
+                << ", binlog reader id: " << _binlog_reader->reader_id();
         return Status::EndOfFile("There is no binlog");
     }
 
@@ -112,7 +115,8 @@ Status BinlogDataSource::_prepare_non_stream_pipeline() {
     _start_seq_id.store(binlog_range.start_seq_id());
     _max_version_exclusive.store(binlog_range.end_version() + 1);
 
-    VLOG(3) << "Prepare to scan binlog, tablet: " << _tablet->full_name() << ", " << binlog_range.debug_string();
+    VLOG(3) << "Prepare to scan binlog, tablet: " << _tablet->full_name()
+            << ", binlog reader id: " << _binlog_reader->reader_id() << ", " << binlog_range.debug_string();
 
     return Status::OK();
 }
@@ -124,6 +128,9 @@ Status BinlogDataSource::set_offset(int64_t table_version, int64_t changelog_id)
     _start_seq_id.store(changelog_id);
     // Note MV can't read binlog across versions currently, so the max_version_exclusive is _start_version + 1
     _max_version_exclusive.store(table_version + 1);
+    VLOG(3) << "Binlog connector set offset, tablet: " << _tablet->full_name()
+            << ", binlog reader id: " << _binlog_reader->reader_id() << ", version: " << table_version
+            << ", seq_id: " << changelog_id;
     return Status::OK();
 }
 
@@ -131,6 +138,8 @@ Status BinlogDataSource::reset_status() {
     _rows_read_number = 0;
     _bytes_read = 0;
     _cpu_time_ns = 0;
+    VLOG(3) << "Binlog connector reset status, tablet: " << _tablet->full_name()
+            << ", binlog reader id: " << _binlog_reader->reader_id();
     return Status::OK();
 }
 
