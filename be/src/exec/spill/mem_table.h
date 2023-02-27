@@ -68,4 +68,39 @@ protected:
 
 using MemTablePtr = std::shared_ptr<SpilledMemTable>;
 
+class UnorderedMemTable final : public SpilledMemTable {
+public:
+    template <class... Args>
+    UnorderedMemTable(Args&&... args) : SpilledMemTable(std::forward<Args>(args)...) {}
+    ~UnorderedMemTable() override = default;
+
+    Status append(ChunkPtr chunk) override;
+    Status done() override { return Status::OK(); };
+    Status flush(FlushCallBack callback) override;
+
+private:
+    std::vector<ChunkPtr> _chunks;
+};
+
+class OrderedMemTable final : public SpilledMemTable {
+public:
+    template <class... Args>
+    OrderedMemTable(const std::vector<ExprContext*>* sort_exprs, const SortDescs* sort_desc, Args&&... args)
+            : SpilledMemTable(std::forward<Args>(args)...), _sort_exprs(sort_exprs), _sort_desc(*sort_desc) {}
+    ~OrderedMemTable() override = default;
+
+    Status append(ChunkPtr chunk) override;
+    Status done() override;
+    Status flush(FlushCallBack callback) override;
+
+private:
+    StatusOr<ChunkPtr> _do_sort(const ChunkPtr& chunk);
+
+    const std::vector<ExprContext*>* _sort_exprs;
+    const SortDescs _sort_desc;
+    Permutation _permutation;
+    ChunkPtr _chunk;
+    ChunkSharedSlice _chunk_slice;
+};
+
 } // namespace starrocks
