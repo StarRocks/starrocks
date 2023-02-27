@@ -105,6 +105,8 @@ public:
     StreamChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
                       ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
 
+    Status prepare(RuntimeState* state) override;
+
     Status set_stream_offset(int64_t table_version, int64_t changelog_id);
     void set_epoch_limit(int64_t epoch_rows_limit, int64_t epoch_time_limit);
     void reset_status();
