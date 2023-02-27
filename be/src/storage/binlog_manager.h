@@ -24,6 +24,7 @@
 #include "gen_cpp/binlog.pb.h"
 #include "storage/binlog_builder.h"
 #include "storage/binlog_file_writer.h"
+#include "storage/binlog_reader.h"
 
 namespace starrocks {
 
@@ -92,7 +93,7 @@ private:
 };
 
 // Manages the binlog metas and files, including generation, deletion and read.
-class BinlogManager : public std::enable_shared_from_this<BinlogManager> {
+class BinlogManager {
 public:
     BinlogManager(int64_t tablet_id, std::string path, int64_t max_file_size, int32_t max_page_size,
                   CompressionTypePB compression_type, std::shared_ptr<RowsetFetcher> rowset_fetcher);
@@ -140,6 +141,18 @@ public:
     // Commit the result of pre-commit, and it's visible for reading
     void commit_ingestion(int64_t version);
 
+    // Register the reader, and return a unique id allocated for this reader.
+    StatusOr<int64_t> register_reader(std::shared_ptr<BinlogReader> reader);
+
+    // Unregister the reader with the given id.
+    void unregister_reader(int64_t reader_id);
+
+    // Find the binlog file which may contain the change event with given <version, seq_id>.
+    // Return Status::NotFound if there is no such file.
+    StatusOr<BinlogFileMetaPBPtr> find_binlog_meta(int64_t version, int64_t seq_id);
+
+    std::string get_binlog_file_path(int64_t file_id) { return BinlogUtil::binlog_file_path(_path, file_id); }
+
     // For testing
     int64_t next_file_id() { return _next_file_id; }
 
@@ -156,6 +169,8 @@ public:
     int64_t total_binlog_file_disk_size() { return _total_binlog_file_disk_size; }
 
     int64_t total_rowset_disk_size() { return _total_rowset_disk_size; }
+
+    void close_active_writer();
 
 private:
     void _apply_build_result(BinlogBuildResult* result);
@@ -192,6 +207,11 @@ private:
     // statistics for disk usage
     int64_t _total_binlog_file_disk_size = 0;
     int64_t _total_rowset_disk_size = 0;
+
+    // Allocate an id for each binlog reader. Protected by _meta_lock
+    int64_t _next_reader_id = 0;
+    // Mapping from the reader id to the readers. Protected by _meta_lock
+    std::unordered_map<int64_t, BinlogReaderSharedPtr> _binlog_readers;
 };
 
 } // namespace starrocks
