@@ -1638,7 +1638,7 @@ public class PlanFragmentBuilder {
             ArrayList<Expr> intermediateAggrExprs = aggExpr.intermediateExpr;
 
             AggregationNode aggregationNode;
-            if (node.getType().isLocal()) {
+            if (node.getType().isLocal() && node.isSplit()) {
                 AggregateInfo aggInfo = AggregateInfo.create(
                         groupingExpressions,
                         aggregateExprList,
@@ -1658,7 +1658,9 @@ public class PlanFragmentBuilder {
                         hasColocateOlapScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
-            } else if (node.getType().isGlobal()) {
+            } else if (node.getType().isGlobal() || (node.getType().isLocal() && !node.isSplit())) {
+                // Local && un-split aggregate meanings only execute local pre-aggregation, we need promise
+                // output type match other node, so must use `update finalized` phase
                 if (node.hasSingleDistinct()) {
                     // For SQL: select count(id_int) as a, sum(DISTINCT id_bigint) as b from test_basic group by id_int;
                     // sum function is update function, but count is merge function
