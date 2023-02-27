@@ -56,10 +56,6 @@ protected:
 };
 
 using BinlogMetaFieldMap = std::unordered_map<std::string, FieldPtr>;
-const std::string BINLOG_OP = g_PlanNodes_constants.BINLOG_OP_COLUMN_NAME;
-const std::string BINLOG_VERSION = g_PlanNodes_constants.BINLOG_VERSION_COLUMN_NAME;
-const std::string BINLOG_SEQ_ID = g_PlanNodes_constants.BINLOG_SEQ_ID_COLUMN_NAME;
-const std::string BINLOG_TIMESTAMP = g_PlanNodes_constants.BINLOG_TIMESTAMP_COLUMN_NAME;
 
 class BinlogDataSource final : public StreamDataSource {
 public:
@@ -115,6 +111,11 @@ private:
     Status _mock_chunk(Chunk* chunk);
     Status _mock_chunk_test(ChunkPtr* chunk);
     std::atomic<int32_t> _mock_chunk_num = 0;
+
+    const std::string BINLOG_OP = g_PlanNodes_constants.BINLOG_OP_COLUMN_NAME;
+    const std::string BINLOG_VERSION = g_PlanNodes_constants.BINLOG_VERSION_COLUMN_NAME;
+    const std::string BINLOG_SEQ_ID = g_PlanNodes_constants.BINLOG_SEQ_ID_COLUMN_NAME;
+    const std::string BINLOG_TIMESTAMP = g_PlanNodes_constants.BINLOG_TIMESTAMP_COLUMN_NAME;
 };
 
 } // namespace starrocks::connector
