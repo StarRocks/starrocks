@@ -158,7 +158,7 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitArrayElement(ArrayElementOperator node, FormatterContext context) {
-            ArrayElementExpr expr =  new ArrayElementExpr(node.getType(), buildExpr.build(node.getChild(0), context),
+            ArrayElementExpr expr = new ArrayElementExpr(node.getType(), buildExpr.build(node.getChild(0), context),
                     buildExpr.build(node.getChild(1), context));
             hackTypeNull(expr);
             return expr;
