@@ -144,14 +144,15 @@ protected:
 namespace detail {
 struct SortRuntimeFilterBuilder {
     template <LogicalType ltype>
-    JoinRuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc) {
+    JoinRuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc,
+                                  bool is_close_interval) {
         auto data_column = ColumnHelper::get_data_column(column.get());
         auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];
         if (asc) {
-            return RuntimeBloomFilter<ltype>::template create_with_range<false>(pool, data);
+            return RuntimeBloomFilter<ltype>::template create_with_range<false>(pool, data, is_close_interval);
         } else {
-            return RuntimeBloomFilter<ltype>::template create_with_range<true>(pool, data);
+            return RuntimeBloomFilter<ltype>::template create_with_range<true>(pool, data, is_close_interval);
         }
     }
 };

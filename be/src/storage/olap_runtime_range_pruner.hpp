@@ -146,7 +146,7 @@ private:
         DecoderType decoder(std::forward<Args>(args)...);
         MinMaxParser<RuntimeBloomFilter<mapping_type>, DecoderType> parser(filter, &decoder);
         SQLFilterOp min_op;
-        if (filter->left_open_interval()) {
+        if (filter->left_close_interval()) {
             min_op = to_olap_filter_type(TExprOpcode::GE, false);
         } else {
             min_op = to_olap_filter_type(TExprOpcode::GT, false);
@@ -155,7 +155,7 @@ private:
         range.add_range(min_op, static_cast<value_type>(min_value));
 
         SQLFilterOp max_op;
-        if (filter->right_open_interval()) {
+        if (filter->right_close_interval()) {
             max_op = to_olap_filter_type(TExprOpcode::LE, false);
         } else {
             max_op = to_olap_filter_type(TExprOpcode::LT, false);
