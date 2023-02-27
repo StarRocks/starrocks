@@ -113,7 +113,6 @@ public class IcebergTableTest {
         IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
         Assert.assertEquals(tableName, table.getTable());
         Assert.assertEquals(db, table.getDb());
-        String uuid = table.getUUID();
         Assert.assertTrue(table.getUUID().startsWith("catalog0.db0.table0"));
     }
 
