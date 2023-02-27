@@ -121,8 +121,14 @@ Status Spiller::prepare(RuntimeState* state) {
     ASSIGN_OR_RETURN(_spill_fmt, SpillFormater::create(_opts.spill_type, _opts.chunk_builder));
 
     for (size_t i = 0; i < _opts.mem_table_pool_size; ++i) {
-        // TODO: init mem table
-        return Status::NotSupported("TODO: implements MemTable");
+        if (_opts.is_unordered) {
+            _mem_table_pool.push(
+                    std::make_unique<UnorderedMemTable>(state, _opts.spill_file_size, state->instance_mem_tracker()));
+        } else {
+            _mem_table_pool.push(std::make_unique<OrderedMemTable>(&_opts.sort_exprs->lhs_ordering_expr_ctxs(),
+                                                                   _opts.sort_desc, state, _opts.spill_file_size,
+                                                                   state->instance_mem_tracker()));
+        }
     }
 
     _file_group = std::make_shared<SpilledFileGroup>(*_spill_fmt);
