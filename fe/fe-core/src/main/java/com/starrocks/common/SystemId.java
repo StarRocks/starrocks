@@ -52,4 +52,14 @@ public class SystemId {
 
     public static final long MATERIALIZED_VIEWS_ID = 23L;
 
+    public static final long VERBOSE_SESSION_VARIABLES_ID = 25L;
+
+    public static final long BE_TABLETS_ID = 26L;
+
+    public static final long BE_METRICS_ID = 27L;
+
+    public static final long BE_TXNS_ID = 28L;
+
+    public static final long BE_CONFIGS_ID = 29L;
+
 }

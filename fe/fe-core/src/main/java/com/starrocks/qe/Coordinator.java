@@ -67,6 +67,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
@@ -562,7 +563,7 @@ public class Coordinator {
         // 2. try to use the resource group specified by workgroup_id
         long workgroupId = connect.getSessionVariable().getResourceGroupId();
         if (resourceGroup == null && workgroupId > 0) {
-            resourceGroup =  GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(workgroupId);
+            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(workgroupId);
         }
 
         // 3. if the specified resource group not exist try to use the default one
@@ -2014,7 +2015,7 @@ public class Coordinator {
      * Therefore, when there are few buckets (<=pipeline_dop/2), insert local shuffle instead of using this strategy
      * to improve the degree of parallelism.
      *
-     * @param scanRanges The buckets assigned to a fragment instance.
+     * @param scanRanges  The buckets assigned to a fragment instance.
      * @param pipelineDop The expected pipelineDop.
      * @return Whether using the strategy of assigning scanRanges to each driver sequence.
      */
@@ -2132,7 +2133,10 @@ public class Coordinator {
 
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
-            if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
+            if (scanNode instanceof SchemaScanNode) {
+                BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
+                selector.computeScanRangeAssignment();
+            } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode) {
                 HDFSBackendSelector selector = new HDFSBackendSelector(scanNode, locations, assignment,
                         ScanRangeAssignType.SCAN_DATA_SIZE, usedBackendIDs);
@@ -3519,8 +3523,9 @@ public class Coordinator {
 
     /**
      * Whether it can use pipeline engine.
+     *
      * @param connectContext It is null for broker broker export.
-     * @param fragments All the fragments need to execute.
+     * @param fragments      All the fragments need to execute.
      * @return true if enabling pipeline in the session variable and all the fragments can use pipeline,
      * otherwise false.
      */
