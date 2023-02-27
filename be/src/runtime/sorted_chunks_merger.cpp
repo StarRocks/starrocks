@@ -304,17 +304,22 @@ void SortedChunksMerger::collect_merged_chunks(ChunkPtr* chunk) {
 CascadeChunkMerger::CascadeChunkMerger(RuntimeState* state) : _state(state), _sort_exprs(nullptr) {}
 
 Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,
-                                const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* sort_orders,
-                                const std::vector<bool>* null_firsts) {
+                                const std::vector<ExprContext*>* sort_exprs, const SortDescs& sort_desc) {
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
-    for (int i = 0; i < providers.size(); i++) {
-        cursors.push_back(std::make_unique<SimpleChunkSortCursor>(providers[i], sort_exprs));
+    for (const auto& provider : providers) {
+        cursors.push_back(std::make_unique<SimpleChunkSortCursor>(provider, sort_exprs));
     }
     _sort_exprs = sort_exprs;
-    _sort_desc = SortDescs(*sort_orders, *null_firsts);
-
+    _sort_desc = sort_desc;
     _merger = std::make_unique<MergeCursorsCascade>();
     RETURN_IF_ERROR(_merger->init(_sort_desc, std::move(cursors)));
+    return Status::OK();
+}
+Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,
+                                const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* sort_orders,
+                                const std::vector<bool>* null_firsts) {
+    auto descs = SortDescs(*sort_orders, *null_firsts);
+    RETURN_IF_ERROR(init(providers, sort_exprs, descs));
     return Status::OK();
 }
 
@@ -322,7 +327,7 @@ bool CascadeChunkMerger::is_data_ready() {
     return _merger->is_data_ready();
 }
 
-Status CascadeChunkMerger::get_next(ChunkPtr* output, std::atomic<bool>* eos, bool* should_exit) {
+Status CascadeChunkMerger::get_next(ChunkUniquePtr* output, std::atomic<bool>* eos, bool* should_exit) {
     if (_merger->is_eos()) {
         *eos = true;
         *should_exit = true;
@@ -331,6 +336,7 @@ Status CascadeChunkMerger::get_next(ChunkPtr* output, std::atomic<bool>* eos, bo
     if (_current_chunk.empty()) {
         ChunkUniquePtr chunk = _merger->try_get_next();
         if (!chunk) {
+            *eos = _merger->is_eos();
             *should_exit = true;
             return Status::OK();
         }

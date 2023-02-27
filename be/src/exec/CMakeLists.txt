@@ -238,6 +238,8 @@ set(EXEC_FILES
     spill/spiller.cpp
     spill/spiller_factory.cpp
     spill/spilled_stream.cpp
+    spill/mem_table.cpp
+    spill/spiller_path_provider.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
     stream/aggregate/agg_group_state.cpp

@@ -487,15 +487,19 @@ public:
 };
 
 // Hold a slice of chunk
-struct ChunkSlice {
-    ChunkUniquePtr chunk;
+template <class Ptr = ChunkUniquePtr>
+struct ChunkSliceTemplate {
+    Ptr chunk;
     size_t offset = 0;
 
     bool empty() const;
     size_t rows() const;
     size_t skip(size_t skip_rows);
-    ChunkPtr cutoff(size_t required_rows);
-    void reset(ChunkUniquePtr input);
+    Ptr cutoff(size_t required_rows);
+    void reset(Ptr input);
 };
+
+using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
+using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
 
 } // namespace starrocks
