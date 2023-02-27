@@ -88,7 +88,7 @@ public class ListPartitionPrunerTest {
         columnToNullPartitions.put(intColumn, Sets.newHashSet(9L));
 
         conjuncts = Lists.newArrayList();
-        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts);
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
     }
 
     @Test
@@ -189,7 +189,7 @@ public class ListPartitionPrunerTest {
 
         Set<Long> allPartitions = Sets.newHashSet(0L, 1L, 2L);
         conjuncts = Lists.newArrayList();
-        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts);
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
 
         // int_col1 + int_col2 = 10
         conjuncts.clear();
@@ -396,7 +396,7 @@ public class ListPartitionPrunerTest {
         conjuncts = Lists.newArrayList();
         conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT, intColumn,
                 ConstantOperator.createInt(1000)));
-        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts);
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
         Assert.assertNull(pruner.prune());
     }
 
@@ -410,7 +410,7 @@ public class ListPartitionPrunerTest {
         conjuncts = Lists.newArrayList();
         conjuncts.add(new InPredicateOperator(false,
                 Lists.newArrayList(intColumn, ConstantOperator.createInt(1000), ConstantOperator.createInt(2000))));
-        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts);
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
         Assert.assertNull(pruner.prune());
     }
 }
