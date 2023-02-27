@@ -919,7 +919,7 @@ public class LeaderImpl {
 
             TPartitionInfo tPartitionInfo = new TPartitionInfo();
             tPartitionInfo.setType(partitionInfo.getType().toThrift());
-            if (partitionInfo.getType() == PartitionType.RANGE) {
+            if (partitionInfo.isRangePartition()) {
                 TRangePartitionDesc rangePartitionDesc = new TRangePartitionDesc();
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 for (Column column : rangePartitionInfo.getPartitionColumns()) {
