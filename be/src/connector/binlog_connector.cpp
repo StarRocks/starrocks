@@ -44,6 +44,7 @@ Status BinlogDataSource::open(RuntimeState* state) {
     const TBinlogScanNode& binlog_scan_node = _provider->_binlog_scan_node;
     _runtime_state = state;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(binlog_scan_node.tuple_id);
+    _is_stream_pipeline = state->fragment_ctx()->is_stream_pipeline();
 
 #ifndef NDEBUG
     // for ut
@@ -53,13 +54,27 @@ Status BinlogDataSource::open(RuntimeState* state) {
 #endif
 
     ASSIGN_OR_RETURN(_tablet, _get_tablet())
+    RETURN_IF_ERROR(_tablet->support_binlog());
     ASSIGN_OR_RETURN(_binlog_read_schema, _build_binlog_schema())
-    VLOG(2) << "Tablet id " << _tablet->tablet_uid() << ", version " << _scan_range.offset.version << ", seq_id "
-            << _scan_range.offset.lsn << ", binlog read schema " << _binlog_read_schema;
+
+    BinlogReaderParams reader_params;
+    reader_params.chunk_size = state->chunk_size();
+    reader_params.output_schema = _binlog_read_schema;
+    _binlog_reader = std::make_shared<BinlogReader>(_tablet, reader_params);
+    RETURN_IF_ERROR(_binlog_reader->init());
+
+    VLOG(3) << "Open binlog connector, tablet: " << _tablet->full_name()
+            << ", binlog read schema: " << _binlog_read_schema << ", is_stream_pipeline: " << _is_stream_pipeline;
+
     return Status::OK();
 }
 
-void BinlogDataSource::close(RuntimeState* state) {}
+void BinlogDataSource::close(RuntimeState* state) {
+    if (_binlog_reader != nullptr) {
+        _binlog_reader->close();
+        _binlog_reader.reset();
+    }
+}
 
 Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_cpu_time_ns);
@@ -70,18 +85,43 @@ Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         return _mock_chunk_test(chunk);
     }
 #endif
+    if (_need_seek_binlog.load(std::memory_order::memory_order_acquire)) {
+        if (!_is_stream_pipeline) {
+            RETURN_IF_ERROR(_prepare_non_stream_pipeline());
+        }
+        RETURN_IF_ERROR(_binlog_reader->seek(_start_version, _start_seq_id));
+        _need_seek_binlog.store(false);
+    }
 
-    // TODO replace with BinlogReader
     _init_chunk(chunk, state->chunk_size());
-    return _mock_chunk(chunk->get());
+    Status status = _binlog_reader->get_next(chunk, _max_version_exclusive);
+    VLOG_IF(3, !status.ok()) << "Fail to read binlog, tablet: " << _tablet->full_name()
+                             << ", start_version: " << _start_version << ", _start_seq_id: " << _start_seq_id
+                             << ", _max_version_exclusive: " << _max_version_exclusive << ", " << status;
+    return status;
+}
+
+Status BinlogDataSource::_prepare_non_stream_pipeline() {
+    BinlogRange binlog_range = _tablet->binlog_manager()->current_binlog_range();
+    if (binlog_range.is_empty()) {
+        VLOG(3) << "There is no binlog for tablet: " << _tablet->full_name();
+        return Status::EndOfFile("There is no binlog");
+    }
+
+    _start_version.store(binlog_range.start_version());
+    _start_seq_id.store(binlog_range.start_seq_id());
+    _max_version_exclusive.store(binlog_range.end_version() + 1);
+
+    VLOG(3) << "Prepare to scan binlog, tablet: " << _tablet->full_name() << ", " << binlog_range.debug_string();
 }
 
 Status BinlogDataSource::set_offset(int64_t table_version, int64_t changelog_id) {
-    // todo return _binlog_reader->seek(table_version, changelog_id);
-    _chunk_num = 0;
-
-    _table_version = table_version;
-    _changelog_id = changelog_id;
+    _mock_chunk_num = 0;
+    _need_seek_binlog.store(true);
+    _start_version.store(table_version);
+    _start_seq_id.store(changelog_id);
+    // Note MV can't read binlog across versions currently, so the max_version_exclusive is _start_version + 1
+    _max_version_exclusive.store(table_version + 1);
     return Status::OK();
 }
 
@@ -89,7 +129,6 @@ Status BinlogDataSource::reset_status() {
     _rows_read_number = 0;
     _bytes_read = 0;
     _cpu_time_ns = 0;
-    _is_stream_pipeline = true;
     return Status::OK();
 }
 
@@ -210,7 +249,7 @@ Status BinlogDataSource::_mock_chunk(Chunk* chunk) {
 
 Status BinlogDataSource::_mock_chunk_test(ChunkPtr* chunk) {
     VLOG_ROW << "[binlog data source] mock_chunk:";
-    int32_t num = _chunk_num.fetch_add(1, std::memory_order_relaxed);
+    int32_t num = _mock_chunk_num.fetch_add(1, std::memory_order_relaxed);
     if (num >= 1) {
         return Status::EndOfFile(fmt::format("Has sent {} chunks", num));
     }
