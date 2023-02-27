@@ -17,6 +17,7 @@ package com.starrocks.sql.common;
 import static com.starrocks.sql.common.ErrorMsgProxy.BaseMessage;
 public interface ParserErrorMsg {
 
+    // --------- error in building AST phase ---------
     @BaseMessage("at line {0}, column {1}")
     String nodePositionPoint(int a0, int a1);
 
@@ -47,14 +48,73 @@ public interface ParserErrorMsg {
             "''expr_children_limit'' in BE conf")
     String argsOfExprExceedLimit(long a0, int a1);
 
-    @BaseMessage("Unsupported partition expression: ''{0}''")
-    String invalidPartitionExpr(String a0);
-
     @BaseMessage("Invalid db name format ''{0}''")
     String invalidDbFormat(String a0);
+
+    @BaseMessage("Invalid table name format ''{0}''")
+    String invalidTableFormat(String a0);
 
     @BaseMessage("Invalid task name format ''{0}''")
     String invalidTaskFormat(String a0);
 
+    @BaseMessage("Invalid UDF function name ''{0}''")
+    String invalidUDFName(String a0);
+
+    @BaseMessage("Unsupported type specification: ''{0}''")
+    String unsupportedType(String a0);
+
+    @BaseMessage("AUTO_INCREMENT column {0} must be NOT NULL")
+    String nullColFoundInPK(String a0);
+
+    @BaseMessage("Incorrect number of arguments in expr ''{0}''")
+    String wrongNumOfArgs(String a0);
+
+    @BaseMessage("Incorrect type/value of arguments in expr ''{0}''")
+    String wrongTypeOfArgs(String a0);
+
+    @BaseMessage("Unsupported expr ''{0}''")
+    String unsupportedExpr(String a0);
+
+    @BaseMessage("Unsupported expr ''{0}'' in {1} clause")
+    String unsupportedExprWithInfo(String a0, String a1);
+
+    @BaseMessage("Cannot use duplicated {0} clause in building materialized view")
+    String duplicatedClause(String a0);
+
+    @BaseMessage("''{0}'' cannot support ''{1}'' in materialized view")
+    String forbidClauseInMV(String a0, String a1);
+
+    @BaseMessage("FE config ''{0}'' is disabled")
+    String feConfigDisable(String a0);
+
+    @BaseMessage("Sql to be add black list is empty")
+    String emptySql();
+
+    @BaseMessage("Column ''{0}'' can not be AUTO_INCREMENT when {1} COLUMN.")
+    String autoIncrementForbid(String a0, String a1);
+
+    @BaseMessage("No tables used")
+    String noTableUsed();
+
+    @BaseMessage("Invalid odbc scalar function ''{0}''")
+    String invalidOdbcFunc(String a0);
+
+    @BaseMessage("Invalid numeric literal {0}")
+    String invalidNumFormat(String a0);
+
+    @BaseMessage("Invalid date literal {0}")
+    String invalidDateFormat(String a0);
+
+    @BaseMessage("Numeric overflow {0}")
+    String numOverflow(String a0);
+
+    @BaseMessage("Binary literal can only contain hexadecimal digits and an even number of digits")
+    String invalidBinaryFormat();
+
+    @BaseMessage("Refresh start time must be after current time")
+    String invalidStartTime();
+
+
+    // --------- error in analyzing phase ---------
 
 }

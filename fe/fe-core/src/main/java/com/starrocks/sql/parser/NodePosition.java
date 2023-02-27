@@ -40,6 +40,10 @@ public class NodePosition implements Serializable {
         this(node.getSymbol().getLine(), node.getSymbol().getCharPositionInLine());
     }
 
+    public NodePosition(@NotNull Token token) {
+        this(token.getLine(), token.getLine());
+    }
+
     public NodePosition(@NotNull Token start, @NotNull Token end) {
         this(start.getLine(), start.getCharPositionInLine(), end.getLine(), end.getCharPositionInLine());
     }
