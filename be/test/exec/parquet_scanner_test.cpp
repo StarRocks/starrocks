@@ -220,7 +220,8 @@ class ParquetScannerTest : public ::testing::Test {
                 {"col_json_struct_string", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
                 {"col_json_json_string", TypeDescriptor::create_json_type()},
                 {"issue_17693_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
-                {"issue_17822_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))}};
+                {"issue_17822_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
+                {"nested_array_c0", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR)))}};
         SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
@@ -334,6 +335,9 @@ class ParquetScannerTest : public ::testing::Test {
                                          test_exec_dir + "/test_data/parquet_data/issue_17693_2.parquet"};
         _issue_17822_file_names =
                 std::vector<std::string>{test_exec_dir + "/test_data/parquet_data/issue_17822.parquet"};
+        _nested_array_file_names = 
+                std::vector<std::string>{test_exec_dir + "/test_data/parquet_data/nested_array_test1.parquet",
+                                        test_exec_dir + "/test_data/parquet_data/nested_array_test2.parquet"};
     }
 
 private:
@@ -345,6 +349,7 @@ private:
     std::vector<int> _file_sizes;
     std::vector<std::string> _issue_16475_file_names;
     std::vector<std::string> _issue_17822_file_names;
+    std::vector<std::string> _nested_array_file_names;
 };
 
 TEST_F(ParquetScannerTest, test_nullable_parquet_data) {
@@ -397,6 +402,23 @@ TEST_F(ParquetScannerTest, test_issue_17822) {
         }
     };
     validate(scanner, 506, check);
+}
+
+TEST_F(ParquetScannerTest, test_nested_array) {
+    auto column_names = std::vector<std::string>{
+            "nested_array_c0",
+    };
+    auto slot_infos = select_columns(column_names, true);
+    auto ranges = generate_ranges(_nested_array_file_names, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    auto check = [](const ChunkPtr& chunk) {
+        auto& columns = chunk->columns();
+        for (auto& col : columns) {
+            ASSERT_TRUE(!col->only_null() && col->is_nullable());
+        }
+    };
+    validate(scanner, 1003, check);
 }
 
 TEST_F(ParquetScannerTest, test_parquet_data) {
