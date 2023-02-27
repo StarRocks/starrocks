@@ -133,11 +133,6 @@ public class ScalarOperatorToExpr {
         }
 
         @Override
-        public Expr visitArrayElement(ArrayElementOperator node, FormatterContext context) {
-            return new ArrayElementExpr(node.getType(), buildExecExpression(node.getChild(0), context),
-                    buildExecExpression(node.getChild(1), context));
-
-        @Override
         public Expr visitArray(ArrayOperator node, FormatterContext context) {
             ArrayExpr expr = new ArrayExpr(node.getType(),
                     node.getChildren().stream().map(e -> buildExecExpression(e, context)).collect(Collectors.toList()));
@@ -146,10 +141,15 @@ public class ScalarOperatorToExpr {
         }
 
         @Override
+        public Expr visitArrayElement(ArrayElementOperator node, FormatterContext context) {
+            return new ArrayElementExpr(node.getType(), buildExecExpression(node.getChild(0), context),
+                    buildExecExpression(node.getChild(1), context));
+
+        @Override
         public Expr visitArraySlice(ArraySliceOperator node, FormatterContext context) {
             ArraySliceExpr expr = new ArraySliceExpr(buildExecExpression(node.getChild(0), context),
-                    buildExpr.build(node.getChild(1), context),
-                    buildExpr.build(node.getChild(2), context));
+                    buildExecExpression(node.getChild(1), context),
+                    buildExecExpression(node.getChild(2), context));
             expr.setType(node.getType());
             hackTypeNull(expr);
             return expr;
