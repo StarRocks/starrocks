@@ -49,6 +49,8 @@ public:
 
 private:
     Status _finalize_delvec(int64_t version);
+    // compact multi delvec files to one file
+    Status _compact_delvec();
 
 private:
     Tablet _tablet;

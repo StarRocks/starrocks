@@ -426,4 +426,57 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_policy2) {
     EXPECT_EQ(input_rowsets[3]->id(), 3);
 }
 
+TEST_F(PrimaryKeyHorizontalCompactionTest, test_delvec_compaction) {
+    // Prepare data for writing
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 6; i++) {
+        _txn_id++;
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+                                                _mem_tracker.get());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, read(version));
+    // check meta
+    ASSIGN_OR_ABORT(auto new_tablet_metadata1, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata1->rowsets_size(), 6);
+    // expected five delvec files generated
+    std::unordered_set<int64_t> ver_cnt;
+    for (const auto& each : new_tablet_metadata1->delvec_meta().delvecs()) {
+        ver_cnt.insert(each.second.version());
+    }
+    EXPECT_EQ(ver_cnt.size(), 5);
+
+    _txn_id++;
+    config::max_update_compaction_num_singleton_deltas = 3;
+    config::lake_delvec_compact_threshold = 1;
+    ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
+    ASSERT_OK(task->execute(nullptr));
+    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
+    version++;
+    ASSERT_EQ(kChunkSize, read(version));
+
+    // check meta
+    ASSIGN_OR_ABORT(auto new_tablet_metadata2, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata2->rowsets_size(), 3);
+    // expected one delvec files generated
+    std::unordered_set<int64_t> ver_cnt2;
+    for (const auto& each : new_tablet_metadata2->delvec_meta().delvecs()) {
+        ver_cnt2.insert(each.second.version());
+    }
+    EXPECT_EQ(ver_cnt2.size(), 1);
+}
+
 } // namespace starrocks::lake
