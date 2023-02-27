@@ -616,7 +616,7 @@ public class ColocateTableIndex implements Writable {
                 GroupId groupId = entry.getValue();
                 info.add(groupId.toString());
                 info.add(entry.getKey());
-                StringBuffer sb = new StringBuffer();
+                StringBuilder sb = new StringBuilder();
                 for (Long tableId : group2Tables.get(groupId)) {
                     if (sb.length() > 0) {
                         sb.append(", ");
