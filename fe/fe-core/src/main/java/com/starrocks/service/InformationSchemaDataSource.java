@@ -27,7 +27,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.cluster.ClusterNamespace;
@@ -232,7 +231,7 @@ public class InformationSchemaDataSource {
         // Partition info
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         StringBuilder partitionKeySb = new StringBuilder();
-        if (partitionInfo.getType().equals(PartitionType.RANGE)) {
+        if (partitionInfo.isRangePartition()) {
             int idx = 0;
             try {
                 for (Column column : partitionInfo.getPartitionColumns()) {
