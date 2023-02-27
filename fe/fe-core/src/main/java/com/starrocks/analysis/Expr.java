@@ -29,8 +29,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
@@ -736,14 +734,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     final void treeToThriftHelper(TExpr container, ExprVisitor visitor) {
         TExprNode msg = new TExprNode();
 
-        if (type.isNull()) {
-            // Hack to ensure BE never sees TYPE_NULL. If an expr makes it this far without
-            // being cast to a non-NULL type, the type doesn't matter and we can cast it
-            // arbitrarily.
-            NullLiteral l = NullLiteral.create(ScalarType.BOOLEAN);
-            l.treeToThriftHelper(container, visitor);
-            return;
-        }
+        Preconditions.checkState(!type.isNull(), "NULL_TYPE is illegal in thrift stage");
+        Preconditions.checkState(!Objects.equal(Type.ARRAY_NULL, type), "Array<NULL_TYPE> is illegal in thrift stage");
 
         msg.type = type.toThrift();
         msg.num_children = children.size();
@@ -760,10 +752,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         msg.output_scale = getOutputScale();
         msg.setIs_monotonic(isMonotonic());
         visitor.visit(this, msg);
-        // Echoes the above hack process
-        if (PrimitiveType.NULL_TYPE.toThrift().equals(msg.child_type)) {
-            msg.child_type = PrimitiveType.BOOLEAN.toThrift();
-        }
         container.addToNodes(msg);
         for (Expr child : children) {
             child.treeToThriftHelper(container, visitor);
