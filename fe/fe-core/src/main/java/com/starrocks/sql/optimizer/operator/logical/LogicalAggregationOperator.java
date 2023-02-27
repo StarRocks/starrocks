@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -65,7 +66,8 @@ public class LogicalAggregationOperator extends LogicalOperator {
     // if singleDistinctFunctionPos is -1, means no single distinct function
     private int singleDistinctFunctionPos = -1;
 
-    private boolean distinctColumnDataSkew = false;
+
+    private DataSkewInfo distinctColumnDataSkew = null;
 
     public LogicalAggregationOperator(AggType type,
                                       List<ColumnRefOperator> groupingKeys,
@@ -134,11 +136,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
         this.partitionByColumns = partitionByColumns;
     }
 
-    public void setDistinctColumnDataSkew(boolean distinctColumnDataSkew) {
+    public void setDistinctColumnDataSkew(DataSkewInfo distinctColumnDataSkew) {
         this.distinctColumnDataSkew = distinctColumnDataSkew;
     }
 
-    public boolean isDistinctColumnDataSkew() {
+    public DataSkewInfo getDistinctColumnDataSkew() {
         return distinctColumnDataSkew;
     }
 
@@ -245,7 +247,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
         private List<ColumnRefOperator> partitionByColumns;
         private int singleDistinctFunctionPos = -1;
 
-        private boolean distinctColumnDataSkew = false;
+        private DataSkewInfo distinctColumnDataSkew = null;
 
         @Override
         public LogicalAggregationOperator build() {
@@ -301,11 +303,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
             return this;
         }
 
-        public void setDistinctColumnDataSkew(boolean distinctColumnDataSkew) {
+        public void setDistinctColumnDataSkew(DataSkewInfo distinctColumnDataSkew) {
             this.distinctColumnDataSkew = distinctColumnDataSkew;
         }
 
-        public boolean isDistinctColumnDataSkew() {
+        public DataSkewInfo getDistinctColumnDataSkew() {
             return distinctColumnDataSkew;
         }
     }

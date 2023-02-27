@@ -24,6 +24,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -125,6 +126,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         colRefMap.put(bucketColRef, bucketCol);
         // projection(groupByColumn, distinctColumn, hash(distinctColumn)%numBuckets as bucket)
         firstAggOp.setProjection(new Projection(colRefMap));
+        firstAggOp.setDistinctColumnDataSkew(new DataSkewInfo(distinctColRef, 1.0, 1));
 
         // second-stage:
         // select groupByColumn, bucket, multi_distinct_count(distinctColumn) as countPerBucket
@@ -137,7 +139,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
 
         LogicalAggregationOperator secondAggOp =
                 new LogicalAggregationOperator(AggType.GLOBAL, secondGroupBy, secondStageAggregations);
-        secondAggOp.setDistinctColumnDataSkew(true);
+        secondAggOp.setDistinctColumnDataSkew(new DataSkewInfo(distinctColRef, 1.0, 2));
         secondAggOp.setPartitionByColumns(secondGroupBy);
 
         // third-stage/fourth Agg: select groupByColumn, sum(countPerBucket) from t group by groupByColumn
@@ -146,6 +148,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         thirdAggregations.put(aggColRef, sum);
         LogicalAggregationOperator thirdAggOp =
                 new LogicalAggregationOperator(AggType.LOCAL, Lists.newArrayList(groupBy), thirdAggregations);
+        thirdAggOp.setDistinctColumnDataSkew(new DataSkewInfo(distinctColRef, 0.5, 3));
 
         // create fourth-stage Agg operator
         LogicalAggregationOperator fourthAggOp = LogicalAggregationOperator.builder().withOperator(thirdAggOp)
@@ -154,6 +157,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
                 .setPartitionByColumns(Lists.newArrayList(groupBy))
                 .setProjection(aggOp.getProjection())
                 .build();
+        fourthAggOp.setDistinctColumnDataSkew(new DataSkewInfo(distinctColRef, 0.5, 4));
 
         OptExpression optExpression = child;
         optExpression = OptExpression.create(firstAggOp, optExpression);

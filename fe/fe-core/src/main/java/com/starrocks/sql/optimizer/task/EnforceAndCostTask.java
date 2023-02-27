@@ -378,7 +378,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (aggregate.getType().isGlobal() && !aggregate.isSplit() &&
                 childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
             // 1.0 if distinct column is skew, optimization is permitted
-            if (aggregate.isDistinctColumnDataSkew()) {
+            if (aggregate.getDistinctColumnDataSkew() != null) {
                 return true;
             }
             // 1.1 check default column statistics or child output row may not be accurate
