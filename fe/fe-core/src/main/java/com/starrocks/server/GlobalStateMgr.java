@@ -256,7 +256,6 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -2231,13 +2230,10 @@ public class GlobalStateMgr {
                 }
             }
         }
-        sb.append("\n) ENGINE=");
-        if (table.isLakeTable()) {
-            sb.append(EngineType.STARROCKS.name()).append(" ");
-        } else {
-            sb.append(table.getType().name()).append(" ");
-        }
 
+        sb.append("\n) ENGINE=");
+        sb.append(table.getType() == TableType.LAKE ? "OLAP" : table.getType().name()).append(" ");
+        
         if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
 
@@ -2484,7 +2480,6 @@ public class GlobalStateMgr {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("table\" = \"")
                         .append(externalOlapTable.getSourceTableName()).append("\"");
             }
-
             sb.append("\n)");
         } else if (table.getType() == TableType.MYSQL) {
             MysqlTable mysqlTable = (MysqlTable) table;

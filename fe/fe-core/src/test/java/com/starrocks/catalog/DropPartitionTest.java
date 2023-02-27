@@ -125,12 +125,12 @@ public class DropPartitionTest {
 
         String createLakeTableStr = "create table test.lake_table(k1 date, k2 int, k3 smallint, v1 varchar(2048), "
                 + "v2 datetime default '2014-02-04 15:36:00')"
-                + " engine = starrocks duplicate key(k1, k2, k3)"
+                + " duplicate key(k1, k2, k3)"
                 + " PARTITION BY RANGE(k1, k2, k3)"
                 + " (PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),"
                 + " PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\")))"
                 + " DISTRIBUTED BY HASH(k2) BUCKETS 3"
-                + " PROPERTIES ( \"enable_storage_cache\" = \"true\", \"storage_cache_ttl\" = \"3600\");";
+                + " PROPERTIES ( \"enable_storage_cache\" = \"true\", \"storage_cache_ttl\" = \"3600\")";
         createTable(createLakeTableStr);
     }
 

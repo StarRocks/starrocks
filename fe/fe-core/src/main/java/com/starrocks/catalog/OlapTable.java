@@ -71,6 +71,7 @@ import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.SystemInfoService;
@@ -2064,6 +2065,21 @@ public class OlapTable extends Table {
             return TStorageFormat.DEFAULT;
         }
         return tableProperty.getStorageFormat();
+    }
+
+    public void setStorageVolume(String storageVolume) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, storageVolume);
+        tableProperty.buildStorageVolume();
+    }
+
+    public String getStorageVolume() {
+        if (tableProperty == null) {
+            return RunMode.getCurrentRunMode().isAllowCreateLakeTable() ? "default" : "local";
+        }
+        return tableProperty.getStorageVolume();
     }
 
     public void setCompressionType(TCompressionType compressionType) {
