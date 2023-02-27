@@ -477,6 +477,10 @@ TEST_F(AvroScannerTest, test_json_type) {
 
 /*
  * TODO: we must support jsonpath * operator 
+ * 接下来这块还需要补充多个测试：
+ * 1. union_type not null
+ * 2. union_type array
+ * 3. union_type record
  */
 TEST_F(AvroScannerTest, test_union_type_null) {
     std::string schema_path = "./be/test/exec/test_data/json_scanner/avro_union_schema.json";
@@ -556,12 +560,105 @@ TEST_F(AvroScannerTest, test_union_type_null) {
     ASSERT_TRUE(st2.ok());
 
     ChunkPtr chunk = st2.value();
-    EXPECT_EQ(5, chunk->num_columns());
+    EXPECT_EQ(4, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
     EXPECT_EQ(1, chunk->get(0)[0].get_int8());
     EXPECT_EQ(4294967296, chunk->get(0)[1].get_int64());
     EXPECT_FLOAT_EQ(1.234567, chunk->get(0)[2].get_double());
     EXPECT_TRUE(chunk->get(0)[3].is_null());
+}
+
+TEST_F(AvroScannerTest, test_array) {
+    std::string schema_path = "./be/test/exec/test_data/json_scanner/avro_array_schema.json";
+    AvroHelper avro_helper;
+    init_avro_value(schema_path, avro_helper);
+    DeferOp avro_helper_deleter([&] {
+        avro_schema_decref(avro_helper.schema);
+        avro_value_iface_decref(avro_helper.iface);
+        avro_value_decref(&avro_helper.avro_val);
+    });
+
+    avro_value_t boolean_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "boolean_type", &boolean_value, NULL) == 0) {
+        avro_value_set_boolean(&boolean_value, true);
+    }
+
+    avro_value_t long_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "long_type", &long_value, NULL) == 0) {
+        avro_value_set_long(&long_value, 4294967296);
+    }
+
+    avro_value_t double_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "double_type", &double_value, NULL) == 0) {
+        avro_value_set_double(&double_value, 1.234567);
+    }
+
+    /*
+     * avro设置union
+     * jsonpath编写
+     * 表定义
+     * 值比较 
+     */
+
+    avro_value_t array_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "array_type", &array_value, NULL) == 0) {
+        avro_value_t ele1;
+        avro_value_append(&array_value, &ele1, NULL);
+        avro_value_set_long(&ele1, 4294967297);
+
+        avro_value_t ele2;
+        avro_value_append(&array_value, &ele2, NULL);
+        avro_value_set_long(&ele2, 4294967298);
+    }
+
+    char* avro_as_json = nullptr;
+    int result = avro_value_to_json(&avro_helper.avro_val, 1, &avro_as_json);
+    if (result != 0) {
+        std::cout << "avro to json failed: " << avro_strerror() << std::endl;
+    }
+    EXPECT_EQ(0, result);
+    DeferOp json_deleter([&] {
+        free(avro_as_json);
+    });
+    std::cout << avro_as_json << std::endl;
+    std::string data_path = "./be/test/exec/test_data/json_scanner/tmp/avro_array_data.json";
+    write_json_data(avro_as_json, data_path);
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_BOOLEAN);
+    types.emplace_back(TYPE_BIGINT);
+    types.emplace_back(TYPE_DOUBLE);
+    TypeDescriptor t(TYPE_ARRAY);
+    t.children.emplace_back(TYPE_BIGINT);
+    types.emplace_back(t);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_AVRO;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path(data_path);
+    ranges.emplace_back(range);
+    std::cout << "Test1 End" << std::endl;
+
+    auto scanner = create_json_scanner(types, ranges, {"boolean_type", "long_type", "double_type", "array_type"});
+
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    auto st2 = scanner->get_next();
+    ASSERT_TRUE(st2.ok());
+
+    ChunkPtr chunk = st2.value();
+    EXPECT_EQ(4, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+    EXPECT_EQ(1, chunk->get(0)[0].get_int8());
+    EXPECT_EQ(4294967296, chunk->get(0)[1].get_int64());
+    EXPECT_FLOAT_EQ(1.234567, chunk->get(0)[2].get_double());
+    auto array = chunk->get(0)[3].get_array();
+    ASSERT_EQ(4294967297, array[0].get_int64());
+    ASSERT_EQ(4294967298, array[1].get_int64());
 }
 
 } // namespace starrocks
