@@ -41,7 +41,6 @@ import java.util.List;
 import java.util.Map;
 
 public class IcebergTableTest {
-    private String catalogName;
     private String db;
     private String tableName;
     String resourceName;
@@ -50,7 +49,6 @@ public class IcebergTableTest {
 
     @Before
     public void setUp() {
-        catalogName = "catalog0";
         db = "db0";
         tableName = "table0";
         resourceName = "iceberg0";
@@ -60,7 +58,6 @@ public class IcebergTableTest {
         columns.add(column);
 
         properties = Maps.newHashMap();
-        properties.put("catalog", catalogName);
         properties.put("database", db);
         properties.put("table", tableName);
         properties.put("resource", resourceName);
@@ -113,7 +110,6 @@ public class IcebergTableTest {
         IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
         Assert.assertEquals(tableName, table.getTable());
         Assert.assertEquals(db, table.getDb());
-        Assert.assertTrue(table.getUUID().startsWith("catalog0.db0.table0"));
     }
 
     @Test
