@@ -21,6 +21,8 @@ import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.catalog.SchemaTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -66,9 +68,9 @@ public class PrivilegeChecker {
     }
 
     public static boolean checkDbPriv(ConnectContext context,
-                                       String catalogName,
-                                       String dbName,
-                                       PrivPredicate predicate) {
+                                      String catalogName,
+                                      String dbName,
+                                      PrivPredicate predicate) {
         return !CatalogMgr.isInternalCatalog(catalogName) ||
                 GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(context, dbName, predicate);
     }
@@ -307,7 +309,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
-            if (statement.isAll() || ! context.getCurrentUserIdentity().equals(statement.getUserIdent())) {
+            if (statement.isAll() || !context.getCurrentUserIdentity().equals(statement.getUserIdent())) {
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
                 }
@@ -318,9 +320,11 @@ public class PrivilegeChecker {
 
     private static class TablePrivilegeChecker extends AstVisitor<Void, Void> {
         private ConnectContext session;
+
         public TablePrivilegeChecker(ConnectContext session) {
             this.session = session;
         }
+
         @Override
         public Void visitQueryStatement(QueryStatement node, Void context) {
             return visit(node.getQueryRelation());
@@ -372,7 +376,14 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            if (!checkTblPriv(session, node.getName(), PrivPredicate.SELECT)) {
+            Table table = node.getTable();
+            if (table instanceof SchemaTable && ((SchemaTable) table).isBeSchemaTable()) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)
+                        && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                        PrivPredicate.OPERATOR)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
+                }
+            } else if (!checkTblPriv(session, node.getName(), PrivPredicate.SELECT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
                         session.getQualifiedUser(), session.getRemoteIP(), node.getTable());
             }
