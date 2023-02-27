@@ -12,6 +12,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -1415,7 +1416,14 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            if (!checkTblPriv(session, node.getName(), PrivPredicate.SELECT)) {
+            Table table = node.getTable();
+            if (table instanceof SchemaTable && ((SchemaTable) table).isBeSchemaTable()) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)
+                        && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                        PrivPredicate.OPERATOR)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
+                }
+            } else if (!checkTblPriv(session, node.getName(), PrivPredicate.SELECT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
                         session.getQualifiedUser(), session.getRemoteIP(), node.getTable());
             }
