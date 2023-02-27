@@ -358,6 +358,7 @@ public class ExternalOlapTable extends OlapTable {
             PartitionType partitionType = PartitionType.fromThrift(tPartitionInfo.getType());
             switch (partitionType) {
                 case RANGE:
+                case EXPR_RANGE:
                     TRangePartitionDesc rangePartitionDesc = tPartitionInfo.getRange_partition_desc();
                     List<Column> columns = new ArrayList<Column>();
                     for (TColumnMeta columnMeta : rangePartitionDesc.getColumns()) {

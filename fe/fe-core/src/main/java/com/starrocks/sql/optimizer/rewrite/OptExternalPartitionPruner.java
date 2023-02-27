@@ -228,7 +228,8 @@ public class OptExternalPartitionPruner {
         }
         PartitionPruner partitionPruner = null;
         switch (partitionInfo.getType()) {
-            case RANGE: {
+            case RANGE:
+            case EXPR_RANGE: {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getIdToRange(false);
                 partitionPruner = new RangePartitionPruner(keyRangeById, rangePartitionInfo.getPartitionColumns(),

@@ -577,7 +577,7 @@ public class OlapTable extends Table {
         }
 
         // reset partition info and idToPartition map
-        if (partitionInfo.getType() == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
                 long newPartId = globalStateMgr.getNextId();
@@ -1236,7 +1236,7 @@ public class OlapTable extends Table {
         adler32.update(partitionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
         LOG.debug("signature. partition type: {}", partitionInfo.getType().name());
         // partition columns
-        if (partitionInfo.getType() == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
             adler32.update(Util.schemaHash(0, partitionColumns, null, 0));
