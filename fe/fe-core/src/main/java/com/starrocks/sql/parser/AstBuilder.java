@@ -624,10 +624,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             Expr firstExpr = paramsExpr.get(0);
             Expr secondExpr = paramsExpr.get(1);
-            String partitionName;
+            String partitionColumnName;
             if (secondExpr instanceof SlotRef) {
-                partitionName = ((SlotRef) secondExpr).getColumnName();
-                columnList.add(partitionName);
+                partitionColumnName = ((SlotRef) secondExpr).getColumnName();
+                columnList.add(partitionColumnName);
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
             }
@@ -638,17 +638,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
                     throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
                 }
-                // For materialized views currently columnDefs == null
-                if (columnDefs != null && "hour".equalsIgnoreCase(fmt)) {
-                    ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionName);
-                    if (partitionDef == null)  {
-                        throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
-                    }
-                    if (partitionDef.getType() != Type.DATETIME) {
-                        throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(expr.toSql(),
-                                "PARTITION BY", "The hour parameter only supports datetime type"), pos);
-                    }
-                }
+                checkPartitionColumnTypeValid(expr, columnDefs, pos, partitionColumnName, fmt);
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
             }
@@ -658,10 +648,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
             }
             Expr firstExpr = paramsExpr.get(0);
-            String partitionName;
+            String partitionColumnName;
             if (firstExpr instanceof SlotRef) {
-                partitionName = ((SlotRef) firstExpr).getColumnName();
-                columnList.add(partitionName);
+                partitionColumnName = ((SlotRef) firstExpr).getColumnName();
+                columnList.add(partitionColumnName);
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
             }
@@ -674,16 +664,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
                 }
                 // For materialized views currently columnDefs == null
-                if (columnDefs != null && "hour".equalsIgnoreCase(fmt)) {
-                    ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionName);
-                    if (partitionDef == null)  {
-                        throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
-                    }
-                    if (partitionDef.getType() != Type.DATETIME) {
-                        throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(expr.toSql(),
-                                "PARTITION BY", "The hour parameter only supports datetime type"), pos);
-                    }
-                }
+                checkPartitionColumnTypeValid(expr, columnDefs, pos, partitionColumnName, fmt);
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
             }
@@ -702,6 +683,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
         }
         return columnList;
+    }
+
+    private void checkPartitionColumnTypeValid(FunctionCallExpr expr, List<ColumnDef> columnDefs,
+                                               NodePosition pos, String partitionColumnName, String fmt) {
+        // For materialized views currently columnDefs == null
+        if (columnDefs != null && "hour".equalsIgnoreCase(fmt)) {
+            ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionColumnName);
+            if (partitionDef == null)  {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            if (partitionDef.getType() != Type.DATETIME) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(expr.toSql(),
+                        "PARTITION BY", "The hour parameter only supports datetime type"), pos);
+            }
+        }
     }
 
     private ColumnDef findPartitionDefByName(List<ColumnDef> columnDefs, String partitionName) {
