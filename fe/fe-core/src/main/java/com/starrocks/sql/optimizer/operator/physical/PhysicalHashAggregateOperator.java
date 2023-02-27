@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -185,10 +186,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     @Override
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
-        ColumnRefSet dictSet = new ColumnRefSet();
-        for (Integer id : childDictColumns) {
-            dictSet.union(id);
-        }
+        Preconditions.checkState(!childDictColumns.isEmpty());
+        ColumnRefSet dictSet = ColumnRefSet.createByIds(childDictColumns);
 
         for (CallOperator operator : aggregations.values()) {
             if (couldApplyStringDict(operator, dictSet)) {
@@ -225,15 +224,15 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         getAggregations().forEach((k, v) -> {
             if (resultSet.contains(k.getId())) {
                 resultSet.union(v.getUsedColumns());
-            }
+            } else {
+                if (!couldApplyStringDict(v, dictSet)) {
+                    resultSet.union(v.getUsedColumns());
+                }
 
-            if (!couldApplyStringDict(v, dictSet)) {
-                resultSet.union(v.getUsedColumns());
-            }
-
-            // disable DictOptimize when having predicate couldn't push down
-            if (predicate != null && predicate.getUsedColumns().isIntersect(k.getUsedColumns())) {
-                resultSet.union(v.getUsedColumns());
+                // disable DictOptimize when having predicate couldn't push down
+                if (predicate != null && predicate.getUsedColumns().isIntersect(k.getUsedColumns())) {
+                    resultSet.union(v.getUsedColumns());
+                }
             }
         });
         // Now we disable DictOptimize when group by predicate couldn't push down

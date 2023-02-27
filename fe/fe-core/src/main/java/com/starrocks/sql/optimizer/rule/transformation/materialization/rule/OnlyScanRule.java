@@ -21,10 +21,10 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 /**
  * Materialized View Rewrite Rule for pattern:
- *  - Scan
+ * - Scan
  */
 public class OnlyScanRule extends SingleTableRewriteBaseRule {
-    private static OnlyScanRule INSTANCE = new OnlyScanRule();
+    private static final OnlyScanRule INSTANCE = new OnlyScanRule();
 
     public OnlyScanRule() {
         super(RuleType.TF_MV_ONLY_SCAN_RULE, Pattern.create(OperatorType.PATTERN_SCAN));

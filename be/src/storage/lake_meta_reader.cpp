@@ -147,25 +147,4 @@ Status LakeMetaReader::do_get_next(ChunkPtr* result) {
 
     return Status::OK();
 }
-
-Status LakeMetaReader::_fill_result_chunk(Chunk* chunk) {
-    for (size_t i = 0; i < _collect_context.result_slot_ids.size(); i++) {
-        auto s_id = _collect_context.result_slot_ids[i];
-        auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
-        if (_collect_context.seg_collecter_params.fields[i] == "dict_merge") {
-            TypeDescriptor item_desc;
-            item_desc = slot->type();
-            TypeDescriptor desc;
-            desc.type = TYPE_ARRAY;
-            desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, false);
-            chunk->append_column(std::move(column), slot->id());
-        } else {
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), false);
-            chunk->append_column(std::move(column), slot->id());
-        }
-    }
-    return Status::OK();
-}
-
 } // namespace starrocks

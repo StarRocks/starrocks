@@ -24,20 +24,41 @@ public class UserPrivilegeCollection extends PrivilegeCollection {
     @SerializedName(value = "r")
     private Set<Long> roleIds;
 
+    @SerializedName(value = "d")
+    private Set<Long> defaultRoleIds;
+
     public UserPrivilegeCollection() {
         super();
         roleIds = new HashSet<>();
+        defaultRoleIds = new HashSet<>();
     }
 
     public void grantRole(Long roleId) {
         roleIds.add(roleId);
     }
 
+    public void grantRoles(Set<Long> roleIds) {
+        this.roleIds.addAll(roleIds);
+    }
+
     public void revokeRole(Long roleId) {
         roleIds.remove(roleId);
+        defaultRoleIds.remove(roleId);
     }
 
     public Set<Long> getAllRoles() {
         return roleIds;
+    }
+
+    public void setDefaultRoleIds(Set<Long> defaultRoleIds) {
+        this.defaultRoleIds = defaultRoleIds;
+    }
+
+    public Set<Long> getDefaultRoleIds() {
+        if (defaultRoleIds == null) {
+            return new HashSet<>();
+        } else {
+            return defaultRoleIds;
+        }
     }
 }

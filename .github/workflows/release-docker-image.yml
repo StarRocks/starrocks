@@ -1,0 +1,60 @@
+name: 'release docker images'
+
+on:
+  release:
+    types: [published]
+
+# This allows a subsequently queued workflow run to interrupt previous runs
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+env:
+  RELEASE_VERSION: ${{ github.ref_name }}
+  REGISTRY: ghcr.io/${{ github.repository }}
+
+jobs:
+  release-docker-images:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: build artifact docker image
+        run: |
+          DOCKER_BUILDKIT=1 docker build --rm=true --build-arg RELEASE_VERSION=${RELEASE_VERSION} -f docker/dockerfiles/artifacts/artifact-ubuntu.Dockerfile -t artifact-ubuntu:${RELEASE_VERSION} .
+
+      - name: build and publish fe docker image
+        run: |
+          DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACTIMAGE=artifact-ubuntu:${RELEASE_VERSION} -f docker/dockerfiles/fe/fe-ubuntu.Dockerfile -t ${REGISTRY}/fe-ubuntu:${RELEASE_VERSION} .
+          # Pushing to the GitHub packages docker registry regularly fails with "unknown blob" errors. The "fix" suggested by GitHub is looping.
+          until docker push ${REGISTRY}/fe-ubuntu:${RELEASE_VERSION}
+          do
+            echo "Could not push ${REGISTRY}/fe-ubuntu:${RELEASE_VERSION} trying again."
+          done
+      - name: build and publish be docker image
+        run: |
+          DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACTIMAGE=artifact-ubuntu:${RELEASE_VERSION} -f docker/dockerfiles/be/be-ubuntu.Dockerfile -t ${REGISTRY}/be-ubuntu:${RELEASE_VERSION} .
+          # Pushing to the GitHub packages docker registry regularly fails with "unknown blob" errors. The "fix" suggested by GitHub is looping.
+          until docker push ${REGISTRY}/be-ubuntu:${RELEASE_VERSION}
+          do
+            echo "Could not push ${REGISTRY}/be-ubuntu:${RELEASE_VERSION} trying again."
+          done
+      - name: build and publish allin1 docker image
+        run: |
+          DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACTIMAGE=artifact-ubuntu:${RELEASE_VERSION} -f docker/dockerfiles/allin1/allin1-ubuntu.Dockerfile -t ${REGISTRY}/allin1-ubuntu:${RELEASE_VERSION} docker/dockerfiles/allin1
+          # Pushing to the GitHub packages docker registry regularly fails with "unknown blob" errors. The "fix" suggested by GitHub is looping.
+          until docker push ${REGISTRY}/allin1-ubuntu:${RELEASE_VERSION}
+          do
+            echo "Could not push ${REGISTRY}/allin1-ubuntu:${RELEASE_VERSION} trying again."
+          done

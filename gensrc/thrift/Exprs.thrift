@@ -237,6 +237,13 @@ struct TExprNode {
   54: optional bool is_monotonic
 }
 
+struct TPartitionLiteral {
+  1: optional Types.TPrimitiveType type
+  2: optional TIntLiteral int_literal
+  3: optional TDateLiteral date_literal
+  4: optional TStringLiteral string_literal
+}
+
 // A flattened representation of a tree of Expr nodes, obtained by depth-first
 // traversal.
 struct TExpr {

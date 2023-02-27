@@ -466,6 +466,10 @@ under the License.
                     <artifactId>ivy</artifactId>
                     <groupId>org.apache.ivy</groupId>
                 </exclusion>
+                <exclusion>
+                    <artifactId>log4j</artifactId>
+                    <groupId>log4j</groupId>
+                </exclusion>
             </exclusions>
         </dependency>
 
@@ -633,6 +637,10 @@ under the License.
                     <groupId>org.apache.hbase.thirdparty</groupId>
                     <artifactId>hbase-shaded-netty</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.glassfish</groupId>
+                    <artifactId>javax.el</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
@@ -640,17 +648,23 @@ under the License.
         <dependency>
             <groupId>org.apache.hudi</groupId>
             <artifactId>hudi-hadoop-mr</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.glassfish</groupId>
+                    <artifactId>javax.el</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starclient</artifactId>
-            <version>0.2.2</version>
+            <version>0.2.6</version>
         </dependency>
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starmanager</artifactId>
-            <version>0.2.2</version>
+            <version>0.2.6</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-api -->

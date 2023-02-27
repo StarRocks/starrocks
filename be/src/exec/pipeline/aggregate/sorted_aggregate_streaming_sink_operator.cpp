@@ -28,13 +28,17 @@ SortedAggregateStreamingSinkOperator::SortedAggregateStreamingSinkOperator(
 
 Status SortedAggregateStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get(), _mem_tracker.get()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
     return _aggregator->open(state);
 }
 
 void SortedAggregateStreamingSinkOperator::close(RuntimeState* state) {
     _aggregator->unref(state);
     Operator::close(state);
+}
+
+bool SortedAggregateStreamingSinkOperator::need_input() const {
+    return !is_finished() && _aggregator->chunk_buffer_size() < Aggregator::MAX_CHUNK_BUFFER_SIZE;
 }
 
 bool SortedAggregateStreamingSinkOperator::is_finished() const {

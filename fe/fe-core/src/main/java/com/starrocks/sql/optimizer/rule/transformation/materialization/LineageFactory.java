@@ -28,9 +28,9 @@ import java.util.Map;
 
 // get all projection map under root
 public class LineageFactory {
-    private OptExpression root;
-    private ColumnRefFactory refFactory;
-    private Map<ColumnRefOperator, ScalarOperator> lineage;
+    private final OptExpression root;
+    private final ColumnRefFactory refFactory;
+    private final Map<ColumnRefOperator, ScalarOperator> lineage;
 
     public LineageFactory(OptExpression root, ColumnRefFactory refFactory) {
         this.root = root;
@@ -61,5 +61,11 @@ public class LineageFactory {
             }
             return null;
         }
+    }
+
+    public static Map<ColumnRefOperator, ScalarOperator> getLineage(OptExpression expression,
+                                                                    ColumnRefFactory refFactory) {
+        LineageFactory factory = new LineageFactory(expression, refFactory);
+        return factory.getLineage();
     }
 }

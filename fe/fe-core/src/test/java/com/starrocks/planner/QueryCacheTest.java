@@ -400,6 +400,7 @@ public class QueryCacheTest {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         ctx.getSessionVariable().setEnableQueryCache(true);
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(30000);
         FeConstants.runningUnitTest = true;
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
@@ -427,7 +428,7 @@ public class QueryCacheTest {
     }
 
     public static List<String> getSsbCreateTableSqlList() {
-        List<String> ssbTableNames = Lists.newArrayList("lineorder", "customer", "dates", "supplier", "part");
+        List<String> ssbTableNames = Lists.newArrayList("customer", "dates", "supplier", "part", "lineorder");
         ClassLoader loader = QueryCacheTest.class.getClassLoader();
         List<String> createTableSqlList = ssbTableNames.stream().map(n -> {
             try {

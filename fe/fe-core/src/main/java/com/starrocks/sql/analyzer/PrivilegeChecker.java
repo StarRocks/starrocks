@@ -19,7 +19,6 @@ import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedIndex;
@@ -35,6 +34,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.mysql.privilege.UserProperty;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -107,7 +107,6 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.SetUserPropertyVar;
-import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
@@ -122,7 +121,7 @@ import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
-import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
@@ -141,6 +140,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.StatsConstants;
@@ -152,6 +152,8 @@ import java.util.Map;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class PrivilegeChecker {
     public static void check(StatementBase statement, ConnectContext session) {
@@ -357,6 +359,40 @@ public class PrivilegeChecker {
             return null;
         }
 
+        private void checkoutSetUserPropertyAccess(String key, boolean isSelf) {
+            for (Pattern advPattern : UserProperty.ADVANCED_PROPERTIES) {
+                Matcher matcher = advPattern.matcher(key);
+                if (matcher.find()) {
+                    // In new RBAC framework, set user property will be checked in PrivilegeCheckerV2
+                    if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!GlobalStateMgr.getCurrentState().getAuth()
+                                .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                                    "ADMIN");
+                        }
+                    }
+                    return;
+                }
+            }
+
+            for (Pattern commPattern : UserProperty.COMMON_PROPERTIES) {
+                Matcher matcher = commPattern.matcher(key);
+                if (matcher.find()) {
+                    // In new RBAC framework, set user property will be checked in PrivilegeCheckerV2
+                    if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!isSelf && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                                PrivPredicate.ADMIN)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                                    "GRANT");
+                        }
+                    }
+                    return;
+                }
+            }
+
+            throw new SemanticException("Unknown property key: " + key);
+        }
+
         @Override
         public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext session) {
             if (statement.getPropertyList() == null || statement.getPropertyList().isEmpty()) {
@@ -364,12 +400,8 @@ public class PrivilegeChecker {
             }
 
             boolean isSelf = statement.getUser().equals(ConnectContext.get().getQualifiedUser());
-            try {
-                for (SetVar var : statement.getPropertyList()) {
-                    ((SetUserPropertyVar) var).analyze(isSelf);
-                }
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
+            for (SetUserPropertyVar var : statement.getPropertyList()) {
+                checkoutSetUserPropertyAccess(var.getPropertyKey(), isSelf);
             }
 
             return null;
@@ -616,7 +648,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt statement, ConnectContext context) {
+        public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, ConnectContext context) {
             // check if current user has GRANT priv on GLOBAL or DATABASE level.
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkHasPriv(context, PrivPredicate.GRANT, Auth.PrivLevel.GLOBAL, Auth.PrivLevel.DATABASE)) {
@@ -672,13 +704,13 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
-            if (stmt.getRole() != null || stmt.getPrivType().equals("USER")) {
+            if (stmt.getRole() != null || stmt.getObjectTypeUnResolved().equals("USER")) {
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
                         session, PrivPredicate.GRANT)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
                 }
             } else {
-                if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
+                if (stmt.getObjectTypeUnResolved().equals("TABLE") || stmt.getObjectTypeUnResolved().equals("DATABASE")) {
                     TablePattern tblPattern = stmt.getTblPattern();
                     if (tblPattern.getPrivLevel() == Auth.PrivLevel.GLOBAL) {
                         if (!GlobalStateMgr.getCurrentState().getAuth()
@@ -741,10 +773,10 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowMaterializedViewStatement(ShowMaterializedViewStmt statement, ConnectContext session) {
+        public Void visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext session) {
             String db = statement.getDb();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEW",
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEWS",
                         session.getQualifiedUser(),
                         session.getRemoteIP(),
                         db);
@@ -1266,7 +1298,8 @@ public class PrivilegeChecker {
                 }
             } catch (Exception e) {
                 if (statement.getTableRefs().size() == 0) {
-                    throw new SemanticException("Table not found.");
+                    String dBName = statement.getDbName();
+                    throw new SemanticException("Database: %s is empty", dBName);
                 } else {
                     throw new SemanticException("BackupStatement failed");
                 }

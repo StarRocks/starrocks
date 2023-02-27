@@ -140,6 +140,7 @@ enum TFileFormatType {
     FORMAT_ORC = 8,
     FORMAT_JSON = 9,
     FORMAT_CSV_ZSTD = 10,
+    FORMAT_AVRO = 11,
 }
 
 // One broker range information.
@@ -417,8 +418,13 @@ struct TSchemaScanNode {
   9: optional i64 thread_id
   10: optional string user_ip   // deprecated
   11: optional Types.TUserIdentity current_user_ident   // to replace the user and user_ip
+  12: optional i64 table_id
+  13: optional i64 partition_id
+  14: optional i64 tablet_id
+  15: optional i64 txn_id
 }
 
+// If you find yourself changing this struct, see also TLakeScanNode
 struct TOlapScanNode {
   1: required Types.TTupleId tuple_id
   2: required list<string> key_column_name
@@ -446,6 +452,7 @@ struct TJDBCScanNode {
   5: optional i64 limit
 }
 
+// If you find yourself changing this struct, see also TOlapScanNode
 struct TLakeScanNode {
   1: required Types.TTupleId tuple_id
   2: required list<string> key_column_name
@@ -713,6 +720,9 @@ struct TSortNode {
   24: optional i64 partition_limit
   25: optional TTopNType topn_type;
   26: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
+  27: optional i64 max_buffered_rows;
+  28: optional i64 max_buffered_bytes;
+  29: optional bool late_materialization;
 }
 
 enum TAnalyticWindowType {
@@ -807,6 +817,7 @@ struct TAnalyticNode {
   11: optional string sql_aggregate_functions
 
   20: optional bool has_outer_join_child
+  21: optional bool use_hash_based_partition
 }
 
 struct TMergeNode {

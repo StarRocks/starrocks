@@ -26,16 +26,17 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
-import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -64,7 +65,7 @@ public class SetExecutorTest {
         AuthenticationManager authenticationManager =
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
         authenticationManager.createUser(createUserStmt);
-        testUser = createUserStmt.getUserIdent();
+        testUser = createUserStmt.getUserIdentity();
     }
 
     private static void ctxToTestUser() {
@@ -79,11 +80,11 @@ public class SetExecutorTest {
 
     @Test
     public void testNormal() throws UserException {
-        List<SetVar> vars = Lists.newArrayList();
+        List<SetListItem> vars = Lists.newArrayList();
         vars.add(new SetPassVar(new UserIdentity("testUser", "%"),
                 "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B"));
         vars.add(new SetNamesVar("utf8"));
-        vars.add(new SetVar("query_timeout", new IntLiteral(10L)));
+        vars.add(new SystemVariable("query_timeout", new IntLiteral(10L)));
 
         SetStmt stmt = new SetStmt(vars);
         ctxToTestUser();
@@ -112,7 +113,7 @@ public class SetExecutorTest {
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sessionSQL, ctx);
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        Assert.assertEquals(1, ctx.getModifiedSessionVariables().getSetVars().size());
+        Assert.assertEquals(1, ctx.getModifiedSessionVariables().getSetListItems().size());
         Assert.assertEquals(9, ctx.sessionVariable.getQueryTimeoutS());
     }
 
@@ -123,8 +124,8 @@ public class SetExecutorTest {
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
         UserVariable userVariable = ctx.getUserVariables("var");
-        Assert.assertTrue(userVariable.getResolvedExpression().getType().matchesType(type));
-        Assert.assertEquals(value.getStringValue(), userVariable.getResolvedExpression().getStringValue());
+        Assert.assertTrue(userVariable.getEvaluatedExpression().getType().matchesType(type));
+        Assert.assertEquals(value.getStringValue(), userVariable.getEvaluatedExpression().getStringValue());
         String planFragment = UtFrameUtils.getPlanAndFragment(ctx, "select @var").second.
                 getExplainString(TExplainLevel.NORMAL);
         Assert.assertTrue(planFragment.contains(value.getStringValue()));
@@ -155,16 +156,16 @@ public class SetExecutorTest {
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
         UserVariable userVariable = ctx.getUserVariables("var");
-        Assert.assertTrue(userVariable.getResolvedExpression().getType().isDecimalV3());
-        Assert.assertEquals("10", userVariable.getResolvedExpression().getStringValue());
+        Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isDecimalV3());
+        Assert.assertEquals("10", userVariable.getEvaluatedExpression().getStringValue());
 
         sql = "set @var = cast(1 as boolean)";
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
         userVariable = ctx.getUserVariables("var");
-        Assert.assertTrue(userVariable.getResolvedExpression().getType().isBoolean());
-        BoolLiteral literal = (BoolLiteral) userVariable.getResolvedExpression();
+        Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isBoolean());
+        BoolLiteral literal = (BoolLiteral) userVariable.getEvaluatedExpression();
         Assert.assertTrue(literal.getValue());
 
         sql = "set @var = cast(0 as boolean)";
@@ -172,8 +173,8 @@ public class SetExecutorTest {
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
         userVariable = ctx.getUserVariables("var");
-        Assert.assertTrue(userVariable.getResolvedExpression().getType().isBoolean());
-        literal = (BoolLiteral) userVariable.getResolvedExpression();
+        Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isBoolean());
+        literal = (BoolLiteral) userVariable.getEvaluatedExpression();
         Assert.assertFalse(literal.getValue());
     }
 

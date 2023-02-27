@@ -64,7 +64,6 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -79,6 +78,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -430,6 +430,7 @@ public class RestoreJob extends AbstractJob {
      * 6. make snapshot for all replicas for incremental download later.
      */
     private void checkAndPrepareMeta() {
+        MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
         Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
@@ -486,6 +487,11 @@ public class RestoreJob extends AbstractJob {
                 Preconditions.checkNotNull(remoteTbl);
                 Table localTbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                 if (localTbl != null) {
+                    if (localTbl instanceof OlapTable && localTbl.hasAutoIncrementColumn()) {
+                        ((OlapTable) localTbl).sendDropAutoIncrementMapTask();
+                    }
+
+                    backupMeta.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
                     if (!localTbl.isOlapOrLakeTable()) {
                         status = new Status(ErrCode.COMMON_ERROR,
@@ -516,7 +522,7 @@ public class RestoreJob extends AbstractJob {
                         if (localPartition != null) {
                             // Partition already exist.
                             PartitionInfo localPartInfo = localOlapTbl.getPartitionInfo();
-                            if (localPartInfo.getType() == PartitionType.RANGE) {
+                            if (localPartInfo.isRangePartition()) {
                                 // If this is a range partition, check range
                                 RangePartitionInfo localRangePartInfo = (RangePartitionInfo) localPartInfo;
                                 RangePartitionInfo remoteRangePartInfo
@@ -546,7 +552,7 @@ public class RestoreJob extends AbstractJob {
                         } else {
                             // partitions does not exist
                             PartitionInfo localPartitionInfo = localOlapTbl.getPartitionInfo();
-                            if (localPartitionInfo.getType() == PartitionType.RANGE) {
+                            if (localPartitionInfo.isRangePartition()) {
                                 // Check if the partition range can be added to the table
                                 RangePartitionInfo localRangePartitionInfo = (RangePartitionInfo) localPartitionInfo;
                                 RangePartitionInfo remoteRangePartitionInfo
@@ -596,6 +602,8 @@ public class RestoreJob extends AbstractJob {
                         status = st;
                         return;
                     }
+
+                    backupMeta.checkAndRecoverAutoIncrementId((Table) remoteOlapTbl);
 
                     // DO NOT set remote table's new name here, cause we will still need the origin name later
                     // remoteOlapTbl.setName(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
@@ -832,7 +840,7 @@ public class RestoreJob extends AbstractJob {
         Partition remotePart = remoteTbl.getPartition(partName);
         Preconditions.checkNotNull(remotePart);
         PartitionInfo localPartitionInfo = localTbl.getPartitionInfo();
-        Preconditions.checkState(localPartitionInfo.getType() == PartitionType.RANGE);
+        Preconditions.checkState(localPartitionInfo.isRangePartition());
 
         // generate new partition id
         long newPartId = globalStateMgr.getNextId();
@@ -1207,6 +1215,7 @@ public class RestoreJob extends AbstractJob {
             if (!st.ok()) {
                 status = st;
             }
+            MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
             return;
         }
         LOG.info("waiting {} tablets to commit. {}", unfinishedSignatureToId.size(), this);
@@ -1371,6 +1380,7 @@ public class RestoreJob extends AbstractJob {
 
         status = new Status(ErrCode.COMMON_ERROR, "user cancelled, current state: " + state.name());
         cancelInternal(false);
+        MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
         return Status.OK;
     }
 

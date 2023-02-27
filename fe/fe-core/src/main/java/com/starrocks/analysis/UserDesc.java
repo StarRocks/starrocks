@@ -34,38 +34,45 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
+
 // Description of user in SQL statement
-public class UserDesc {
-    private UserIdentity userIdent;
+public class UserDesc implements ParseNode {
+    private final UserIdentity userIdentity;
     private String password;
-    private boolean isPasswordPlain;
+    private final boolean isPasswordPlain;
     private String authPlugin;
     private String authString;
 
+    private final NodePosition pos;
+
     public UserDesc(UserIdentity userIdent) {
-        this(userIdent, "", false);
+        this(userIdent, "", false, NodePosition.ZERO);
     }
 
-    public UserDesc(UserIdentity userIdent, String password, boolean isPasswordPlain) {
-        this.userIdent = userIdent;
+    public UserDesc(UserIdentity userIdentity, String password, boolean isPasswordPlain) {
+        this(userIdentity, password, isPasswordPlain, NodePosition.ZERO);
+    }
+
+    public UserDesc(UserIdentity userIdentity, String password, boolean isPasswordPlain, NodePosition pos) {
+        this.pos = pos;
+        this.userIdentity = userIdentity;
         this.password = password;
         this.isPasswordPlain = isPasswordPlain;
     }
 
-    public UserDesc(UserIdentity userIdent, String authPlugin) {
-        this.userIdent = userIdent;
-        this.authPlugin = authPlugin;
-    }
-
-    public UserDesc(UserIdentity userIdent, String authPlugin, String authString, boolean isPasswordPlain) {
-        this.userIdent = userIdent;
+    public UserDesc(UserIdentity userIdentity, String authPlugin, String authString, boolean isPasswordPlain,
+                    NodePosition pos) {
+        this.pos = pos;
+        this.userIdentity = userIdentity;
         this.authPlugin = authPlugin;
         this.authString = authString;
         this.isPasswordPlain = isPasswordPlain;
     }
 
-    public UserIdentity getUserIdent() {
-        return userIdent;
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
     }
 
     public String getPassword() {
@@ -82,5 +89,10 @@ public class UserDesc {
 
     public String getAuthString() {
         return authString;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

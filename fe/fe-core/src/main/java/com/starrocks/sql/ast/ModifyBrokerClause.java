@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.util.HashSet;
@@ -39,24 +40,25 @@ public class ModifyBrokerClause extends AlterClause {
 
     protected Set<Pair<String, Integer>> hostPortPairs;
 
-    public ModifyBrokerClause(ModifyOp op, String brokerName, List<String> hostPorts) {
-        super(AlterOpType.ALTER_OTHER);
+    public ModifyBrokerClause(ModifyOp op, String brokerName, List<String> hostPorts, NodePosition pos) {
+        super(AlterOpType.ALTER_OTHER, pos);
         this.op = op;
         this.brokerName = brokerName;
         this.hostPorts = hostPorts;
         this.hostPortPairs = new HashSet<>();
     }
 
-    public static ModifyBrokerClause createAddBrokerClause(String brokerName, List<String> hostPorts) {
-        return new ModifyBrokerClause(ModifyOp.OP_ADD, brokerName, hostPorts);
+    public static ModifyBrokerClause createAddBrokerClause(String brokerName, List<String> hostPorts, NodePosition pos) {
+        return new ModifyBrokerClause(ModifyOp.OP_ADD, brokerName, hostPorts, pos);
     }
 
-    public static ModifyBrokerClause createDropBrokerClause(String brokerName, List<String> hostPorts) {
-        return new ModifyBrokerClause(ModifyOp.OP_DROP, brokerName, hostPorts);
+
+    public static ModifyBrokerClause createDropBrokerClause(String brokerName, List<String> hostPorts, NodePosition pos) {
+        return new ModifyBrokerClause(ModifyOp.OP_DROP, brokerName, hostPorts, pos);
     }
 
-    public static ModifyBrokerClause createDropAllBrokerClause(String brokerName) {
-        return new ModifyBrokerClause(ModifyOp.OP_DROP_ALL, brokerName, null);
+    public static ModifyBrokerClause createDropAllBrokerClause(String brokerName, NodePosition pos) {
+        return new ModifyBrokerClause(ModifyOp.OP_DROP_ALL, brokerName, null, pos);
     }
 
     public ModifyOp getOp() {

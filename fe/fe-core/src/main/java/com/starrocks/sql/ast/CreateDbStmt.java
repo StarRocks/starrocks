@@ -15,11 +15,18 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class CreateDbStmt extends DdlStmt {
     private final boolean ifNotExists;
     private final String dbName;
 
     public CreateDbStmt(boolean ifNotExists, String dbName) {
+        this(ifNotExists, dbName, NodePosition.ZERO);
+    }
+
+    public CreateDbStmt(boolean ifNotExists, String dbName, NodePosition pos) {
+        super(pos);
         this.ifNotExists = ifNotExists;
         this.dbName = dbName;
     }

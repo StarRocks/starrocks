@@ -15,6 +15,9 @@ thirdparty/src
 **/*.o
 
 **/output
+# negate the output as it might be used for packing container from locally build artifact
+!output
+
 
 
 

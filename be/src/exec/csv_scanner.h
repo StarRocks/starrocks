@@ -67,6 +67,7 @@ private:
     Status _parse_csv_v2(Chunk* chunk);
 
     StatusOr<ChunkPtr> _materialize(ChunkPtr& src_chunk);
+    void _materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
     void _report_error(const std::string& line, const std::string& err_msg);
 
     using ConverterPtr = std::unique_ptr<csv::Converter>;

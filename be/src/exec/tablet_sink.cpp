@@ -35,9 +35,12 @@
 #include "exec/tablet_sink.h"
 
 #include <memory>
+#include <numeric>
 #include <sstream>
 #include <utility>
 
+#include "agent/master_info.h"
+#include "agent/utils.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -47,17 +50,21 @@
 #include "exec/pipeline/stream_epoch_manager.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
+#include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
 #include "simd/simd.h"
+#include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "types/hll.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
 #include "util/defer_op.h"
 #include "util/thread.h"
+#include "util/thrift_rpc_helper.h"
 #include "util/uid_util.h"
 
 static const uint8_t VALID_SEL_FAILED = 0x0;
@@ -67,9 +74,12 @@ static const uint8_t VALID_SEL_OK = 0x1;
 // make sure the least bit is 1.
 static const uint8_t VALID_SEL_OK_AND_NULL = 0x3;
 
-namespace starrocks::stream_load {
+namespace starrocks {
 
-NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id) : _parent(parent), _node_id(node_id) {
+namespace stream_load {
+
+NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental)
+        : _parent(parent), _node_id(node_id), _is_incremental(is_incremental) {
     // restrict the chunk memory usage of send queue
     _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
 }
@@ -100,6 +110,11 @@ NodeChannel::~NodeChannel() noexcept {
 }
 
 Status NodeChannel::init(RuntimeState* state) {
+    // already init success
+    if (_runtime_state != nullptr) {
+        return Status::OK();
+    }
+
     _tuple_desc = _parent->_output_tuple_desc;
     _node_info = _parent->_nodes_info->find_node(_node_id);
     if (_node_info == nullptr) {
@@ -171,12 +186,13 @@ void NodeChannel::try_open() {
     for (int i = 0; i < _rpc_request.requests_size(); i++) {
         _open_closures.emplace_back(new RefCountClosure<PTabletWriterOpenResult>());
         _open_closures.back()->ref();
-
-        _open(_rpc_request.requests(i).index_id(), _open_closures[i]);
+        _open(_rpc_request.requests(i).index_id(), _open_closures[i],
+              _index_tablets_map[_rpc_request.requests(i).index_id()], false);
     }
 }
 
-void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure) {
+void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure,
+                        std::vector<PTabletWithPartition>& tablets, bool incremental_open) {
     PTabletWriterOpenRequest request;
     request.set_merge_condition(_parent->_merge_condition);
     request.set_allocated_id(&_parent->_load_id);
@@ -188,9 +204,12 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);
     request.set_write_quorum(_write_quorum_type);
-    for (auto& tablet : _index_tablets_map[index_id]) {
+    request.set_miss_auto_increment_column(_parent->_miss_auto_increment_column);
+    request.set_abort_delete(_parent->_abort_delete);
+    request.set_is_incremental(incremental_open);
+    for (auto& tablet : tablets) {
         auto ptablet = request.add_tablets();
-        ptablet->Swap(&tablet);
+        ptablet->CopyFrom(tablet);
     }
     request.set_num_senders(_parent->_num_senders);
     request.set_need_gen_rollup(_parent->_need_gen_rollup);
@@ -226,6 +245,16 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
 
     VLOG(2) << "NodeChannel[" << _load_info << "] send open request to [" << _node_info->host << ":"
             << _node_info->brpc_port << "]";
+}
+
+void NodeChannel::try_incremental_open() {
+    for (int i = 0; i < _rpc_request.requests_size(); i++) {
+        _open_closures.emplace_back(new RefCountClosure<PTabletWriterOpenResult>());
+        _open_closures.back()->ref();
+
+        _open(_rpc_request.requests(i).index_id(), _open_closures[i],
+              _index_tablets_map[_rpc_request.requests(i).index_id()], true);
+    }
 }
 
 bool NodeChannel::is_open_done() {
@@ -368,111 +397,107 @@ bool NodeChannel::is_full() {
 }
 
 Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_ids,
-                              const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size, bool eos) {
+                              const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size) {
     if (_cancelled || _send_finished) {
         return _err_st;
     }
 
-    if (LIKELY(!eos)) {
-        DCHECK(_rpc_request.requests_size() == 1);
-        if (UNLIKELY(_cur_chunk == nullptr)) {
-            _cur_chunk = input->clone_empty_with_slot();
-        }
-
-        if (is_full()) {
-            SCOPED_TIMER(_parent->_wait_response_timer);
-            // wait previous request done then we can pop data from queue to send request
-            // and make new space to push data.
-            RETURN_IF_ERROR(_wait_one_prev_request());
-        }
-
-        SCOPED_TIMER(_parent->_pack_chunk_timer);
-        // 1. append data
-        _cur_chunk->append_selective(*input, indexes.data(), from, size);
-        auto req = _rpc_request.mutable_requests(0);
-        for (size_t i = 0; i < size; ++i) {
-            req->add_tablet_ids(tablet_ids[indexes[from + i]]);
-        }
-
-        if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
-            // 2. chunk not full
-            if (_request_queue.empty()) {
-                return Status::OK();
-            }
-            // passthrough: try to send data if queue not empty
-        } else {
-            // 3. chunk full push back to queue
-            _mem_tracker->consume(_cur_chunk->memory_usage());
-            _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
-            _cur_chunk = input->clone_empty_with_slot();
-            _rpc_request.mutable_requests(0)->clear_tablet_ids();
-        }
-
-        // 4. check last request
-        if (!_check_prev_request_done()) {
-            // 4.1 noblock here so that other node channel can send data
-            return Status::OK();
-        }
+    DCHECK(_rpc_request.requests_size() == 1);
+    if (UNLIKELY(_cur_chunk == nullptr)) {
+        _cur_chunk = input->clone_empty_with_slot();
     }
 
-    return _send_request(eos);
+    if (is_full()) {
+        SCOPED_TIMER(_parent->_wait_response_timer);
+        // wait previous request done then we can pop data from queue to send request
+        // and make new space to push data.
+        RETURN_IF_ERROR(_wait_one_prev_request());
+    }
+
+    SCOPED_TIMER(_parent->_pack_chunk_timer);
+    // 1. append data
+    _cur_chunk->append_selective(*input, indexes.data(), from, size);
+    auto req = _rpc_request.mutable_requests(0);
+    for (size_t i = 0; i < size; ++i) {
+        req->add_tablet_ids(tablet_ids[indexes[from + i]]);
+    }
+
+    if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
+        // 2. chunk not full
+        if (_request_queue.empty()) {
+            return Status::OK();
+        }
+        // passthrough: try to send data if queue not empty
+    } else {
+        // 3. chunk full push back to queue
+        _mem_tracker->consume(_cur_chunk->memory_usage());
+        _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
+        _cur_chunk = input->clone_empty_with_slot();
+        _rpc_request.mutable_requests(0)->clear_tablet_ids();
+    }
+
+    // 4. check last request
+    if (!_check_prev_request_done()) {
+        // 4.1 noblock here so that other node channel can send data
+        return Status::OK();
+    }
+
+    return _send_request(false);
 }
 
 Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64_t>>& tablet_ids,
-                               const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size, bool eos) {
+                               const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size) {
     if (_cancelled || _send_finished) {
         return _err_st;
     }
 
-    if (LIKELY(!eos)) {
-        DCHECK(tablet_ids.size() == _rpc_request.requests_size());
-        if (UNLIKELY(_cur_chunk == nullptr)) {
-            _cur_chunk = input->clone_empty_with_slot();
-        }
+    DCHECK(tablet_ids.size() == _rpc_request.requests_size());
+    if (UNLIKELY(_cur_chunk == nullptr)) {
+        _cur_chunk = input->clone_empty_with_slot();
+    }
 
-        if (is_full()) {
-            // wait previous request done then we can pop data from queue to send request
-            // and make new space to push data.
-            RETURN_IF_ERROR(_wait_one_prev_request());
-        }
+    if (is_full()) {
+        // wait previous request done then we can pop data from queue to send request
+        // and make new space to push data.
+        RETURN_IF_ERROR(_wait_one_prev_request());
+    }
 
-        SCOPED_TIMER(_parent->_pack_chunk_timer);
-        // 1. append data
-        _cur_chunk->append_selective(*input, indexes.data(), from, size);
-        for (size_t index_i = 0; index_i < tablet_ids.size(); ++index_i) {
-            auto req = _rpc_request.mutable_requests(index_i);
-            for (size_t i = 0; i < size; ++i) {
-                req->add_tablet_ids(tablet_ids[index_i][indexes[from + i]]);
-            }
-        }
-
-        if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
-            // 2. chunk not full
-            if (_request_queue.empty()) {
-                return Status::OK();
-            }
-            // passthrough: try to send data if queue not empty
-        } else {
-            // 3. chunk full push back to queue
-            _mem_tracker->consume(_cur_chunk->memory_usage());
-            _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
-            _cur_chunk = input->clone_empty_with_slot();
-            for (size_t index_i = 0; index_i < tablet_ids.size(); ++index_i) {
-                _rpc_request.mutable_requests(index_i)->clear_tablet_ids();
-            }
-        }
-
-        // 4. check last request
-        if (!_check_prev_request_done()) {
-            // 4.1 noblock here so that other node channel can send data
-            return Status::OK();
+    SCOPED_TIMER(_parent->_pack_chunk_timer);
+    // 1. append data
+    _cur_chunk->append_selective(*input, indexes.data(), from, size);
+    for (size_t index_i = 0; index_i < tablet_ids.size(); ++index_i) {
+        auto req = _rpc_request.mutable_requests(index_i);
+        for (size_t i = 0; i < size; ++i) {
+            req->add_tablet_ids(tablet_ids[index_i][indexes[from + i]]);
         }
     }
 
-    return _send_request(eos);
+    if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
+        // 2. chunk not full
+        if (_request_queue.empty()) {
+            return Status::OK();
+        }
+        // passthrough: try to send data if queue not empty
+    } else {
+        // 3. chunk full push back to queue
+        _mem_tracker->consume(_cur_chunk->memory_usage());
+        _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
+        _cur_chunk = input->clone_empty_with_slot();
+        for (size_t index_i = 0; index_i < tablet_ids.size(); ++index_i) {
+            _rpc_request.mutable_requests(index_i)->clear_tablet_ids();
+        }
+    }
+
+    // 4. check last request
+    if (!_check_prev_request_done()) {
+        // 4.1 noblock here so that other node channel can send data
+        return Status::OK();
+    }
+
+    return _send_request(false);
 }
 
-Status NodeChannel::_send_request(bool eos) {
+Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
     if (eos) {
         if (_request_queue.empty()) {
             if (_cur_chunk.get() == nullptr) {
@@ -505,6 +530,9 @@ Status NodeChannel::_send_request(bool eos) {
         auto req = request.mutable_requests(i);
         if (UNLIKELY(eos)) {
             req->set_eos(true);
+            if (wait_all_sender_close) {
+                req->set_wait_all_sender_close(true);
+            }
             for (auto pid : _parent->_partition_ids) {
                 req->add_partition_ids(pid);
             }
@@ -537,6 +565,9 @@ Status NodeChannel::_send_request(bool eos) {
     }
     _next_packet_seq++;
 
+    VLOG(2) << "NodeChannel[" << _load_info << "] send chunk request [rows: " << chunk->num_rows() << " eos: " << eos
+            << "] to [" << _node_info->host << ":" << _node_info->brpc_port << "]";
+
     return Status::OK();
 }
 
@@ -557,6 +588,9 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _runtime_state->append_tablet_fail_infos(std::move(fail_info));
         return _err_st;
     }
+
+    VLOG(2) << "NodeChannel[" << _load_info << "] recevied response : " << closure->result.DebugString() << "] from ["
+            << _node_info->host << ":" << _node_info->brpc_port << "]";
 
     Status st(closure->result.status());
     if (!st.ok()) {
@@ -583,6 +617,8 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _add_batch_counter.add_batch_num++;
     }
 
+    std::vector<int64_t> tablet_ids;
+    std::vector<int64_t> backend_ids;
     for (auto& tablet : closure->result.tablet_vec()) {
         TTabletCommitInfo commit_info;
         commit_info.tabletId = tablet.tablet_id();
@@ -604,6 +640,21 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         commit_info.__set_valid_dict_cache_columns(valid_dict_cache_columns);
 
         _tablet_commit_infos.emplace_back(std::move(commit_info));
+
+        if (tablet_ids.size() < 128) {
+            tablet_ids.emplace_back(commit_info.tabletId);
+            backend_ids.emplace_back(commit_info.backendId);
+        }
+    }
+
+    if (!tablet_ids.empty()) {
+        string commit_tablet_id_list_str;
+        JoinInts(tablet_ids, ",", &commit_tablet_id_list_str);
+        string backend_id_list_str;
+        JoinInts(backend_ids, ",", &backend_id_list_str);
+        LOG(INFO) << "OlapTableSink txn_id: " << _parent->_txn_id << " load_id: " << print_id(_parent->_load_id)
+                  << " commit " << _tablet_commit_infos.size() << " tablets: " << commit_tablet_id_list_str
+                  << " backends: " << backend_id_list_str;
     }
 
     return Status::OK();
@@ -678,13 +729,13 @@ Status NodeChannel::_wait_one_prev_request() {
     return Status::OK();
 }
 
-Status NodeChannel::try_close() {
+Status NodeChannel::try_close(bool wait_all_sender_close) {
     if (_cancelled || _send_finished) {
         return _err_st;
     }
 
     if (_check_prev_request_done()) {
-        auto st = _send_request(true /* eos */);
+        auto st = _send_request(true /* eos */, wait_all_sender_close);
         if (!st.ok()) {
             _cancelled = true;
             _err_st = st;
@@ -749,27 +800,28 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
 
 IndexChannel::~IndexChannel() = default;
 
-Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets) {
+Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental) {
     for (const auto& tablet : tablets) {
         auto* location = _parent->_location->find_tablet(tablet.tablet_id());
         if (location == nullptr) {
             auto msg = fmt::format("Not found tablet: {}", tablet.tablet_id());
             return Status::NotFound(msg);
         }
-        std::vector<NodeChannel*> channels;
         std::vector<int64_t> bes;
         for (auto& node_id : location->node_ids) {
             NodeChannel* channel = nullptr;
             auto it = _node_channels.find(node_id);
             if (it == std::end(_node_channels)) {
-                auto channel_ptr = std::make_unique<NodeChannel>(_parent, node_id);
+                auto channel_ptr = std::make_unique<NodeChannel>(_parent, node_id, is_incremental);
                 channel = channel_ptr.get();
                 _node_channels.emplace(node_id, std::move(channel_ptr));
+                if (is_incremental) {
+                    _has_incremental_node_channel = true;
+                }
             } else {
                 channel = it->second.get();
             }
             channel->add_tablet(_index_id, tablet);
-            channels.push_back(channel);
             bes.emplace_back(node_id);
         }
         _tablet_to_be.emplace(tablet.tablet_id(), std::move(bes));
@@ -812,37 +864,20 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _tuple_desc_id = table_sink.tuple_id;
     _is_lake_table = table_sink.is_lake_table;
     _keys_type = table_sink.keys_type;
+    _null_expr_in_auto_increment = table_sink.null_expr_in_auto_increment;
+    _miss_auto_increment_column = table_sink.miss_auto_increment_column;
+    _abort_delete = table_sink.abort_delete;
+    _auto_increment_slot_id = table_sink.auto_increment_slot_id;
     if (table_sink.__isset.write_quorum_type) {
         _write_quorum_type = table_sink.write_quorum_type;
     }
     if (table_sink.__isset.enable_replicated_storage) {
         _enable_replicated_storage = table_sink.enable_replicated_storage;
     }
-    _schema = std::make_shared<OlapTableSchemaParam>();
-    RETURN_IF_ERROR(_schema->init(table_sink.schema));
-    _vectorized_partition = _pool->add(new OlapTablePartitionParam(_schema, table_sink.partition));
-    RETURN_IF_ERROR(_vectorized_partition->init(state));
-    _location = _pool->add(new OlapTableLocationParam(table_sink.location));
-    _nodes_info = _pool->add(new StarRocksNodesInfo(table_sink.nodes_info));
-
-    if (table_sink.__isset.load_channel_timeout_s) {
-        _load_channel_timeout_s = table_sink.load_channel_timeout_s;
-    } else {
-        _load_channel_timeout_s = config::streaming_load_rpc_max_alive_time_sec;
-    }
-
-    return Status::OK();
-}
-
-Status OlapTableSink::prepare(RuntimeState* state) {
-    _span->AddEvent("prepare");
 
     // profile must add to state's object pool
     _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
 
-    _profile->add_info_string("TxnID", fmt::format("{}", _txn_id));
-    _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
-    _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
     // add all counter
     _input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
     _output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
@@ -860,6 +895,37 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _compress_timer = ADD_CHILD_TIMER(_profile, "CompressTime", "SendRpcTime");
     _client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
     _server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
+
+    _schema = std::make_shared<OlapTableSchemaParam>();
+    RETURN_IF_ERROR(_schema->init(table_sink.schema));
+    _vectorized_partition = _pool->add(new OlapTablePartitionParam(_schema, table_sink.partition));
+    RETURN_IF_ERROR(_vectorized_partition->init(state));
+    _location = _pool->add(new OlapTableLocationParam(table_sink.location));
+    _nodes_info = _pool->add(new StarRocksNodesInfo(table_sink.nodes_info));
+
+    if (table_sink.__isset.load_channel_timeout_s) {
+        _load_channel_timeout_s = table_sink.load_channel_timeout_s;
+    } else {
+        _load_channel_timeout_s = config::streaming_load_rpc_max_alive_time_sec;
+    }
+
+    _enable_automatic_partition = _vectorized_partition->enable_automatic_partition();
+    if (_enable_automatic_partition) {
+        _automatic_partition_token =
+                state->exec_env()->automatic_partition_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    }
+
+    return Status::OK();
+}
+
+Status OlapTableSink::prepare(RuntimeState* state) {
+    _span->AddEvent("prepare");
+
+    _profile->add_info_string("TxnID", fmt::format("{}", _txn_id));
+    _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
+    _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
+    _alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
+    _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
 
     SCOPED_TIMER(_profile->total_time_counter());
 
@@ -930,7 +996,7 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
         // collect all tablets belong to this rollup
         std::vector<PTabletWithPartition> tablets;
         auto* index = _schema->indexes()[i];
-        for (auto* part : partitions) {
+        for (auto& [id, part] : partitions) {
             for (auto tablet : part->indexes[i].tablets) {
                 PTabletWithPartition tablet_info;
                 tablet_info.set_tablet_id(tablet);
@@ -962,7 +1028,7 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
                         NodeChannel* node_channel = nullptr;
                         auto it = _node_channels.find(node_id);
                         if (it == std::end(_node_channels)) {
-                            auto channel_ptr = std::make_unique<NodeChannel>(this, node_id);
+                            auto channel_ptr = std::make_unique<NodeChannel>(this, node_id, false);
                             node_channel = channel_ptr.get();
                             _node_channels.emplace(node_id, std::move(channel_ptr));
                         } else {
@@ -976,7 +1042,7 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
             }
         }
         auto channel = std::make_unique<IndexChannel>(this, index->index_id);
-        RETURN_IF_ERROR(channel->init(state, tablets));
+        RETURN_IF_ERROR(channel->init(state, tablets, false));
         _channels.emplace_back(std::move(channel));
     }
     if (_colocate_mv_index) {
@@ -1079,21 +1145,106 @@ bool OlapTableSink::is_full() {
         for_each_index_channel([&full](NodeChannel* ch) { full |= ch->is_full(); });
     }
 
-    return full;
+    return full || _is_automatic_partition_running.load(std::memory_order_acquire);
+}
+
+Status OlapTableSink::_automatic_create_partition() {
+    TCreatePartitionRequest request;
+    TCreatePartitionResult result;
+    request.__set_txn_id(_txn_id);
+    request.__set_db_id(_vectorized_partition->db_id());
+    request.__set_table_id(_vectorized_partition->table_id());
+    request.__set_partition_values(_partition_not_exist_row_values);
+
+    VLOG(1) << "automatic partition rpc begin request " << request;
+    TNetworkAddress master_addr = get_master_address();
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+            master_addr.hostname, master_addr.port,
+            [&request, &result](FrontendServiceConnection& client) { client->createPartition(result, request); }));
+    VLOG(1) << "automatic partition rpc end response " << result;
+    if (result.status.status_code == TStatusCode::OK) {
+        // add new created partitions
+        RETURN_IF_ERROR(_vectorized_partition->add_partitions(result.partitions));
+
+        // add new tablet locations
+        _location->add_locations(result.tablets);
+
+        // update new node info
+        _nodes_info->add_nodes(result.nodes);
+
+        // incremental open node channel
+        RETURN_IF_ERROR(_incremental_open_node_channel(result.partitions));
+    }
+
+    return Status(result.status);
+}
+
+Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTablePartition>& partitions) {
+    std::map<int64_t, std::vector<PTabletWithPartition>> index_tablets_map;
+    for (auto& t_part : partitions) {
+        for (auto& index : t_part.indexes) {
+            std::vector<PTabletWithPartition> tablets;
+            // setup new partitions's tablets
+            for (auto tablet : index.tablets) {
+                PTabletWithPartition tablet_info;
+                tablet_info.set_tablet_id(tablet);
+                tablet_info.set_partition_id(t_part.id);
+
+                auto* location = _location->find_tablet(tablet);
+                if (location == nullptr) {
+                    auto msg = fmt::format("Failed to find tablet {} location info", tablet);
+                    return Status::NotFound(msg);
+                }
+
+                for (auto& node_id : location->node_ids) {
+                    auto node_info = _nodes_info->find_node(node_id);
+                    if (node_info == nullptr) {
+                        return Status::InvalidArgument(fmt::format("Unknown node_id: {}", node_id));
+                    }
+                    auto* replica = tablet_info.add_replicas();
+                    replica->set_host(node_info->host);
+                    replica->set_port(node_info->brpc_port);
+                    replica->set_node_id(node_id);
+                }
+
+                index_tablets_map[index.index_id].emplace_back(std::move(tablet_info));
+            }
+        }
+    }
+
+    for (auto& channel : _channels) {
+        // initialize index channel
+        RETURN_IF_ERROR(channel->init(_runtime_state, index_tablets_map[channel->_index_id], true));
+
+        // incremental open new partition's tablet on storage side
+        channel->for_each_node_channel([](NodeChannel* ch) { ch->try_incremental_open(); });
+
+        Status err_st = Status::OK();
+        channel->for_each_node_channel([&channel, &err_st](NodeChannel* ch) {
+            auto st = ch->open_wait();
+            if (!st.ok()) {
+                LOG(WARNING) << ch->name() << ", tablet open failed, " << ch->print_load_info()
+                             << ", node=" << ch->node_info()->host << ":" << ch->node_info()->brpc_port
+                             << ", errmsg=" << st.get_error_msg();
+                err_st = st.clone_and_append(string(" be:") + ch->node_info()->host);
+                channel->mark_as_failed(ch);
+            }
+        });
+
+        if (channel->has_intolerable_failure()) {
+            LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
+            return err_st;
+        }
+    }
+
+    return Status::OK();
 }
 
 Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     SCOPED_TIMER(_profile->total_time_counter());
     DCHECK(chunk->num_rows() > 0);
     size_t num_rows = chunk->num_rows();
-    _number_input_rows += num_rows;
     size_t serialize_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
-    // update incrementally so that FE can get the progress.
-    // the real 'num_rows_load_total' will be set when sink being closed.
-    state->update_num_rows_load_from_sink(num_rows);
-    state->update_num_bytes_load_from_sink(serialize_size);
-    StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
-    StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
 
     {
         SCOPED_TIMER(_prepare_data_timer);
@@ -1126,6 +1277,11 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
         }
 
         {
+            SCOPED_TIMER(_alloc_auto_increment_timer);
+            RETURN_IF_ERROR(_fill_auto_increment_id(chunk));
+        }
+
+        {
             SCOPED_RAW_TIMER(&_validate_data_ns);
             _validate_selection.assign(num_rows, VALID_SEL_OK);
             _validate_data(state, chunk);
@@ -1133,9 +1289,47 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
         {
             uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
             int invalid_row_index = 0;
-            RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
-                                                                &_validate_selection, &invalid_row_index));
 
+            // _enable_automatic_partition is true means destination table using automatic partition
+            // _has_automatic_partition is true means last send_chunk already create partition in nonblocking mode
+            // we don't need create again since it will resend last chunk
+            if (_enable_automatic_partition && !_has_automatic_partition) {
+                _partition_not_exist_row_values.clear();
+                // only support single column partition now
+                _partition_not_exist_row_values.resize(1);
+
+                RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
+                                                                    &_validate_selection, &invalid_row_index, _txn_id,
+                                                                    &_partition_not_exist_row_values));
+
+                if (!_partition_not_exist_row_values[0].empty()) {
+                    _is_automatic_partition_running.store(true, std::memory_order_release);
+                    RETURN_IF_ERROR(_automatic_partition_token->submit_func([this] {
+                        this->_automatic_partition_status = this->_automatic_create_partition();
+                        if (!this->_automatic_partition_status.ok()) {
+                            LOG(WARNING) << "Failed to automatic create partition, err="
+                                         << this->_automatic_partition_status;
+                        }
+                        _is_automatic_partition_running.store(false, std::memory_order_release);
+                    }));
+
+                    if (_nonblocking_send_chunk) {
+                        _has_automatic_partition = true;
+                        return Status::EAgain("");
+                    } else {
+                        _automatic_partition_token->wait();
+                        // after the partition is created, go through the data again
+                        RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
+                                                                            &_validate_selection, &invalid_row_index,
+                                                                            _txn_id, nullptr));
+                    }
+                }
+            } else {
+                RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
+                                                                    &_validate_selection, &invalid_row_index, _txn_id,
+                                                                    nullptr));
+                _has_automatic_partition = false;
+            }
             // Note: must padding char column after find_tablets.
             _padding_char_column(chunk);
 
@@ -1154,8 +1348,14 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
             if (num_rows_after_validate - _validate_select_idx.size() > 0) {
                 if (!state->has_reached_max_error_msg_num()) {
                     std::string debug_row = chunk->debug_row(invalid_row_index);
-                    state->append_error_msg_to_file(debug_row,
-                                                    "The row is out of partition ranges. Please add a new partition.");
+                    if (_enable_automatic_partition) {
+                        state->append_error_msg_to_file(debug_row,
+                                                        fmt::format("The row create partition failed since {}.",
+                                                                    _automatic_partition_status.to_string()));
+                    } else {
+                        state->append_error_msg_to_file(
+                                debug_row, "The row is out of partition ranges. Please add a new partition.");
+                    }
                 }
             }
 
@@ -1163,6 +1363,13 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
             _number_output_rows += _validate_select_idx.size();
         }
     }
+    // update incrementally so that FE can get the progress.
+    // the real 'num_rows_load_total' will be set when sink being closed.
+    _number_input_rows += num_rows;
+    state->update_num_rows_load_from_sink(num_rows);
+    state->update_num_bytes_load_from_sink(serialize_size);
+    StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
+    StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
 
     SCOPED_TIMER(_send_data_timer);
 
@@ -1270,7 +1477,7 @@ Status OlapTableSink::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel, s
             }
         }
         NodeChannel* node = it.second.get();
-        auto st = node->add_chunk(chunk, _tablet_ids, _node_select_idx, 0, _node_select_idx.size(), false /* eos */);
+        auto st = node->add_chunk(chunk, _tablet_ids, _node_select_idx, 0, _node_select_idx.size());
 
         if (!st.ok()) {
             LOG(WARNING) << node->name() << ", tablet add chunk failed, " << node->print_load_info()
@@ -1310,20 +1517,74 @@ Status OlapTableSink::try_close(RuntimeState* state) {
         });
     } else {
         for (auto& index_channel : _channels) {
-            index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
-                if (!index_channel->is_failed_channel(ch)) {
-                    auto st = ch->try_close();
-                    if (!st.ok()) {
-                        LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
-                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
-                        err_st = st;
-                        index_channel->mark_as_failed(ch);
+            if (index_channel->has_incremental_node_channel()) {
+                // close initial node channel and wait it done
+                index_channel->for_each_initial_node_channel(
+                        [&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
+                            if (!index_channel->is_failed_channel(ch)) {
+                                auto st = ch->try_close(true);
+                                if (!st.ok()) {
+                                    LOG(WARNING) << "close initial channel failed. channel_name=" << ch->name()
+                                                 << ", load_info=" << ch->print_load_info()
+                                                 << ", error_msg=" << st.get_error_msg();
+                                    err_st = st;
+                                    index_channel->mark_as_failed(ch);
+                                }
+                            }
+                            if (index_channel->has_intolerable_failure()) {
+                                intolerable_failure = true;
+                            }
+                        });
+
+                if (intolerable_failure) {
+                    break;
+                }
+
+                bool is_initial_node_channel_close_done = true;
+                index_channel->for_each_initial_node_channel([&is_initial_node_channel_close_done](NodeChannel* ch) {
+                    is_initial_node_channel_close_done &= ch->is_close_done();
+                });
+
+                // close initial node channel not finish, can not close incremental node channel
+                if (!is_initial_node_channel_close_done) {
+                    break;
+                }
+
+                // close incremental node channel
+                index_channel->for_each_incremental_node_channel(
+                        [&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
+                            if (!index_channel->is_failed_channel(ch)) {
+                                auto st = ch->try_close();
+                                if (!st.ok()) {
+                                    LOG(WARNING) << "close incremental channel failed. channel_name=" << ch->name()
+                                                 << ", load_info=" << ch->print_load_info()
+                                                 << ", error_msg=" << st.get_error_msg();
+                                    err_st = st;
+                                    index_channel->mark_as_failed(ch);
+                                }
+                            }
+                            if (index_channel->has_intolerable_failure()) {
+                                intolerable_failure = true;
+                            }
+                        });
+
+            } else {
+                index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
+                    if (!index_channel->is_failed_channel(ch)) {
+                        auto st = ch->try_close();
+                        if (!st.ok()) {
+                            LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
+                                         << ", load_info=" << ch->print_load_info()
+                                         << ", error_msg=" << st.get_error_msg();
+                            err_st = st;
+                            index_channel->mark_as_failed(ch);
+                        }
                     }
-                }
-                if (index_channel->has_intolerable_failure()) {
-                    intolerable_failure = true;
-                }
-            });
+                    if (index_channel->has_intolerable_failure()) {
+                        intolerable_failure = true;
+                    }
+                });
+            }
         }
     }
 
@@ -1332,6 +1593,60 @@ Status OlapTableSink::try_close(RuntimeState* state) {
     } else {
         return Status::OK();
     }
+}
+
+Status OlapTableSink::_fill_auto_increment_id(Chunk* chunk) {
+    if (_has_automatic_partition) {
+        return Status::OK();
+    }
+    if (_auto_increment_slot_id == -1) {
+        return Status::OK();
+    }
+    _has_auto_increment = true;
+
+    auto& slot = _output_tuple_desc->slots()[_auto_increment_slot_id];
+    RETURN_IF_ERROR(_fill_auto_increment_id_internal(chunk, slot, _schema->table_id()));
+
+    return Status::OK();
+}
+
+Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescriptor* slot, int64_t table_id) {
+    ColumnPtr& col = chunk->get_column_by_slot_id(slot->id());
+    Status st;
+
+    // For simplicity, we set NULL Literal in auto increment column when planning if the user does not specify a value.
+    // We reuse NullableColumn to represent the auto-increment column because NullableColumn
+    // has null_column_data to indicate the which row has the null value. It means that we should replace the auto increment
+    // column value of this row with a system-generated value.
+    if (!col->is_nullable()) {
+        return Status::OK();
+    }
+
+    ColumnPtr& data_col = std::dynamic_pointer_cast<NullableColumn>(col)->data_column();
+    std::vector<uint8_t> filter(std::dynamic_pointer_cast<NullableColumn>(col)->immutable_null_column_data());
+
+    uint32_t null_rows = SIMD::count_nonzero(filter);
+
+    switch (slot->type().type) {
+    case TYPE_BIGINT: {
+        std::vector<int64_t> ids(null_rows);
+        if (!_miss_auto_increment_column) {
+            RETURN_IF_ERROR(StorageEngine::instance()->get_next_increment_id_interval(table_id, null_rows, ids));
+        } else {
+            // partial update does not specify an auto-increment column,
+            // it will be allocate in DeltaWriter.
+            ids.assign(null_rows, 0);
+        }
+        RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(data_col))->fill_range(ids, filter));
+        break;
+    }
+    default:
+        auto msg = fmt::format("illegal type size for auto-increment column");
+        LOG(ERROR) << msg;
+        return Status::InternalError(msg);
+    }
+
+    return Status::OK();
 }
 
 bool OlapTableSink::is_close_done() {
@@ -1461,7 +1776,9 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     }
 
     Expr::close(_output_expr_ctxs, state);
-    _vectorized_partition->close(state);
+    if (_vectorized_partition) {
+        _vectorized_partition->close(state);
+    }
     if (!status.ok()) {
         _span->SetStatus(trace::StatusCode::kError, status.get_error_msg());
     }
@@ -1499,7 +1816,7 @@ void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV
 #endif
 }
 
-template <LogicalType PT, typename CppType = RunTimeCppType<PT>>
+template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
 void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc) {
     if (state->has_reached_max_error_msg_num()) {
         return;
@@ -1514,11 +1831,11 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
 #endif
 }
 
-template <LogicalType PT>
+template <LogicalType LT>
 void OlapTableSink::_validate_decimal(RuntimeState* state, Column* column, const SlotDescriptor* desc,
                                       std::vector<uint8_t>* validate_selection) {
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto* data_column = down_cast<ColumnType*>(ColumnHelper::get_data_column(column));
     const auto num_rows = data_column->get_data().size();
     auto* data = &data_column->get_data().front();
@@ -1532,7 +1849,7 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, Column* column, const
             const auto& datum = data[i];
             if (datum > max_decimal || datum < min_decimal) {
                 (*validate_selection)[i] = VALID_SEL_FAILED;
-                _print_decimalv3_error_msg<PT>(state, datum, desc);
+                _print_decimalv3_error_msg<LT>(state, datum, desc);
             }
         }
     }
@@ -1552,12 +1869,37 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
             _validate_selection[j] &= 0x1;
         }
 
+        // update_column for auto increment column.
+        if (_has_auto_increment && _auto_increment_slot_id == desc->id() && column_ptr->is_nullable()) {
+            auto* nullable = down_cast<NullableColumn*>(column_ptr.get());
+            // If _null_expr_in_auto_increment == true, it means that user specify a null value in auto
+            // increment column, we abort the entire chunk and append a single error msg. Because be know
+            // nothing about whether this row is specified by the user as null or setted during planning.
+            if (nullable->has_null() && _null_expr_in_auto_increment) {
+                for (size_t j = 0; j < num_rows; ++j) {
+                    _validate_selection[j] = VALID_SEL_FAILED;
+                }
+                std::stringstream ss;
+                ss << "NULL value in auto increment column '" << desc->col_name() << "'";
+#if BE_TEST
+                LOG(INFO) << ss.str();
+#else
+                if (!state->has_reached_max_error_msg_num()) {
+                    state->append_error_msg_to_file("", ss.str());
+                }
+#endif
+            }
+            chunk->update_column(nullable->data_column(), desc->id());
+        }
+
         // Validate column nullable info
         // Column nullable info need to respect slot nullable info
         if (desc->is_nullable() && !column_ptr->is_nullable()) {
             ColumnPtr new_column = NullableColumn::create(column_ptr, NullColumn::create(num_rows, 0));
             chunk->update_column(std::move(new_column), desc->id());
-        } else if (!desc->is_nullable() && column_ptr->is_nullable()) {
+            // Auto increment column is not nullable but use NullableColumn to implement. We should skip the check for it.
+        } else if (!desc->is_nullable() && column_ptr->is_nullable() &&
+                   (!_has_auto_increment || _auto_increment_slot_id != desc->id())) {
             auto* nullable = down_cast<NullableColumn*>(column_ptr.get());
             // Non-nullable column shouldn't have null value,
             // If there is null value, which means expr compute has a error.
@@ -1697,4 +2039,5 @@ Status OlapTableSink::reset_epoch(RuntimeState* state) {
     return Status::OK();
 }
 
-} // namespace starrocks::stream_load
+} // namespace stream_load
+} // namespace starrocks

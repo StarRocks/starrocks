@@ -35,6 +35,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -103,6 +104,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String JSONPATHS = "jsonpaths";
     public static final String JSONROOT = "json_root";
 
+    // csv properties
+    public static final String TRIMSPACE = "trim_space";
+    public static final String ENCLOSE = "enclose";
+    public static final String ESCAPE = "escape";
+
     // kafka type properties
     public static final String KAFKA_BROKER_LIST_PROPERTY = "kafka_broker_list";
     public static final String KAFKA_TOPIC_PROPERTY = "kafka_topic";
@@ -110,6 +116,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String KAFKA_PARTITIONS_PROPERTY = "kafka_partitions";
     public static final String KAFKA_OFFSETS_PROPERTY = "kafka_offsets";
     public static final String KAFKA_DEFAULT_OFFSETS = "kafka_default_offsets";
+    // optional
+    public static final String CONFLUENT_SCHEMA_REGISTRY_URL = "confluent.schema.registry.url";
 
     // pulsar type properties
     public static final String PULSAR_SERVICE_URL_PROPERTY = "pulsar_service_url";
@@ -137,6 +145,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(LoadStmt.TIMEZONE)
             .add(LoadStmt.PARTIAL_UPDATE)
             .add(LoadStmt.MERGE_CONDITION)
+            .add(TRIMSPACE)
+            .add(ENCLOSE)
+            .add(ESCAPE)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -144,6 +155,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(KAFKA_TOPIC_PROPERTY)
             .add(KAFKA_PARTITIONS_PROPERTY)
             .add(KAFKA_OFFSETS_PROPERTY)
+            .add(CONFLUENT_SCHEMA_REGISTRY_URL)
             .build();
 
     private static final ImmutableSet<String> PULSAR_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -153,7 +165,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(PULSAR_PARTITIONS_PROPERTY)
             .add(PULSAR_INITIAL_POSITIONS_PROPERTY)
             .build();
-
+        
+    private String confluentSchemaRegistryUrl;
     private LabelName labelName;
     private final String tableName;
     private final List<ParseNode> loadPropertyList;
@@ -185,6 +198,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private String jsonRoot = ""; // MUST be a jsonpath string
     private boolean stripOuterArray = false;
 
+    // for csv
+    private boolean trimspace = false;
+    private byte enclose = 0;
+    private byte escape = 0;
+
     // kafka related properties
     private String kafkaBrokerList;
     private String kafkaTopic;
@@ -213,12 +231,41 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public CreateRoutineLoadStmt(LabelName labelName, String tableName, List<ParseNode> loadPropertyList,
                                  Map<String, String> jobProperties,
                                  String typeName, Map<String, String> dataSourceProperties) {
+        this(labelName, tableName, loadPropertyList, jobProperties, typeName,
+                dataSourceProperties, NodePosition.ZERO);
+    }
+
+    public CreateRoutineLoadStmt(LabelName labelName, String tableName, List<ParseNode> loadPropertyList,
+                                 Map<String, String> jobProperties,
+                                 String typeName, Map<String, String> dataSourceProperties,
+                                 NodePosition pos) {
+        super(pos);
         this.labelName = labelName;
         this.tableName = tableName;
         this.loadPropertyList = loadPropertyList;
         this.jobProperties = jobProperties == null ? Maps.newHashMap() : jobProperties;
         this.typeName = typeName.toUpperCase();
         this.dataSourceProperties = dataSourceProperties;
+    }
+
+    public String getConfluentSchemaRegistryUrl() {
+        return confluentSchemaRegistryUrl;
+    }
+
+    public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
+        this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
+    }
+
+    public boolean isTrimspace() {
+        return trimspace;
+    }
+
+    public byte getEnclose() {
+        return enclose;
+    }
+
+    public byte getEscape() {
+        return escape;
     }
 
     public LabelName getLabelName() {
@@ -479,11 +526,26 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 jsonPaths = jobProperties.get(JSONPATHS);
                 jsonRoot = jobProperties.get(JSONROOT);
                 stripOuterArray = Boolean.valueOf(jobProperties.getOrDefault(STRIP_OUTER_ARRAY, "false"));
+            } else if (format.equalsIgnoreCase("avro")) {
+                format = "avro";
             } else {
                 throw new UserException("Format type is invalid. format=`" + format + "`");
             }
         } else {
             format = "csv"; // default csv
+        }
+        if (format.equalsIgnoreCase("csv") || format.isEmpty()) {
+            trimspace = Boolean.valueOf(jobProperties.getOrDefault(TRIMSPACE, "false"));
+            if (jobProperties.containsKey(ENCLOSE)) {
+                enclose = (byte) jobProperties.get(ENCLOSE).charAt(0);
+            } else {
+                enclose = 0;
+            }
+            if (jobProperties.containsKey(ESCAPE)) {
+                escape = (byte) jobProperties.get(ESCAPE).charAt(0);            
+            } else {
+                escape = 0;
+            }
         }
     }
 
@@ -547,6 +609,22 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         String kafkaOffsetsString = dataSourceProperties.get(KAFKA_OFFSETS_PROPERTY);
         if (kafkaOffsetsString != null) {
             analyzeKafkaOffsetProperty(kafkaOffsetsString, kafkaPartitionOffsets);
+        }
+        String confluentSchemaRegistryUrlString = dataSourceProperties.get(CONFLUENT_SCHEMA_REGISTRY_URL);
+        if (confluentSchemaRegistryUrlString == null) {
+            if (format == null) {
+                format = jobProperties.get(FORMAT);
+                if (format != null) {
+                    if (format.equalsIgnoreCase("avro")) {
+                        format = "avro";
+                    }
+                }
+            }
+            if (format.equals("avro")) {
+                throw new AnalysisException(CONFLUENT_SCHEMA_REGISTRY_URL + " is a required property");
+            }
+        } else {
+            confluentSchemaRegistryUrl = confluentSchemaRegistryUrlString;
         }
     }
 

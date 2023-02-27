@@ -39,6 +39,8 @@ void MapColumn::check_or_die() const {
 
 MapColumn::MapColumn(ColumnPtr keys, ColumnPtr values, UInt32Column::Ptr offsets)
         : _keys(std::move(keys)), _values(std::move(values)), _offsets(std::move(offsets)) {
+    DCHECK(_keys->is_nullable());
+    DCHECK(_values->is_nullable());
     if (_offsets->empty()) {
         _offsets->append(0);
     }
@@ -538,12 +540,12 @@ bool MapColumn::set_null(size_t idx) {
     return false;
 }
 
-size_t MapColumn::element_memory_usage(size_t from, size_t size) const {
+size_t MapColumn::reference_memory_usage(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     size_t start_offset = _offsets->get_data()[from];
     size_t elements_num = _offsets->get_data()[from + size] - start_offset;
-    return _keys->element_memory_usage(start_offset, elements_num) +
-           _values->element_memory_usage(start_offset, elements_num) + _offsets->element_memory_usage(from, size);
+    return _keys->reference_memory_usage(start_offset, elements_num) +
+           _values->reference_memory_usage(start_offset, elements_num) + _offsets->reference_memory_usage(from, size);
 }
 
 void MapColumn::swap_column(Column& rhs) {

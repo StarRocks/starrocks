@@ -104,6 +104,7 @@ public class CreateRoutineLoadStmtTest {
                 + "FROM KAFKA\n"
                 + "(\n"
                 + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                + "\"confluent.schema.registry.url\" = \"https://user:password@confluent.west.us\",\n"
                 + "\"kafka_topic\" = \"topictest\"\n"
                 + ");";
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
@@ -121,6 +122,7 @@ public class CreateRoutineLoadStmtTest {
         Assert.assertEquals("kafkahost1:9092,kafkahost2:9092", createRoutineLoadStmt.getKafkaBrokerList());
         Assert.assertEquals("topictest", createRoutineLoadStmt.getKafkaTopic());
         Assert.assertEquals("Asia/Shanghai", createRoutineLoadStmt.getTimezone());
+        Assert.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
     }
 
     @Test
@@ -337,6 +339,33 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
+    public void testAnalyzeCSVConfig() throws Exception {
+        String createSQL = "CREATE ROUTINE LOAD db0.routine_load_1 ON t1 " +
+                "PROPERTIES(\"format\" = \"csv\", \"trim_space\"=\"true\", \"enclose\"=\"'\", \"escape\"=\"|\") " +
+                "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:xxx\",\"kafka_topic\" = \"topic_0\");";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
+        CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+        Assert.assertEquals(createRoutineLoadStmt.isTrimspace(), true);
+        Assert.assertEquals(createRoutineLoadStmt.getEnclose(), '\'');
+        Assert.assertEquals(createRoutineLoadStmt.getEscape(), '|');
+    }
+
+    @Test
+    public void testAnalyzeCSVDefalultValue() throws Exception {
+        String createSQL = "CREATE ROUTINE LOAD db0.routine_load_1 ON t1 " +
+                "PROPERTIES(\"max_error_number\" = \"10\") " +
+                "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:xxx\",\"kafka_topic\" = \"topic_0\");";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
+        CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+        Assert.assertEquals(createRoutineLoadStmt.getMaxErrorNum(), 10);
+        Assert.assertEquals(createRoutineLoadStmt.getEnclose(), 0);
+        Assert.assertEquals(createRoutineLoadStmt.getEscape(), 0);
+        Assert.assertEquals(createRoutineLoadStmt.isTrimspace(), false);
+    }
+
+    @Test
     public void testKafkaOffset() {
 
         String jobName = "job1";
@@ -432,12 +461,13 @@ public class CreateRoutineLoadStmtTest {
                 + "FROM KAFKA\n"
                 + "(\n"
                 + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
-                + "\"kafka_topic\" = \"topictest\"\n"
+                + "\"kafka_topic\" = \"topictest\",\n"
+                + "\"confluent.schema.registry.url\" = \"https://user:password@confluent.west.us\"\n"
                 + ");";
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Assert.assertEquals("CREATE ROUTINE LOAD null.null ON table1PROPERTIES ( \"desired_concurrent_number\" = \"3\", \"timezone\" = \"Asia/Shanghai\", \"strict_mode\" = \"false\", \"max_batch_interval\" = \"20\" ) " +
-                "FROM KAFKA ( \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\", \"kafka_topic\" = \"topictest\" )", AstToStringBuilder.toString(stmt));
+        "FROM KAFKA ( \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\", \"kafka_topic\" = \"topictest\", \"confluent.schema.registry.url\" = \"***\" )", AstToStringBuilder.toString(stmt));
     }
 
     private Map<String, String> getCustomProperties() {

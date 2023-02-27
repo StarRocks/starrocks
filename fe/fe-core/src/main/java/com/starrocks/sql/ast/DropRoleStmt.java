@@ -12,23 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.List;
+
 public class DropRoleStmt extends DdlStmt {
+    private final List<String> roles;
+    private final boolean ifExists;
 
-    private String role;
-
-    public DropRoleStmt(String role) {
-        this.role = role;
+    public DropRoleStmt(List<String> roles, boolean ifExists) {
+        this(roles, ifExists, NodePosition.ZERO);
     }
 
-    public String getQualifiedRole() {
-        return role;
+    public DropRoleStmt(List<String> roles, boolean ifExists, NodePosition pos) {
+        super(pos);
+        this.roles = roles;
+        this.ifExists = ifExists;
     }
 
-    public void setQualifiedRole(String role) {
-        this.role = role;
+    public List<String> getRoles() {
+        return roles;
+    }
+
+    public boolean isIfExists() {
+        return ifExists;
     }
 
     @Override

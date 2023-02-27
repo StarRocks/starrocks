@@ -89,76 +89,76 @@ namespace starrocks {
 
 // Aggregate types
 template <class Functor, class... Args>
-auto type_dispatch_aggregate(LogicalType ptype, Functor fun, Args... args) {
-    switch (ptype) {
+auto type_dispatch_aggregate(LogicalType ltype, Functor fun, Args... args) {
+    switch (ltype) {
         APPLY_FOR_ALL_NUMBER_TYPE(_TYPE_DISPATCH_CASE)
         _TYPE_DISPATCH_CASE(TYPE_BOOLEAN)
         _TYPE_DISPATCH_CASE(TYPE_DATE)
         _TYPE_DISPATCH_CASE(TYPE_DATETIME)
         _TYPE_DISPATCH_CASE(TYPE_DECIMALV2)
     default:
-        CHECK(false) << "Unknown type: " << ptype;
+        CHECK(false) << "Unknown type: " << ltype;
         __builtin_unreachable();
     }
 }
 
 // type_dispatch_*:
 template <class Functor, class... Args>
-auto type_dispatch_basic(LogicalType ptype, Functor fun, Args... args) {
-    switch (ptype) {
+auto type_dispatch_basic(LogicalType ltype, Functor fun, Args... args) {
+    switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
     default:
-        CHECK(false) << "Unknown type: " << ptype;
+        CHECK(false) << "Unknown type: " << ltype;
         __builtin_unreachable();
     }
 }
 
 template <class Functor, class... Args>
-auto type_dispatch_all(LogicalType ptype, Functor fun, Args... args) {
-    switch (ptype) {
+auto type_dispatch_all(LogicalType ltype, Functor fun, Args... args) {
+    switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
         _TYPE_DISPATCH_CASE(TYPE_ARRAY)
         _TYPE_DISPATCH_CASE(TYPE_HLL)
         _TYPE_DISPATCH_CASE(TYPE_OBJECT)
         _TYPE_DISPATCH_CASE(TYPE_PERCENTILE)
     default:
-        CHECK(false) << "Unknown type: " << ptype;
+        CHECK(false) << "Unknown type: " << ltype;
         __builtin_unreachable();
     }
 }
 
 // Types could build into columns
 template <class Functor, class... Args>
-auto type_dispatch_column(LogicalType ptype, Functor fun, Args... args) {
-    switch (ptype) {
+auto type_dispatch_column(LogicalType ltype, Functor fun, Args... args) {
+    switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
         _TYPE_DISPATCH_CASE(TYPE_HLL)
         _TYPE_DISPATCH_CASE(TYPE_OBJECT)
         _TYPE_DISPATCH_CASE(TYPE_PERCENTILE)
     default:
-        CHECK(false) << "Unknown type: " << ptype;
+        CHECK(false) << "Unknown type: " << ltype;
         __builtin_unreachable();
     }
 }
 
 // Types which are sortable
 template <class Functor, class... Args>
-auto type_dispatch_sortable(LogicalType ptype, Functor fun, Args... args) {
-    switch (ptype) {
+auto type_dispatch_sortable(LogicalType ltype, Functor fun, Args... args) {
+    switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
-        CHECK(false) << "Unknown type: " << ptype;
+        CHECK(false) << "Unknown type: " << ltype;
         __builtin_unreachable();
     }
 }
 
 template <class Ret, class Functor, class... Args>
-Ret type_dispatch_predicate(LogicalType ptype, bool assert, Functor fun, Args... args) {
-    switch (ptype) {
+Ret type_dispatch_predicate(LogicalType ltype, bool assert, Functor fun, Args... args) {
+    switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
         if (assert) {
-            CHECK(false) << "Unknown type: " << ptype;
+            CHECK(false) << "Unknown type: " << ltype;
             __builtin_unreachable();
         } else {
             return Ret{};
@@ -167,8 +167,8 @@ Ret type_dispatch_predicate(LogicalType ptype, bool assert, Functor fun, Args...
 }
 
 template <class Functor, class Ret, class... Args>
-auto type_dispatch_filter(LogicalType ptype, Ret default_value, Functor fun, Args... args) {
-    switch (ptype) {
+auto type_dispatch_filter(LogicalType ltype, Ret default_value, Functor fun, Args... args) {
+    switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
         return default_value;

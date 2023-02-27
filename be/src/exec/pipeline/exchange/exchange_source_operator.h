@@ -69,6 +69,8 @@ public:
                                                          const std::shared_ptr<RuntimeProfile>& profile);
     void close_stream_recvr();
 
+    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+
 private:
     const TExchangeNode& _texchange_node;
     const int32_t _num_sender;

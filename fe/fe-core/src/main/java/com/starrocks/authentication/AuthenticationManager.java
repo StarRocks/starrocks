@@ -16,7 +16,6 @@
 package com.starrocks.authentication;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -31,9 +30,9 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -216,11 +215,19 @@ public class AuthenticationManager {
     }
 
     public void createUser(CreateUserStmt stmt) throws DdlException {
-        UserIdentity userIdentity = stmt.getUserIdent();
+        UserIdentity userIdentity = stmt.getUserIdentity();
         UserAuthenticationInfo info = stmt.getAuthenticationInfo();
         writeLock();
         try {
-            updateUserNoLock(userIdentity, info, false);
+            if (userToAuthenticationInfo.containsKey(userIdentity)) {
+                // Existence verification has been performed in the Analyzer stage. If it exists here,
+                // it may be that other threads have performed the same operation, and return directly here
+                LOG.info("Operation CREATE USER failed for " + stmt.getUserIdentity()
+                        + " : user " + stmt.getUserIdentity() + " already exists");
+                return;
+            }
+            userToAuthenticationInfo.put(userIdentity, info);
+
             UserProperty userProperty = null;
             if (!userNameToProperty.containsKey(userIdentity.getQualifiedUser())) {
                 userProperty = new UserProperty();
@@ -229,31 +236,32 @@ public class AuthenticationManager {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             PrivilegeManager privilegeManager = globalStateMgr.getPrivilegeManager();
             // init user privilege
-            UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity);
+            UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity, stmt.getDefaultRoles());
+
             short pluginId = privilegeManager.getProviderPluginId();
             short pluginVersion = privilegeManager.getProviderPluginVersion();
             globalStateMgr.getEditLog().logCreateUser(
                     userIdentity, info, userProperty, collection, pluginId, pluginVersion);
 
-        } catch (AuthenticationException | PrivilegeException e) {
-            throw new DdlException("failed to create user " + userIdentity, e);
+        } catch (PrivilegeException e) {
+            throw new DdlException("failed to create user " + userIdentity + " : " + e.getMessage(), e);
         } finally {
             writeUnlock();
         }
     }
 
-    public void alterUser(AlterUserStmt stmt) throws DdlException {
-        UserIdentity userIdentity = stmt.getUserIdent();
-        UserAuthenticationInfo info = stmt.getAuthenticationInfo();
-        updateUserWithAuthenticationInfo(userIdentity, info);
-    }
-
-    public void updateUserWithAuthenticationInfo(UserIdentity userIdentity,
-                                                 UserAuthenticationInfo info) throws DdlException {
+    public void alterUser(UserIdentity userIdentity, UserAuthenticationInfo userAuthenticationInfo) throws DdlException {
         writeLock();
         try {
-            updateUserNoLock(userIdentity, info, true);
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(userIdentity, info);
+            if (!userToAuthenticationInfo.containsKey(userIdentity)) {
+                // Existence verification has been performed in the Analyzer stage. If it not exists here,
+                // it may be that other threads have performed the same operation, and return directly here
+                LOG.info("Operation ALTER USER failed for " + userIdentity + " : user " + userIdentity + " not exists");
+                return;
+            }
+
+            updateUserNoLock(userIdentity, userAuthenticationInfo, true);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(userIdentity, userAuthenticationInfo);
         } catch (AuthenticationException e) {
             throw new DdlException("failed to alter user " + userIdentity, e);
         } finally {
@@ -300,7 +308,7 @@ public class AuthenticationManager {
     }
 
     public void dropUser(DropUserStmt stmt) throws DdlException {
-        UserIdentity userIdentity = stmt.getUserIdent();
+        UserIdentity userIdentity = stmt.getUserIdentity();
         writeLock();
         try {
             dropUserNoLock(userIdentity);
@@ -312,7 +320,7 @@ public class AuthenticationManager {
         }
     }
 
-    public void replayDropUser(UserIdentity userIdentity) throws DdlException {
+    public void replayDropUser(UserIdentity userIdentity) {
         writeLock();
         try {
             dropUserNoLock(userIdentity);
@@ -326,7 +334,7 @@ public class AuthenticationManager {
     private void dropUserNoLock(UserIdentity userIdentity) {
         // 1. remove from userToAuthenticationInfo
         if (!userToAuthenticationInfo.containsKey(userIdentity)) {
-            LOG.warn("cannot find user {}", userIdentity);
+            LOG.info("Operation DROP USER failed for " + userIdentity + " : user " + userIdentity + " not exists");
             return;
         }
         userToAuthenticationInfo.remove(userIdentity);
@@ -508,8 +516,8 @@ public class AuthenticationManager {
         return isLoaded;
     }
 
-    public void setLoaded() {
-        isLoaded = true;
+    public void setLoaded(boolean loaded) {
+        isLoaded = loaded;
     }
 
     /**

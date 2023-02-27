@@ -166,8 +166,8 @@ static Status delete_txn_log(std::string_view root_location, const std::set<int6
         if (is_txn_log(name)) {
             auto [tablet_id, txn_id] = parse_txn_log_filename(name);
             if (txn_id < min_active_txn_id && owned_tablets.count(tablet_id) > 0) {
-                VLOG(2) << "Deleting " << name;
                 auto location = join_path(txn_log_root_location, name);
+                LOG(INFO) << "Deleting " << location << ". min_active_txn_id=" << min_active_txn_id;
                 auto st = fs->delete_file(location);
                 LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << name << ": " << st;
             }

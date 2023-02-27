@@ -37,7 +37,7 @@ public:
 
 private:
     void _call_udf_close();
-    RuntimeState* _runtime_state;
+    RuntimeState* _runtime_state = nullptr;
     std::shared_ptr<JavaUDFContext> _func_desc;
     std::shared_ptr<UDFFunctionCallHelper> _call_helper;
     bool _is_returning_random_value;

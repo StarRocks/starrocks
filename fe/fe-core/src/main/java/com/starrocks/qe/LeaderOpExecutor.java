@@ -37,13 +37,17 @@ package com.starrocks.qe;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
@@ -106,29 +110,34 @@ public class LeaderOpExecutor {
     }
 
     private void afterForward() throws DdlException {
-        if (parsedStmt != null) {
-            if (parsedStmt instanceof SetStmt) {
-                SetExecutor executor = new SetExecutor(ctx, (SetStmt) parsedStmt);
-                try {
-                    executor.setSessionVars();
-                } catch (DdlException e) {
-                    LOG.warn("set session variables after forward failed", e);
-                    // set remote result to null, so that mysql protocol will show the error message
-                    result = null;
-                    throw new DdlException("Global level variables are set successfully, " +
-                            "but session level variables are set failed with error: " + e.getMessage() + ". " +
-                            "Please check if the version of fe currently connected is the same as the version of master, " +
-                            "or re-establish the connection and you will see the new variables");
+        if (parsedStmt != null && parsedStmt instanceof SetStmt) {
+            try {
+                /*
+                 * This method is only called after a set statement is forward to the leader.
+                 * In this case, the follower should change this session variable as well.
+                 */
+                SetStmt stmt = (SetStmt) parsedStmt;
+                for (SetListItem var : stmt.getSetListItems()) {
+                    if (var instanceof SystemVariable) {
+                        VariableMgr.setSystemVariable(ctx.getSessionVariable(), (SystemVariable) var, true);
+                    }
                 }
+            } catch (DdlException e) {
+                LOG.warn("set session variables after forward failed", e);
+                // set remote result to null, so that mysql protocol will show the error message
+                result = null;
+                throw new DdlException("Global level variables are set successfully, " +
+                        "but session level variables are set failed with error: " + e.getMessage() + ". " +
+                        "Please check if the version of fe currently connected is the same as the version of master, " +
+                        "or re-establish the connection and you will see the new variables");
             }
         }
     }
 
     // Send request to Leader
     private void forward() throws Exception {
-        String leaderHost = ctx.getGlobalStateMgr().getLeaderIp();
-        int leaderRpcPort = ctx.getGlobalStateMgr().getLeaderRpcPort();
-        TNetworkAddress thriftAddress = new TNetworkAddress(leaderHost, leaderRpcPort);
+        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
+        TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
         TMasterOpRequest params = new TMasterOpRequest();
         params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         params.setSql(originStmt.originStmt);

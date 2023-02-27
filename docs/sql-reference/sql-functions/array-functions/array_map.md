@@ -4,7 +4,7 @@
 
 array_map() is a higher-order SQL function that can take lambda functions as arguments.It applies the lambda function to the input arrays and returns a new array.
 
-array_map() can accept multiple arrays and can be nested with lambda functions to capture a variable. For more information about lambda functions, see [Lambda expression](../Lambda_expression.md).
+array_map() can accept multiple arrays and can be nested with lambda functions to capture a variable. For more information about lambda functions, see [Lambda expression](../Lambda_expression.md). This function is supported from v2.5.
 
 The alias is transform().
 

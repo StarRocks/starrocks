@@ -10,7 +10,7 @@ From StarRocks v2.5 onwards, Broker Load no longer needs to depend on brokers to
 
 > **NOTE**
 >
-> Unloading without the broker process may not work in certain circumstances, such as when you configure multiple HA systems or have multiple Kerberos configurations. In this situation, you must export data by using the broker process.
+> Unloading without the broker process may not work in certain circumstances, such as when you have multiple HDFS clusters or multiple Kerberos users. In this situation, you must export data by using the broker process.
 
 If you need to use brokers to export data, make sure that brokers are deployed in your StarRocks cluster.
 

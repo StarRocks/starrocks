@@ -15,14 +15,13 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.SetWarehouseStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SuspendWarehouseStmt;
@@ -38,16 +37,22 @@ public class WarehouseAnalyzer {
         }
 
         @Override
+        public Void visitSetWarehouseStatement(SetWarehouseStmt statement, ConnectContext context) {
+            String whName = statement.getWarehouseName();
+            if (Strings.isNullOrEmpty(whName)) {
+                throw new SemanticException("warehouse name can not be null or empty");
+            }
+            FeNameFormat.checkWarehouseName(whName);
+            return null;
+        }
+
+        @Override
         public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
             String whName = statement.getFullWhName();
             if (Strings.isNullOrEmpty(whName)) {
-                throw new SemanticException("'warehouse name' can not be null or empty");
+                throw new SemanticException("warehouse name can not be null or empty");
             }
-            try {
-                FeNameFormat.checkWarehouseName(whName);
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            FeNameFormat.checkWarehouseName(whName);
             return null;
         }
 
@@ -55,7 +60,7 @@ public class WarehouseAnalyzer {
         public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
             String whName = statement.getFullWhName();
             if (Strings.isNullOrEmpty(whName)) {
-                throw new SemanticException("'warehouse name' can not be null or empty");
+                throw new SemanticException("warehouse name can not be null or empty");
             }
             return null;
         }
@@ -64,7 +69,7 @@ public class WarehouseAnalyzer {
         public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
             String whName = statement.getFullWhName();
             if (Strings.isNullOrEmpty(whName)) {
-                throw new SemanticException("'warehouse name' can not be null or empty");
+                throw new SemanticException("warehouse name can not be null or empty");
             }
             return null;
         }
@@ -72,7 +77,7 @@ public class WarehouseAnalyzer {
         public Void visitResumeWarehouseStatement(ResumeWarehouseStmt statement, ConnectContext context) {
             String whName = statement.getFullWhName();
             if (Strings.isNullOrEmpty(whName)) {
-                throw new SemanticException("'warehouse name' can not be null or empty");
+                throw new SemanticException("warehouse name can not be null or empty");
             }
             return null;
         }
@@ -81,7 +86,7 @@ public class WarehouseAnalyzer {
         public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
             String whName = statement.getFullWhName();
             if (Strings.isNullOrEmpty(whName)) {
-                throw new SemanticException("'warehouse name' can not be null or empty");
+                throw new SemanticException("warehouse name can not be null or empty");
             }
             return null;
         }

@@ -35,6 +35,25 @@ public class ArrayTypeTest extends PlanTestBase {
         starRocksAssert.withTable("create table test_array(c0 INT, c1 array<varchar(65533)>, c2 array<int>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
+
+        starRocksAssert.withTable("CREATE TABLE adec ( \n" +
+                "v1 bigint not null ,\n" +
+                "i_1 Array<INT> NOT NULL ,\n" +
+                "s_1 Array<String> NULL ,\n" +
+                "d_1 Array<DECIMAL(26, 2)> NOT NULL ,\n" +
+                "d_2 Array<DECIMAL64(4, 3)> NULL ,\n" +
+                "d_3 Array<DECIMAL128(25, 19)> NOT NULL ,\n" +
+                "d_4 Array<DECIMAL32(8, 5)> NULL ,\n" +
+                "d_5 Array<DECIMAL(16, 3)> NULL ,\n" +
+                "d_6 Array<DECIMAL128(18, 6)> NOT NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
     }
 
     @Test
@@ -118,15 +137,15 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select [][1]";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+        Assert.assertTrue(plan.contains("ARRAY<boolean>[][1]"));
 
         sql = "select [][1] from t0";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+        Assert.assertTrue(plan.contains("ARRAY<boolean>[][1]"));
 
         sql = "select [][1] from (values(1,2,3), (4,5,6)) t";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+        Assert.assertTrue(plan.contains("ARRAY<boolean>[][1]"));
 
         sql = "select [v1,v2] from t0";
         plan = getFragmentPlan(sql);
@@ -212,5 +231,166 @@ public class ArrayTypeTest extends PlanTestBase {
                     String.format("No matching function with signature: %s(ARRAY<bigint(20)>)", fnName.toLowerCase()));
             getFragmentPlan(sql);
         }
+    }
+
+    @Test
+    public void testEmptyArray() throws Exception {
+        {
+            String sql = "select cast([] as array<varchar(200)>)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 2> : CAST(ARRAY<boolean>[] AS ARRAY<VARCHAR(200)>)\n" +
+                    "  |  \n" +
+                    "  0:UNION\n" +
+                    "     constant exprs: \n" +
+                    "         NULL");
+
+            String thriftPlan = getThriftPlan(sql);
+            assertNotContains(thriftPlan, "NULL_TYPE");
+        }
+        {
+            String sql = "select cast(null as array<varchar(200)>)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 2> : NULL\n" +
+                    "  |  \n" +
+                    "  0:UNION\n" +
+                    "     constant exprs: \n" +
+                    "         NULL");
+        }
+        {
+            String sql = "select array_append([[1,2,3]], [])";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 2> : array_append(ARRAY<ARRAY<tinyint(4)>>[[1,2,3]], ARRAY<tinyint(4)>[])");
+        }
+        {
+            String sql = "select array_append([[1,2,3]], [null])";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan,
+                    "<slot 2> : array_append(ARRAY<ARRAY<tinyint(4)>>[[1,2,3]], ARRAY<tinyint(4)>[NULL])");
+        }
+        {
+            starRocksAssert.withTable("create table test_literal_array_insert_t0(" +
+                    "c0 bigint, " +
+                    "c1 ARRAY<ARRAY<bigint>> not null, " +
+                    "c2 array<Array<bigint>> not null" +
+                    ")" +
+                    "duplicate key(c0) " +
+                    "distributed by hash(c0) " +
+                    "buckets 1 properties('replication_num'='1');\n");
+
+            String sql = "insert into test_literal_array_insert_t0 values " +
+                    "(4,[],[])";
+            getFragmentPlan(sql);
+
+            sql = "insert into test_literal_array_insert_t0 values " +
+                    "(4,[],[]), " +
+                    "(9223372036854775807,[[9223372036854775807]],[[9223372036854775807]]);\n";
+            getFragmentPlan(sql);
+        }
+        {
+            String sql = "select array_append([],null)";
+            getThriftPlan(sql);
+        }
+        {
+            String sql = "select [][1]";
+            getThriftPlan(sql);
+        }
+        {
+            String sql = "select array_append([], [])";
+            getThriftPlan(sql);
+        }
+        {
+            String sql = "select array_append([[]], [])";
+            getThriftPlan(sql);
+        }
+    }
+
+    @Test
+    public void testNestedArrayLambdaFunctions() throws Exception {
+        String sql = "WITH `CASE_006` AS\n" +
+                "  (SELECT array_map((arg_001) -> (arg_001), `c1`) AS `argument_003`,\n" +
+                "          array_map((arg_002) -> (CAST(1 AS BIGINT)), `c1`) AS `argument_004`\n" +
+                "   FROM test_array)\n" +
+                "\n" +
+                "select argument_004, ARRAY_FILTER((x, y) -> y IS NOT NULL, " +
+                "`argument_003`, `argument_004`) AS `source_target_005` from CASE_006;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 14> : array_map(<slot 5> -> 1, 8: c1)");
+
+        sql = "WITH `CASE_006` AS\n" +
+                "  (SELECT array_map((arg_001) -> (arg_001), `c1`) AS `argument_003`,\n" +
+                "          array_map((arg_002) -> (arg_002 + 1), `c1`) AS `argument_004`\n" +
+                "   FROM test_array)\n" +
+                "\n" +
+                "select argument_004, ARRAY_FILTER((x, y) -> y IS NOT NULL, " +
+                "`argument_003`, `argument_004`) AS `source_target_005` from CASE_006;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 14> : array_map(<slot 5> -> CAST(<slot 5> AS DOUBLE) + 1.0, 8: c1)");
+    }
+
+    @Test
+    public void testArraySortDecimalType() throws Exception {
+        String sql = "select array_sort(d_1) from adec;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "array_sort[([4: d_1, ARRAY<DECIMAL128(26,2)>, false]); " +
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(26,2)>;");
+
+        sql = "select array_sort(d_2) from adec;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "array_sort[([5: d_2, ARRAY<DECIMAL64(4,3)>, true]); " +
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(4,3)>;");
+
+        sql = "select array_sort(d_4) from adec;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "array_sort[([7: d_4, ARRAY<DECIMAL32(8,5)>, true]);" +
+                " args: INVALID_TYPE; result: ARRAY<DECIMAL32(8,5)>;");
+
+        sql = "select array_sort(d_5) from adec;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "array_sort[([8: d_5, ARRAY<DECIMAL64(16,3)>, true]); " +
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(16,3)>;");
+    }
+
+    @Test
+    public void testArrayIntersectDecimalType() throws Exception {
+        String sql = "select array_intersect(d_1, d_2) from adec;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan,
+                "array_intersect[(cast([4: d_1, ARRAY<DECIMAL128(26,2)>, false] as ARRAY<DECIMAL128(27,3)>), " +
+                        "cast([5: d_2, ARRAY<DECIMAL64(4,3)>, true] as ARRAY<DECIMAL128(27,3)>)); " +
+                        "args: INVALID_TYPE,INVALID_TYPE; result: ARRAY<DECIMAL128(27,3)>;");
+
+        sql = "select array_intersect(d_1, d_3) from adec;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, " array_intersect[(cast([4: d_1, ARRAY<DECIMAL128(26,2)>, false] as ARRAY<DOUBLE>), " +
+                "cast([6: d_3, ARRAY<DECIMAL128(25,19)>, false] as ARRAY<DOUBLE>)); args: INVALID_TYPE,INVALID_TYPE; " +
+                "result: ARRAY<DOUBLE>;");
+
+        sql = "select array_intersect(d_3, d_4) from adec;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "array_intersect[([6: d_3, ARRAY<DECIMAL128(25,19)>, false], " +
+                "cast([7: d_4, ARRAY<DECIMAL32(8,5)>, true] as ARRAY<DECIMAL128(25,19)>)); args: INVALID_TYPE,INVALID_TYPE; " +
+                "result: ARRAY<DECIMAL128(25,19)>;");
+
+        sql = "select array_intersect(d_3, d_6) from adec;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "array_intersect[([6: d_3, ARRAY<DECIMAL128(25,19)>, false], " +
+                "cast([9: d_6, ARRAY<DECIMAL128(18,6)>, false] as ARRAY<DECIMAL128(31,19)>)); args: INVALID_TYPE,INVALID_TYPE; " +
+                "result: ARRAY<DECIMAL128(31,19)>;");
+
+        sql = "select array_intersect(d_1, i_1) from adec;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "10 <-> array_intersect[([4: d_1, ARRAY<DECIMAL128(26,2)>, false], " +
+                "cast([2: i_1, ARRAY<INT>, false] as ARRAY<DECIMAL128(26,2)>)); args: INVALID_TYPE,INVALID_TYPE; " +
+                "result: ARRAY<DECIMAL128(26,2)>;");
+
+        sql = "select array_intersect(d_3, s_1) from adec;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "array_intersect[(cast([6: d_3, ARRAY<DECIMAL128(25,19)>, false] " +
+                "as ARRAY<VARCHAR(65533)>), [3: s_1, ARRAY<VARCHAR(65533)>, true]); args: INVALID_TYPE,INVALID_TYPE; " +
+                "result: ARRAY<VARCHAR(65533)>;");
     }
 }

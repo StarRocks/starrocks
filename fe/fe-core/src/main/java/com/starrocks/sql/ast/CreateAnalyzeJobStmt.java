@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.StatsConstants;
 
 import java.util.List;
@@ -30,16 +31,17 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     private final boolean isSample;
     private Map<String, String> properties;
 
-    public CreateAnalyzeJobStmt(boolean isSample, Map<String, String> properties) {
-        this(null, Lists.newArrayList(), isSample, properties);
+    public CreateAnalyzeJobStmt(boolean isSample, Map<String, String> properties, NodePosition pos) {
+        this(null, Lists.newArrayList(), isSample, properties, pos);
     }
 
-    public CreateAnalyzeJobStmt(String db, boolean isSample, Map<String, String> properties) {
-        this(new TableName(db, null), Lists.newArrayList(), isSample, properties);
+    public CreateAnalyzeJobStmt(String db, boolean isSample, Map<String, String> properties, NodePosition pos) {
+        this(new TableName(db, null), Lists.newArrayList(), isSample, properties, pos);
     }
 
     public CreateAnalyzeJobStmt(TableName tbl, List<String> columnNames, boolean isSample,
-                                Map<String, String> properties) {
+                                Map<String, String> properties, NodePosition pos) {
+        super(pos);
         this.tbl = tbl;
         this.dbId = StatsConstants.DEFAULT_ALL_ID;
         this.tableId = StatsConstants.DEFAULT_ALL_ID;

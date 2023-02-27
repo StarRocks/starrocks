@@ -85,6 +85,16 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         return partitionKey;
     }
 
+    public static PartitionKey createShadowPartitionKey(List<Column> columns) 
+            throws AnalysisException {
+        PartitionKey partitionKey = new PartitionKey();
+        for (Column column : columns) {
+            partitionKey.keys.add(DateLiteral.createMinValue(Type.fromPrimitiveType(column.getPrimitiveType())));
+            partitionKey.types.add(column.getPrimitiveType());
+        }
+        return partitionKey;
+    }
+
     public static PartitionKey createPartitionKey(List<PartitionValue> keys, List<Column> columns)
             throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();

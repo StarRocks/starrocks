@@ -56,7 +56,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -69,6 +68,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import org.apache.commons.collections4.CollectionUtils;
@@ -90,7 +90,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
-import static java.lang.Long.min;
 
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
@@ -248,12 +247,17 @@ public class DatabaseTransactionMgr {
         return infos;
     }
 
-    public long getMinActiveTxnId() {
-        long result = Long.MAX_VALUE;
-        for (Long txnId : idToRunningTransactionState.keySet()) {
-            result = min(result, txnId);
+    public Optional<Long> getMinActiveTxnId() {
+        readLock();
+        try {
+            if (idToRunningTransactionState.isEmpty()) {
+                return Optional.empty();
+            }
+            long minId = idToRunningTransactionState.keySet().stream().min(Comparator.comparing(Long::longValue)).get();
+            return Optional.of(minId);
+        } finally {
+            readUnlock();
         }
-        return result;
     }
 
     private void getTxnStateInfo(TransactionState txnState, List<String> info) {
@@ -1135,7 +1139,7 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
                 partitionCommitInfo.setVersion(partition.getNextVersion());
-                partitionCommitInfo.setVersionTime(commitTs);
+                partitionCommitInfo.setVersionTime(table.isLakeTable() ? 0 : commitTs);
             }
         }
 

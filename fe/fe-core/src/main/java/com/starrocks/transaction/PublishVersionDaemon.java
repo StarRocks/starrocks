@@ -53,6 +53,7 @@ import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -103,7 +104,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 return;
             }
 
-            if (!Config.use_staros) {
+            if (!RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
                 publishVersionForOlapTable(readyTransactionStates);
                 return;
             }
@@ -272,13 +273,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
     }
 
     void publishVersionForLakeTable(List<TransactionState> readyTransactionStates) {
-        int maxPublishingTransactions = Config.experimental_lake_publish_version_threads * 2;
         ConcurrentHashSet<Long> publishingTransactions = getPublishingLakeTransactions();
         for (TransactionState txnState : readyTransactionStates) {
-            if (publishingTransactions.size() >= maxPublishingTransactions) {
-                break;
-            }
-
             long txnId = txnState.getTransactionId();
             if (publishingTransactions.add(txnId)) { // the set did not already contain the specified element
                 CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
@@ -395,8 +391,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 return true;
             }
             if (partition.getVisibleVersion() + 1 != txnVersion) {
-                LOG.info("Previous transaction has not finished. txn_id={} partition_version={}, txn_version={}",
-                        txnId, partition.getVisibleVersion(), txnVersion);
                 return false;
             }
             List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);

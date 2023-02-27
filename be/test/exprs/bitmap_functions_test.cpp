@@ -1921,8 +1921,10 @@ TEST_F(VecBitmapFunctionsTest, base64ToBitmapTest) {
 
 TEST_F(VecBitmapFunctionsTest, array_to_bitmap_test) {
     auto builder = [](const Buffer<int64_t>& val) {
-        auto ele_column = Int64Column::create();
-        ele_column->append(val);
+        auto ele_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        for (auto& v : val) {
+            ele_column->append_datum(v);
+        }
         auto offset_column = UInt32Column::create();
         offset_column->append(0);
         offset_column->append(val.size());

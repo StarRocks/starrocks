@@ -51,6 +51,7 @@ public:
     arrow::Result<int64_t> Tell() const override;
     arrow::Status Close() override;
     bool closed() const override;
+    const std::string& filename() const;
 
 private:
     std::shared_ptr<starrocks::RandomAccessFile> _file;
@@ -98,6 +99,7 @@ private:
     int64_t _read_size;
 
     std::string _timezone;
+    std::string _filename;
 };
 
 // Reader of broker parquet file

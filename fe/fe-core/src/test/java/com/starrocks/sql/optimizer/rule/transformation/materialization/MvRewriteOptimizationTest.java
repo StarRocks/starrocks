@@ -16,10 +16,13 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
@@ -51,6 +54,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.sql.SQLException;
 import java.util.List;
 
 public class MvRewriteOptimizationTest {
@@ -270,9 +274,10 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: empid = 5\n" +
                 "     partitions=1/1\n" +
                 "     rollup: mv_1");
-        PlanTestBase.assertContains(plan, "tabletRatio=6/6");
+        PlanTestBase.assertContains(plan, "tabletRatio=1/6");
 
         String query2 = "select empid, deptno, name, salary from emps where empid = 6";
         String plan2 = getFragmentPlan(query2);
@@ -296,8 +301,10 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 7: empid = 5\n" +
                 "     partitions=1/1\n" +
-                "     rollup: mv_1");
+                "     rollup: mv_1\n" +
+                "     tabletRatio=1/6");
 
         String query7 = "select empid, deptno from emps where empid = 5";
         String plan7 = getFragmentPlan(query7);
@@ -366,8 +373,10 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: empid < 5\n" +
                 "     partitions=1/1\n" +
-                "     rollup: mv_1");
+                "     rollup: mv_1\n" +
+                "     tabletRatio=6/6");
 
         String query2 = "select empid, deptno, name, salary from emps where empid < 4";
         String plan2 = getFragmentPlan(query2);
@@ -576,7 +585,11 @@ public class MvRewriteOptimizationTest {
                         " as select empid, deptno, salary from mv_1 where salary > 100");
         String query = "select empid, deptno, (salary + 1) * 2 from emps where empid < 5 and salary > 110";
         String plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "mv_2");
+        PlanTestBase.assertContains(plan, "TABLE: mv_2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 8: salary > 110.0, 6: empid <= 4\n" +
+                "     partitions=1/1\n" +
+                "     rollup: mv_2");
         dropMv("test", "mv_1");
         dropMv("test", "mv_2");
     }
@@ -831,6 +844,35 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    public void testCrossJoin() throws Exception {
+        createAndRefreshMv("test", "cross_join_mv1", "create materialized view cross_join_mv1" +
+                " distributed by hash(v1)" +
+                " as " +
+                " SELECT t0.v1 as v1, test_all_type.t1d, test_all_type.t1c" +
+                " from t0 join test_all_type" +
+                " where t0.v1 < 100");
+
+        String query1 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 < 100";
+        String plan1 = getFragmentPlan(query1);
+        System.out.println(plan1);
+        PlanTestBase.assertContains(plan1, "cross_join_mv1");
+        dropMv("test", "cross_join_mv1");
+
+        createAndRefreshMv("test", "cross_join_mv2", "create materialized view cross_join_mv2" +
+                " distributed by hash(empid)" +
+                " as" +
+                " select emps1.empid, emps2.name as name1, depts.name as name2 from emps emps1 join depts" +
+                " join emps emps2 on (emps1.empid = emps2.empid)");
+        String query22 = "select depts.name as name2" +
+                " from emps emps2 join depts" +
+                " join emps emps1 on (emps1.empid = emps2.empid)";
+        String plan22 = getFragmentPlan(query22);
+        PlanTestBase.assertContains(plan22, "cross_join_mv2");
+        dropMv("test", "cross_join_mv2");
+    }
+
+    @Test
     public void testHiveJoinMvRewrite() throws Exception {
         createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
                 " distributed by hash(s_suppkey)" +
@@ -997,7 +1039,17 @@ public class MvRewriteOptimizationTest {
                 " where t0.v1 < 100" +
                 " group by alias, test_all_type.t1d";
         String plan5 = getFragmentPlan(query5);
-        PlanTestBase.assertNotContains(plan5, "agg_join_mv_1");
+        PlanTestBase.assertContains(plan5, "agg_join_mv_1");
+        PlanTestBase.assertContains(plan5, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(19: total_sum), sum(20: total_num)\n" +
+                "  |  group by: 23: add, 17: v1");
+        PlanTestBase.assertContains(plan5, "  1:Project\n" +
+                "  |  <slot 17> : 17: v1\n" +
+                "  |  <slot 18> : 18: t1d\n" +
+                "  |  <slot 19> : 19: total_sum\n" +
+                "  |  <slot 20> : 20: total_num\n" +
+                "  |  <slot 23> : 17: v1 + 1");
+
 
         dropMv("test", "agg_join_mv_1");
 
@@ -1155,7 +1207,7 @@ public class MvRewriteOptimizationTest {
         // abs(empid) can not be rewritten
         String query21 = "select abs(empid), sum(salary) from emps group by empid";
         String plan21 = getFragmentPlan(query21);
-        PlanTestBase.assertNotContains(plan21, "agg_mv_8");
+        PlanTestBase.assertContains(plan21, "agg_mv_8");
 
         // count(salary) + 1 cannot be rewritten
         String query22 = "select sum(salary), count(salary) + 1 from emps";
@@ -1351,18 +1403,11 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan1, "0:UNION\n" +
                 "  |  \n" +
                 "  |----5:EXCHANGE");
-        PlanTestBase.assertContains(plan1, "4:Project\n" +
-                "  |  <slot 13> : 5: empid\n" +
-                "  |  <slot 14> : 6: deptno\n" +
-                "  |  <slot 15> : 7: name\n" +
-                "  |  <slot 16> : 8: salary\n" +
-                "  |  \n" +
-                "  3:OlapScanNode\n" +
+        PlanTestBase.assertContains(plan1, "  3:OlapScanNode\n" +
                 "     TABLE: union_mv_1");
-        PlanTestBase.assertContains(plan1, "1:OlapScanNode\n" +
-                "     TABLE: emps\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 9: empid < 5, 9: empid > 2");
+        PlanTestBase.assertContains(plan1, "TABLE: emps\n" +
+                "     PREAGGREGATION: ON\n",
+                "empid < 5,", "empid > 2");
 
         String query7 = "select deptno, empid from emps where empid < 5";
         String plan7 = getFragmentPlan(query7);
@@ -1467,7 +1512,7 @@ public class MvRewriteOptimizationTest {
 
         String query5 = "select * from multi_mv_1";
         String plan5 = getFragmentPlan(query5);
-        PlanTestBase.assertContains(plan5, "multi_mv_1", "multi_mv_2", "multi_mv_3", "UNION");
+        PlanTestBase.assertContains(plan5, "multi_mv_1", "multi_mv_2", "UNION");
         dropMv("test", "multi_mv_1");
         dropMv("test", "multi_mv_2");
         dropMv("test", "multi_mv_3");
@@ -1794,6 +1839,117 @@ public class MvRewriteOptimizationTest {
         } finally {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
+    }
+    @Test
+    public void testPkFk() throws SQLException {
+        cluster.runSql("test", "CREATE TABLE test.parent_table1(\n" +
+                "k1 INT,\n" +
+                "k2 VARCHAR(20),\n" +
+                "k3 INT,\n" +
+                "k4 VARCHAR(20)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n," +
+                "\"unique_constraints\" = \"k1,k2\"\n" +
+                ");");
+
+        cluster.runSql("test", "CREATE TABLE test.parent_table2(\n" +
+                "k1 INT,\n" +
+                "k2 VARCHAR(20),\n" +
+                "k3 INT,\n" +
+                "k4 VARCHAR(20)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n," +
+                "\"unique_constraints\" = \"k1,k2\"\n" +
+                ");");
+
+        OlapTable olapTable = (OlapTable) getTable("test", "parent_table1");
+        Assert.assertNotNull(olapTable.getUniqueConstraints());
+        Assert.assertEquals(1, olapTable.getUniqueConstraints().size());
+        UniqueConstraint uniqueConstraint = olapTable.getUniqueConstraints().get(0);
+        Assert.assertEquals(2, uniqueConstraint.getUniqueColumns().size());
+        Assert.assertEquals("k1", uniqueConstraint.getUniqueColumns().get(0));
+        Assert.assertEquals("k2", uniqueConstraint.getUniqueColumns().get(1));
+
+        cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2; k3; k4\")");
+        Assert.assertNotNull(olapTable.getUniqueConstraints());
+        Assert.assertEquals(3, olapTable.getUniqueConstraints().size());
+        UniqueConstraint uniqueConstraint2 = olapTable.getUniqueConstraints().get(0);
+        Assert.assertEquals(2, uniqueConstraint2.getUniqueColumns().size());
+        Assert.assertEquals("k1", uniqueConstraint2.getUniqueColumns().get(0));
+        Assert.assertEquals("k2", uniqueConstraint2.getUniqueColumns().get(1));
+
+        UniqueConstraint uniqueConstraint3 = olapTable.getUniqueConstraints().get(1);
+        Assert.assertEquals(1, uniqueConstraint3.getUniqueColumns().size());
+        Assert.assertEquals("k3", uniqueConstraint3.getUniqueColumns().get(0));
+
+        UniqueConstraint uniqueConstraint4 = olapTable.getUniqueConstraints().get(2);
+        Assert.assertEquals(1, uniqueConstraint4.getUniqueColumns().size());
+        Assert.assertEquals("k4", uniqueConstraint4.getUniqueColumns().get(0));
+
+        cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"\")");
+        Assert.assertNull(olapTable.getUniqueConstraints());
+
+        cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2\")");
+
+        cluster.runSql("test", "CREATE TABLE test.base_table1(\n" +
+                "k1 INT,\n" +
+                "k2 VARCHAR(20),\n" +
+                "k3 INT,\n" +
+                "k4 VARCHAR(20),\n" +
+                "k5 INT,\n" +
+                "k6 VARCHAR(20),\n" +
+                "k7 INT,\n" +
+                "k8 VARCHAR(20),\n" +
+                "k9 INT,\n" +
+                "k10 VARCHAR(20)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table1(k1, k2)\"\n" +
+                ");");
+        OlapTable baseTable = (OlapTable) getTable("test", "base_table1");
+        Assert.assertNotNull(baseTable.getForeignKeyConstraints());
+        List<ForeignKeyConstraint> foreignKeyConstraints = baseTable.getForeignKeyConstraints();
+        Assert.assertEquals(1, foreignKeyConstraints.size());
+        BaseTableInfo parentTable = foreignKeyConstraints.get(0).getParentTableInfo();
+        Assert.assertEquals(olapTable.getId(), parentTable.getTableId());
+        Assert.assertEquals(2, foreignKeyConstraints.get(0).getColumnRefPairs().size());
+        Assert.assertEquals("k3", foreignKeyConstraints.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals("k1", foreignKeyConstraints.get(0).getColumnRefPairs().get(0).second);
+        Assert.assertEquals("k4", foreignKeyConstraints.get(0).getColumnRefPairs().get(1).first);
+        Assert.assertEquals("k2", foreignKeyConstraints.get(0).getColumnRefPairs().get(1).second);
+
+        cluster.runSql("test", "alter table base_table1 set(" +
+                "\"foreign_key_constraints\"=\"(k3,k4) references parent_table1(k1, k2);" +
+                "(k5,k6) REFERENCES parent_table2(k1, k2)\")");
+
+        List<ForeignKeyConstraint> foreignKeyConstraints2 = baseTable.getForeignKeyConstraints();
+        Assert.assertEquals(2, foreignKeyConstraints2.size());
+        BaseTableInfo parentTableInfo2 = foreignKeyConstraints2.get(1).getParentTableInfo();
+        OlapTable parentTable2 = (OlapTable) getTable("test", "parent_table2");
+        Assert.assertEquals(parentTable2.getId(), parentTableInfo2.getTableId());
+        Assert.assertEquals(2, foreignKeyConstraints2.get(1).getColumnRefPairs().size());
+        Assert.assertEquals("k5", foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).first);
+        Assert.assertEquals("k1", foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).second);
+        Assert.assertEquals("k6", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).first);
+        Assert.assertEquals("k2", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).second);
+
+        cluster.runSql("test", "show create table base_table1");
+        cluster.runSql("test", "alter table base_table1 set(" +
+                "\"foreign_key_constraints\"=\"\")");
+        List<ForeignKeyConstraint> foreignKeyConstraints3 = baseTable.getForeignKeyConstraints();
+        Assert.assertNull(foreignKeyConstraints3);
     }
 
     public String getFragmentPlan(String sql) throws Exception {

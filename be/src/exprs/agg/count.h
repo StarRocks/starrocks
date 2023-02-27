@@ -348,6 +348,13 @@ public:
     }
 
     std::string get_name() const override { return "count_nullable"; }
+
+    AggStateTableKind agg_state_table_kind(bool is_append_only) const override { return AggStateTableKind::RESULT; }
+
+    void retract(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                 size_t row_num) const override {
+        this->data(state).count -= !columns[0]->is_null(row_num);
+    }
 };
 
 } // namespace starrocks

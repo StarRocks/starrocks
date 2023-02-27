@@ -44,6 +44,7 @@ import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
@@ -73,7 +74,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     // 1. Native table:
     //   1.1 Local: OLAP, MATERIALIZED_VIEW
-    //   1.2 Lake: LAKE
+    //   1.2 Cloud native: LAKE, LAKE_MATERIALIZED_VIEW
     // 2. System table: SCHEMA
     // 3. View: INLINE_VIEW, VIEW
     // 4. External table: MYSQL, OLAP_EXTERNAL, BROKER, ELASTICSEARCH, HIVE, ICEBERG, HUDI, ODBC, JDBC
@@ -93,7 +94,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         MATERIALIZED_VIEW,
         LAKE,
         DELTALAKE,
-        FILE
+        FILE,
+        LAKE_MATERIALIZED_VIEW
     }
 
     @SerializedName(value = "id")
@@ -140,6 +142,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     // not serialized field
     // record all materialized views based on this Table
+    @SerializedName(value = "mvs")
     private Set<MvId> relatedMaterializedViews;
 
     public Table(TableType type) {
@@ -170,16 +173,23 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
-    public boolean isTypeRead() {
-        return isTypeRead;
-    }
-
     public void setTypeRead(boolean isTypeRead) {
         this.isTypeRead = isTypeRead;
     }
 
     public long getId() {
         return id;
+    }
+
+    /**
+     * Get the unique id of table in string format, since we already ensure
+     * the uniqueness of id for internal table, we just convert it to string
+     * and return, for external table it's up to the implementation of connector.
+     *
+     * @return unique id of table in string format
+     */
+    public String getUUID() {
+        return Long.toString(id);
     }
 
     public void setId(long id) {
@@ -206,20 +216,32 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.OLAP;
     }
 
-    public boolean isMaterializedView() {
+    public boolean isOlapMaterializedView() {
         return type == TableType.MATERIALIZED_VIEW;
+    }
+
+    public boolean isLocalTable() {
+        return isOlapTable() || isOlapMaterializedView();
     }
 
     public boolean isLakeTable() {
         return type == TableType.LAKE;
     }
 
-    public boolean isLocalTable() {
-        return isOlapTable() || isMaterializedView();
+    public boolean isLakeMaterializedView() {
+        return type == TableType.LAKE_MATERIALIZED_VIEW;
+    }
+
+    public boolean isCloudNativeTable() {
+        return isLakeTable() || isLakeMaterializedView();
+    }
+
+    public boolean isMaterializedView() {
+        return isOlapMaterializedView() || isLakeMaterializedView();
     }
 
     public boolean isNativeTable() {
-        return isLocalTable() || isLakeTable();
+        return isLocalTable() || isCloudNativeTable();
     }
 
     public boolean isHiveTable() {
@@ -262,6 +284,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public Column getColumn(String name) {
         return nameToColumn.get(name);
+    }
+
+    public boolean containColumn(String columnName) {
+        return nameToColumn.containsKey(columnName);
     }
 
     public List<Column> getColumns() {
@@ -307,6 +333,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return table;
         } else if (type == TableType.LAKE) {
             table = LakeTable.read(in);
+            table.setTypeRead(true);
+            return table;
+        } else if (type == TableType.LAKE_MATERIALIZED_VIEW) {
+            table = LakeMaterializedView.read(in);
             table.setTypeRead(true);
             return table;
         } else {
@@ -496,6 +526,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         }
 
         return true;
+    }
+
+    public boolean hasAutoIncrementColumn() {
+        List<Column> columns = this.getFullSchema();
+        for (Column col : columns) {
+            if (col.isAutoIncrement()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

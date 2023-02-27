@@ -171,10 +171,14 @@ public class IcebergUtil {
      */
     public static TableScan getTableScan(Table table,
                                          Snapshot snapshot,
-                                         Expression icebergPredicate) {
+                                         Expression icebergPredicate,
+                                         Boolean includeColumnStats) {
         // TODO: use planWith(executorService) after
         // https://github.com/apache/iceberg/commit/74db81f4dd81360bf3c0ad438d4be937c7a812d9 release
-        TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
+        TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId());
+        if (includeColumnStats) {
+            tableScan = tableScan.includeColumnStats();
+        }
         if (icebergPredicate != null) {
             tableScan = tableScan.filter(icebergPredicate);
         }
@@ -409,7 +413,7 @@ public class IcebergUtil {
     }
 
     private static ArrayType convertToArrayType(org.apache.iceberg.types.Type icebergType) {
-        return new ArrayType(convertColumnType(icebergType.asNestedType().asListType().elementType()), true);
+        return new ArrayType(convertColumnType(icebergType.asNestedType().asListType().elementType()));
     }
 
     private static Type convertToMapType(org.apache.iceberg.types.Type icebergType) {

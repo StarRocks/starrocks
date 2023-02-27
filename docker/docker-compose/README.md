@@ -2,8 +2,9 @@
 
 This directory contains the Docker Compose YAML files for the StarRocks deployment.
 
-You can deploy a StarRocks cluster with one BE node using [**docker-compose.yaml**](./docker-compose.yaml), or a StarRocks cluster with three BE nodes using [docker-compose-multiBE.yaml](./docker-compose-multiBE.yaml).
+You can deploy a StarRocks cluster with one BE node using [**docker-compose.yml**](./docker-compose.yml), or  simulate a distributed StarRocks cluster with multiple BEs on a single instance using [docker-compose-3BE.yml](./docker-compose-3BE.yml).
 
+Note that deploying with docker compose is only recommended in a testing environment, as high availability cannot be guaranteed with a single instance deployment.
 ## Deploy StarRocks using Docker Compose
 
 Run the following command to deploy StarRocks using Docker Compose:

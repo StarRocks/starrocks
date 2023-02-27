@@ -85,7 +85,7 @@ struct OrcMappingOrOrcColumnId {
 //     └── 1->10
 class OrcMapping {
 public:
-    // Only Array, Map, Struct contains child mapping, other primitive types will return nullptr directly.
+    // Only Array, Map, Struct contains child mapping, other logical types will return nullptr directly.
     // src_pos is origin column position in table definition.
     const OrcMappingOrOrcColumnId& get_column_id_or_child_mapping(size_t original_pos_in_table_definition);
 

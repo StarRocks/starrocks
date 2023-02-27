@@ -576,19 +576,22 @@ public class Repository implements Writable {
         return info;
     }
 
-    public List<List<String>> getSnapshotInfos(String snapshotName, String timestamp)
+    public List<List<String>> getSnapshotInfos(String snapshotName, String timestamp, List<String> snapshotNames)
             throws AnalysisException {
         List<List<String>> snapshotInfos = Lists.newArrayList();
         if (Strings.isNullOrEmpty(snapshotName)) {
             // get all snapshot infos
-            List<String> snapshotNames = Lists.newArrayList();
-            Status status = listSnapshots(snapshotNames);
+            List<String> fullSnapshotNames = Lists.newArrayList();
+            Status status = listSnapshots(fullSnapshotNames);
             if (!status.ok()) {
                 throw new AnalysisException(
                         "Failed to list snapshot in repo: " + name + ", err: " + status.getErrMsg());
             }
 
-            for (String ssName : snapshotNames) {
+            for (String ssName : fullSnapshotNames) {
+                if (snapshotNames != null && snapshotNames.size() != 0 && !snapshotNames.contains(ssName)) {
+                    continue;
+                }
                 List<String> info = getSnapshotInfo(ssName, null /* get all timestamp */);
                 snapshotInfos.add(info);
             }
@@ -697,5 +700,17 @@ public class Repository implements Writable {
         location = Text.readString(in);
         storage = BlobStorage.read(in);
         createTime = in.readLong();
+
+        // list __palo_repository_ first, if success, prefixRepo = __palo_repository_
+        String listPath = Joiner.on(PATH_DELIMITER).join(location, joinPrefix("__palo_repository_", name), PREFIX_SNAPSHOT_DIR)
+                + "*";
+        List<RemoteFile> result = Lists.newArrayList();
+        Status st = storage.list(listPath, result);
+
+        if (st.ok()) {
+            prefixRepo = "__palo_repository_";
+        } else {
+            prefixRepo = "__starrocks_repository_";
+        }
     }
 }

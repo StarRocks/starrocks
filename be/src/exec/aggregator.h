@@ -207,6 +207,7 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
 // it contains common data struct and algorithm of aggregation
 class Aggregator : public pipeline::ContextWithDependency {
 public:
+    static constexpr auto MAX_CHUNK_BUFFER_SIZE = 1024;
     Aggregator(AggregatorParamsPtr&& params);
 
     ~Aggregator() noexcept override {
@@ -216,8 +217,7 @@ public:
     }
 
     Status open(RuntimeState* state);
-    virtual Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
-                           MemTracker* mem_tracker);
+    virtual Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     void close(RuntimeState* state) override;
 
     const MemPool* mem_pool() const { return _mem_pool.get(); }
@@ -239,6 +239,10 @@ public:
     void set_aggr_phase(AggrPhase aggr_phase) { _aggr_phase = aggr_phase; }
     AggrPhase get_aggr_phase() { return _aggr_phase; }
 
+    bool is_hash_set() { return _is_only_group_by_columns; }
+    const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
+    const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
+
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
     const AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
     const AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
@@ -256,6 +260,7 @@ public:
 
     bool is_chunk_buffer_empty();
     ChunkPtr poll_chunk_buffer();
+    size_t chunk_buffer_size() { return _buffer_size.load(std::memory_order_acquire); }
     void offer_chunk_to_buffer(const ChunkPtr& chunk);
 
     bool should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
@@ -317,8 +322,6 @@ protected:
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
 
-    MemTracker* _mem_tracker = nullptr;
-
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
     // The open phase still relies on the TFunction object for some initialization operations
@@ -333,6 +336,7 @@ protected:
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
+    std::atomic_int _buffer_size{};
     std::queue<ChunkPtr> _buffer;
     std::mutex _buffer_mutex;
 

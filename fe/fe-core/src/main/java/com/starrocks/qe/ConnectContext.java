@@ -36,7 +36,6 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
@@ -48,12 +47,15 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.ssl.SSLChannel;
 import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
-import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -138,7 +140,7 @@ public class ConnectContext {
     // Variables belong to this session.
     protected SessionVariable sessionVariable;
     // all the modified session variables, will forward to leader
-    protected Map<String, SetVar> modifiedSessionVariables = new HashMap<>();
+    protected Map<String, SystemVariable> modifiedSessionVariables = new HashMap<>();
     // user define variable in this session
     protected HashMap<String, UserVariable> userVariables;
     // Scheduler this connection belongs to
@@ -291,11 +293,6 @@ public class ConnectContext {
         this.qualifiedUser = qualifiedUser;
     }
 
-    // for USER() function
-    public UserIdentity getUserIdentity() {
-        return new UserIdentity(qualifiedUser, remoteIP);
-    }
-
     public UserIdentity getCurrentUserIdentity() {
         return currentUserIdentity;
     }
@@ -308,27 +305,40 @@ public class ConnectContext {
         return currentRoleIds;
     }
 
+    public void setCurrentRoleIds(UserIdentity user) {
+        try {
+            Set<Long> defaultRoleIds;
+            if (this.getSessionVariable().isActivateAllRolesOnLogin()) {
+                defaultRoleIds = this.getGlobalStateMgr().getPrivilegeManager().getRoleIdsByUser(user);
+            } else {
+                defaultRoleIds = this.getGlobalStateMgr().getPrivilegeManager().getDefaultRoleIdsByUser(user);
+            }
+            this.currentRoleIds = defaultRoleIds;
+        } catch (PrivilegeException e) {
+            LOG.warn("Set current role fail : {}", e.getMessage());
+        }
+    }
+
     public void setCurrentRoleIds(Set<Long> roleIds) {
         this.currentRoleIds = roleIds;
     }
 
-    public void modifySessionVariable(SetVar setVar, boolean onlySetSessionVar) throws DdlException {
-        VariableMgr.setVar(sessionVariable, setVar, onlySetSessionVar);
+    public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
+        VariableMgr.setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
         if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
 
-    public void modifyUserVariable(SetVar setVar) {
-        UserVariable userDefineVariable = (UserVariable) setVar;
-        if (userVariables.size() > 1024 && !userVariables.containsKey(setVar.getVariable())) {
+    public void modifyUserVariable(UserVariable userVariable) {
+        if (userVariables.size() > 1024 && !userVariables.containsKey(userVariable.getVariable())) {
             throw new SemanticException("User variable exceeds the maximum limit of 1024");
         }
-        userVariables.put(setVar.getVariable(), userDefineVariable);
+        userVariables.put(userVariable.getVariable(), userVariable);
     }
 
     public SetStmt getModifiedSessionVariables() {
-        List<SetVar> sessionVariables = new ArrayList<>();
+        List<SetListItem> sessionVariables = new ArrayList<>();
         if (!modifiedSessionVariables.isEmpty()) {
             sessionVariables.addAll(modifiedSessionVariables.values());
         }

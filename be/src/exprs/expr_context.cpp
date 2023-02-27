@@ -53,7 +53,9 @@ ExprContext::ExprContext(Expr* root)
         : _root(root), _is_clone(false), _prepared(false), _opened(false), _closed(false) {}
 
 ExprContext::~ExprContext() {
-    // DCHECK(!_prepared || _closed) << ". expr context address = " << this;
+    // nothing to do
+    if (_runtime_state == nullptr) return;
+
     close(_runtime_state);
     for (auto& _fn_context : _fn_contexts) {
         delete _fn_context;
@@ -129,6 +131,7 @@ Status ExprContext::clone(RuntimeState* state, ObjectPool* pool, ExprContext** n
     (*new_ctx)->_is_clone = true;
     (*new_ctx)->_prepared = true;
     (*new_ctx)->_opened = true;
+    (*new_ctx)->_runtime_state = state;
 
     return _root->open(state, *new_ctx, FunctionContext::THREAD_LOCAL);
 }

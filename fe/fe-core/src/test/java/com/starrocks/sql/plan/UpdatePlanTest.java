@@ -44,6 +44,7 @@ public class UpdatePlanTest extends PlanTestBase {
 
         testExplain("explain update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
         testExplain("explain update tprimary set v2 = DEFAULT where v1 = 'aaa'");
+        testExplain("explain update tprimary_auto_increment set v2 = DEFAULT where v1 = '123'");
         testExplain("explain verbose update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
         testExplain("explain costs update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
     }

@@ -19,12 +19,18 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.proc.DeleteInfoProcDir;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowDeleteStmt extends ShowStmt {
 
     private String dbName;
 
     public ShowDeleteStmt(String dbName) {
+        this(dbName, NodePosition.ZERO);
+    }
+
+    public ShowDeleteStmt(String dbName, NodePosition pos) {
+        super(pos);
         this.dbName = dbName;
     }
 

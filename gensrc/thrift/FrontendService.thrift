@@ -350,14 +350,34 @@ struct TTableStatus {
     5: optional i64 last_check_time
     6: optional i64 create_time
     20: optional string ddl_sql
-    // id for materialized view
-    21: optional string id
-    // row_count for materialized view
-    22: optional string rows
 }
 
 struct TListTableStatusResult {
     1: required list<TTableStatus> tables
+}
+
+struct TMaterializedViewStatus {
+    1: optional string id
+    2: optional string database_name
+    3: optional string name
+    4: optional string refresh_type 
+    5: optional string is_active 
+    6: optional string last_refresh_start_time
+    7: optional string last_refresh_finished_time
+    8: optional string last_refresh_duration
+    9: optional string last_refresh_state
+    10: optional string inactive_code
+    11: optional string inactive_reason 
+    12: optional string text
+    13: optional string rows
+
+    20: optional i64 last_check_time
+    21: optional i64 create_time
+    22: optional string ddl_sql
+}
+
+struct TListMaterializedViewStatusResult {
+    1: optional list<TMaterializedViewStatus> materialized_views
 }
 
 // Arguments to showTasks/ShowTaskRuns
@@ -514,6 +534,7 @@ struct TMasterOpRequest {
     30: optional Types.TUniqueId queryId
     31: optional bool isLastStmt
     32: optional string modified_variables_sql
+    33: optional Types.TUserRoles user_roles
 }
 
 struct TColumnDefinition {
@@ -1028,16 +1049,14 @@ struct TCreatePartitionRequest {
     2: optional i64 db_id
     3: optional i64 table_id
     // for each partition column's partition values
-    4: optional list<list<string>> partitionValues
+    4: optional list<list<string>> partition_values
 }
 
 struct TCreatePartitionResult {
     1: optional Status.TStatus status
-    // If the status is not OK, err_msg will be a specific error reason
-    2: optional string err_msg;
-    3: optional list<Descriptors.TOlapTablePartition> partitions
-    4: optional list<Descriptors.TTabletLocation> tablets
-    5: optional list<Descriptors.TNodeInfo> nodes
+    2: optional list<Descriptors.TOlapTablePartition> partitions
+    3: optional list<Descriptors.TTabletLocation> tablets
+    4: optional list<Descriptors.TNodeInfo> nodes
 }
 
 struct TAuthInfo {
@@ -1111,6 +1130,17 @@ struct TTableInfo {
     21: optional string table_comment
 }
 
+struct TAllocateAutoIncrementIdParam {
+    1: optional i64 table_id
+    2: optional i64 rows
+}
+
+struct TAllocateAutoIncrementIdResult {
+    1: optional i64 auto_increment_id
+    2: optional i64 allocated_rows
+    3: optional Status.TStatus status
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1141,6 +1171,7 @@ service FrontendService {
     TMasterOpResult forward(TMasterOpRequest params)
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
+    TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
 
     TGetTaskInfoResult getTasks(1:TGetTasksParams params)
     TGetTaskRunInfoResult getTaskRuns(1:TGetTasksParams params)
@@ -1171,5 +1202,7 @@ service FrontendService {
     
     // For Materialized View
     MVMaintenance.TMVReportEpochResponse mvReport(1: MVMaintenance.TMVMaintenanceTasks request)
+
+    TAllocateAutoIncrementIdResult allocAutoIncrementId (1:TAllocateAutoIncrementIdParam params)
 }
 

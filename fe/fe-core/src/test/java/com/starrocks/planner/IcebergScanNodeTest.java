@@ -138,7 +138,8 @@ public class IcebergScanNodeTest {
             @Mock
             public TableScan getTableScan(Table table,
                                           Snapshot snapshot,
-                                          Expression icebergPredicate) {
+                                          Expression icebergPredicate,
+                                          Boolean includeColumnStats) {
                 return new DataTableScan(null, iTable);
             }
         };

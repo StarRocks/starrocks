@@ -218,6 +218,10 @@ public class OlapScanNode extends ScanNode {
         this.bucketColumns = bucketColumns;
     }
 
+    public List<Expr> getBucketExprs() {
+        return bucketExprs;
+    }
+
     public void setBucketExprs(List<Expr> bucketExprs) {
         this.bucketExprs = bucketExprs;
     }
@@ -336,6 +340,87 @@ public class OlapScanNode extends ScanNode {
         }
     }
 
+    // update TScanRangeLocations based on the latest olapTable tablet distributions, 
+    // this function will make sure the version of each TScanRangeLocations doesn't change.
+    public List<TScanRangeLocations> updateScanRangeLocations(List<TScanRangeLocations> locations) throws UserException {
+        if (selectedPartitionIds.size() == 0) {
+            throw new UserException("Scan node's partition is empty");
+        }
+        List<TScanRangeLocations> newLocations = Lists.newArrayList();
+        for (TScanRangeLocations location: locations) {
+            TInternalScanRange internalScanRange = location.scan_range.internal_scan_range;
+            String expectedSchemaHashStr = internalScanRange.getSchema_hash();
+            String expectedVersionStr = internalScanRange.getVersion();
+            long tabletId = internalScanRange.getTablet_id();
+            int expectedSchemaHash = Integer.parseInt(expectedSchemaHashStr);
+            long expectedVersion = Long.parseLong(expectedVersionStr);
+            Long partitionId = internalScanRange.partition_id;
+            
+            final Partition partition = olapTable.getPartition(partitionId);
+            final MaterializedIndex selectedTable = partition.getIndex(selectedIndexId);
+            final Tablet selectedTablet = selectedTable.getTablet(tabletId);
+            if (selectedTablet == null) {
+                throw new UserException("Tablet " +  tabletId + " doesn't exist in partition " + partitionId);
+            }
+
+            int schemaHash = olapTable.getSchemaHashByIndexId(selectedTable.getId());
+            if (schemaHash != expectedSchemaHash) {
+                throw new UserException("Tablet " +  tabletId + " schema hash " + schemaHash + " has changed, doesn't equal to expected schema hash " + expectedSchemaHash);
+            }
+
+            // random shuffle List && only collect one copy
+            List<Replica> allQueryableReplicas = Lists.newArrayList();
+            List<Replica> localReplicas = Lists.newArrayList();
+            selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                expectedVersion, -1, schemaHash);
+            if (allQueryableReplicas.isEmpty()) {
+                String replicaInfos = ((LocalTablet) selectedTablet).getReplicaInfos();
+                LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
+                        tabletId, expectedVersion, replicaInfos);
+                throw new UserException(
+                        "Failed to get scan range, no queryable replica found in tablet: " + tabletId + " " +
+                                replicaInfos);
+            }
+
+            TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+            TInternalScanRange internalRange = new TInternalScanRange();
+            internalRange.setDb_name("");
+            internalRange.setSchema_hash(expectedSchemaHashStr);
+            internalRange.setVersion(expectedVersionStr);
+            internalRange.setVersion_hash("0");
+            internalRange.setTablet_id(tabletId);
+            internalRange.setPartition_id(partition.getId());
+
+            List<Replica> replicas = allQueryableReplicas;
+
+            Collections.shuffle(replicas);
+            boolean tabletIsNull = true;
+            for (Replica replica : replicas) {
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                if (backend == null) {
+                    LOG.debug("replica {} not exists", replica.getBackendId());
+                    continue;
+                }
+                String ip = backend.getHost();
+                int port = backend.getBePort();
+                TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(ip, port));
+                scanRangeLocation.setBackend_id(replica.getBackendId());
+                scanRangeLocations.addToLocations(scanRangeLocation);
+                internalRange.addToHosts(new TNetworkAddress(ip, port));
+                tabletIsNull = false;
+            }
+            if (tabletIsNull) {
+                throw new UserException(tabletId + "have no alive replicas");
+            }
+            TScanRange scanRange = new TScanRange();
+            scanRange.setInternal_scan_range(internalRange);
+            scanRangeLocations.setScan_range(scanRange);
+
+            newLocations.add(scanRangeLocations);
+        }        
+        return newLocations;
+    }
+
     public void addScanRangeLocations(Partition partition,
                                       MaterializedIndex index,
                                       List<Tablet> tablets,
@@ -436,7 +521,7 @@ public class OlapScanNode extends ScanNode {
         // Step1: compute partition ids
         PartitionNames partitionNames = desc.getRef().getPartitionNames();
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        if (partitionInfo.getType() == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             selectedPartitionIds = partitionPrune((RangePartitionInfo) partitionInfo, partitionNames);
         } else {
             selectedPartitionIds = null;
@@ -670,7 +755,7 @@ public class OlapScanNode extends ScanNode {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
                     new TLakeScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
-            msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
+            msg.lake_scan_node.setSort_key_column_names(keyColumnNames);
             msg.lake_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
             if (!conjuncts.isEmpty()) {
                 msg.lake_scan_node.setSql_predicates(getExplainString(conjuncts));
@@ -687,7 +772,7 @@ public class OlapScanNode extends ScanNode {
             if (!olapTable.hasDelete()) {
                 msg.lake_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
-        } else {
+        } else { // If you find yourself changing this code block, see also the above code block, i.e, if (olapTable.isLakeTable) { ... }.
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
                     new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
@@ -734,6 +819,11 @@ public class OlapScanNode extends ScanNode {
 
     @Override
     public boolean canUsePipeLine() {
+        return true;
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
 
@@ -918,7 +1008,7 @@ public class OlapScanNode extends ScanNode {
         //  At present, we support predicates' decomposition on RangePartition with single-column partition key.
         //  in the future, predicates' decomposition on RangePartition with multi-column partition key will be
         //  supported.
-        if (partitionInfo.getType() == PartitionType.RANGE &&
+        if (partitionInfo.isRangePartition() &&
                 ((RangePartitionInfo) partitionInfo).getPartitionColumns().size() == 1) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             conjuncts = decomposeRangePredicates(normalizer, planNode, rangePartitionInfo, conjuncts);

@@ -50,6 +50,8 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
+import com.starrocks.catalog.DynamicPartitionProperty;
+import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -60,12 +62,13 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -116,9 +119,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
-
-import static java.lang.Math.min;
 
 public class SchemaChangeHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandler.class);
@@ -986,7 +988,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // 3. check partition key
-            if (hasColumnChange && olapTable.getPartitionInfo().getType() == PartitionType.RANGE) {
+            if (hasColumnChange && olapTable.getPartitionInfo().isRangePartition()) {
                 List<Column> partitionColumns = ((RangePartitionInfo) olapTable.getPartitionInfo()).getPartitionColumns();
                 for (Column partitionCol : partitionColumns) {
                     String colName = partitionCol.getName();
@@ -1122,20 +1124,17 @@ public class SchemaChangeHandler extends AlterHandler {
         getAlterJobV2Infos(db, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
     }
 
-    @Nullable
-    public Long getMinActiveTxnId() {
-        long result = Long.MAX_VALUE;
+    public Optional<Long> getMinActiveTxnId() {
+        long minId = Long.MAX_VALUE;
         Map<Long, AlterJobV2> alterJobV2Map = getAlterJobsV2();
         for (AlterJobV2 job : alterJobV2Map.values()) {
             AlterJobV2.JobState jobState = job.getJobState();
             if (jobState == AlterJobV2.JobState.FINISHED || jobState == AlterJobV2.JobState.CANCELLED) {
                 continue;
             }
-            if (job instanceof LakeTableSchemaChangeJob) {
-                result = min(result, ((LakeTableSchemaChangeJob) job).getWatershedTxnId());
-            }
+            minId = Math.min(minId, job.getTransactionId().orElse(Long.MAX_VALUE));
         }
-        return result == Long.MAX_VALUE ? null : result;
+        return minId == Long.MAX_VALUE ? Optional.empty() : Optional.of(minId);
     }
 
     @VisibleForTesting
@@ -1177,6 +1176,13 @@ public class SchemaChangeHandler extends AlterHandler {
                     if (!olapTable.dynamicPartitionExists()) {
                         DynamicPartitionUtil.checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
                     }
+                    if (properties.containsKey(DynamicPartitionProperty.BUCKETS)) {
+                        String colocateGroup = olapTable.getColocateGroup();
+                        if (colocateGroup != null) {
+                            throw new DdlException("The table has a colocate group:" + colocateGroup + ". so cannot " +
+                                    "modify dynamic_partition.buckets. Colocate tables must have same bucket number.");
+                        }
+                    }
                     GlobalStateMgr.getCurrentState().modifyTableDynamicPartition(db, olapTable, properties);
                     return null;
                 } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
@@ -1189,6 +1195,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+                    return null;
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                    GlobalStateMgr.getCurrentState().alterTableProperties(db, olapTable, properties);
                     return null;
                 }
             }
@@ -1648,6 +1657,78 @@ public class SchemaChangeHandler extends AlterHandler {
                 LOG.warn(errMsg);
                 throw new DdlException(errMsg);
             }
+        }
+    }
+
+    public void updateTableConstraint(Database db, String tableName, Map<String, String> properties)
+            throws DdlException {
+        if (!db.readLockAndCheckExist()) {
+            throw new DdlException(String.format("db:%s does not exists.", db.getFullName()));
+        }
+        TableProperty tableProperty;
+        OlapTable olapTable;
+        try {
+            Table table = db.getTable(tableName);
+            if (table == null) {
+                throw new DdlException(String.format("table:%s does not exist", tableName));
+            }
+            olapTable = (OlapTable) table;
+            tableProperty = olapTable.getTableProperty();
+        } finally {
+            db.readUnlock();
+        }
+
+        boolean hasChanged = false;
+        if (tableProperty != null) {
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+                try {
+                    List<UniqueConstraint> newUniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, olapTable);
+                    List<UniqueConstraint> originalUniqueConstraints = tableProperty.getUniqueConstraints();
+                    if (originalUniqueConstraints == null
+                            || !newUniqueConstraints.toString().equals(originalUniqueConstraints.toString())) {
+                        hasChanged = true;
+                        String newProperty = newUniqueConstraints
+                                .stream().map(UniqueConstraint::toString).collect(Collectors.joining(";"));
+                        properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, newProperty);
+                    } else {
+                        LOG.warn("unique constraint is the same as origin");
+                    }
+                } catch (AnalysisException e) {
+                    throw new DdlException(
+                            String.format("analyze table unique constraint:%s failed",
+                                    properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)), e);
+                }
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+                try {
+                    List<ForeignKeyConstraint> newForeignKeyConstraints =
+                            PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, olapTable);
+                    List<ForeignKeyConstraint> originalForeignKeyConstraints = tableProperty.getForeignKeyConstraints();
+                    if (originalForeignKeyConstraints == null
+                            || !newForeignKeyConstraints.toString().equals(originalForeignKeyConstraints.toString())) {
+                        hasChanged = true;
+                        String newProperty = newForeignKeyConstraints
+                                .stream().map(ForeignKeyConstraint::toString).collect(Collectors.joining(";"));
+                        properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, newProperty);
+                    } else {
+                        LOG.warn("foreign constraint is the same as origin");
+                    }
+                } catch (AnalysisException e) {
+                    throw new DdlException(
+                            String.format("analyze table foreign key constraint:%s failed",
+                                    properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)), e);
+                }
+            }
+        }
+
+        if (!hasChanged) {
+            return;
+        }
+        db.writeLock();
+        try {
+            GlobalStateMgr.getCurrentState().modifyTableConstraint(db, tableName, properties);
+        } finally {
+            db.writeUnlock();
         }
     }
 

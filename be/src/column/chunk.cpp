@@ -152,6 +152,11 @@ void Chunk::update_column(ColumnPtr column, SlotId slot_id) {
     check_or_die();
 }
 
+void Chunk::update_column_by_index(ColumnPtr column, size_t idx) {
+    _columns[idx] = std::move(column);
+    check_or_die();
+}
+
 void Chunk::insert_column(size_t idx, ColumnPtr column, const FieldPtr& field) {
     DCHECK_LT(idx, _columns.size());
     _columns.emplace(_columns.begin() + idx, std::move(column));
@@ -318,13 +323,13 @@ size_t Chunk::container_memory_usage() const {
     return container_memory_usage;
 }
 
-size_t Chunk::element_memory_usage(size_t from, size_t size) const {
+size_t Chunk::reference_memory_usage(size_t from, size_t size) const {
     DCHECK_LE(from + size, num_rows()) << "Range error";
-    size_t element_memory_usage = 0;
+    size_t reference_memory_usage = 0;
     for (const auto& column : _columns) {
-        element_memory_usage += column->element_memory_usage(from, size);
+        reference_memory_usage += column->reference_memory_usage(from, size);
     }
-    return element_memory_usage;
+    return reference_memory_usage;
 }
 
 size_t Chunk::bytes_usage() const {

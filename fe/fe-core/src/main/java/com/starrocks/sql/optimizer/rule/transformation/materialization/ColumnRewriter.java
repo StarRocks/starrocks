@@ -15,12 +15,11 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,7 +29,7 @@ import java.util.Set;
 
 public class ColumnRewriter {
     private static final Logger LOG = LogManager.getLogger(ColumnRewriter.class);
-    private RewriteContext rewriteContext;
+    private final RewriteContext rewriteContext;
 
     public ColumnRewriter(RewriteContext rewriteContext) {
         this.rewriteContext = rewriteContext;
@@ -84,9 +83,9 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
-    private class ColumnRewriteVisitor extends ScalarOperatorVisitor<ScalarOperator, Void> {
-        private boolean enableRelationRewrite;
-        private boolean enableEquivalenceClassesRewrite;
+    private static class ColumnRewriteVisitor extends BaseScalarOperatorShuttle {
+        private final boolean enableRelationRewrite;
+        private final boolean enableEquivalenceClassesRewrite;
 
         private Map<Integer, Integer> srcToDstRelationIdMapping;
         private ColumnRefFactory srcRefFactory;
@@ -113,31 +112,18 @@ public class ColumnRewriter {
         }
 
         @Override
-        public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
-            List<ScalarOperator> children = Lists.newArrayList(scalarOperator.getChildren());
-            for (int i = 0; i < children.size(); ++i) {
-                ScalarOperator child = scalarOperator.getChild(i).accept(this, context);
-                if (child == null) {
-                    return null;
-                }
-                scalarOperator.setChild(i, child);
-            }
-            return scalarOperator;
-        }
-
-        @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator columnRef, Void context) {
             ColumnRefOperator result = columnRef;
             if (enableRelationRewrite && srcToDstRelationIdMapping != null) {
                 Integer srcRelationId = srcRefFactory.getRelationId(columnRef.getId());
                 if (srcRelationId < 0) {
-                    LOG.warn("invalid columnRef:%s", columnRef);
+                    LOG.warn("invalid columnRef: {}", columnRef);
                     return null;
                 }
                 Integer targetRelationId = srcToDstRelationIdMapping.get(srcRelationId);
                 List<ColumnRefOperator> relationColumns = dstRelationIdToColumns.get(targetRelationId);
                 if (relationColumns == null) {
-                    LOG.warn("no columns for relation id:%d", targetRelationId);
+                    LOG.warn("no columns for relation id:{}", targetRelationId);
                     return null;
                 }
                 boolean found = false;
@@ -149,7 +135,8 @@ public class ColumnRewriter {
                     }
                 }
                 if (!found) {
-                    LOG.warn("can not find column ref:%s in target relation:%d", columnRef, targetRelationId);
+                    LOG.warn("can not find column ref id:{} name:{} in target relation:{}",
+                            columnRef.getId(), columnRef.getName(), targetRelationId);
                 }
             }
             if (enableEquivalenceClassesRewrite && equivalenceClasses != null) {

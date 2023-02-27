@@ -52,16 +52,19 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.InternalServiceVersion;
+import com.starrocks.thrift.TAdaptiveDopParam;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
@@ -494,7 +497,7 @@ public class CoordinatorPreprocessor {
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
 
             boolean dopAdaptionEnabled = usePipeline &&
-                    connectContext.getSessionVariable().isPipelineDopAdaptionEnabled();
+                    connectContext.getSessionVariable().isEnablePipelineAdaptiveDop();
 
             // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
             if (fragment.getChildren().size() > 0 && fragment.getChild(0) instanceof MultiCastPlanFragment) {
@@ -681,10 +684,17 @@ public class CoordinatorPreprocessor {
                                 List<List<TScanRangeParams>> scanRangeParamsPerDriverSeq =
                                         ListUtil.splitBySize(scanRangeParams, expectedDop);
                                 instanceParam.pipelineDop = scanRangeParamsPerDriverSeq.size();
+                                if (fragment.isUseRuntimeAdaptiveDop()) {
+                                    instanceParam.pipelineDop = Utils.computeMinGEPower2(instanceParam.pipelineDop);
+                                }
                                 Map<Integer, List<TScanRangeParams>> scanRangesPerDriverSeq = new HashMap<>();
                                 instanceParam.nodeToPerDriverSeqScanRanges.put(planNodeId, scanRangesPerDriverSeq);
                                 for (int driverSeq = 0; driverSeq < scanRangeParamsPerDriverSeq.size(); ++driverSeq) {
                                     scanRangesPerDriverSeq.put(driverSeq, scanRangeParamsPerDriverSeq.get(driverSeq));
+                                }
+                                for (int driverSeq = scanRangeParamsPerDriverSeq.size();
+                                        driverSeq < instanceParam.pipelineDop; ++driverSeq) {
+                                    scanRangesPerDriverSeq.put(driverSeq, Lists.newArrayList());
                                 }
                             }
                             if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
@@ -932,6 +942,9 @@ public class CoordinatorPreprocessor {
 
                 if (assignPerDriverSeq) {
                     instanceParam.pipelineDop = scanRangesPerDriverSeq.size();
+                    if (params.fragment.isUseRuntimeAdaptiveDop()) {
+                        instanceParam.pipelineDop = Utils.computeMinGEPower2(instanceParam.pipelineDop);
+                    }
                 }
 
                 for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
@@ -1007,13 +1020,18 @@ public class CoordinatorPreprocessor {
 
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
-            if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
+            if (scanNode instanceof SchemaScanNode) {
+                BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
+                selector.computeScanRangeAssignment();
+            } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                     scanNode instanceof FileTableScanNode) {
                 if (connectContext != null) {
                     queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
-                    queryOptions.setEnable_populate_block_cache(
-                            connectContext.getSessionVariable().getEnablePopulateBlockCache());
+                    queryOptions.
+                            setEnable_populate_block_cache(
+                                    connectContext.getSessionVariable().getEnablePopulateBlockCache());
+                    queryOptions.setHudi_mor_force_jni_reader(connectContext.getSessionVariable().getHudiMORForceJNIReader());
                 }
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
@@ -1037,6 +1055,9 @@ public class CoordinatorPreprocessor {
                     BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
                     selector.computeScanRangeAssignment();
                 }
+            }
+            if (LOG.isDebugEnabled()) {
+                LOG.debug(assignment.toDebugString());
             }
         }
     }
@@ -1424,14 +1445,6 @@ public class CoordinatorPreprocessor {
         }
     }
 
-    /**
-     * map from an impalad host address to the per-node assigned scan ranges;
-     * records scan range assignment for a single fragment
-     */
-    static class FragmentScanRangeAssignment extends
-            HashMap<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> {
-    }
-
     static class BucketSeqToScanRange
             extends HashMap<Integer, Map<Integer, List<TScanRangeParams>>> {
     }
@@ -1529,6 +1542,13 @@ public class CoordinatorPreprocessor {
                     commonParams.setEnable_resource_group(enableResourceGroup);
                     if (enableResourceGroup && resourceGroup != null) {
                         commonParams.setWorkgroup(resourceGroup);
+                    }
+                    if (fragment.isUseRuntimeAdaptiveDop()) {
+                        commonParams.setAdaptive_dop_param(new TAdaptiveDopParam());
+                        commonParams.adaptive_dop_param.setMax_block_rows_per_driver_seq(
+                                sessionVariable.getAdaptiveDopMaxBlockRowsPerDriverSeq());
+                        commonParams.adaptive_dop_param.setMax_output_amplification_factor(
+                                sessionVariable.getAdaptiveDopMaxOutputAmplificationFactor());
                     }
                 }
             }

@@ -44,7 +44,7 @@ struct UDFFunctionCallHelper {
     JavaMethodDescriptor* call_desc;
     std::vector<std::string> _data_buffer;
 
-    // Now we don't support primitive type function
+    // Now we don't support logical type function
     ColumnPtr call(FunctionContext* ctx, Columns& columns, size_t size) {
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
@@ -113,6 +113,8 @@ StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context,
 }
 
 JavaFunctionCallExpr::~JavaFunctionCallExpr() {
+    // nothing to do if JavaFunctionCallExpr has not been prepared
+    if (_runtime_state == nullptr) return;
     auto promise = call_function_in_pthread(_runtime_state, [this]() {
         this->_func_desc.reset();
         this->_call_helper.reset();

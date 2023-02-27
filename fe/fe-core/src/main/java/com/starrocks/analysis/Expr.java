@@ -42,8 +42,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
@@ -61,6 +59,7 @@ import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
@@ -82,7 +81,7 @@ import java.util.stream.Collectors;
 /**
  * Root of the expr node hierarchy.
  */
-abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneable, Writable {
+public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneable, Writable {
     // Name of the function that needs to be implemented by every Expr that
     // supports negation.
     private static final String NEGATE_FN = "negate";
@@ -200,8 +199,20 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // Needed for properly capturing expr precedences in the SQL string.
     protected boolean printSqlInParens = false;
 
+    protected final NodePosition pos;
+
     protected Expr() {
-        super();
+        pos = NodePosition.ZERO;
+        type = Type.INVALID;
+        originType = Type.INVALID;
+        opcode = TExprOpcode.INVALID_OPCODE;
+        vectorOpcode = TExprOpcode.INVALID_OPCODE;
+        selectivity = -1.0;
+        numDistinctValues = -1;
+    }
+
+    protected Expr(NodePosition pos) {
+        this.pos = pos;
         type = Type.INVALID;
         originType = Type.INVALID;
         opcode = TExprOpcode.INVALID_OPCODE;
@@ -212,6 +223,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     protected Expr(Expr other) {
         super();
+        pos = other.pos;
         id = other.id;
         isAuxExpr = other.isAuxExpr;
         type = other.type;
@@ -745,14 +757,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     final void treeToThriftHelper(TExpr container, ExprVisitor visitor) {
         TExprNode msg = new TExprNode();
 
-        if (type.isNull()) {
-            // Hack to ensure BE never sees TYPE_NULL. If an expr makes it this far without
-            // being cast to a non-NULL type, the type doesn't matter and we can cast it
-            // arbitrarily.
-            NullLiteral l = NullLiteral.create(ScalarType.BOOLEAN);
-            l.treeToThriftHelper(container, visitor);
-            return;
-        }
+        Preconditions.checkState(!type.isNull(), "NULL_TYPE is illegal in thrift stage");
+        Preconditions.checkState(!Objects.equal(Type.ARRAY_NULL, type), "Array<NULL_TYPE> is illegal in thrift stage");
 
         msg.type = type.toThrift();
         msg.num_children = children.size();
@@ -769,10 +775,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         msg.output_scale = getOutputScale();
         msg.setIs_monotonic(isMonotonic());
         visitor.visit(this, msg);
-        // Echoes the above hack process
-        if (PrimitiveType.NULL_TYPE.toThrift().equals(msg.child_type)) {
-            msg.child_type = PrimitiveType.BOOLEAN.toThrift();
-        }
         container.addToNodes(msg);
         for (Expr child : children) {
             child.treeToThriftHelper(container, visitor);
@@ -1199,6 +1201,11 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     @Override
+    public NodePosition getPos() {
+        return pos;
+    }
+
+    @Override
     public void write(DataOutput out) throws IOException {
         throw new IOException("Not implemented serializable ");
     }
@@ -1338,29 +1345,32 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     // only the first/last one can be lambda functions.
     public boolean hasLambdaFunction(Expr expression) {
-        int pos = -1, num = 0;
+        int idx = -1;
+        int num = 0;
         for (int i = 0; i < children.size(); ++i) {
             if (children.get(i) instanceof LambdaFunctionExpr) {
                 num++;
-                pos = i;
+                idx = i;
             }
         }
-        if (num == 1 && (pos == 0 || pos == children.size() - 1)) {
+        if (num == 1 && (idx == 0 || idx == children.size() - 1)) {
             if (children.size() <= 1) {
-                throw new SemanticException("Lambda functions should work with inputs in high-order functions.");
+                throw new SemanticException("Lambda functions need array inputs in high-order functions.");
             }
             return true;
         } else if (num > 1) {
-            throw new SemanticException("A high-order function can have one lambda function.");
-        } else if (pos > 0 && pos < children.size() - 1) {
+            throw new SemanticException("A high-order function should have only 1 lambda function, " +
+                    "but there are " + num + " lambda functions.");
+        } else if (idx > 0 && idx < children.size() - 1) {
             throw new SemanticException(
-                    "Lambda functions can only be the first or last argument of any high-order function, " +
-                            "or lambda arguments should be in ().");
+                    "Lambda functions should only be the first or last argument of any high-order function, " +
+                            "or lambda arguments should be in () if there are more than one lambda arguments, " +
+                            "like (x,y)->x+y.");
         } else if (num == 0) {
             if (expression instanceof FunctionCallExpr) {
                 String funcName = ((FunctionCallExpr) expression).getFnName().getFunction();
                 if (funcName.equals(FunctionSet.ARRAY_MAP) || funcName.equals(FunctionSet.TRANSFORM)) {
-                    throw new SemanticException(funcName + " should not without lambda function input.");
+                    throw new SemanticException("There are no lambda functions in high-order function " + funcName);
                 }
             }
         }

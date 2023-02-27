@@ -326,6 +326,11 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
 
     // Parse the raw-text data. Translate the text string to internal format.
     switch (slot_desc->type().type) {
+    case TYPE_JSON: {
+        ASSIGN_OR_RETURN(auto value, JsonValue::parse(Slice(data, len)));
+        reinterpret_cast<JsonColumn*>(data_column)->append(std::move(value));
+        break;
+    }
     case TYPE_VARCHAR:
     case TYPE_CHAR: {
         Slice value(data, len);
@@ -485,9 +490,9 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
     return Status::OK();
 }
 
-template <LogicalType PT, typename CppType>
+template <LogicalType LT, typename CppType>
 void MySQLDataSource::append_value_to_column(Column* column, CppType& value) {
-    using ColumnType = typename starrocks::RunTimeColumnType<PT>;
+    using ColumnType = typename starrocks::RunTimeColumnType<LT>;
 
     auto* runtime_column = down_cast<ColumnType*>(column);
     runtime_column->append(value);

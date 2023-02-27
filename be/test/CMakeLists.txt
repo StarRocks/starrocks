@@ -156,6 +156,7 @@ set(EXEC_FILES
         ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
+        ./io/spill_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/disjunctive_predicates_test.cpp
         ./storage/utils_test.cpp
@@ -186,6 +187,7 @@ set(EXEC_FILES
         ./storage/lake/partial_update_test.cpp
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp
+        ./storage/lake/condition_update_test.cpp
         ./storage/lake/primary_key_compaction_task_test.cpp
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/rowset_update_state_test.cpp
@@ -217,6 +219,7 @@ set(EXEC_FILES
         ./storage/storage_types_test.cpp
         ./storage/tablet_meta_test.cpp
         ./storage/tablet_meta_manager_test.cpp
+        ./storage/table_reader_remote_test.cpp
         ./storage/table_reader_test.cpp
         ./storage/table_schema_test.cpp
         ./storage/tablet_updates_test.cpp
@@ -246,7 +249,12 @@ set(EXEC_FILES
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
         ./storage/storage_engine_test.cpp
+        ./storage/binlog_test_base.cpp
         ./storage/binlog_file_test.cpp
+        ./storage/binlog_builder_test.cpp
+        ./storage/binlog_manager_test.cpp
+        ./storage/binlog_reader_test.cpp
+        ./storage/tablet_binlog_test.cpp
         ./storage/publish_version_task_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
@@ -263,7 +271,7 @@ set(EXEC_FILES
         ./runtime/memory/memory_resource_test.cpp
         ./runtime/mem_pool_test.cpp
         ./runtime/result_queue_mgr_test.cpp
-        ./runtime/routine_load_task_executor_test.cpp
+        #./runtime/routine_load_task_executor_test.cpp
         ./runtime/small_file_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp

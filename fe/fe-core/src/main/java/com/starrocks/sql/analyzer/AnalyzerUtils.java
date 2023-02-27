@@ -26,8 +26,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
+import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
@@ -45,12 +47,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
@@ -72,6 +72,7 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.LocalDateTime;
@@ -134,74 +135,53 @@ public class AnalyzerUtils {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
     }
 
-    private static Function getDBUdfFunction(ConnectContext session, FunctionName fnName,
+    private static Function getDBUdfFunction(ConnectContext context, FunctionName fnName,
                                              Type[] argTypes) {
         String dbName = fnName.getDb();
         if (StringUtils.isEmpty(dbName)) {
-            dbName = session.getDatabase();
+            dbName = context.getDatabase();
         }
 
-        Database db = session.getGlobalStateMgr().getDb(dbName);
+        Database db = context.getGlobalStateMgr().getDb(dbName);
         if (db == null) {
             return null;
         }
 
-        Function search = new Function(fnName, argTypes, Type.INVALID, false);
-        Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-
-        if (fn == null) {
-            return null;
-        }
-
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            // check SELECT action on any object(table/view/mv) in db
-            if (!PrivilegeManager.checkActionInDb(session, dbName, "SELECT")) {
+        try {
+            db.readLock();
+            Function search = new Function(fnName, argTypes, Type.INVALID, false);
+            Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null && !PrivilegeActions.checkFunctionAction(context, fn.dbName(),
+                    fn.signatureString(), PrivilegeType.USAGE)) {
                 throw new StarRocksPlannerException(String.format("Access denied. " +
-                                "Found UDF: %s and need the SELECT action on any object(table/view/mv) in db %s",
-                        fnName, dbName), ErrorType.USER_ERROR);
-            }
-        } else {
-            if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
-                throw new StarRocksPlannerException(String.format("Access denied. " +
-                        "Found UDF: %s and need the SELECT priv for %s", fnName, dbName),
+                        "Found UDF: %s and need the USAGE privilege for FUNCTION", fn.getFunctionName()),
                         ErrorType.USER_ERROR);
             }
 
+            return fn;
+        } finally {
+            db.readUnlock();
         }
-        return fn;
     }
 
-    private static Function getGlobalUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
+    private static Function getGlobalUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes) {
         Function search = new Function(fnName, argTypes, Type.INVALID, false);
-        Function fn = session.getGlobalStateMgr().getGlobalFunctionMgr()
+        Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-
-        if (fn == null) {
-            return null;
+        if (fn != null && !PrivilegeActions.checkGlobalFunctionAction(context,
+                fn.signatureString(), PrivilegeType.USAGE)) {
+            throw new StarRocksPlannerException(String.format("Access denied. " +
+                    "Found UDF: %s and need the USAGE privilege for GLOBAL FUNCTION", fn.getFunctionName()),
+                    ErrorType.USER_ERROR);
         }
 
-        String name = fn.signatureString();
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            if (!PrivilegeManager.checkGlobalFunctionAction(session, name,
-                    PrivilegeType.USAGE)) {
-                throw new StarRocksPlannerException(String.format("Access denied. " +
-                                "Found UDF: %s and need the USAGE priv for GLOBAL FUNCTION",
-                        name), ErrorType.USER_ERROR);
-            }
-        } else {
-            if (!session.getGlobalStateMgr().getAuth().checkGlobalPriv(session, PrivPredicate.USAGE)) {
-                throw new StarRocksPlannerException(String.format("Access denied. " +
-                        "Found UDF: %s and need the USAGE priv for GLOBAL", name),
-                        ErrorType.USER_ERROR);
-            }
-        }
         return fn;
     }
 
-    public static Function getUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
-        Function fn = getDBUdfFunction(session, fnName, argTypes);
+    public static Function getUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes) {
+        Function fn = getDBUdfFunction(context, fnName, argTypes);
         if (fn == null) {
-            fn = getGlobalUdfFunction(session, fnName, argTypes);
+            fn = getGlobalUdfFunction(context, fnName, argTypes);
         }
         if (fn != null) {
             if (!Config.enable_udf) {
@@ -212,10 +192,10 @@ public class AnalyzerUtils {
         return fn;
     }
 
-    //Get all the db used, the query needs to add locks to them
-    public static Map<String, Database> collectAllDatabase(ConnectContext session, StatementBase statementBase) {
+    // Get all the db used, the query needs to add locks to them
+    public static Map<String, Database> collectAllDatabase(ConnectContext context, StatementBase statementBase) {
         Map<String, Database> dbs = Maps.newHashMap();
-        new AnalyzerUtils.DBCollector(dbs, session).visit(statementBase);
+        new AnalyzerUtils.DBCollector(dbs, context).visit(statementBase);
         return dbs;
     }
 
@@ -423,6 +403,12 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
+    public static boolean isOnlyHasOlapTables(StatementBase statementBase) {
+        Map<TableName, Table> nonOlapTables = Maps.newHashMap();
+        new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase);
+        return nonOlapTables.isEmpty();
+    }
+
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
@@ -443,6 +429,44 @@ public class AnalyzerUtils {
         public Void visitView(ViewRelation node, Void context) {
             Table table = node.getView();
             tables.put(node.getResolveTableName(), table);
+            return null;
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (node.hasWithClause()) {
+                node.getCteRelations().forEach(this::visit);
+            }
+            if (node.getPredicate() != null && CollectionUtils.isNotEmpty(node.getPredicate().getChildren())) {
+                node.getPredicate().getChildren().forEach(this::visit);
+            }
+            return visit(node.getRelation());
+        }
+
+        @Override
+        public Void visitInPredicate(InPredicate node, Void context) {
+            if (CollectionUtils.isNotEmpty(node.getChildren())) {
+                node.getChildren().forEach(this::visit);
+            }
+            return null;
+        }
+
+        public Void visitSubquery(Subquery node, Void context) {
+            return visit(node.getQueryStatement());
+        }
+    }
+
+    private static class NonOlapTableCollector extends TableCollector {
+        public NonOlapTableCollector(Map<TableName, Table> tables) {
+            super(tables);
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            Table table = node.getTable();
+            if (!table.isOlapTable()) {
+                tables.put(node.getResolveTableName(), table);
+            }
             return null;
         }
     }
@@ -600,41 +624,53 @@ public class AnalyzerUtils {
         } else if (expr instanceof IntLiteral) {
             IntLiteral intLiteral = (IntLiteral) expr;
             return String.valueOf(intLiteral.getLongValue() + offset);
+        } else if (expr instanceof MaxLiteral) {
+            return MaxLiteral.MAX_VALUE.toString();
         } else {
             return null;
         }
     }
 
     public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(
-            List<String> partitionValues, String granularity, OlapTable olapTable) throws AnalysisException {
+            OlapTable olapTable, List<String> partitionValues, long interval, String granularity) throws AnalysisException {
         Map<String, AddPartitionClause> result = Maps.newHashMap();
+        String partitionPrefix = "p";
         for (String partitionValue : partitionValues) {
             DateTimeFormatter beginDateTimeFormat;
             LocalDateTime beginTime;
             LocalDateTime endTime;
-
+            String partitionName;
             try {
                 beginDateTimeFormat = DateUtils.probeFormat(partitionValue);
                 beginTime = DateUtils.parseStringWithDefaultHSM(partitionValue, beginDateTimeFormat);
+                // The start date here is passed by BE through function calculation,
+                // so it must be the start date of a certain partition.
                 switch (granularity.toLowerCase()) {
-                    case "day":
-                        endTime = beginTime.plusDays(1);
-                        break;
                     case "hour":
-                        endTime = beginTime.plusHours(1);
+                        beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.HOUR_FORMATTER);
+                        endTime = beginTime.plusHours(interval);
+                        break;
+                    case "day":
+                        beginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.DATEKEY_FORMATTER);
+                        endTime = beginTime.plusDays(interval);
                         break;
                     case "month":
-                        endTime = beginTime.plusMonths(1);
+                        beginTime = beginTime.withDayOfMonth(1);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.MONTH_FORMATTER);
+                        endTime = beginTime.plusMonths(interval);
                         break;
                     case "year":
-                        endTime = beginTime.plusYears(1);
+                        beginTime = beginTime.withDayOfYear(1);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.YEAR_FORMATTER);
+                        endTime = beginTime.plusYears(interval);
                         break;
                     default:
-                        throw new AnalysisException("unsupported partition granularity:" + granularity);
+                        throw new AnalysisException("unsupported automatic partition granularity:" + granularity);
                 }
                 String lowerBound = beginTime.format(DateUtils.DATEKEY_FORMATTER);
                 String upperBound = endTime.format(DateUtils.DATEKEY_FORMATTER);
-                String partitionName = "p" + lowerBound;
                 PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
                         Collections.singletonList(new PartitionValue(lowerBound)),
                         Collections.singletonList(new PartitionValue(upperBound)));

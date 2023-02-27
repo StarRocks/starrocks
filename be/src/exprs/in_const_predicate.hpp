@@ -31,17 +31,17 @@ class ExprContext;
 
 namespace in_const_pred_detail {
 template <LogicalType Type, typename Enable = void>
-struct PHashSet {
-    using PType = HashSet<RunTimeCppType<Type>>;
+struct LHashSet {
+    using LType = HashSet<RunTimeCppType<Type>>;
 };
 
 template <LogicalType Type>
-struct PHashSet<Type, std::enable_if_t<isSlicePT<Type>>> {
-    using PType = SliceHashSet;
+struct LHashSet<Type, std::enable_if_t<isSliceLT<Type>>> {
+    using LType = SliceHashSet;
 };
 
 template <LogicalType Type>
-using PHashSetType = typename PHashSet<Type>::PType;
+using LHashSetType = typename LHashSet<Type>::LType;
 
 } // namespace in_const_pred_detail
 
@@ -127,7 +127,7 @@ public:
         RETURN_IF_ERROR(Expr::open(state, context, scope));
 
         if (Type != _children[0]->type().type) {
-            if (!isSlicePT<Type> || !_children[0]->type().is_string_type()) {
+            if (!isSliceLT<Type> || !_children[0]->type().is_string_type()) {
                 return Status::InternalError("VectorizedInPredicate type is error");
             }
         }
@@ -154,7 +154,7 @@ public:
             }
 
             // insert into set
-            if constexpr (isSlicePT<Type>) {
+            if constexpr (isSliceLT<Type>) {
                 if (_hash_set.emplace(viewer.value(0)).second) {
                     _string_values.emplace_back(value);
                 }
@@ -348,7 +348,7 @@ public:
         }
     }
 
-    const in_const_pred_detail::PHashSetType<Type>& hash_set() const { return _hash_set; }
+    const in_const_pred_detail::LHashSetType<Type>& hash_set() const { return _hash_set; }
 
     bool is_not_in() const { return _is_not_in; }
 
@@ -391,7 +391,7 @@ private:
     int _array_size = 0;
     std::vector<uint8_t> _array_buffer;
 
-    in_const_pred_detail::PHashSetType<Type> _hash_set;
+    in_const_pred_detail::LHashSetType<Type> _hash_set;
     // Ensure the string memory don't early free
     std::vector<ColumnPtr> _string_values;
 };

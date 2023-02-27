@@ -41,6 +41,7 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -50,7 +51,12 @@ import java.nio.charset.StandardCharsets;
 
 public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr> {
     public LiteralExpr() {
+        super();
         numDistinctValues = 1;
+    }
+
+    protected LiteralExpr(NodePosition pos) {
+        super(pos);
     }
 
     protected LiteralExpr(LiteralExpr other) {

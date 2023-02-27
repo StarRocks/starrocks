@@ -34,8 +34,8 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.io.Text;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

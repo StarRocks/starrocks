@@ -53,11 +53,18 @@ public:
     CurrentThread() { tls_is_thread_status_init = true; }
     ~CurrentThread();
 
-    void commit() {
+    void commit(bool is_ctx_shift) {
         MemTracker* cur_tracker = mem_tracker();
-        if (_cache_size != 0 && cur_tracker != nullptr) {
+        if (cur_tracker != nullptr) {
             cur_tracker->consume(_cache_size);
             _cache_size = 0;
+            if (is_ctx_shift) {
+                // Flush all cached info
+                cur_tracker->update_allocation(_allocated_cache_size);
+                cur_tracker->update_deallocation(_deallocated_cache_size);
+                _allocated_cache_size = 0;
+                _deallocated_cache_size = 0;
+            }
         }
     }
 
@@ -73,7 +80,7 @@ public:
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
-        commit();
+        commit(true);
         auto* prev = tls_mem_tracker;
         tls_mem_tracker = mem_tracker;
         return prev;
@@ -102,18 +109,18 @@ public:
     bool is_catched() const { return _is_catched; }
 
     void mem_consume(int64_t size) {
-        MemTracker* cur_tracker = mem_tracker();
         _cache_size += size;
+        _allocated_cache_size += size;
         _total_consumed_bytes += size;
-        if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
-            cur_tracker->consume(_cache_size);
-            _cache_size = 0;
+        if (_cache_size >= BATCH_SIZE) {
+            commit(false);
         }
     }
 
     bool try_mem_consume(int64_t size) {
         MemTracker* cur_tracker = mem_tracker();
         _cache_size += size;
+        _allocated_cache_size += size;
         _total_consumed_bytes += size;
         if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
             MemTracker* limit_tracker = cur_tracker->try_consume(_cache_size);
@@ -122,6 +129,7 @@ public:
                 return true;
             } else {
                 _cache_size -= size;
+                _allocated_cache_size -= size;
                 _try_consume_mem_size = size;
                 tls_exceed_mem_tracker = limit_tracker;
                 return false;
@@ -151,11 +159,10 @@ public:
     }
 
     void mem_release(int64_t size) {
-        MemTracker* cur_tracker = mem_tracker();
         _cache_size -= size;
-        if (cur_tracker != nullptr && _cache_size <= -BATCH_SIZE) {
-            cur_tracker->release(-_cache_size);
-            _cache_size = 0;
+        _deallocated_cache_size += size;
+        if (_cache_size <= -BATCH_SIZE) {
+            commit(false);
         }
     }
 
@@ -177,8 +184,12 @@ public:
 
 private:
     const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
-
-    int64_t _cache_size = 0;           // Allocated but not committed memory bytes
+    // Allocated or delocated but not committed memory bytes, can be negative
+    int64_t _cache_size = 0;
+    // Allocated but not committed memory bytes, always positive
+    int64_t _allocated_cache_size = 0;
+    // Deallocated but not committed memory bytes, always positive
+    int64_t _deallocated_cache_size = 0;
     int64_t _total_consumed_bytes = 0; // Totally consumed memory bytes
     int64_t _try_consume_mem_size = 0; // Last time tried to consumed bytes
     // Store in TLS for diagnose coredump easier
@@ -194,10 +205,18 @@ inline thread_local CurrentThread tls_thread_status;
 class CurrentThreadMemTrackerSetter {
 public:
     explicit CurrentThreadMemTrackerSetter(MemTracker* new_mem_tracker) {
-        _old_mem_tracker = tls_thread_status.set_mem_tracker(new_mem_tracker);
+        _old_mem_tracker = tls_thread_status.mem_tracker();
+        _is_same = (_old_mem_tracker == new_mem_tracker);
+        if (!_is_same) {
+            tls_thread_status.set_mem_tracker(new_mem_tracker);
+        }
     }
 
-    ~CurrentThreadMemTrackerSetter() { (void)tls_thread_status.set_mem_tracker(_old_mem_tracker); }
+    ~CurrentThreadMemTrackerSetter() {
+        if (!_is_same) {
+            (void)tls_thread_status.set_mem_tracker(_old_mem_tracker);
+        }
+    }
 
     CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = delete;
     void operator=(const CurrentThreadMemTrackerSetter&) = delete;
@@ -206,6 +225,7 @@ public:
 
 private:
     MemTracker* _old_mem_tracker;
+    bool _is_same;
 };
 
 class CurrentThreadCheckMemLimitSetter {

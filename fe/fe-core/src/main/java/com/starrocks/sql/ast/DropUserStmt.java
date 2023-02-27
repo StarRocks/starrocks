@@ -12,24 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 
 public class DropUserStmt extends DdlStmt {
     private final UserIdentity userIdent;
+    private final boolean ifExists;
 
-    public DropUserStmt(UserIdentity userIdent) {
+    public DropUserStmt(UserIdentity userIdent, boolean ifExists) {
+        this(userIdent, ifExists, NodePosition.ZERO);
+    }
+
+    public DropUserStmt(UserIdentity userIdent, boolean ifExists, NodePosition pos) {
+        super(pos);
         this.userIdent = userIdent;
+        this.ifExists = ifExists;
     }
 
     public UserIdentity getUserIdentity() {
         return userIdent;
     }
 
-    public UserIdentity getUserIdent() {
-        return userIdent;
+    public boolean isIfExists() {
+        return ifExists;
     }
 
     @Override

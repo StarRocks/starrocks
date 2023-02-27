@@ -75,6 +75,8 @@ public:
 
     Status finish_batch() override { return Status::OK(); }
 
+    void set_need_parse_levels(bool need_parse_levels) override{};
+
     void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
 
 private:
@@ -318,7 +320,7 @@ static GroupReaderParam::Column _create_group_reader_param_of_column(int idx, tp
     c.col_idx_in_parquet = idx;
     c.col_idx_in_chunk = idx;
     c.col_type_in_parquet = par_type;
-    c.col_type_in_chunk = TypeDescriptor::from_primtive_type(prim_type);
+    c.col_type_in_chunk = TypeDescriptor::from_logical_type(prim_type);
     c.slot_id = idx;
     return c;
 }

@@ -15,13 +15,16 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.PrivBitSet;
-import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -30,8 +33,8 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected GrantRevokePrivilegeObjects objects;
 
     protected String role;
-    protected String privType;
-    protected List<String> privList;
+    protected String objectTypeUnResolved;
+    protected List<String> privilegeTypeUnResolved;
 
     // the following fields is set by analyzer for old privilege framework and will be removed after 2.5 released
     private PrivBitSet privBitSet = null;
@@ -40,16 +43,25 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     // the following fields is set by analyzer, for new RBAC privilege framework
     private ObjectType objectType;
-    private ActionSet actionList;
+    private List<PrivilegeType> privilegeTypes;
     private List<PEntryObject> objectList;
 
     public BaseGrantRevokePrivilegeStmt(
-            List<String> privList,
-            String privType,
+            List<String> privilegeTypeUnResolved,
+            String objectTypeUnResolved,
             GrantRevokeClause clause,
             GrantRevokePrivilegeObjects objects) {
-        this.privList = privList;
-        this.privType = privType;
+        this(privilegeTypeUnResolved, objectTypeUnResolved, clause, objects, NodePosition.ZERO);
+    }
+
+    public BaseGrantRevokePrivilegeStmt(
+            List<String> privilegeTypeUnResolved,
+            String objectTypeUnResolved,
+            GrantRevokeClause clause,
+            GrantRevokePrivilegeObjects objects, NodePosition pos) {
+        super(pos);
+        this.privilegeTypeUnResolved = privilegeTypeUnResolved;
+        this.objectTypeUnResolved = objectTypeUnResolved;
         this.clause = clause;
         this.objects = objects;
         this.role = clause.getRoleName();
@@ -80,23 +92,8 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return objects.getUserPrivilegeObjectList();
     }
 
-    public FunctionArgsDef getFunctionArgsDef() {
-        return objects.getFunctionArgsDef();
-    }
-
-    public String getFunctionName() {
-        return objects.getFunctionName();
-    }
-    public List<String> getAllTypeList() {
-        return objects.getAllTypeList();
-    }
-
-    public String getRestrictType() {
-        return objects.getRestrictType();
-    }
-
-    public String getRestrictName() {
-        return objects.getRestrictName();
+    public List<Pair<FunctionName, FunctionArgsDef>> getFunctions() {
+        return objects.getFunctions();
     }
 
     public void setPrivBitSet(PrivBitSet privBitSet) {
@@ -107,10 +104,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         this.role = role;
     }
 
-    public void setPrivType(String privType) {
-        this.privType = privType;
-    }
-
     public String getRole() {
         return role;
     }
@@ -119,12 +112,12 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return clause.getUserIdentity();
     }
 
-    public String getPrivType() {
-        return privType;
+    public String getObjectTypeUnResolved() {
+        return objectTypeUnResolved;
     }
 
-    public List<String> getPrivList() {
-        return privList;
+    public List<String> getPrivilegeTypeUnResolved() {
+        return privilegeTypeUnResolved;
     }
 
     public TablePattern getTblPattern() {
@@ -139,14 +132,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return privBitSet;
     }
 
-    public boolean isWithGrantOption() {
-        return clause.isWithGrantOption();
-    }
-
-    public short getTypeId() {
-        return (short) objectType.getId();
-    }
-
     public ObjectType getObjectType() {
         return objectType;
     }
@@ -155,12 +140,12 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         this.objectType = objectType;
     }
 
-    public ActionSet getActionList() {
-        return actionList;
+    public List<PrivilegeType> getPrivilegeTypes() {
+        return privilegeTypes;
     }
 
-    public void setActionList(ActionSet actionList) {
-        this.actionList = actionList;
+    public void setPrivilegeTypes(List<PrivilegeType> privilegeTypes) {
+        this.privilegeTypes = privilegeTypes;
     }
 
     public List<PEntryObject> getObjectList() {
@@ -173,6 +158,16 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     public boolean hasPrivilegeObject() {
         return this.objects != null;
+    }
+
+    public List<String> getTokens() {
+        if (!objects.isAllDB() && objects.getDbName() == null) {
+            return Lists.newArrayList("*");
+        } else if (objects.getDbName() != null) {
+            return Lists.newArrayList(objects.getDbName(), "*");
+        } else {
+            return Lists.newArrayList("*", "*");
+        }
     }
 
     @Override

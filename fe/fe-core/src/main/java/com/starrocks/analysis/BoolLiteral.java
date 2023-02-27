@@ -37,6 +37,7 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TBoolLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -54,11 +55,21 @@ public class BoolLiteral extends LiteralExpr {
     }
 
     public BoolLiteral(boolean value) {
+        this(value, NodePosition.ZERO);
+    }
+
+    public BoolLiteral(boolean value, NodePosition pos) {
+        super(pos);
         this.value = value;
         type = Type.BOOLEAN;
     }
 
     public BoolLiteral(String value) throws AnalysisException {
+        this(value, NodePosition.ZERO);
+    }
+
+    public BoolLiteral(String value, NodePosition pos) throws AnalysisException {
+        super(pos);
         this.type = Type.BOOLEAN;
         if (value.trim().equalsIgnoreCase("true") || value.trim().equals("1")) {
             this.value = true;

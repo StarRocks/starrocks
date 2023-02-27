@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 /**
  * 1.Support for modifying the way of refresh and the cycle of asynchronous refresh;
@@ -33,6 +34,14 @@ public class AlterMaterializedViewStmt extends DdlStmt {
     public AlterMaterializedViewStmt(TableName mvName, String newMvName,
                                      RefreshSchemeDesc refreshSchemeDesc,
                                      ModifyTablePropertiesClause modifyTablePropertiesClause) {
+        this(mvName, newMvName, refreshSchemeDesc, modifyTablePropertiesClause, NodePosition.ZERO);
+    }
+
+    public AlterMaterializedViewStmt(TableName mvName, String newMvName,
+                                     RefreshSchemeDesc refreshSchemeDesc,
+                                     ModifyTablePropertiesClause modifyTablePropertiesClause,
+                                     NodePosition pos) {
+        super(pos);
         this.mvName = mvName;
         this.newMvName = newMvName;
         this.refreshSchemeDesc = refreshSchemeDesc;

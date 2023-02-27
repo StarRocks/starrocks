@@ -50,7 +50,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetType;
-import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.SystemVariable;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -257,7 +257,7 @@ public class VariableMgr {
     }
 
     // Check if this setVar can be set correctly
-    private static void checkUpdate(SetVar setVar, int flag) throws DdlException {
+    private static void checkUpdate(SystemVariable setVar, int flag) throws DdlException {
         if ((flag & READ_ONLY) != 0) {
             ErrorReport.reportDdlException(ErrorCode.ERR_VARIABLE_IS_READONLY, setVar.getVariable());
         }
@@ -273,7 +273,7 @@ public class VariableMgr {
     // Input:
     //      sessionVariable: the variable of current session
     //      setVar: variable information that needs to be set
-    public static void setVar(SessionVariable sessionVariable, SetVar setVar, boolean onlySetSessionVar)
+    public static void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar)
             throws DdlException {
         if (SessionVariable.DEPRECATED_VARIABLES.stream().anyMatch(c -> c.equalsIgnoreCase(setVar.getVariable()))) {
             return;
@@ -495,6 +495,19 @@ public class VariableMgr {
             LOG.warn("Access failed.", e);
         }
         return "";
+    }
+
+    public static String getDefaultValue(String variable) {
+        VarContext ctx = getVarContext(variable);
+        if (ctx == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, variable);
+        }
+
+        String value = ctx.getDefaultValue();
+        if (value == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DEFAULT, variable);
+        }
+        return value;
     }
 
     // Dump all fields. Used for `show variables`, but note `sessionVar` would be null.

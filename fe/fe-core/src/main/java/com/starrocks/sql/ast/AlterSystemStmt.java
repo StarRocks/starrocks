@@ -15,10 +15,17 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class AlterSystemStmt extends DdlStmt {
     private final AlterClause alterClause;
 
     public AlterSystemStmt(AlterClause alterClause) {
+        this(alterClause, NodePosition.ZERO);
+    }
+
+    public AlterSystemStmt(AlterClause alterClause, NodePosition pos) {
+        super(pos);
         this.alterClause = alterClause;
     }
 

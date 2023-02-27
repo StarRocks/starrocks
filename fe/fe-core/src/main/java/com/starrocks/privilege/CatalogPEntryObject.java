@@ -20,9 +20,12 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaNotFoundException;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Currently there is only one internal catalog, i.e. `default_catalog`,
@@ -32,7 +35,7 @@ import java.util.Objects;
  * don't support create database under external catalog for now.
  */
 public class CatalogPEntryObject implements PEntryObject {
-    public static final long ALL_CATALOG_ID = -1; // -1 represent all
+    public static final long ALL_CATALOGS_ID = -1; // -1 represent all
     @SerializedName(value = "i")
     private long id;
 
@@ -45,6 +48,10 @@ public class CatalogPEntryObject implements PEntryObject {
             throw new PrivilegeException("invalid object tokens, should have only one, token: " + tokens);
         }
         String name = tokens.get(0);
+        if (name.equals("*")) {
+            return new CatalogPEntryObject(ALL_CATALOGS_ID);
+        }
+
         long id;
         if (CatalogMgr.isInternalCatalog(name)) {
             id = InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
@@ -56,14 +63,6 @@ public class CatalogPEntryObject implements PEntryObject {
             id = catalog.getId();
         }
         return new CatalogPEntryObject(id);
-    }
-
-    public static CatalogPEntryObject generate(
-            List<String> allTypes, String restrictType, String restrictName) throws PrivilegeException {
-        if (allTypes.size() != 1 || restrictType != null || restrictName != null) {
-            throw new PrivilegeException("invalid ALL statement for catalogs! only support ON ALL CATALOGS");
-        }
-        return new CatalogPEntryObject(ALL_CATALOG_ID);
     }
 
     protected CatalogPEntryObject(long id) {
@@ -83,7 +82,7 @@ public class CatalogPEntryObject implements PEntryObject {
             return false;
         }
         CatalogPEntryObject other = (CatalogPEntryObject) obj;
-        if (other.id == ALL_CATALOG_ID) {
+        if (other.id == ALL_CATALOGS_ID) {
             return true;
         }
         return other.id == id;
@@ -91,7 +90,7 @@ public class CatalogPEntryObject implements PEntryObject {
 
     @Override
     public boolean isFuzzyMatching() {
-        return ALL_CATALOG_ID == id;
+        return ALL_CATALOGS_ID == id;
     }
 
     @Override
@@ -132,5 +131,27 @@ public class CatalogPEntryObject implements PEntryObject {
     @Override
     public int hashCode() {
         return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        if (id == ALL_CATALOGS_ID) {
+            return "ALL CATALOGS";
+        } else {
+            if (id == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
+                return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+            }
+
+            List<Catalog> catalogs =
+                    new ArrayList<>(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().values());
+            Optional<Catalog> catalogOptional = catalogs.stream().filter(
+                    catalog -> catalog.getId() == id
+            ).findFirst();
+            if (!catalogOptional.isPresent()) {
+                throw new MetaNotFoundException("Can't find catalog : " + id);
+            }
+            Catalog catalog = catalogOptional.get();
+            return catalog.getName();
+        }
     }
 }

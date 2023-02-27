@@ -370,16 +370,16 @@ public:
 
     virtual std::string debug_string() const { return {}; }
 
-    // memory usage includes container memory usage and element memory usage.
+    // memory usage includes container memory usage and reference memory usage.
     // 1. container memory usage: container capacity * type size.
-    // 2. element memory usage: element data size that is not in the container,
+    // 2. reference memory usage: element data size that is not in the container,
     //    such as memory referenced by pointer.
     //   2.1 object column: element serialize data size.
     //   2.2 other columns: 0.
-    virtual size_t memory_usage() const { return container_memory_usage() + element_memory_usage(); }
+    virtual size_t memory_usage() const { return container_memory_usage() + reference_memory_usage(); }
     virtual size_t container_memory_usage() const = 0;
-    virtual size_t element_memory_usage() const { return element_memory_usage(0, size()); }
-    virtual size_t element_memory_usage(size_t from, size_t size) const = 0;
+    virtual size_t reference_memory_usage() const { return reference_memory_usage(0, size()); }
+    virtual size_t reference_memory_usage(size_t from, size_t size) const = 0;
 
     virtual void swap_column(Column& rhs) = 0;
 
@@ -399,6 +399,8 @@ public:
     // But if complex types contains ConstColumns internally, current unpack functions can not handle it.
     // So to get a right answer, we need to make sure that there are no const columns in Complex Columns(Struct/Map)
     virtual Status unfold_const_children(const TypeDescriptor& type) { return Status::OK(); }
+    // current only used by adaptive_nullable_column
+    virtual void materialized_nullable() const {}
 
 protected:
     static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col);

@@ -2,7 +2,7 @@
 
 ## Description
 
-Searches for an event chain in a sliding window and calculates the maximum number of consecutive events in the event chain. This function is commonly used for conversion rate analysis.
+Searches for an event chain in a sliding window and calculates the maximum number of consecutive events in the event chain. This function is commonly used for analyzing conversion rate. It is supported from v2.3.
 
 This function works according to the following rules:
 
@@ -272,3 +272,7 @@ order by uid;
 ```
 
 `1` is returned for `uid = 2` because mode `4` (strictly increasing) is used. "Click" happens at the same second as "BROWSE". Therefore, "Click" and "Order" are not counted.
+
+## Keywords
+
+window funnel, funnel, window_funnel

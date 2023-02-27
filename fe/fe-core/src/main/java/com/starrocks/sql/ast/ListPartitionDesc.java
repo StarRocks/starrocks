@@ -26,6 +26,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -48,6 +49,12 @@ public class ListPartitionDesc extends PartitionDesc {
 
     public ListPartitionDesc(List<String> partitionColNames,
                              List<PartitionDesc> partitionDescs) {
+        this(partitionColNames, partitionDescs, NodePosition.ZERO);
+    }
+
+    public ListPartitionDesc(List<String> partitionColNames,
+                             List<PartitionDesc> partitionDescs, NodePosition pos) {
+        super(pos);
         super.type = PartitionType.LIST;
         this.partitionColNames = partitionColNames;
         this.singleListPartitionDescs = Lists.newArrayList();
@@ -99,7 +106,8 @@ public class ListPartitionDesc extends PartitionDesc {
             boolean found = false;
             for (ColumnDef columnDef : columnDefs) {
                 if (columnDef.getName().equals(partitionCol)) {
-                    if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()) {
+                    if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()
+                            || columnDef.getType().isDecimalOfAnyVersion()) {
                         throw new AnalysisException(String.format("Invalid partition column '%s': %s",
                                 columnDef.getName(), "invalid data type " + columnDef.getType()));
                     }

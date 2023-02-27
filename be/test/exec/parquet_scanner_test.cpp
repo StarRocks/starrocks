@@ -169,25 +169,27 @@ class ParquetScannerTest : public ::testing::Test {
             ASSERT_TRUE(chunk->num_rows() > 0);
             num_rows += chunk->num_rows();
             check_func(chunk);
-            break;
         }
         scanner->close();
     }
 
     SlotTypeDescInfoArray select_columns(const std::vector<std::string>& column_names, bool is_nullable) {
         auto slot_map = std::unordered_map<std::string, TypeDescriptor>{
-                {"col_date", TypeDescriptor::from_primtive_type(TYPE_DATE)},
-                {"col_datetime", TypeDescriptor::from_primtive_type(TYPE_DATETIME)},
-                {"col_char", TypeDescriptor::from_primtive_type(TYPE_CHAR)},
-                {"col_varchar", TypeDescriptor::from_primtive_type(TYPE_VARCHAR)},
-                {"col_boolean", TypeDescriptor::from_primtive_type(TYPE_BOOLEAN)},
-                {"col_tinyint", TypeDescriptor::from_primtive_type(TYPE_TINYINT)},
-                {"col_smallint", TypeDescriptor::from_primtive_type(TYPE_SMALLINT)},
-                {"col_int", TypeDescriptor::from_primtive_type(TYPE_INT)},
-                {"col_bigint", TypeDescriptor::from_primtive_type(TYPE_BIGINT)},
-                {"col_decimal_p6s2", TypeDescriptor::from_primtive_type(TYPE_DECIMAL32, -1, 6, 2)},
-                {"col_decimal_p14s5", TypeDescriptor::from_primtive_type(TYPE_DECIMAL64, -1, 14, 5)},
-                {"col_decimal_p27s9", TypeDescriptor::from_primtive_type(TYPE_DECIMALV2, -1, 27, 9)},
+                {"col_date", TypeDescriptor::from_logical_type(TYPE_DATE)},
+                {"col_datetime", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
+                {"col_char", TypeDescriptor::from_logical_type(TYPE_CHAR)},
+                {"col_varchar", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
+                {"col_boolean", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
+                {"col_tinyint", TypeDescriptor::from_logical_type(TYPE_TINYINT)},
+                {"col_smallint", TypeDescriptor::from_logical_type(TYPE_SMALLINT)},
+                {"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
+                {"col_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+                {"col_decimal_p6s2", TypeDescriptor::from_logical_type(TYPE_DECIMAL32, -1, 6, 2)},
+                {"col_decimal_p14s5", TypeDescriptor::from_logical_type(TYPE_DECIMAL64, -1, 14, 5)},
+                {"col_decimal_p27s9", TypeDescriptor::from_logical_type(TYPE_DECIMALV2, -1, 27, 9)},
+
+                {"col_int_null", TypeDescriptor::from_logical_type(TYPE_INT)},
+                {"col_string_null", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
 
                 {"col_json_int8", TypeDescriptor::create_json_type()},
                 {"col_json_int16", TypeDescriptor::create_json_type()},
@@ -215,9 +217,11 @@ class ParquetScannerTest : public ::testing::Test {
                 {"col_json_struct_struct", TypeDescriptor::create_json_type()},
 
                 // Convert struct->JSON->string
-                {"col_json_struct_string", TypeDescriptor::from_primtive_type(TYPE_VARCHAR)},
+                {"col_json_struct_string", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
                 {"col_json_json_string", TypeDescriptor::create_json_type()},
-        };
+                {"issue_17693_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
+                {"issue_17822_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
+                {"nested_array_c0", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR)))}};
         SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
@@ -245,7 +249,7 @@ class ParquetScannerTest : public ::testing::Test {
 
         auto src_slot_infos = select_columns(columns_from_file, is_nullable);
         for (const auto& i : columns_from_path) {
-            src_slot_infos.template emplace_back(i, TypeDescriptor::from_primtive_type(TYPE_VARCHAR), is_nullable);
+            src_slot_infos.template emplace_back(i, TypeDescriptor::from_logical_type(TYPE_VARCHAR), is_nullable);
         }
 
         auto dst_slot_infos = select_columns(column_names, is_nullable);
@@ -292,7 +296,7 @@ class ParquetScannerTest : public ::testing::Test {
             }
             result = chunk;
         };
-        validate(scanner, 36865, check);
+        validate(scanner, 3, check);
 
         return result;
     }
@@ -326,6 +330,14 @@ class ParquetScannerTest : public ::testing::Test {
                                        772472, /*"/test_data/parquet_data/data_8192.parquet",*/
                                        775318 /*"/test_data/parquet_data/data_8193.parquet"*/};
         _runtime_state = _obj_pool.add(new RuntimeState(TQueryGlobals()));
+        _issue_16475_file_names =
+                std::vector<std::string>{test_exec_dir + "/test_data/parquet_data/issue_17693_1.parquet",
+                                         test_exec_dir + "/test_data/parquet_data/issue_17693_2.parquet"};
+        _issue_17822_file_names =
+                std::vector<std::string>{test_exec_dir + "/test_data/parquet_data/issue_17822.parquet"};
+        _nested_array_file_names = 
+                std::vector<std::string>{test_exec_dir + "/test_data/parquet_data/nested_array_test1.parquet",
+                                        test_exec_dir + "/test_data/parquet_data/nested_array_test2.parquet"};
     }
 
 private:
@@ -335,6 +347,9 @@ private:
     std::vector<std::string> _file_names;
     std::vector<std::string> _nullable_file_names;
     std::vector<int> _file_sizes;
+    std::vector<std::string> _issue_16475_file_names;
+    std::vector<std::string> _issue_17822_file_names;
+    std::vector<std::string> _nested_array_file_names;
 };
 
 TEST_F(ParquetScannerTest, test_nullable_parquet_data) {
@@ -353,6 +368,57 @@ TEST_F(ParquetScannerTest, test_nullable_parquet_data) {
         }
     };
     validate(scanner, 36865, check);
+}
+
+TEST_F(ParquetScannerTest, test_issue_17693) {
+    auto column_names = std::vector<std::string>{
+            "issue_17693_c0",
+    };
+    auto slot_infos = select_columns(column_names, true);
+    auto ranges = generate_ranges(_issue_16475_file_names, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    auto check = [](const ChunkPtr& chunk) {
+        auto& columns = chunk->columns();
+        for (auto& col : columns) {
+            ASSERT_TRUE(!col->only_null() && col->is_nullable());
+        }
+    };
+    validate(scanner, 2000, check);
+}
+
+TEST_F(ParquetScannerTest, test_issue_17822) {
+    auto column_names = std::vector<std::string>{
+            "issue_17822_c0",
+    };
+    auto slot_infos = select_columns(column_names, true);
+    auto ranges = generate_ranges(_issue_17822_file_names, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    auto check = [](const ChunkPtr& chunk) {
+        auto& columns = chunk->columns();
+        for (auto& col : columns) {
+            ASSERT_TRUE(!col->only_null() && col->is_nullable());
+        }
+    };
+    validate(scanner, 506, check);
+}
+
+TEST_F(ParquetScannerTest, test_nested_array) {
+    auto column_names = std::vector<std::string>{
+            "nested_array_c0",
+    };
+    auto slot_infos = select_columns(column_names, true);
+    auto ranges = generate_ranges(_nested_array_file_names, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    auto check = [](const ChunkPtr& chunk) {
+        auto& columns = chunk->columns();
+        for (auto& col : columns) {
+            ASSERT_TRUE(!col->only_null() && col->is_nullable());
+        }
+    };
+    validate(scanner, 1003, check);
 }
 
 TEST_F(ParquetScannerTest, test_parquet_data) {
@@ -377,8 +443,8 @@ TEST_F(ParquetScannerTest, test_parquet_data_with_1_column_from_path) {
     std::vector<std::string> columns_from_file = {
             "col_datetime", "col_char",   "col_varchar",      "col_boolean",       "col_tinyint",      "col_smallint",
             "col_int",      "col_bigint", "col_decimal_p6s2", "col_decimal_p14s5", "col_decimal_p27s9"};
-    auto varchar_type = TypeDescriptor::from_primtive_type(TYPE_VARCHAR);
-    auto date_type = TypeDescriptor::from_primtive_type(TYPE_DATE);
+    auto varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    auto date_type = TypeDescriptor::from_logical_type(TYPE_DATE);
     std::vector<std::string> columns_from_path = {"col_date"};
     std::vector<std::string> column_values = {"2021-03-22"};
     auto column_ref_expr = create_column_ref(11, varchar_type, true);
@@ -396,9 +462,9 @@ TEST_F(ParquetScannerTest, test_parquet_data_with_2_column_from_path) {
     std::vector<std::string> columns_from_path = {"col_date", "col_datetime"};
     std::vector<std::string> column_values = {"2021-02-22", "2020-12-20 22:56:04"};
 
-    auto varchar_type = TypeDescriptor::from_primtive_type(TYPE_VARCHAR);
-    auto date_type = TypeDescriptor::from_primtive_type(TYPE_DATE);
-    auto datetime_type = TypeDescriptor::from_primtive_type(TYPE_DATETIME);
+    auto varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    auto date_type = TypeDescriptor::from_logical_type(TYPE_DATE);
+    auto datetime_type = TypeDescriptor::from_logical_type(TYPE_DATETIME);
 
     auto column_ref_expr10 = create_column_ref(10, varchar_type, true);
     auto column_ref_expr11 = create_column_ref(11, varchar_type, true);
@@ -421,9 +487,9 @@ TEST_F(ParquetScannerTest, test_parquet_data_with_3_column_from_path) {
                                                   "col_decimal_p6s2", "col_decimal_p14s5", "col_decimal_p27s9"};
     std::vector<std::string> columns_from_path = {"col_date", "col_datetime", "col_char"};
 
-    auto varchar_type = TypeDescriptor::from_primtive_type(TYPE_VARCHAR);
-    auto date_type = TypeDescriptor::from_primtive_type(TYPE_DATE);
-    auto datetime_type = TypeDescriptor::from_primtive_type(TYPE_DATETIME);
+    auto varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    auto date_type = TypeDescriptor::from_logical_type(TYPE_DATE);
+    auto datetime_type = TypeDescriptor::from_logical_type(TYPE_DATETIME);
 
     auto column_ref_expr9 = create_column_ref(9, varchar_type, true);
     auto column_ref_expr10 = create_column_ref(10, varchar_type, true);
@@ -537,6 +603,19 @@ TEST_F(ParquetScannerTest, test_selected_parquet_data) {
         }
     };
     validate(scanner, 36865, check);
+}
+
+TEST_F(ParquetScannerTest, test_arrow_null) {
+    std::vector<std::string> column_names{"col_int_null", "col_string_null"};
+    std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/data_null.parquet";
+    std::vector<std::string> file_names{parquet_file_name};
+
+    auto slot_infos = select_columns(column_names, true);
+    auto ranges = generate_ranges(file_names, column_names.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, slot_infos});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    auto check = [](const ChunkPtr& chunk) {};
+    validate(scanner, 3, check);
 }
 
 } // namespace starrocks

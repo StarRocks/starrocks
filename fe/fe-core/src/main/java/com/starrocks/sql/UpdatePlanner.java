@@ -55,10 +55,13 @@ public class UpdatePlanner {
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(updateStmt.getTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+        boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
         try {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
+            // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
+            session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
             Optimizer optimizer = new Optimizer();
             OptExpression optimizedPlan = optimizer.optimize(
@@ -95,7 +98,7 @@ public class UpdatePlanner {
                 partitionIds.add(partition.getId());
             }
             DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
-                    table.enableReplicatedStorage());
+                    table.enableReplicatedStorage(), updateStmt.nullExprInAutoIncrement());
             execPlan.getFragments().get(0).setSink(dataSink);
             execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             if (canUsePipeline) {
@@ -109,11 +112,13 @@ public class UpdatePlanner {
                 sinkFragment.setHasOlapTableSink();
                 sinkFragment.setForceSetTableSinkDop();
                 sinkFragment.setForceAssignScanRangesPerDriverSeq();
+                sinkFragment.disableRuntimeAdaptiveDop();
             } else {
                 execPlan.getFragments().get(0).setPipelineDop(1);
             }
             return execPlan;
         } finally {
+            session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(true);
             }

@@ -95,7 +95,7 @@ private:
 
     Status append_text_to_column(const char* data, const int& len, const SlotDescriptor* slot_desc, Column* column);
 
-    template <LogicalType PT, typename CppType = RunTimeCppType<PT>>
+    template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
     void append_value_to_column(Column* column, CppType& value);
 };
 

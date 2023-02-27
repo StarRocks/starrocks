@@ -32,10 +32,10 @@ public class BackendTest {
     public void cpuCoreUpdate() {
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 8);
         Assert.assertEquals(8, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
-        Assert.assertEquals(4, BackendCoreStat.getDefaultDOP());
+        Assert.assertEquals(8, BackendCoreStat.getDefaultDOP());
 
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 16);
         Assert.assertEquals(16, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
-        Assert.assertEquals(8, BackendCoreStat.getDefaultDOP());
+        Assert.assertEquals(16, BackendCoreStat.getDefaultDOP());
     }
 }

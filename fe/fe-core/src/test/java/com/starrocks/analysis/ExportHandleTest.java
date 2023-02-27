@@ -20,6 +20,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CancelExportStmt;
+import com.starrocks.sql.parser.NodePosition;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -49,7 +50,8 @@ public class ExportHandleTest {
         };
 
         try {
-            DDLStmtExecutor.execute(new CancelExportStmt("repo", null), new ConnectContext());
+            DDLStmtExecutor.execute(new CancelExportStmt("repo", null, NodePosition.ZERO),
+                    new ConnectContext());
         } catch (Exception ex) {
             Assert.fail();
         }

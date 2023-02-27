@@ -169,6 +169,7 @@ protected:
 
     int _num_segment{0};
     int _num_delfile{0};
+    vector<uint32> _delfile_idxes;
     vector<std::string> _tmp_segment_files;
     // mutex lock for vectorized add chunk and flush
     std::mutex _lock;
@@ -220,7 +221,9 @@ private:
 
     Status _flush_chunk(const Chunk& chunk, SegmentPB* seg_info = nullptr);
 
-    std::string _dump_mixed_segment_delfile_not_supported();
+    std::string _flush_state_to_string();
+
+    std::string _error_msg();
 
     std::unique_ptr<SegmentWriter> _segment_writer;
     std::unique_ptr<VerticalRowsetWriter> _vertical_rowset_writer;

@@ -139,14 +139,20 @@ public class PruneGroupByKeysRule extends TransformationRule {
         }
 
         if (newGroupingKeys.isEmpty() && aggregations.isEmpty()) {
-            // for queries with all constant in project and group by keys,
-            // like `select 'a','b' from table group by 'c','d'`,
-            // we can remove agg node and rewrite it to `select 'a','b' from table limit 1`
-            OptExpression result = OptExpression.create(
-                    new LogicalLimitOperator(1, 0, LogicalLimitOperator.Phase.GLOBAL),
-                    OptExpression.create(
-                            projectOperator, input.getInputs().get(0).getInputs()));
-            return Lists.newArrayList(result);
+            // If agg's predicate is not null, cannot prune it.
+            // eg: select 1 from t group by null having 1=0, it returns empty rather than input + limit 1.
+            if (aggOperator.getPredicate() != null) {
+                return Lists.newArrayList();
+            } else {
+                // for queries with all constant in project and group by keys,
+                // like `select 'a','b' from table group by 'c','d'`,
+                // we can remove agg node and rewrite it to `select 'a','b' from table limit 1`
+                OptExpression result = OptExpression.create(
+                        new LogicalLimitOperator(1, 0, LogicalLimitOperator.Phase.GLOBAL),
+                        OptExpression.create(
+                                projectOperator, input.getInputs().get(0).getInputs()));
+                return Lists.newArrayList(result);
+            }
         }
         // update projection by aggregation
         for (Map.Entry<ColumnRefOperator, CallOperator> aggregation : aggregations.entrySet()) {
@@ -175,8 +181,8 @@ public class PruneGroupByKeysRule extends TransformationRule {
         LogicalProjectOperator newProjectOperator = new LogicalProjectOperator(newProjections);
 
         OptExpression result = OptExpression.create(newPostAggProjectOperator,
-                    OptExpression.create(newAggOperator,
-                            OptExpression.create(newProjectOperator, input.getInputs().get(0).getInputs())));
+                OptExpression.create(newAggOperator,
+                        OptExpression.create(newProjectOperator, input.getInputs().get(0).getInputs())));
 
         return Lists.newArrayList(result);
     }

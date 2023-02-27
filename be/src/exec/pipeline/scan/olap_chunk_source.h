@@ -64,7 +64,7 @@ private:
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, Chunk* chunk);
     void _update_counter();
     void _update_realtime_counter(Chunk* chunk);
-    void _decide_chunk_size();
+    void _decide_chunk_size(bool has_predicate);
 
 private:
     TabletReaderParams _params{};

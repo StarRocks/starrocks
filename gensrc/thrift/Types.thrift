@@ -198,6 +198,7 @@ enum TTaskType {
     INSTALL_PLUGIN,
     UNINSTALL_PLUGIN,
     // this use for calculate enum count
+    DROP_AUTO_INCREMENT_MAP,
     NUM_TASK_TYPE
 }
 
@@ -452,6 +453,10 @@ struct TUserIdentity {
     1: optional string username
     2: optional string host
     3: optional bool is_domain
+}
+
+struct TUserRoles {
+    1: optional list<i64> role_id_list
 }
 
 const i32 TSNAPSHOT_REQ_VERSION1 = 3; // corresponding to alpha rowset

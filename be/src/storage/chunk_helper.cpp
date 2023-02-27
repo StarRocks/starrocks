@@ -217,23 +217,23 @@ template <bool force>
 struct ColumnPtrBuilder {
     template <LogicalType ftype>
     ColumnPtr operator()(size_t chunk_size, const Field& field, int precision, int scale) {
-        auto nullable = [&](ColumnPtr c) -> ColumnPtr {
+        auto NullableIfNeed = [&](ColumnPtr c) -> ColumnPtr {
             return field.is_nullable()
                            ? NullableColumn::create(std::move(c), get_column_ptr<NullColumn, force>(chunk_size))
                            : c;
         };
 
         if constexpr (ftype == TYPE_ARRAY) {
-            auto elements = field.sub_field(0).create_column();
+            auto elements = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
             auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
             auto array = ArrayColumn::create(std::move(elements), offsets);
-            return nullable(array);
+            return NullableIfNeed(array);
         } else if constexpr (ftype == TYPE_MAP) {
-            auto keys = field.sub_field(0).create_column();
-            auto values = field.sub_field(1).create_column();
+            auto keys = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
+            auto values = NullableColumn::wrap_if_necessary(field.sub_field(1).create_column());
             auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
             auto map = MapColumn::create(std::move(keys), std::move(values), offsets);
-            return nullable(map);
+            return NullableIfNeed(map);
         } else if constexpr (ftype == TYPE_STRUCT) {
             std::vector<std::string> names;
             std::vector<ColumnPtr> fields;
@@ -242,17 +242,17 @@ struct ColumnPtrBuilder {
                 fields.template emplace_back(sub_field.create_column());
             }
             auto struct_column = StructColumn::create(std::move(fields), std::move(names));
-            return nullable(struct_column);
+            return NullableIfNeed(struct_column);
         } else {
             switch (ftype) {
             case TYPE_DECIMAL32:
-                return nullable(get_decimal_column_ptr<Decimal32Column, force>(precision, scale, chunk_size));
+                return NullableIfNeed(get_decimal_column_ptr<Decimal32Column, force>(precision, scale, chunk_size));
             case TYPE_DECIMAL64:
-                return nullable(get_decimal_column_ptr<Decimal64Column, force>(precision, scale, chunk_size));
+                return NullableIfNeed(get_decimal_column_ptr<Decimal64Column, force>(precision, scale, chunk_size));
             case TYPE_DECIMAL128:
-                return nullable(get_decimal_column_ptr<Decimal128Column, force>(precision, scale, chunk_size));
+                return NullableIfNeed(get_decimal_column_ptr<Decimal128Column, force>(precision, scale, chunk_size));
             default: {
-                return nullable(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size));
+                return NullableIfNeed(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size));
             }
             }
         }

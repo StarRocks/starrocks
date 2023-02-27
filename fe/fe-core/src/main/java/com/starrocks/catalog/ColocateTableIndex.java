@@ -42,7 +42,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -52,6 +51,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -65,7 +65,6 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -316,8 +315,7 @@ public class ColocateTableIndex implements Writable {
         readLock();
         try {
             if (lakeGroups.contains(groupId)) {
-                // TODO: for now just consider lake table always stable
-                return false;
+                return !GlobalStateMgr.getCurrentStarOSAgent().queryMetaGroupStable(groupId.grpId);
             } else {
                 return unstableGroups.contains(groupId);
             }
@@ -635,7 +633,7 @@ public class ColocateTableIndex implements Writable {
                 List<String> cols = groupSchema.getDistributionColTypes().stream().map(
                         e -> e.toSql()).collect(Collectors.toList());
                 info.add(Joiner.on(", ").join(cols));
-                info.add(String.valueOf(!unstableGroups.contains(groupId)));
+                info.add(String.valueOf(!isGroupUnstable(groupId)));
                 infos.add(info);
             }
         } finally {
@@ -861,7 +859,7 @@ public class ColocateTableIndex implements Writable {
                 // user set a new colocate group,
                 // check if all partitions all this table has same buckets num and same replication number
                 PartitionInfo partitionInfo = table.getPartitionInfo();
-                if (partitionInfo.getType() == PartitionType.RANGE) {
+                if (partitionInfo.isRangePartition()) {
                     int bucketsNum = -1;
                     short replicationNum = -1;
                     for (Partition partition : table.getPartitions()) {
@@ -1012,7 +1010,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     private void constructLakeGroups(GlobalStateMgr globalStateMgr) {
-        if (!Config.use_staros) {
+        if (!RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             return;
         }
 

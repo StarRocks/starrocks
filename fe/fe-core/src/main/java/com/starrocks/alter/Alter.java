@@ -44,6 +44,7 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
@@ -542,13 +543,25 @@ public class Alter {
                 Preconditions.checkState(alterClauses.size() == 1);
                 AlterClause alterClause = alterClauses.get(0);
                 if (alterClause instanceof DropPartitionClause) {
-                    if (!((DropPartitionClause) alterClause).isTempPartition()) {
+                    DropPartitionClause dropPartitionClause = (DropPartitionClause) alterClause;
+                    if (!dropPartitionClause.isTempPartition()) {
                         DynamicPartitionUtil.checkAlterAllowed((OlapTable) db.getTable(tableName));
                     }
-                    GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, ((DropPartitionClause) alterClause));
+                    if (dropPartitionClause.getPartitionName()
+                            .startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                        throw new DdlException("Deletion of shadow partitions is not allowed");
+                    }
+                    GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, dropPartitionClause);
                 } else if (alterClause instanceof ReplacePartitionClause) {
+                    ReplacePartitionClause replacePartitionClause = (ReplacePartitionClause) alterClause;
+                    List<String> partitionNames = replacePartitionClause.getPartitionNames();
+                    for (String partitionName : partitionNames) {
+                        if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                            throw new DdlException("Replace shadow partitions is not allowed");
+                        }
+                    }
                     GlobalStateMgr.getCurrentState()
-                            .replaceTempPartition(db, tableName, (ReplacePartitionClause) alterClause);
+                            .replaceTempPartition(db, tableName, replacePartitionClause);
                 } else if (alterClause instanceof ModifyPartitionClause) {
                     ModifyPartitionClause clause = ((ModifyPartitionClause) alterClause);
                     // expand the partition names if it is 'Modify Partition(*)'
@@ -569,7 +582,7 @@ public class Alter {
                 } else if (alterClause instanceof AddPartitionClause) {
                     needProcessOutsideDatabaseLock = true;
                 } else {
-                    throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
+                    throw new DdlException("Invalid alter operation: " + alterClause.getOpType());
                 }
             } else if (currentAlterOps.hasTruncatePartitionOp()) {
                 needProcessOutsideDatabaseLock = true;
@@ -596,7 +609,7 @@ public class Alter {
                 }
                 GlobalStateMgr.getCurrentState().addPartitions(db, tableName, (AddPartitionClause) alterClause);
             } else if (alterClause instanceof TruncatePartitionClause) {
-                // This logic is use to adapt mysql syntax.
+                // This logic is used to adapt mysql syntax.
                 // ALTER TABLE test TRUNCATE PARTITION p1;
                 TruncatePartitionClause clause = (TruncatePartitionClause) alterClause;
                 TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());
@@ -630,7 +643,9 @@ public class Alter {
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE));
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
 
                 OlapTable olapTable = (OlapTable) db.getTable(tableName);
                 if (olapTable.isLakeTable()) {
@@ -657,8 +672,11 @@ public class Alter {
                     if (!isSuccess) {
                         throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
                     }
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+                    ((SchemaChangeHandler) schemaChangeHandler).updateTableConstraint(db, olapTable.getName(), properties);
                 } else {
-                    throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
+                    throw new DdlException("Invalid alter operation: " + alterClause.getOpType());
                 }
             }
         }
@@ -826,7 +844,12 @@ public class Alter {
                 GlobalStateMgr.getCurrentState().renameRollup(db, table, (RollupRenameClause) alterClause);
                 break;
             } else if (alterClause instanceof PartitionRenameClause) {
-                GlobalStateMgr.getCurrentState().renamePartition(db, table, (PartitionRenameClause) alterClause);
+                PartitionRenameClause partitionRenameClause = (PartitionRenameClause) alterClause;
+                if (partitionRenameClause.getPartitionName()
+                        .startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                    throw new DdlException("Rename of shadow partitions is not allowed");
+                }
+                GlobalStateMgr.getCurrentState().renamePartition(db, table, partitionRenameClause);
                 break;
             } else if (alterClause instanceof ColumnRenameClause) {
                 GlobalStateMgr.getCurrentState().renameColumn(db, table, (ColumnRenameClause) alterClause);

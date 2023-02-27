@@ -43,7 +43,8 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeNameFormat;
+import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.Set;
@@ -56,7 +57,7 @@ import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 // Example:
 //      id bigint key NOT NULL DEFAULT "-1" "user id"
 //      pv bigint sum NULL DEFAULT "-1" "page visit"
-public class ColumnDef {
+public class ColumnDef implements ParseNode {
     /*
      * User can set default value for a column
      * eg:
@@ -119,20 +120,33 @@ public class ColumnDef {
     // Add a new variable name isAllowNullImplicit to indicate the message. If isAllowNullImplicit=true, it indicates the null constraint is obeyed implicitly.
     private boolean isAllowNullImplicit = false;
     private Boolean isAllowNull;
+    private Boolean isAutoIncrement;
     private DefaultValueDef defaultValueDef;
     private final String comment;
 
+    private final NodePosition pos;
+
     public ColumnDef(String name, TypeDef typeDef) {
-        this(name, typeDef, null, false, null, false, DefaultValueDef.NOT_SET, "");
+        this(name, typeDef, null, false, null, false, DefaultValueDef.NOT_SET,
+                null, "", NodePosition.ZERO);
     }
 
     public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
-        this(name, typeDef, null, isKey, aggregateType, isAllowNull, defaultValueDef, comment);
+        this(name, typeDef, null, isKey, aggregateType, isAllowNull, defaultValueDef,
+                null, comment, NodePosition.ZERO);
     }
 
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
-                     Boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
+                     Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement, String comment) {
+        this(name, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef, isAutoIncrement,
+                comment, NodePosition.ZERO);
+    }
+
+    public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
+                     Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement, String comment,
+                     NodePosition pos) {
+        this.pos = pos;
         this.name = name;
         this.typeDef = typeDef;
         if (charsetName == null) {
@@ -150,6 +164,11 @@ public class ColumnDef {
             this.isAllowNullImplicit = false;
         }
         this.defaultValueDef = defaultValueDef;
+        if (isAutoIncrement == null) {
+            this.isAutoIncrement = false;
+        } else {
+            this.isAutoIncrement = true;
+        }
         this.comment = comment;
     }
 
@@ -159,6 +178,10 @@ public class ColumnDef {
 
     public void setAllowNull(Boolean allowNull) {
         isAllowNull = allowNull;
+    }
+
+    public boolean isAutoIncrement() {
+        return isAutoIncrement;
     }
 
     // The columns will obey NULL constraint if not specified. The primary key column should abide by the NOT NULL constraint default to be compatible with ANSI.
@@ -403,6 +426,7 @@ public class ColumnDef {
         }
     }
 
+    @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("`").append(name).append("` ");
@@ -419,6 +443,10 @@ public class ColumnDef {
             sb.append("NULL ");
         }
 
+        if (isAutoIncrement) {
+            sb.append("AUTO_INCREMENT ");
+        }
+
         if (defaultValueDef.isSet) {
             sb.append("DEFAULT ").append(toDefaultExpr(defaultValueDef.expr)).append(" ");
         }
@@ -427,8 +455,15 @@ public class ColumnDef {
         return sb.toString();
     }
 
+    @Override
+    public NodePosition getPos() {
+        return pos;
+    }
+
     public Column toColumn() {
-        return new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValueDef, comment);
+        Column col = new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValueDef, comment);
+        col.setIsAutoIncrement(isAutoIncrement);
+        return col;
     }
 
     private String toDefaultExpr(Expr expr) {

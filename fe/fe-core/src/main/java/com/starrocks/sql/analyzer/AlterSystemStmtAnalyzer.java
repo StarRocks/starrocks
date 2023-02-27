@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackendClause;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.ComputeNodeClause;
+import com.starrocks.sql.ast.CreateImageClause;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.FrontendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
@@ -97,6 +98,11 @@ public class AlterSystemStmtAnalyzer {
             } catch (AnalysisException e) {
                 throw new SemanticException("frontend host or port is wrong!");
             }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateImageClause(CreateImageClause createImageClause, ConnectContext context) {
             return null;
         }
 

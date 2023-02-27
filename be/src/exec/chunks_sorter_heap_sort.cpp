@@ -177,7 +177,7 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPoo
     if (_runtime_filter.empty()) {
         auto rf = type_dispatch_predicate<JoinRuntimeFilter*>(
                 (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,
-                top_cursor_column, cursor_rid, _sort_desc.descs[0].asc_order());
+                top_cursor_column, cursor_rid, _sort_desc.descs[0].asc_order(), false);
         _runtime_filter.emplace_back(rf);
     } else {
         type_dispatch_predicate<std::nullptr_t>((*_sort_exprs)[0]->root()->type().type, false,
@@ -290,8 +290,8 @@ int ChunksSorterHeapSort::_filter_data(detail::ChunkHolder* chunk_holder, int ro
     return chunk_holder->value()->chunk->filter(filter);
 }
 
-void ChunksSorterHeapSort::setup_runtime(RuntimeProfile* profile) {
-    ChunksSorter::setup_runtime(profile);
+void ChunksSorterHeapSort::setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
+    ChunksSorter::setup_runtime(profile, parent_mem_tracker);
     _sort_filter_costs = ADD_TIMER(profile, "SortFilterCost");
     _sort_filter_rows = ADD_COUNTER(profile, "SortFilterRows", TUnit::UNIT);
 }

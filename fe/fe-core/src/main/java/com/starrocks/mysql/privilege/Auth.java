@@ -44,7 +44,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.InfoSchemaDb;
@@ -72,6 +71,7 @@ import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -617,22 +617,31 @@ public class Auth implements Writable {
     @Deprecated
     public void createUser(CreateUserStmt stmt) throws DdlException {
         AuthPlugin authPlugin = null;
-        if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
-            authPlugin = AuthPlugin.valueOf(stmt.getAuthPlugin());
+        if (!Strings.isNullOrEmpty(stmt.getAuthPluginName())) {
+            authPlugin = AuthPlugin.valueOf(stmt.getAuthPluginName());
         }
-        createUserInternal(stmt.getUserIdent(), stmt.getQualifiedRole(),
-                new Password(stmt.getPassword(), authPlugin, stmt.getUserForAuthPlugin()), false, stmt.isIfNotExist());
+
+        //The current version of the code, here has been completely abandoned, here is only for UT compatibility,
+        String role;
+        if (!stmt.getDefaultRoles().isEmpty()) {
+            role = stmt.getDefaultRoles().get(0);
+        } else {
+            role = null;
+        }
+
+        createUserInternal(stmt.getUserIdentity(), role,
+                new Password(stmt.getPassword(), authPlugin, stmt.getUserForAuthPlugin()), false, stmt.isIfNotExists());
     }
 
     // alter user
     @Deprecated
     public void alterUser(AlterUserStmt stmt) throws DdlException {
         AuthPlugin authPlugin = null;
-        if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
-            authPlugin = AuthPlugin.valueOf(stmt.getAuthPlugin());
+        if (!Strings.isNullOrEmpty(stmt.getAuthPluginName())) {
+            authPlugin = AuthPlugin.valueOf(stmt.getAuthPluginName());
         }
         // alter user only support change password till now
-        setPasswordInternal(stmt.getUserIdent(),
+        setPasswordInternal(stmt.getUserIdentity(),
                 new Password(stmt.getPassword(), authPlugin, stmt.getUserForAuthPlugin()), null, true, false, false);
     }
 
@@ -768,7 +777,7 @@ public class Auth implements Writable {
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            grantRoleInternal(stmt.getGranteeRole().get(0), stmt.getUserIdent(), true, false);
+            grantRoleInternal(stmt.getGranteeRole().get(0), stmt.getUserIdentity(), true, false);
         } finally {
             writeUnlock();
         }
@@ -826,7 +835,7 @@ public class Auth implements Writable {
     public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            revokeRoleInternal(stmt.getGranteeRole().get(0), stmt.getUserIdent(), false);
+            revokeRoleInternal(stmt.getGranteeRole().get(0), stmt.getUserIdentity(), false);
         } finally {
             writeUnlock();
         }
@@ -906,9 +915,9 @@ public class Auth implements Writable {
     @Deprecated
     public void grant(GrantPrivilegeStmt stmt) throws DdlException {
         PrivBitSet privs = stmt.getPrivBitSet();
-        if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
+        if (stmt.getObjectTypeUnResolved().equals("TABLE") || stmt.getObjectTypeUnResolved().equals("DATABASE")) {
             grantInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getTblPattern(), privs, true, false);
-        } else if (stmt.getPrivType().equals("RESOURCE")) {
+        } else if (stmt.getObjectTypeUnResolved().equals("RESOURCE")) {
             grantInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getResourcePattern(), privs, true, false);
         } else {
             if (stmt.getRole() == null) {
@@ -1158,10 +1167,10 @@ public class Auth implements Writable {
     @Deprecated
     public void revoke(RevokePrivilegeStmt stmt) throws DdlException {
         PrivBitSet privs = stmt.getPrivBitSet();
-        if (stmt.getPrivType().equals("TABLE")) {
+        if (stmt.getObjectTypeUnResolved().equals("TABLE")) {
             revokeInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getTblPattern(), privs,
                     true /* err on non exist */, false /* is replay */);
-        } else if (stmt.getPrivType().equals("RESOURCE")) {
+        } else if (stmt.getObjectTypeUnResolved().equals("RESOURCE")) {
             revokeInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getResourcePattern(), privs,
                     true /* err on non exist */, false /* is replay */);
         } else {
@@ -1439,7 +1448,7 @@ public class Auth implements Writable {
     // create role
     @Deprecated
     public void createRole(CreateRoleStmt stmt) throws DdlException {
-        createRoleInternal(stmt.getQualifiedRole(), false);
+        createRoleInternal(stmt.getRoles().get(0), false);
     }
 
     @Deprecated
@@ -1470,7 +1479,7 @@ public class Auth implements Writable {
     // drop role
     @Deprecated
     public void dropRole(DropRoleStmt stmt) throws DdlException {
-        dropRoleInternal(stmt.getQualifiedRole(), false);
+        dropRoleInternal(stmt.getRoles().get(0), false);
     }
 
     @Deprecated
@@ -1835,7 +1844,6 @@ public class Auth implements Writable {
     private void initUser() {
         try {
             UserIdentity rootUser = new UserIdentity(ROOT_USER, "%");
-            rootUser.setIsAnalyzed();
             createUserInternal(rootUser, Role.OPERATOR_ROLE, new Password(new byte[0]), true /* isReplay */, false);
         } catch (DdlException e) {
             LOG.error("should not happen", e);

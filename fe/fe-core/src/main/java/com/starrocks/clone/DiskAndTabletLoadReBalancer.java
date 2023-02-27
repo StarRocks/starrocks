@@ -1414,6 +1414,12 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
+                    // Table not in NORMAL state is not allowed to do balance,
+                    // because the change of tablet location can cause Schema change or rollup failed
+                    if (olapTbl.getState() != OlapTable.OlapTableState.NORMAL) {
+                        continue;
+                    }
+
                     for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
                         partitionChecked++;
                         if (partitionChecked % partitionBatchNum == 0) {

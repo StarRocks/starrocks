@@ -34,8 +34,8 @@
 
 package com.starrocks.http.rest;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseAction;
@@ -44,6 +44,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.UnauthorizedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -93,6 +94,7 @@ public class RestBaseAction extends BaseAction {
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setRemoteIP(authInfo.remoteIp);
         ctx.setCurrentUserIdentity(currentUser);
+        ctx.setCurrentRoleIds(currentUser);
         ctx.setThreadLocalInfo();
         executeWithoutPassword(request, response);
     }
@@ -154,8 +156,9 @@ public class RestBaseAction extends BaseAction {
         if (globalStateMgr.isLeader()) {
             return false;
         }
+        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getLeaderIpAndHttpPort();
         redirectTo(request, response,
-                new TNetworkAddress(globalStateMgr.getLeaderIp(), globalStateMgr.getLeaderHttpPort()));
+                new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
         return true;
     }
 }

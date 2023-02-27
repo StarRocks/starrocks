@@ -65,6 +65,8 @@ public:
     // These local exchange sink operators and the source operator share a passthrough exchanger.
     OpFactories maybe_gather_pipelines_to_one(RuntimeState* state, std::vector<OpFactories>& pred_operators_list);
 
+    OpFactories maybe_interpolate_collect_stats(RuntimeState* state, OpFactories& pred_operators);
+
     uint32_t next_pipe_id() { return _next_pipeline_id++; }
 
     uint32_t next_operator_id() { return _next_operator_id++; }
@@ -75,7 +77,11 @@ public:
 
     bool is_stream_pipeline() const { return _is_stream_pipeline; }
 
-    Pipelines get_pipelines() const { return _pipelines; }
+    const Pipelines& get_pipelines() const { return _pipelines; }
+    const Pipeline* last_pipeline() const {
+        DCHECK(!_pipelines.empty());
+        return _pipelines[_pipelines.size() - 1].get();
+    }
 
     RuntimeState* runtime_state() { return _fragment_context->runtime_state(); }
     FragmentContext* fragment_context() { return _fragment_context; }
@@ -101,6 +107,12 @@ public:
     void inherit_upstream_source_properties(SourceOperatorFactory* downstream_source,
                                             SourceOperatorFactory* upstream_source);
 
+    void push_dependent_pipeline(const Pipeline* pipeline);
+    void pop_dependent_pipeline();
+
+    bool force_disable_adaptive_dop() const { return _force_disable_adaptive_dop; }
+    void set_force_disable_adaptive_dop(bool val) { _force_disable_adaptive_dop = val; }
+
 private:
     OpFactories _do_maybe_interpolate_local_shuffle_exchange(
             RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs,
@@ -111,12 +123,17 @@ private:
     FragmentContext* _fragment_context;
     Pipelines _pipelines;
 
+    std::list<const Pipeline*> _dependent_pipelines;
+
     uint32_t _next_pipeline_id = 0;
     uint32_t _next_operator_id = 0;
     int32_t _next_pseudo_plan_node_id = Operator::s_pseudo_plan_node_id_upper_bound;
 
     const size_t _degree_of_parallelism;
+
     const bool _is_stream_pipeline;
+
+    bool _force_disable_adaptive_dop = false;
 };
 
 class PipelineBuilder {

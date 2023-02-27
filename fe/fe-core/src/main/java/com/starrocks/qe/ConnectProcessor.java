@@ -35,7 +35,6 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -58,12 +57,14 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.MysqlServerStatusFlag;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -80,6 +81,7 @@ import java.nio.channels.AsynchronousCloseException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -219,6 +221,10 @@ public class ConnectProcessor {
     }
 
     public String computeStatementDigest(StatementBase queryStmt) {
+        if (queryStmt == null) {
+            return "";
+        }
+
         String digest = SqlDigestBuilder.build(queryStmt);
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
@@ -262,7 +268,13 @@ public class ConnectProcessor {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
-        String sql = parsedStmt.getOrigStmt().originStmt;
+        String sql;
+        if (!ctx.getState().isQuery() && parsedStmt.needAuditEncryption()) {
+            sql = AstToStringBuilder.toString(parsedStmt);
+        } else {
+            sql = parsedStmt.getOrigStmt().originStmt;
+        }
+
         boolean isQuery = parsedStmt instanceof QueryStatement;
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(ctx.getQueryId()),
@@ -355,14 +367,14 @@ public class ConnectProcessor {
             LOG.warn("Process one query failed because IOException: ", e);
             ctx.getState().setError("StarRocks process failed");
         } catch (UserException e) {
-            LOG.warn("Process one query failed because.", e);
+            LOG.warn("Process one query failed. SQL: " + originStmt + ", because.", e);
             ctx.getState().setError(e.getMessage());
             // set is as ANALYSIS_ERR so that it won't be treated as a query failure.
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
-            LOG.warn("Process one query failed because unknown reason: ", e);
+            LOG.warn("Process one query failed. SQL: " + originStmt + ", because unknown reason: ", e);
             ctx.getState().setError("Unexpected exception: " + e.getMessage());
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
@@ -586,6 +598,12 @@ public class ConnectProcessor {
             UserIdentity currentUserIdentity = UserIdentity.fromThrift(request.getCurrent_user_ident());
             ctx.setCurrentUserIdentity(currentUserIdentity);
         }
+
+        if (request.isSetUser_roles()) {
+            List<Long> roleIds = request.getUser_roles().getRole_id_list();
+            ctx.setCurrentRoleIds(new HashSet<>(roleIds));
+        }
+
         if (request.isSetIsLastStmt()) {
             ctx.setIsLastStmt(request.isIsLastStmt());
         } else {
@@ -700,7 +718,7 @@ public class ConnectProcessor {
         try {
             packetBuf = channel.fetchOnePacket();
             if (packetBuf == null) {
-                throw new IOException("Error happened when receiving packet.");
+                throw new RpcException(ctx.getRemoteIP(), "Error happened when receiving packet.");
             }
         } catch (AsynchronousCloseException e) {
             // when this happened, timeout checker close this channel
@@ -720,6 +738,10 @@ public class ConnectProcessor {
         while (!ctx.isKilled()) {
             try {
                 processOnce();
+            } catch (RpcException rpce) {
+                LOG.debug("Exception happened in one session(" + ctx + ").", rpce);
+                ctx.setKilled();
+                break;
             } catch (Exception e) {
                 // TODO(zhaochun): something wrong
                 LOG.warn("Exception happened in one seesion(" + ctx + ").", e);
