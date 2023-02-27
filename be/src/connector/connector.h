@@ -40,6 +40,7 @@ public:
     virtual Status open(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
     virtual Status get_next(RuntimeState* state, ChunkPtr* chunk) { return Status::OK(); }
+    virtual bool skip_predicate() const { return false; }
 
     // how many rows read from storage
     virtual int64_t raw_rows_read() const = 0;
