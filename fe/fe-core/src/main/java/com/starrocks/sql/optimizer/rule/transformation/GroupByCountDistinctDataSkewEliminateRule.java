@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -134,7 +135,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         List<ColumnRefOperator> secondGroupBy = Lists.newArrayList(groupBy);
         secondGroupBy.add(bucketColRef);
         Map<ColumnRefOperator, CallOperator> secondStageAggregations = Maps.newHashMap();
-        CallOperator multiDistinctCountAgg = CallOperator.buildMultiCountDistinct(aggCall);
+        CallOperator multiDistinctCountAgg = ScalarOperatorUtil.buildMultiCountDistinct(aggCall);
         secondStageAggregations.put(aggColRef, multiDistinctCountAgg);
 
         LogicalAggregationOperator secondAggOp =
@@ -144,7 +145,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
 
         // third-stage/fourth Agg: select groupByColumn, sum(countPerBucket) from t group by groupByColumn
         Map<ColumnRefOperator, CallOperator> thirdAggregations = Maps.newHashMap();
-        CallOperator sum = CallOperator.buildSum(aggColRef);
+        CallOperator sum = ScalarOperatorUtil.buildSum(aggColRef);
         thirdAggregations.put(aggColRef, sum);
         LogicalAggregationOperator thirdAggOp =
                 new LogicalAggregationOperator(AggType.LOCAL, Lists.newArrayList(groupBy), thirdAggregations);
