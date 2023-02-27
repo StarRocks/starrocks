@@ -14,11 +14,17 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.List;
 
 public class IntersectRelation extends SetOperationRelation {
     public IntersectRelation(List<QueryRelation> relations, SetQualifier qualifier) {
         super(relations, qualifier);
+    }
+
+    public IntersectRelation(List<QueryRelation> relations, SetQualifier qualifier, NodePosition pos) {
+        super(relations, qualifier, pos);
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

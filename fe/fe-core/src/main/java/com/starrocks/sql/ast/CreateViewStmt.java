@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -26,7 +27,12 @@ public class CreateViewStmt extends BaseViewStmt {
 
     public CreateViewStmt(boolean ifNotExists, TableName tableName, List<ColWithComment> cols,
                           String comment, QueryStatement queryStmt) {
-        super(tableName, cols, queryStmt);
+        this(ifNotExists, tableName, cols, comment, queryStmt, NodePosition.ZERO);
+    }
+
+    public CreateViewStmt(boolean ifNotExists, TableName tableName, List<ColWithComment> cols,
+                          String comment, QueryStatement queryStmt, NodePosition pos) {
+        super(tableName, cols, queryStmt, pos);
         this.ifNotExists = ifNotExists;
         this.comment = Strings.nullToEmpty(comment);
     }

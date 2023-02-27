@@ -34,8 +34,10 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Objects;
 
@@ -47,11 +49,17 @@ public class VariableExpr extends Expr {
     private Object value;
     private boolean isNull;
 
+    @VisibleForTesting
     public VariableExpr(String name) {
         this(name, SetType.SESSION);
     }
 
     public VariableExpr(String name, SetType setType) {
+        this(name, setType, NodePosition.ZERO);
+    }
+
+    public VariableExpr(String name, SetType setType, NodePosition pos) {
+        super(pos);
         this.name = name;
         this.setType = setType;
     }

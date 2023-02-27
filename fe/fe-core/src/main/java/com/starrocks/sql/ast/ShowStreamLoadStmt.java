@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LabelName;
@@ -98,7 +97,6 @@ public class ShowStreamLoadStmt extends ShowStmt {
     private List<OrderByElement> orderElements;
     private LimitElement limitElement;
 
-    @VisibleForTesting
     public ShowStreamLoadStmt(LabelName labelName, boolean includeHistory) {
         this(labelName, includeHistory, null, null, null, NodePosition.ZERO);
     }

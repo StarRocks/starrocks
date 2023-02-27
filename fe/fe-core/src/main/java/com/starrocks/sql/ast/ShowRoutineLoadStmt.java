@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LabelName;
@@ -94,7 +93,6 @@ public class ShowRoutineLoadStmt extends ShowStmt {
     private LimitElement limitElement;
 
 
-    @VisibleForTesting
     public ShowRoutineLoadStmt(LabelName labelName, boolean includeHistory) {
         this(labelName, includeHistory, null, null, null, NodePosition.ZERO);
     }

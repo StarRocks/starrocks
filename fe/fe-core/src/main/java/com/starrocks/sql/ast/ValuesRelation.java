@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,6 +32,11 @@ public class ValuesRelation extends QueryRelation {
     private boolean isNullValues;
 
     public ValuesRelation(List<ArrayList<Expr>> rows, List<String> explicitColumnNames) {
+        this(rows, explicitColumnNames, NodePosition.ZERO);
+    }
+
+    public ValuesRelation(List<ArrayList<Expr>> rows, List<String> explicitColumnNames, NodePosition pos) {
+        super(pos);
         this.rows = new ArrayList<>(rows);
         this.explicitColumnNames = explicitColumnNames;
     }

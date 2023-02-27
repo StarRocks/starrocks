@@ -48,24 +48,13 @@ public class ModifyBrokerClause extends AlterClause {
         this.hostPortPairs = new HashSet<>();
     }
 
-    public static ModifyBrokerClause createAddBrokerClause(String brokerName, List<String> hostPorts) {
-        return new ModifyBrokerClause(ModifyOp.OP_ADD, brokerName, hostPorts, NodePosition.ZERO);
-    }
-
     public static ModifyBrokerClause createAddBrokerClause(String brokerName, List<String> hostPorts, NodePosition pos) {
         return new ModifyBrokerClause(ModifyOp.OP_ADD, brokerName, hostPorts, pos);
     }
 
-    public static ModifyBrokerClause createDropBrokerClause(String brokerName, List<String> hostPorts) {
-        return new ModifyBrokerClause(ModifyOp.OP_DROP, brokerName, hostPorts, NodePosition.ZERO);
-    }
 
     public static ModifyBrokerClause createDropBrokerClause(String brokerName, List<String> hostPorts, NodePosition pos) {
         return new ModifyBrokerClause(ModifyOp.OP_DROP, brokerName, hostPorts, pos);
-    }
-
-    public static ModifyBrokerClause createDropAllBrokerClause(String brokerName) {
-        return new ModifyBrokerClause(ModifyOp.OP_DROP_ALL, brokerName, null, NodePosition.ZERO);
     }
 
     public static ModifyBrokerClause createDropAllBrokerClause(String brokerName, NodePosition pos) {

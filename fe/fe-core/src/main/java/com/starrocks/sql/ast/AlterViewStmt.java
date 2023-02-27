@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -23,6 +24,10 @@ import java.util.List;
 public class AlterViewStmt extends BaseViewStmt {
     public AlterViewStmt(TableName tbl, List<ColWithComment> cols, QueryStatement queryStatement) {
         super(tbl, cols, queryStatement);
+    }
+
+    public AlterViewStmt(TableName tbl, List<ColWithComment> cols, QueryStatement queryStatement, NodePosition pos) {
+        super(tbl, cols, queryStatement, pos);
     }
 
     public TableName getTbl() {

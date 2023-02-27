@@ -43,10 +43,6 @@ public class ShowTableStmt extends ShowStmt {
         this(db, isVerbose, pattern, null, null, NodePosition.ZERO);
     }
 
-    public ShowTableStmt(String db, boolean isVerbose, String pattern, Expr where) {
-        this(db, isVerbose, pattern, where, null, NodePosition.ZERO);
-    }
-
     public ShowTableStmt(String db, boolean isVerbose, String pattern, String catalogName) {
         this(db, isVerbose, pattern, null, catalogName, NodePosition.ZERO);
     }

@@ -45,6 +45,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -78,7 +79,11 @@ public class ArithmeticExpr extends Expr {
     }
 
     public ArithmeticExpr(Operator op, Expr e1, Expr e2) {
-        super();
+        this(op, e1, e2, NodePosition.ZERO);
+    }
+
+    public ArithmeticExpr(Operator op, Expr e1, Expr e2, NodePosition pos) {
+        super(pos);
         this.op = op;
         Preconditions.checkNotNull(e1);
         children.add(e1);

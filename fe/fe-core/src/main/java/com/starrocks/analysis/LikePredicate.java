@@ -37,6 +37,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
@@ -63,7 +64,11 @@ public class LikePredicate extends Predicate {
     private final Operator op;
 
     public LikePredicate(Operator op, Expr e1, Expr e2) {
-        super();
+        this(op, e1, e2, NodePosition.ZERO);
+    }
+
+    public LikePredicate(Operator op, Expr e1, Expr e2, NodePosition pos) {
+        super(pos);
         this.op = op;
         Preconditions.checkNotNull(e1);
         children.add(e1);

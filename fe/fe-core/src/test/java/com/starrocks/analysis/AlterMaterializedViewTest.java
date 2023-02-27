@@ -91,7 +91,7 @@ public class AlterMaterializedViewTest {
     @Test
     public void testAlterAsyncRefreshMonth() {
         String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 MONTH)";
-        Assert.assertThrows(IllegalArgumentException.class,
+        Assert.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext));
     }
 

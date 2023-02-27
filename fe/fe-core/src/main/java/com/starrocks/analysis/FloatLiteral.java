@@ -37,6 +37,7 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TFloatLiteral;
@@ -71,6 +72,11 @@ public class FloatLiteral extends LiteralExpr {
     }
 
     public FloatLiteral(String value) throws AnalysisException {
+        this(value, NodePosition.ZERO);
+    }
+
+    public FloatLiteral(String value, NodePosition pos) throws AnalysisException {
+        super(pos);
         Double floatValue = null;
         try {
             floatValue = new Double(value);
