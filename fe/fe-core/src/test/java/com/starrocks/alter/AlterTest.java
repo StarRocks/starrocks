@@ -1019,7 +1019,6 @@ public class AlterTest {
                 "      v1 VARCHAR(2048),\n" +
                 "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
                 ")\n" +
-                "ENGINE=starrocks\n" +
                 "DUPLICATE KEY(k1, k2, k3)\n" +
                 "PARTITION BY RANGE (k1, k2, k3) (\n" +
                 "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
@@ -1110,7 +1109,6 @@ public class AlterTest {
                 "    user_name VARCHAR(32),\n" +
                 "    pv BIGINT DEFAULT '0'\n" +
                 ")\n" +
-                "ENGINE=starrocks\n" +
                 "DUPLICATE KEY(datekey, site_id, city_code, user_name)\n" +
                 "PARTITION BY RANGE (datekey) (\n" +
                 "    START (\"1\") END (\"5\") EVERY (1)\n" +
@@ -2052,7 +2050,6 @@ public class AlterTest {
                 "      v1 VARCHAR(2048),\n" +
                 "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
                 ")\n" +
-                "ENGINE=starrocks\n" +
                 "DUPLICATE KEY(k1, k2, k3)\n" +
                 "PARTITION BY RANGE (k1, k2, k3) (\n" +
                 "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +

@@ -338,6 +338,7 @@ public class ExternalOlapTable extends OlapTable {
             tableProperty = new TableProperty(meta.getProperties());
             tableProperty.buildReplicationNum();
             tableProperty.buildStorageFormat();
+            tableProperty.buildStorageVolume();
             tableProperty.buildInMemory();
             tableProperty.buildDynamicProperty();
             tableProperty.buildWriteQuorum();
