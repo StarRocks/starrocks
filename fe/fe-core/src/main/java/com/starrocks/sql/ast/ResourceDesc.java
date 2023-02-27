@@ -58,7 +58,6 @@ public class ResourceDesc implements ParseNode {
         this.etlJobType = EtlJobType.UNKNOWN;
     }
 
-
     public String getName() {
         return name;
     }

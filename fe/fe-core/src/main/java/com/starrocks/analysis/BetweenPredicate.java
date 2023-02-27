@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 
 /**
@@ -48,6 +49,11 @@ public class BetweenPredicate extends Predicate {
 
     // First child is the comparison expr which should be in [lowerBound, upperBound].
     public BetweenPredicate(Expr compareExpr, Expr lowerBound, Expr upperBound, boolean isNotBetween) {
+        this(compareExpr, lowerBound, upperBound, isNotBetween, NodePosition.ZERO);
+    }
+
+    public BetweenPredicate(Expr compareExpr, Expr lowerBound, Expr upperBound, boolean isNotBetween, NodePosition pos) {
+        super(pos);
         children.add(compareExpr);
         children.add(lowerBound);
         children.add(upperBound);

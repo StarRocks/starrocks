@@ -40,6 +40,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -58,7 +59,11 @@ public class IsNullPredicate extends Predicate {
     private final boolean isNotNull;
 
     public IsNullPredicate(Expr e, boolean isNotNull) {
-        super();
+        this(e, isNotNull, NodePosition.ZERO);
+    }
+
+    public IsNullPredicate(Expr e, boolean isNotNull, NodePosition pos) {
+        super(pos);
         this.isNotNull = isNotNull;
         Preconditions.checkNotNull(e);
         children.add(e);

@@ -40,6 +40,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -181,7 +182,11 @@ public class BinaryPredicate extends Predicate implements Writable {
     }
 
     public BinaryPredicate(Operator op, Expr e1, Expr e2) {
-        super();
+        this(op, e1, e2, NodePosition.ZERO);
+    }
+
+    public BinaryPredicate(Operator op, Expr e1, Expr e2, NodePosition pos) {
+        super(pos);
         this.op = op;
         this.opcode = op.opcode;
         Preconditions.checkNotNull(e1);

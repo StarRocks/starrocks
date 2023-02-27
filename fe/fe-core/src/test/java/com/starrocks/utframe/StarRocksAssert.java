@@ -76,6 +76,7 @@ import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.lang.StringUtils;
 import org.junit.Assert;
@@ -379,7 +380,7 @@ public class StarRocksAssert {
 
     public ShowResultSet showTablet(String db, String table) throws DdlException, AnalysisException {
         TableName tableName = new TableName(db, table);
-        ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableName, -1);
+        ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableName, -1, NodePosition.ZERO);
         ShowExecutor showExecutor = new ShowExecutor(getCtx(), showTabletStmt);
         return showExecutor.execute();
     }

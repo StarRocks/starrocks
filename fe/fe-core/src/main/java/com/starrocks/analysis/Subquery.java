@@ -40,6 +40,7 @@ import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,7 +67,11 @@ public class Subquery extends Expr {
     }
 
     public Subquery(QueryStatement queryStatement) {
-        super();
+        this(queryStatement, queryStatement.getPos());
+    }
+
+    public Subquery(QueryStatement queryStatement, NodePosition pos) {
+        super(pos);
         this.queryStatement = queryStatement;
     }
 

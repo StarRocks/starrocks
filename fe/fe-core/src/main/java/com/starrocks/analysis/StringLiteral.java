@@ -39,6 +39,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TStringLiteral;
@@ -53,12 +54,16 @@ public class StringLiteral extends LiteralExpr {
     private String value;
 
     public StringLiteral() {
-        super();
+        super(NodePosition.ZERO);
         type = Type.VARCHAR;
     }
 
     public StringLiteral(String value) {
-        super();
+        this(value, NodePosition.ZERO);
+    }
+
+    public StringLiteral(String value, NodePosition pos) {
+        super(pos);
         this.value = value;
         type = Type.VARCHAR;
         analysisDone();

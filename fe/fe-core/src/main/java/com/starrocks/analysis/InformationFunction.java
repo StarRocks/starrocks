@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TInfoFunc;
@@ -47,10 +48,21 @@ public class InformationFunction extends Expr {
 
     // First child is the comparison expr which should be in [lowerBound, upperBound].
     public InformationFunction(String funcType) {
-        this.funcType = funcType;
+        this(funcType, NodePosition.ZERO);
+    }
+
+    public InformationFunction(String funcType, NodePosition pos) {
+        this(funcType, null, 0, pos);
     }
 
     public InformationFunction(String funcType, String strValue, long intValue) {
+        this.funcType = funcType;
+        this.strValue = strValue;
+        this.intValue = intValue;
+    }
+
+    public InformationFunction(String funcType, String strValue, long intValue, NodePosition pos) {
+        super(pos);
         this.funcType = funcType;
         this.strValue = strValue;
         this.intValue = intValue;
