@@ -113,6 +113,8 @@ Status BinlogDataSource::_prepare_non_stream_pipeline() {
     _max_version_exclusive.store(binlog_range.end_version() + 1);
 
     VLOG(3) << "Prepare to scan binlog, tablet: " << _tablet->full_name() << ", " << binlog_range.debug_string();
+
+    return Status::OK();
 }
 
 Status BinlogDataSource::set_offset(int64_t table_version, int64_t changelog_id) {
