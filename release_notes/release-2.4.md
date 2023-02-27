@@ -2,7 +2,7 @@
 
 ## 2.4.4
 
-发布日期：2023 年 2 月 24 日
+发布日期：2023 年 2 月 22 日
 
 ### 功能优化
 
@@ -31,7 +31,7 @@
 - Local Shuffle 返回错误查询结果。 [#17130](https://github.com/StarRocks/starrocks/pull/17130)
 - 增量克隆可能会失败。 [#16930](https://github.com/StarRocks/starrocks/pull/16930)
 - 在一些情况下，CBO 比较算子是否相等的逻辑发生错误。 [#17199](https://github.com/StarRocks/starrocks/pull/17199) [#17227](https://github.com/StarRocks/starrocks/pull/17227)
-- 未检查和正确解析JuiceFS Schema 导致访问 JuiceFS 失败。 [#16940](https://github.com/StarRocks/starrocks/pull/16940)
+- 未检查和正确解析 JuiceFS Schema 导致访问 JuiceFS 失败。 [#16940](https://github.com/StarRocks/starrocks/pull/16940)
 
 ## 2.4.3
 
