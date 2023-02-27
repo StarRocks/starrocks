@@ -45,6 +45,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -100,28 +101,44 @@ public class FunctionCallExpr extends Expr {
 
     // only used restore from readFields.
     private FunctionCallExpr() {
-        super();
+        super(NodePosition.ZERO);
     }
 
     public FunctionCallExpr(String functionName, List<Expr> params) {
-        this(new FunctionName(functionName), new FunctionParams(false, params));
+        this(new FunctionName(functionName), new FunctionParams(false, params), NodePosition.ZERO);
+    }
+
+    public FunctionCallExpr(String functionName, List<Expr> params, NodePosition pos) {
+        this(new FunctionName(functionName), new FunctionParams(false, params), pos);
     }
 
     public FunctionCallExpr(FunctionName fnName, List<Expr> params) {
-        this(fnName, new FunctionParams(false, params));
+        this(fnName, new FunctionParams(false, params), NodePosition.ZERO);
+    }
+
+    public FunctionCallExpr(FunctionName fnName, List<Expr> params, NodePosition pos) {
+        this(fnName, new FunctionParams(false, params), pos);
     }
 
     public FunctionCallExpr(String fnName, FunctionParams params) {
-        this(new FunctionName(fnName), params);
+        this(new FunctionName(fnName), params, NodePosition.ZERO);
+    }
+
+    public FunctionCallExpr(String fnName, FunctionParams params, NodePosition pos) {
+        this(new FunctionName(fnName), params, pos);
     }
 
     public FunctionCallExpr(FunctionName fnName, FunctionParams params) {
-        this(fnName, params, false);
+        this(fnName, params, false, NodePosition.ZERO);
+    }
+
+    public FunctionCallExpr(FunctionName fnName, FunctionParams params, NodePosition pos) {
+        this(fnName, params, false, pos);
     }
 
     private FunctionCallExpr(
-            FunctionName fnName, FunctionParams params, boolean isMergeAggFn) {
-        super();
+            FunctionName fnName, FunctionParams params, boolean isMergeAggFn, NodePosition pos) {
+        super(pos);
         this.fnName = fnName;
         fnParams = params;
         this.isMergeAggFn = isMergeAggFn;
@@ -358,17 +375,6 @@ public class FunctionCallExpr extends Expr {
         return true;
     }
 
-    public static FunctionCallExpr createMergeAggCall(
-            FunctionCallExpr agg, List<Expr> params) {
-        Preconditions.checkState(agg.isAnalyzed);
-        Preconditions.checkState(agg.isAggregateFunction());
-        FunctionCallExpr result = new FunctionCallExpr(
-                agg.fnName, new FunctionParams(false, params), true);
-        // Inherit the function object from 'agg'.
-        result.fn = agg.fn;
-        result.type = agg.type;
-        return result;
-    }
 
     @Override
     public void write(DataOutput out) throws IOException {

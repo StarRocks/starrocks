@@ -20,6 +20,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 
 /**
@@ -29,6 +30,11 @@ import com.starrocks.thrift.TExprNode;
 public class ArrowExpr extends Expr {
 
     public ArrowExpr(Expr left, Expr right) {
+        this(left, right, NodePosition.ZERO);
+    }
+
+    public ArrowExpr(Expr left, Expr right, NodePosition pos) {
+        super(pos);
         this.children.add(left);
         this.children.add(right);
     }

@@ -14,11 +14,17 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.List;
 
 public class UnionRelation extends SetOperationRelation {
     public UnionRelation(List<QueryRelation> relations, SetQualifier qualifier) {
         super(relations, qualifier);
+    }
+
+    public UnionRelation(List<QueryRelation> relations, SetQualifier qualifier, NodePosition pos) {
+        super(relations, qualifier, pos);
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

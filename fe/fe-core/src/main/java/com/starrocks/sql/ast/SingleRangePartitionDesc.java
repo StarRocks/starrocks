@@ -27,6 +27,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TTabletType;
 
 import java.util.Map;
@@ -49,8 +50,13 @@ public class SingleRangePartitionDesc extends PartitionDesc {
 
     public SingleRangePartitionDesc(boolean ifNotExists, String partName, PartitionKeyDesc partitionKeyDesc,
                                     Map<String, String> properties) {
-        this.ifNotExists = ifNotExists;
+        this(ifNotExists, partName, partitionKeyDesc, properties, NodePosition.ZERO);
+    }
 
+    public SingleRangePartitionDesc(boolean ifNotExists, String partName, PartitionKeyDesc partitionKeyDesc,
+                                    Map<String, String> properties, NodePosition pos) {
+        super(pos);
+        this.ifNotExists = ifNotExists;
         this.isAnalyzed = false;
 
         this.partName = partName;

@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotRef;
@@ -39,7 +38,6 @@ public class ShowDbStmt extends ShowStmt {
 
     private String catalogName;
 
-    @VisibleForTesting
     public ShowDbStmt(String pattern) {
         this(pattern, null, null, NodePosition.ZERO);
     }

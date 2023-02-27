@@ -15,12 +15,17 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableSortedSet;
-import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
 
 import java.util.Set;
 
-public class OdbcScalarFunctionCall {
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+
+public class OdbcScalarFunctionCall implements ParseNode {
     private final Expr function;
+
+    private final NodePosition pos;
 
     private static final Set<String> ODBC_SCALAR_STRING_FUNCTIONS =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
@@ -56,19 +61,20 @@ public class OdbcScalarFunctionCall {
                     .add("user").add("database").add("current_user").build();
 
     public OdbcScalarFunctionCall(Expr function) {
+        this.pos = function.getPos();
         this.function = function;
     }
 
     public Expr mappingFunction() {
         if (!(function instanceof FunctionCallExpr)) {
-            throw new SemanticException("unsupported odbc expr.");
+            throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(function.toSql()), function.getPos());
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) function;
         String fnName = functionCallExpr.getFnName().getFunction();
 
         // for information function
         if (ODBC_SCALAR_INFORMATION_FUNCTIONS.contains(fnName)) {
-            return new InformationFunction(fnName);
+            return new InformationFunction(fnName, function.getPos());
         }
 
         if (ODBC_SCALAR_STRING_FUNCTIONS.contains(fnName) || ODBC_SCALAR_NUMERIC_FUNCTIONS.contains(fnName) ||
@@ -76,7 +82,11 @@ public class OdbcScalarFunctionCall {
             return function;
         }
 
-        throw new SemanticException("invalid odbc scalar function:" + fnName);
+        throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(function.toSql()), function.getPos());
     }
 
+    @Override
+    public NodePosition getPos() {
+        return pos;
+    }
 }

@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.List;
 
 public class GrantPrivilegeStmt extends BaseGrantRevokePrivilegeStmt {
@@ -26,7 +28,18 @@ public class GrantPrivilegeStmt extends BaseGrantRevokePrivilegeStmt {
             GrantRevokeClause grantRevokeClause,
             GrantRevokePrivilegeObjects objects,
             boolean withGrantOption) {
-        super(privilegeTypeUnResolved, objectTypeUnResolved, grantRevokeClause, objects);
+        this(privilegeTypeUnResolved, objectTypeUnResolved, grantRevokeClause, objects,
+                withGrantOption, NodePosition.ZERO);
+    }
+
+    public GrantPrivilegeStmt(
+            List<String> privilegeTypeUnResolved,
+            String objectTypeUnResolved,
+            GrantRevokeClause grantRevokeClause,
+            GrantRevokePrivilegeObjects objects,
+            boolean withGrantOption,
+            NodePosition pos) {
+        super(privilegeTypeUnResolved, objectTypeUnResolved, grantRevokeClause, objects, pos);
         this.withGrantOption = withGrantOption;
     }
 
