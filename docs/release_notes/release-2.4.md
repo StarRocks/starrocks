@@ -2,7 +2,7 @@
 
 ## 2.4.4
 
-Release date: February 24, 2023
+Release date: February 22, 2023
 
 ### Improvements
 
