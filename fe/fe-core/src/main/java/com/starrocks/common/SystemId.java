@@ -73,6 +73,11 @@ public class SystemId {
     public static final long BE_METRICS_ID = 27L;
 
     public static final long BE_TXNS_ID = 28L;
-
+    
     public static final long BE_CONFIGS_ID = 29L;
+    
+    public static final long PARTITIONS_ID = 30L;
+
+    public static final long COLUMN_PRIVILEGES_ID = 31L;
+
 }
