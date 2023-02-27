@@ -37,7 +37,7 @@ public:
     virtual void close() = 0;
 
     void mark_eof() { _eof = true; }
-    bool eof() { return _eof; }
+    bool eof() const { return _eof; }
 
 private:
     std::atomic_bool _eof = false;
