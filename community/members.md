@@ -14,6 +14,8 @@
 
 ### Committers
 
+- ABingHuang
+
 - Astralidea
 
 - caneGuy
@@ -59,8 +61,6 @@
 - aaawuanjun
 
 - abc982627271
-
-- ABingHuang
 
 - adzfolc
 
