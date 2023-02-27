@@ -202,14 +202,6 @@ public class CreateTableStmt extends DdlStmt {
         return engineName.equalsIgnoreCase(EngineType.OLAP.name());
     }
 
-    public boolean isLakeEngine() {
-        return engineName.equalsIgnoreCase(EngineType.STARROCKS.name());
-    }
-
-    public boolean isOlapOrLakeEngine() {
-        return isOlapEngine() || isLakeEngine();
-    }
-
     public String getCharsetName() {
         return charsetName;
     }
@@ -272,7 +264,7 @@ public class CreateTableStmt extends DdlStmt {
 
     @Override
     public boolean needAuditEncryption() {
-        return !isOlapOrLakeEngine();
+        return !isOlapEngine();
     }
 
     @Override
