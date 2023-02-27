@@ -50,6 +50,7 @@ import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
@@ -117,6 +118,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
      * This property should be set when creating the table, and can only be changed to V2 using Alter Table stmt.
      */
     private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
+
+    /*
+     * the default storage volume of this table.
+     * DEFAULT: depends on FE's config 'run_mode'
+     * run_mode == "shared_nothing": "local"
+     * run_mode == "shared_data": "default"
+     *
+     * This property should be set when creating the table, and can not be changed.
+     */
+    private String storageVolume;
 
     // the default compression type of this table.
     private TCompressionType compressionType = TCompressionType.LZ4_FRAME;
@@ -320,6 +331,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildStorageVolume() {
+        storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
+            RunMode.getCurrentRunMode().isAllowCreateLakeTable() ? "default" : "local");
+        return this;
+    }
+
     public TableProperty buildCompressionType() {
         compressionType = TCompressionType.valueOf(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPRESSION,
                 TCompressionType.LZ4_FRAME.name()));
@@ -434,6 +451,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return storageFormat;
     }
 
+    public String getStorageVolume() {
+        return storageVolume;
+    }
+
     public TCompressionType getCompressionType() {
         return compressionType;
     }
@@ -511,6 +532,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildReplicationNum();
         buildInMemory();
         buildStorageFormat();
+        buildStorageVolume();
         buildEnablePersistentIndex();
         buildCompressionType();
         buildWriteQuorum();

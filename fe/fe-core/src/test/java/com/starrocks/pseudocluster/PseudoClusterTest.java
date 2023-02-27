@@ -69,7 +69,7 @@ public class PseudoClusterTest {
             stmt.execute("create database db_test_lake");
             stmt.execute("use db_test_lake");
             stmt.execute("create table test (k0 bigint NOT NULL, v0 string not null, v1 int not null ) " +
-                    "ENGINE=STARROCKS duplicate KEY(k0) DISTRIBUTED BY HASH(k0) BUCKETS 7");
+                    "duplicate KEY(k0) DISTRIBUTED BY HASH(k0) BUCKETS 7");
         } finally {
             stmt.close();
             connection.close();

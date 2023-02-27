@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.common;
 
-import com.starrocks.server.RunMode;
-
 public enum EngineType {
     OLAP,
     MYSQL,
@@ -25,13 +23,9 @@ public enum EngineType {
     ICEBERG,
     HUDI,
     JDBC,
-    STARROCKS,
     FILE;
 
     public static EngineType defaultEngine() {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            return STARROCKS;
-        }
         return OLAP;
     }
 }
