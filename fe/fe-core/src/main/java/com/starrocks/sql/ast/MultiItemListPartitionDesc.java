@@ -28,6 +28,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TTabletType;
 
 import java.util.ArrayList;
@@ -52,7 +53,13 @@ public class MultiItemListPartitionDesc extends PartitionDesc {
 
     public MultiItemListPartitionDesc(boolean ifNotExists, String partitionName, List<List<String>> multiValues,
                                       Map<String, String> partitionProperties) {
-        super.type = PartitionType.LIST;
+        this(ifNotExists, partitionName, multiValues, partitionProperties, NodePosition.ZERO);
+    }
+
+    public MultiItemListPartitionDesc(boolean ifNotExists, String partitionName, List<List<String>> multiValues,
+                                      Map<String, String> partitionProperties, NodePosition pos) {
+        super(pos);
+        this.type = PartitionType.LIST;
         this.partitionName = partitionName;
         this.ifNotExists = ifNotExists;
         this.multiValues = multiValues;

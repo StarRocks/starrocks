@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
@@ -43,13 +42,8 @@ public class ShowCollationStmt extends ShowStmt {
     private String pattern;
     private Expr where;
 
-    @VisibleForTesting
     public ShowCollationStmt() {
         super(NodePosition.ZERO);
-    }
-
-    public ShowCollationStmt(String pattern, Expr where) {
-        this(pattern, where, NodePosition.ZERO);
     }
 
     public ShowCollationStmt(String pattern, Expr where, NodePosition pos) {

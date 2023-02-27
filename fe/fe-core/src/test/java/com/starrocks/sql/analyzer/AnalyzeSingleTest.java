@@ -357,11 +357,12 @@ public class AnalyzeSingleTest {
         statement = (QueryStatement) analyzeSuccess("select '0ABC' ");
         Assert.assertEquals("\'0ABC\'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
-        analyzeFail("select x'0AB' ", "Binary literal must contain an even number of digits");
-        analyzeFail("select x\"0AB\" ", "Binary literal must contain an even number of digits");
-        analyzeFail("select x'0,AB' ", "Binary literal can only contain hexadecimal digits");
-        analyzeFail("select x\"0,AB\" ", "Binary literal can only contain hexadecimal digits");
-        analyzeFail("select x\"0AX\" ", "Binary literal can only contain hexadecimal digits");
+        String expectMsg = "Binary literal can only contain hexadecimal digits and an even number of digits";
+        analyzeFail("select x'0AB' ", expectMsg);
+        analyzeFail("select x\"0AB\" ", expectMsg);
+        analyzeFail("select x'0,AB' ", expectMsg);
+        analyzeFail("select x\"0,AB\" ", expectMsg);
+        analyzeFail("select x\"0AX\" ", expectMsg);
     }
 
     @Test
