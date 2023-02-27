@@ -300,18 +300,27 @@ public:
     static Status regexp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
-     * @param: [string_value, pattern_value, index_value
+     * @param: [string_value, pattern_value, index_value]
      * @paramType: [BinaryColumn, BinaryColumn, Int64Column]
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(regexp_extract);
 
     /**
-     * @param: [string_value, pattern_value, replace_value
+     * @param: [string_value, pattern_value, replace_value]
      * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(regexp_replace);
+
+    /**
+     * @param: [string_value, pattern_value, replace_value]
+     * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(replace);
+    static Status replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status replace_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [DOUBLE]
@@ -495,7 +504,7 @@ template <LogicalType Type>
 StatusOr<ColumnPtr> StringFunctions::money_format_decimal(FunctionContext* context, const starrocks::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     using CppType = RunTimeCppType<Type>;
-    static_assert(pt_is_decimal<Type>, "Invalid decimal type");
+    static_assert(lt_is_decimal<Type>, "Invalid decimal type");
     auto money_viewer = ColumnViewer<Type>(columns[0]);
     const auto& type = context->get_arg_type(0);
     int scale = type->scale;

@@ -33,6 +33,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,12 +61,19 @@ public class ShowTabletStmt extends ShowStmt {
 
     private boolean isShowSingleTablet;
 
-    public ShowTabletStmt(TableName dbTableName, long tabletId) {
-        this(dbTableName, tabletId, null, null, null, null);
+    public ShowTabletStmt(TableName dbTableName, long tabletId, NodePosition pos) {
+        this(dbTableName, tabletId, null, null, null, null, pos);
     }
 
     public ShowTabletStmt(TableName dbTableName, long tabletId, PartitionNames partitionNames,
                           Expr whereClause, List<OrderByElement> orderByElements, LimitElement limitElement) {
+        this(dbTableName, tabletId, partitionNames, whereClause, orderByElements, limitElement, NodePosition.ZERO);
+    }
+
+    public ShowTabletStmt(TableName dbTableName, long tabletId, PartitionNames partitionNames,
+                          Expr whereClause, List<OrderByElement> orderByElements, LimitElement limitElement,
+                          NodePosition pos) {
+        super(pos);
         if (dbTableName == null) {
             this.dbName = null;
             this.tableName = null;

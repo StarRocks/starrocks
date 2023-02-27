@@ -41,7 +41,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.MarkedCountDownLatch;
@@ -69,6 +68,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.PlannerProfile;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
@@ -684,7 +684,7 @@ public class Coordinator {
                             if (errMsg == null) {
                                 errMsg = "exec rpc error. backend id: " + pair.first.backend.getId();
                             }
-                            queryStatus.setStatus(errMsg);
+                            queryStatus.setStatus(errMsg + " backend:" + pair.first.address.hostname);
                             LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
                                     errMsg, code, fragment.getFragmentId(),
                                     pair.first.address.hostname, pair.first.address.port);
@@ -696,7 +696,7 @@ public class Coordinator {
                                     SimpleScheduler.addToBlacklist(pair.first.backend.getId());
                                     throw new RpcException(pair.first.backend.getHost(), "rpc failed");
                                 default:
-                                    throw new UserException(errMsg);
+                                    throw new UserException(errMsg + " backend:" + pair.first.address.hostname);
                             }
                         }
                     }
@@ -1009,7 +1009,7 @@ public class Coordinator {
                                     SimpleScheduler.addToBlacklist(pair.first.backend.getId());
                                     throw new RpcException(pair.first.backend.getHost(), "rpc failed");
                                 default:
-                                    throw new UserException(errMsg);
+                                    throw new UserException(errMsg + " backend:" + pair.first.address.hostname);
                             }
                         }
                     }
@@ -1339,15 +1339,18 @@ public class Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
+        connectContext.getState().setError(cancelReason.toString());
         if (null != receiver) {
             receiver.cancel();
         }
         cancelRemoteFragmentsAsync(cancelReason);
         if (profileDoneSignal != null && cancelReason != PPlanFragmentCancelReason.LIMIT_REACH) {
             // count down to zero to notify all objects waiting for this
-            profileDoneSignal.countDownToZero(new Status());
-            LOG.info("unfinished instance: {}",
-                    profileDoneSignal.getLeftMarks().stream().map(e -> DebugUtil.printId(e.getKey())).toArray());
+            if (!connectContext.getSessionVariable().isEnableProfile()) {
+                profileDoneSignal.countDownToZero(new Status());
+                LOG.info("unfinished instance: {}",
+                        profileDoneSignal.getLeftMarks().stream().map(e -> DebugUtil.printId(e.getKey())).toArray());
+            }
         }
     }
 
@@ -1623,7 +1626,8 @@ public class Coordinator {
                     RuntimeProfile operatorProfile = operatorProfilePair.first;
                     if (!foundResultSink & operatorProfile.getName().contains("RESULT_SINK")) {
                         long executionWallTime = pipelineProfile.getCounter("DriverTotalTime").getValue();
-                        Counter executionTotalTime = queryProfile.addCounter("ExecutionWallTime", TUnit.TIME_NS, null);
+                        Counter executionTotalTime =
+                                queryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
                         queryProfile.getCounterTotalTime().setValue(0);
                         executionTotalTime.setValue(executionWallTime);
                         foundResultSink = true;
@@ -1661,10 +1665,11 @@ public class Coordinator {
         queryCumulativeOperatorTimer.setValue(queryCumulativeOperatorTime);
         queryProfile.getCounterTotalTime().setValue(0);
 
-        long memCostBytes = statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes;
-        long cpuCostNs = statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs;
-        queryProfile.addInfoString("QueryCumulativeCpuTime", DebugUtil.getPrettyStringNs(cpuCostNs));
-        queryProfile.addInfoString("MachinePeakMemoryUsage", DebugUtil.getPrettyStringBytes(memCostBytes));
+        Counter queryCumulativeCpuTime = queryProfile.addCounter("QueryCumulativeCpuTime", TUnit.TIME_NS, null);
+        queryCumulativeCpuTime.setValue(statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs);
+        Counter queryPeakMemoryUsage = queryProfile.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null);
+        queryPeakMemoryUsage.setValue(
+                statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes);
     }
 
     /**

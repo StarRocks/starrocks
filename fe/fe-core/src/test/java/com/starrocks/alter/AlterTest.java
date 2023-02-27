@@ -43,7 +43,6 @@ import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -75,6 +74,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -100,6 +100,7 @@ import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -199,6 +200,23 @@ public class AlterTest {
                         "    'in_memory' = 'false',\n" +
                         "    'storage_medium' = 'SSD',\n" +
                         "    'storage_cooldown_time' = '9999-12-31 00:00:00'\n" +
+                        ");")
+                .withTable("CREATE TABLE t_recharge_detail(\n" +
+                        "    id bigint  ,\n" +
+                        "    user_id  bigint  ,\n" +
+                        "    recharge_money decimal(32,2) , \n" +
+                        "    province varchar(20) not null,\n" +
+                        "    dt varchar(20) not null\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(id)\n" +
+                        "PARTITION BY LIST (dt,province) (\n" +
+                        "   PARTITION p1 VALUES IN ((\"2022-04-01\", \"beijing\")),\n" +
+                        "   PARTITION p2 VALUES IN ((\"2022-04-01\", \"shanghai\"))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");");
     }
 
@@ -948,7 +966,6 @@ public class AlterTest {
 
     @Test
     public void testAddPartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
-        Config.use_staros = true;
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
@@ -973,12 +990,19 @@ public class AlterTest {
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L, 20006L),
                         Lists.newArrayList(20007L, 20008L, 20009L));
                 agent.getPrimaryBackendIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
             }
         };
 
@@ -995,7 +1019,6 @@ public class AlterTest {
                 "      v1 VARCHAR(2048),\n" +
                 "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
                 ")\n" +
-                "ENGINE=starrocks\n" +
                 "DUPLICATE KEY(k1, k2, k3)\n" +
                 "PARTITION BY RANGE (k1, k2, k3) (\n" +
                 "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
@@ -1026,13 +1049,10 @@ public class AlterTest {
         dropSQL = "drop table test_lake_partition";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-
-        Config.use_staros = false;
     }
 
     @Test
     public void testMultiRangePartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
-        Config.use_staros = true;
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
@@ -1057,7 +1077,7 @@ public class AlterTest {
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L),
                         Lists.newArrayList(30007L, 30008L, 30009L),
@@ -1066,6 +1086,13 @@ public class AlterTest {
                         Lists.newArrayList(30016L, 30017L, 30018L));
                 agent.getPrimaryBackendIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
             }
         };
 
@@ -1082,7 +1109,6 @@ public class AlterTest {
                 "    user_name VARCHAR(32),\n" +
                 "    pv BIGINT DEFAULT '0'\n" +
                 ")\n" +
-                "ENGINE=starrocks\n" +
                 "DUPLICATE KEY(datekey, site_id, city_code, user_name)\n" +
                 "PARTITION BY RANGE (datekey) (\n" +
                 "    START (\"1\") END (\"5\") EVERY (1)\n" +
@@ -1116,7 +1142,6 @@ public class AlterTest {
         dropSQL = "drop table site_access";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-        Config.use_staros = false;
     }
 
     @Test
@@ -1425,7 +1450,6 @@ public class AlterTest {
 
     @Test
     public void testCatalogAddPartitionsAtomicRange() throws Exception {
-
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -1773,7 +1797,6 @@ public class AlterTest {
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-
     }
 
     @Test
@@ -1979,8 +2002,6 @@ public class AlterTest {
 
     @Test
     public void testSingleRangePartitionPersistInfo(@Mocked StarOSAgent agent) throws Exception {
-        Config.use_staros = true;
-
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
 
@@ -2004,11 +2025,18 @@ public class AlterTest {
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L));
                 agent.getPrimaryBackendIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
             }
         };
 
@@ -2022,7 +2050,6 @@ public class AlterTest {
                 "      v1 VARCHAR(2048),\n" +
                 "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
                 ")\n" +
-                "ENGINE=starrocks\n" +
                 "DUPLICATE KEY(k1, k2, k3)\n" +
                 "PARTITION BY RANGE (k1, k2, k3) (\n" +
                 "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
@@ -2082,7 +2109,6 @@ public class AlterTest {
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         file.delete();
-        Config.use_staros = false;
     }
 
     @Test(expected = DdlException.class)
@@ -2365,5 +2391,13 @@ public class AlterTest {
         TableName tableName = new TableName("test_db", "test_table");
         AlterTableStmt stmt = new AlterTableStmt(tableName, cList);
         alter.processAlterTable(stmt);
+    }
+
+    @Test
+    public void testDropListPartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE t_recharge_detail DROP PARTITION p2 force;";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
     }
 }

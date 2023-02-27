@@ -39,7 +39,6 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserDesc;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.DomainResolver;
 import com.starrocks.common.Config;
@@ -62,6 +61,7 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
 import mockit.Expectations;
@@ -185,7 +185,7 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        UserIdentity userIdentity = createUserStmt.getUserIdent();
+        UserIdentity userIdentity = createUserStmt.getUserIdentity();
 
         // 2. check if cmy from specified ip can access
         List<UserIdentity> currentUser = Lists.newArrayList();
@@ -204,7 +204,7 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        userIdentity = createUserStmt.getUserIdent();
+        userIdentity = createUserStmt.getUserIdentity();
 
         // 4. check if zhangsan from specified ip can access
         Assert.assertTrue(auth.checkPlainPassword("zhangsan", "192.168.0.1",
@@ -936,7 +936,7 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        userIdentity = createUserStmt.getUserIdent();
+        userIdentity = createUserStmt.getUserIdentity();
 
         sql = "GRANT NODE_PRIV ON *.* TO zhaoliu";
         try {
@@ -1029,7 +1029,7 @@ public class AuthTest {
         String createUserSql = "CREATE USER 'test_user' IDENTIFIED BY '12345'";
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
         auth.createUser(createUserStmt);
-        UserIdentity userIdentity = createUserStmt.getUserIdent();
+        UserIdentity userIdentity = createUserStmt.getUserIdentity();
 
         // check if select & load & spark resource usage privilege all not granted
         String dbName = "db1";
@@ -1043,9 +1043,9 @@ public class AuthTest {
         String selectRoleName = "select_role";
         String createRoleSql = String.format("CREATE ROLE %s", selectRoleName);
         CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
-        Assert.assertEquals(false, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
+        Assert.assertEquals(false, auth.doesRoleExist(createRoleStmt.getRoles().get(0)));
         auth.createRole(createRoleStmt);
-        Assert.assertEquals(true, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
+        Assert.assertEquals(true, auth.doesRoleExist(createRoleStmt.getRoles().get(0)));
 
         // 3. grant select privilege to role
         GrantPrivilegeStmt grantStmt = null;
@@ -1132,7 +1132,7 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        UserIdentity userIdentity = createUserStmt.getUserIdent();
+        UserIdentity userIdentity = createUserStmt.getUserIdentity();
 
 
         // 2. grant usage_priv on resource 'spark0' to 'testUser'@'%'
@@ -1617,7 +1617,7 @@ public class AuthTest {
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
         // createUserStmt.analyze(analyzer);
         auth.createUser(createUserStmt);
-        UserIdentity user = createUserStmt.getUserIdent();
+        UserIdentity user = createUserStmt.getUserIdentity();
 
         // enable_password_reuse is false allow same password
         Config.enable_password_reuse = true;
@@ -1668,7 +1668,7 @@ public class AuthTest {
 
         // 2. check reuse
         Config.enable_password_reuse = false;
-        auth.checkPasswordReuse(createUserStmt.getUserIdent(), password);
+        auth.checkPasswordReuse(createUserStmt.getUserIdentity(), password);
     }
 
     private static final Logger LOG = LogManager.getLogger(AuthTest.class);
@@ -2020,7 +2020,7 @@ public class AuthTest {
         Assert.assertEquals(1, infos.size());
         Assert.assertEquals(2, infos.get(0).size());
         Assert.assertEquals(emptyPrivilegeUser.toString(), infos.get(0).get(0));
-        Assert.assertEquals("GRANT SELECT ON information_schema.* TO 'user1'@'%'", infos.get(0).get(1));
+        Assert.assertEquals("GRANT SELECT ON information_schema.* TO USER 'user1'@'%'", infos.get(0).get(1));
 
         // 2. grant table privilege to onePrivilegeUser
         TablePattern table = new TablePattern("testdb", "table1");
@@ -2030,7 +2030,7 @@ public class AuthTest {
         Assert.assertEquals(1, infos.size());
         Assert.assertEquals(2, infos.get(0).size());
         Assert.assertEquals(onePrivilegeUser.toString(), infos.get(0).get(0));
-        String expectSQL = "GRANT SELECT ON testdb.table1 TO 'user2'@'%'";
+        String expectSQL = "GRANT SELECT ON testdb.table1 TO USER 'user2'@'%'";
         Assert.assertTrue(infos.get(0).get(1).contains(expectSQL));
 
         // 3. grant resource & table & global & impersonate to manyPrivilegeUser
@@ -2038,16 +2038,16 @@ public class AuthTest {
         TablePattern db = new TablePattern("testdb", "*");
         db.analyze();
         auth.grantPrivs(manyPrivilegeUser, db, PrivBitSet.of(Privilege.LOAD_PRIV, Privilege.SELECT_PRIV), false);
-        expectSQLs.add("GRANT SELECT, LOAD ON testdb.* TO 'user3'@'%'");
+        expectSQLs.add("GRANT SELECT, LOAD ON testdb.* TO USER 'user3'@'%'");
         TablePattern global = new TablePattern("*", "*");
         global.analyze();
         auth.grantPrivs(manyPrivilegeUser, global, PrivBitSet.of(Privilege.GRANT_PRIV), false);
-        expectSQLs.add("GRANT GRANT ON *.* TO 'user3'@'%'");
+        expectSQLs.add("GRANT GRANT ON *.* TO USER 'user3'@'%'");
         ResourcePattern resourcePattern = new ResourcePattern("test_resource");
         resourcePattern.analyze();
         auth.grantPrivs(manyPrivilegeUser, resourcePattern, PrivBitSet.of(Privilege.USAGE_PRIV), false);
-        expectSQLs.add("GRANT USAGE ON RESOURCE test_resource TO 'user3'@'%'");
-        String sql = "GRANT IMPERSONATE ON USER 'user1'@'%' TO 'user3'@'%'";
+        expectSQLs.add("GRANT USAGE ON RESOURCE test_resource TO USER 'user3'@'%'");
+        String sql = "GRANT IMPERSONATE ON USER 'user1'@'%' TO USER 'user3'@'%'";
         auth.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx));
         expectSQLs.add(sql);
         infos = auth.getGrantsSQLs(manyPrivilegeUser);

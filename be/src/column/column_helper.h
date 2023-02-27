@@ -82,7 +82,7 @@ public:
 
     template <LogicalType Type>
     static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
-        static_assert(!pt_is_decimal<Type>,
+        static_assert(!lt_is_decimal<Type>,
                       "Decimal column can not created by this function because of missing "
                       "precision and scale param");
         auto ptr = RunTimeColumnType<Type>::create();
@@ -95,13 +95,13 @@ public:
         return ConstColumn::create(ptr, chunk_size);
     }
 
-    template <LogicalType PT>
-    static inline ColumnPtr create_const_decimal_column(RunTimeCppType<PT> value, int precision, int scale,
+    template <LogicalType LT>
+    static inline ColumnPtr create_const_decimal_column(RunTimeCppType<LT> value, int precision, int scale,
                                                         size_t size) {
-        static_assert(pt_is_decimal<PT>);
-        using ColumnType = RunTimeColumnType<PT>;
+        static_assert(lt_is_decimal<LT>);
+        using ColumnType = RunTimeColumnType<LT>;
         auto data_column = ColumnType::create(precision, scale, 1);
-        auto& data = ColumnHelper::cast_to_raw<PT>(data_column)->get_data();
+        auto& data = ColumnHelper::cast_to_raw<LT>(data_column)->get_data();
         DCHECK(data.size() == 1);
         data[0] = value;
         return ConstColumn::create(data_column, size);
@@ -222,8 +222,8 @@ public:
                                        const bool is_nullable);
 
     // Create a column with specified size, the column will be resized to size
-    static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size);
-
+    static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
+                                   bool use_adaptive_nullable_column = false);
     /**
      * Cast columnPtr to special type ColumnPtr
      * Plz sure actual column type by yourself
@@ -496,15 +496,19 @@ public:
 };
 
 // Hold a slice of chunk
-struct ChunkSlice {
-    ChunkUniquePtr chunk;
+template <class Ptr = ChunkUniquePtr>
+struct ChunkSliceTemplate {
+    Ptr chunk;
     size_t offset = 0;
 
     bool empty() const;
     size_t rows() const;
     size_t skip(size_t skip_rows);
-    ChunkPtr cutoff(size_t required_rows);
-    void reset(ChunkUniquePtr input);
+    Ptr cutoff(size_t required_rows);
+    void reset(Ptr input);
 };
+
+using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
+using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
 
 } // namespace starrocks

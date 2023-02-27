@@ -53,7 +53,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
@@ -68,6 +67,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
@@ -93,6 +93,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class SystemInfoService {
     private static final Logger LOG = LogManager.getLogger(SystemInfoService.class);
@@ -143,6 +144,15 @@ public class SystemInfoService {
             }
         }
         return null;
+    }
+
+    /**
+     * For test.
+     */
+    public void addComputeNode(ComputeNode computeNode) {
+        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
+        copiedComputeNodes.put(computeNode.getId(), computeNode);
+        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
     }
 
     // Final entry of adding compute node
@@ -413,7 +423,7 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             // remove worker
-            if (Config.integrate_starmgr) {
+            if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
                 long starletPort = droppedBackend.getStarletPort();
                 // only need to remove worker after be reported its staretPort
                 if (starletPort != 0) {
@@ -448,6 +458,14 @@ public class SystemInfoService {
 
     public ComputeNode getComputeNode(long computeNodeId) {
         return idToComputeNodeRef.get(computeNodeId);
+    }
+
+    public ComputeNode getBackendOrComputeNode(long nodeId) {
+        ComputeNode backend = idToBackendRef.get(nodeId);
+        if (backend == null) {
+            backend =  idToComputeNodeRef.get(nodeId);
+        }
+        return backend;
     }
 
     public boolean checkBackendAvailable(long backendId) {
@@ -638,6 +656,10 @@ public class SystemInfoService {
 
     public List<Backend> getBackends() {
         return idToBackendRef.values().asList();
+    }
+
+    public Stream<ComputeNode> backendAndComputeNodeStream() {
+        return Stream.concat(idToBackendRef.values().stream(), idToComputeNodeRef.values().stream());
     }
 
     public List<Long> seqChooseBackendIdsByStorageMedium(int backendNum, boolean needAvailable, boolean isCreate,
@@ -1004,7 +1026,7 @@ public class SystemInfoService {
         if (null != cluster) {
             cluster.removeBackend(backend.getId());
             // clear map in starosAgent
-            if (Config.integrate_starmgr) {
+            if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
                 long starletPort = backend.getStarletPort();
                 if (starletPort == 0) {
                     return;

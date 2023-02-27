@@ -29,7 +29,7 @@ using NullValueType = NullColumn::ValueType;
 static constexpr NullValueType DATUM_NULL = NullValueType(1);
 static constexpr NullValueType DATUM_NOT_NULL = NullValueType(0);
 
-class NullableColumn final : public ColumnFactory<Column, NullableColumn> {
+class NullableColumn : public ColumnFactory<Column, NullableColumn> {
     friend class ColumnFactory<Column, NullableColumn>;
 
 public:
@@ -40,6 +40,7 @@ public:
         auto null = NullColumn::create(column->size(), 0);
         return NullableColumn::create(std::move(column), std::move(null));
     }
+    NullableColumn() = default;
 
     NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column);
     NullableColumn(ColumnPtr data_column, NullColumnPtr null_column);
@@ -259,9 +260,9 @@ public:
         return _data_column->container_memory_usage() + _null_column->container_memory_usage();
     }
 
-    size_t element_memory_usage(size_t from, size_t size) const override {
+    size_t reference_memory_usage(size_t from, size_t size) const override {
         DCHECK_LE(from + size, this->size()) << "Range error";
-        return _data_column->element_memory_usage(from, size) + _null_column->element_memory_usage(from, size);
+        return _data_column->reference_memory_usage(from, size) + _null_column->reference_memory_usage(from, size);
     }
 
     void swap_column(Column& rhs) override {
@@ -311,10 +312,10 @@ public:
 
     void check_or_die() const override;
 
-private:
+protected:
     ColumnPtr _data_column;
     NullColumnPtr _null_column;
-    bool _has_null;
+    mutable bool _has_null;
 };
 
 } // namespace starrocks

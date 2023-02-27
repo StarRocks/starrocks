@@ -25,6 +25,7 @@ public class QueryStatement extends StatementBase {
     protected OutFileClause outFileClause;
 
     public QueryStatement(QueryRelation queryRelation) {
+        super(queryRelation.getPos());
         this.queryRelation = queryRelation;
     }
 

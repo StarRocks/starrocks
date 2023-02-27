@@ -29,11 +29,11 @@ namespace starrocks {
  * ARGS_TYPE: ALL TYPE
  * SERIALIZED_TYPE: TYPE_VARCHAR
  */
-template <LogicalType PT, bool IsOutputHLL, typename T = RunTimeCppType<PT>>
+template <LogicalType LT, bool IsOutputHLL, typename T = RunTimeCppType<LT>>
 class HllNdvAggregateFunction final
-        : public AggregateFunctionBatchHelper<HyperLogLog, HllNdvAggregateFunction<PT, IsOutputHLL, T>> {
+        : public AggregateFunctionBatchHelper<HyperLogLog, HllNdvAggregateFunction<LT, IsOutputHLL, T>> {
 public:
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         this->data(state).clear();
@@ -44,7 +44,7 @@ public:
         uint64_t value = 0;
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
 
-        if constexpr (pt_is_string<PT>) {
+        if constexpr (lt_is_string<LT>) {
             Slice s = column->get_slice(row_num);
             value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
         } else {
@@ -62,7 +62,7 @@ public:
                                               int64_t frame_end) const override {
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
 
-        if constexpr (pt_is_string<PT>) {
+        if constexpr (lt_is_string<LT>) {
             uint64_t value = 0;
             for (size_t i = frame_start; i < frame_end; ++i) {
                 Slice s = column->get_slice(i);
@@ -129,7 +129,7 @@ public:
         uint64_t value = 0;
         for (size_t i = 0; i < chunk_size; ++i) {
             HyperLogLog hll;
-            if constexpr (pt_is_string<PT>) {
+            if constexpr (lt_is_string<LT>) {
                 Slice s = column->get_slice(i);
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
             } else {

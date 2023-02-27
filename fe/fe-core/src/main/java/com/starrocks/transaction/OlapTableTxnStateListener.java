@@ -203,7 +203,8 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                                 "Commit failed. txn: %d table: %s tablet: %d quorum: %d<%d errorReplicas: %s commitBackends: %s",
                                 txnState.getTransactionId(), table.getName(), tablet.getId(), successReplicaNum,
                                 quorumReplicaNum,
-                                failedReplicaInfoSB.toString(), commitBackends.toString());
+                                failedReplicaInfoSB.toString(),
+                                commitBackends == null ? "" : commitBackends.toString());
                         LOG.warn(msg);
                         throw new TabletQuorumFailedException(msg);
                     }
@@ -262,7 +263,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                 // update write failed backend/replica
                 // use for selection of primary replica for replicated storage
                 for (TabletFailInfo failedTablet : failedTablets) {
-                    LOG.info(failedTablet);
+                    LOG.debug("failed tablet ", failedTablet);
                     if (failedTablet.getTabletId() == -1) {
                         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(failedTablet.getBackendId());
                         if (backend != null) {
@@ -277,7 +278,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                     }
                 }
             } catch (Exception e) {
-                LOG.warn(e);
+                LOG.warn("Fail to execute postAbort", e);
             } finally {
                 db.readUnlock();
             }

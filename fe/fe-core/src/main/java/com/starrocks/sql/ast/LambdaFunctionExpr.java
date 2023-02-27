@@ -21,6 +21,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
@@ -30,9 +31,14 @@ import java.util.Map;
 public class LambdaFunctionExpr extends Expr {
     private LambdaFunctionOperator transformedOp = null;
     private int commonSubOperatorNum = 0;
-
+    // the arguments are lambda expr, lambda arg1, lambda arg2...
     public LambdaFunctionExpr(List<Expr> arguments) {
-        this.children.addAll(arguments); // lambda expr, lambda arg1, lambda arg2...
+        this(arguments, NodePosition.ZERO);
+    }
+
+    public LambdaFunctionExpr(List<Expr> arguments, NodePosition pos) {
+        super(pos);
+        this.children.addAll(arguments);
     }
 
     // transformed from operators before pushing down to BE.

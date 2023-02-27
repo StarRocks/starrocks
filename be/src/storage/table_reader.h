@@ -22,9 +22,20 @@
 #include "storage/column_predicate.h"
 #include "storage/tablet.h"
 
+namespace doris {
+class PBackendService_Stub;
+}
+
 namespace starrocks {
 
+class OlapTablePartitionParam;
+class OlapTableLocationParam;
+class StarRocksNodesInfo;
 class LocalTabletReader;
+
+namespace serde {
+class ProtobufChunkMeta;
+}
 
 // Parameters used to create a TableReader supporting only single local tablet access
 struct LocalTableReaderParams {
@@ -36,14 +47,14 @@ struct LocalTableReaderParams {
 struct TableReaderParams {
     // table schema
     TOlapTableSchemaParam schema;
-    // Version of data to read
-    int64_t version;
     // table and partition info, used to find the tablet that a key belongs to
     TOlapTablePartitionParam partition_param;
     // tablet id -> { node id list }, used to find BE nodes that a tablet locates on
     TOlapTableLocationParam location_param;
     // node id -> host address map, used to find the RPC port of BE nodes
     TNodesInfo nodes_info;
+    std::map<int64_t, int64_t> partition_versions;
+    int64_t timeout_ms{-1};
 };
 
 // Table reader provides storage interfaces for multi_get and scan. It can read from local
@@ -66,7 +77,7 @@ public:
      * @param values output, a chunk with columns in the same order as `value_columns`, and append the column values of
      *                    each founded row to corresponding column
      * @return Status::OK() if no error, otherwise return error status
-     *
+     * @note not thread-safe, concurrent calls not supported
      * Example:
      *     table schema:
      *         k1 int primary key, v1 int, v2 int, v3 int
@@ -85,7 +96,7 @@ public:
      *         3  | 3
      *         5  | 5
      */
-    Status multi_get(const Chunk& keys, const std::vector<std::string>& value_columns, std::vector<bool>& found,
+    Status multi_get(Chunk& keys, const std::vector<std::string>& value_columns, std::vector<bool>& found,
                      Chunk& values);
 
     /**
@@ -95,7 +106,8 @@ public:
      *                   contents of predicates must remain valid when using the returned ChunkIteratorPtr
      * @return A ChunkIterator which can be used to iterate over the rows of the table satisfying the predicates, or
      *         error status
-     * note: specifying ordering is not supported, user cannot assume the order of the returned rows,
+     * @note not thread-safe, concurrent calls not supported
+     * @note specifying ordering is not supported, user cannot assume the order of the returned rows,
      *       its complex/inefficient to merge data from multiple remote sources and maintain some ordering requirements,
      *       it's better to let execution engine to do the ordering(rather then storage engine)
      */
@@ -103,12 +115,28 @@ public:
                                     const std::vector<const ColumnPredicate*>& predicates);
 
 private:
+    Status _tablet_multi_get(int64_t tablet_id, int64_t version, Chunk& keys,
+                             const std::vector<std::string>& value_columns, std::vector<bool>& found, Chunk& values,
+                             std::unique_ptr<serde::ProtobufChunkMeta>& chunk_meta);
+
+    Status _tablet_multi_get_remote(int64_t tablet_id, int64_t version, Chunk& keys,
+                                    const std::vector<std::string>& value_columns, std::vector<bool>& found,
+                                    Chunk& values, std::unique_ptr<serde::ProtobufChunkMeta>& chunk_meta);
+
+    Status _tablet_multi_get_rpc(doris::PBackendService_Stub* stub, int64_t tablet_id, int64_t version, Chunk& keys,
+                                 const std::vector<std::string>& value_columns, std::vector<bool>& found, Chunk& values,
+                                 std::unique_ptr<serde::ProtobufChunkMeta>& chunk_meta);
     // fields for local tablet reader
     std::unique_ptr<LocalTableReaderParams> _local_params;
     std::unique_ptr<LocalTabletReader> _local_tablet_reader;
 
     // fields for remote tablet reader
     std::unique_ptr<TableReaderParams> _params;
+    std::shared_ptr<OlapTableSchemaParam> _schema_param;
+    std::unique_ptr<OlapTablePartitionParam> _partition_param;
+    std::unique_ptr<OlapTableLocationParam> _location_param;
+    std::unique_ptr<StarRocksNodesInfo> _nodes_info;
+    std::unique_ptr<RowDescriptor> _row_desc;
 };
 
 } // namespace starrocks

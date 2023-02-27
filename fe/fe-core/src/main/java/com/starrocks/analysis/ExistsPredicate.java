@@ -37,6 +37,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 
 import java.util.Objects;
@@ -49,6 +50,11 @@ public class ExistsPredicate extends Predicate {
     }
 
     public ExistsPredicate(Subquery subquery, boolean notExists) {
+        this(subquery, notExists, NodePosition.ZERO);
+    }
+
+    public ExistsPredicate(Subquery subquery, boolean notExists, NodePosition pos) {
+        super(pos);
         Preconditions.checkNotNull(subquery);
         children.add(subquery);
         this.notExists = notExists;

@@ -2,11 +2,11 @@
 
 ## Description
 
-Creates a repository in a remote storage system that is used to store data snapshots for [Backup and restore data](../../../administration/Backup_and_restore.md).
+Creates a repository in a remote storage system that is used to store data snapshots for [backing up and restoring data](../../../administration/Backup_and_restore.md).
 
 > **CAUTION**
 >
-> Only root user and superuser can create a repository.
+> Only users with the ADMIN privilege can create a repository.
 
 For detailed instructions on deleting a repository, see [DROP REPOSITORY](../data-definition/DROP%20REPOSITORY.md).
 
@@ -23,73 +23,81 @@ PROPERTIES ("key"="value", ...)
 
 | **Parameter**       | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ |
-| READ ONLY           | Create a read-only repository. Note that you can only restore data from a read-only repository. When creating the same repository for two clusters to migrate data, you can create a read-only warehouse for the new cluster and only grant it RESTORE permissions.|
+| READ ONLY           | Create a read-only repository. Note that you can only restore data from a read-only repository. When creating the same repository for two clusters to migrate data, you can create a read-only repository for the new cluster and only grant it RESTORE permissions.|
 | repository_name     | Repository name.                                             |
 | repository_location | Location of the repository in the remote storage system.     |
-| PROPERTIES          | Username/password or access key/endpoint to the remote storage system. See [Examples](#examples) for more instructions. |
+| PROPERTIES          |The credential method for accessing the remote storage system. |
 
 **PROPERTIES**:
 
-StarRocks Supports creating repository in HDFS, S3, OSS, and COS.
+StarRocks supports creating repositories in HDFS, AWS S3, and Google GCS.
 
-- HDFS：
-  - "username"：Username used to log in HDFS.
-  - "password"：Password used to log in HDFS.
+- For HDFS:
+  - "username": The username of the account that you want to use to access the NameNode of the HDFS cluster.
+  - "password": The password of the account that you want to use to access the NameNode of the HDFS cluster.
 
-- S3：
-  - "fs.s3a.access.key"：Access Key used to log in S3.
-  - "fs.s3a.secret.key"：Secret Key used to log in S3.
-  - "fs.s3a.endpoint"：Endpoint of the S3 storage.
+- For AWS S3:
+  - "aws.s3.use_instance_profile": Whether or not to allow instance profile and assumed role as credential methods for accessing AWS S3. Default: `false`. 
 
-- For OSS：
-  - "fs.oss.accessKeyId"：Access Key ID used to log in OSS.
-  - "fs.oss.accessKeySecret"：Access Key Secret used to log in OSS.
-  - "fs.oss.endpoint"：Endpoint of the OSS storage.
+    - If you use IAM user-based credential (Access Key and Secret Key) to access AWS S3, you don't need to specify this parameter, and you need to specify "aws.s3.access_key", "aws.s3.secret_key", and "aws.s3.endpoint".
+    - If you use Instance Profile to access AWS S3, you need to set this parameter to `true` and specify "aws.s3.region".
+    - If you use Assumed Role to access AWS S3, you need to set this parameter to `true` and specify "aws.s3.iam_role_arn" and "aws.s3.region".
+  
+  - "aws.s3.access_key": The Access Key ID that you can use to access the Amazon S3 bucket.
+  - "aws.s3.secret_key": The Secret Access Key that you can use to access the Amazon S3 bucket.
+  - "aws.s3.endpoint": The endpoint that you can use to access the Amazon S3 bucket.
+  - "aws.s3.iam_role_arn": The ARN of the IAM role that has privileges on the AWS S3 bucket in which your data files are stored. If you want to use assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it analyzes your Hive data by using a Hive catalog.
+  - "aws.s3.region": The region in which your AWS S3 bucket resides. Example: `us-west-1`.
 
-- For COS：
-  - "fs.cosn.userinfo.secretId"：Secret ID used to log in COS.
-  - "fs.cosn.userinfo.secretKey"：Secret Key used to log in COS.
-  - "fs.cosn.bucket.endpoint_suffix"：COS endpoint suffix.
+> **NOTE**
+>
+> StarRocks supports creating repositories in AWS S3 only according to the S3A protocol. Therefore, when you create repositories in AWS S3, you must replace `s3://` in the S3 URI you pass as a repository location in `ON LOCATION` with `s3a://`.
+
+- For Google GCS:
+  - "fs.s3a.access.key": The Access Key that you can use to access the Google GCS bucket.
+  - "fs.s3a.secret.key": The Secret Key that you can use to access the Google GCS bucket.
+  - "fs.s3a.endpoint": The endpoint that you can use to access the Google GCS bucket.
+
+> **NOTE**
+>
+> StarRocks supports creating repositories in Google GCS only according to the S3A protocol. Therefore, when you create repositories in Google GCS, you must replace the prefix in the GCS URI you pass as a repository location in `ON LOCATION` with `s3a://`.
 
 ## Examples
 
-Example 1: creates a repository named `oss_repo` using the remote storage directory `oss://starRocks_backup`.
+Example 1: Create a repository named `hdfs_repo` in an Apache™ Hadoop® cluster.
 
 ```SQL
-CREATE REPOSITORY `oss_repo`
+CREATE REPOSITORY hdfs_repo
 WITH BROKER
-ON LOCATION "oss://starRocks_backup"
-PROPERTIES
-(
-    "fs.oss.accessKeyId" = "xxx",
-    "fs.oss.accessKeySecret" = "yyy",
-    "fs.oss.endpoint" = "oss-cn-beijing.aliyuncs.com"
+ON LOCATION "hdfs://x.x.x.x:yyyy/repo_dir/backup"
+PROPERTIES(
+    "username" = "xxxxxxxx",
+    "password" = "yyyyyyyy"
 );
 ```
 
-Example 2: creates a read-only repository named `oss_repo` using the remote storage directory `oss://starRocks_backup`.
+Example 2: Create a read-only repository named `s3_repo` in the Amazon S3 bucket `bucket_s3`.
 
 ```SQL
-CREATE READ ONLY REPOSITORY `oss_repo`
+CREATE READ ONLY REPOSITORY s3_repo
 WITH BROKER
-ON LOCATION "oss://starRocks_backup"
-PROPERTIES
-(
-    "fs.oss.accessKeyId" = "xxx",
-    "fs.oss.accessKeySecret" = "yyy",
-    "fs.oss.endpoint" = "oss-cn-beijing.aliyuncs.com"
+ON LOCATION "s3a://bucket_s3/backup"
+PROPERTIES(
+    "aws.s3.access_key" = "XXXXXXXXXXXXXXXXX",
+    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyy",
+    "aws.s3.endpoint" = "s3.us-east-1.amazonaws.com"
 );
 ```
 
-Example 3: creates a repository named `hdfs_repo` using the remote storage directory `hdfs://hadoop-name-node:xxxxx/path/to/repo/`.
+Example 3: Create a repository named `gcs_repo` in the Google GCS bucket `bucket_gcs`.
 
 ```SQL
-CREATE REPOSITORY `hdfs_repo`
+CREATE REPOSITORY gcs_repo
 WITH BROKER
-ON LOCATION "hdfs://hadoop-name-node:xxxxx/path/to/repo/"
-PROPERTIES
-(
-    "username" = "xxxx",
-    "password" = "yyyy"
+ON LOCATION "s3a://bucket_gcs/backup"
+PROPERTIES(
+    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
+    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "fs.s3a.endpoint" = "storage.googleapis.com"
 );
 ```

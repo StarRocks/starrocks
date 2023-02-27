@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
@@ -31,6 +30,7 @@ import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -38,9 +38,11 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class PrivilegeStmtAnalyzerV2Test {
@@ -79,20 +81,20 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testCreateUser() throws Exception {
         String sql = "create user test";
         CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", stmt.getUserIdent().getQualifiedUser());
-        Assert.assertEquals("%", stmt.getUserIdent().getHost());
+        Assert.assertEquals("test", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("%", stmt.getUserIdentity().getHost());
         Assert.assertEquals("", stmt.getOriginalPassword());
 
         sql = "create user 'test'@'10.1.1.1'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", stmt.getUserIdent().getQualifiedUser());
-        Assert.assertEquals("10.1.1.1", stmt.getUserIdent().getHost());
+        Assert.assertEquals("test", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("10.1.1.1", stmt.getUserIdentity().getHost());
         Assert.assertEquals("", stmt.getOriginalPassword());
 
         sql = "create user 'test'@'%' identified by 'abc'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", stmt.getUserIdent().getQualifiedUser());
-        Assert.assertEquals("%", stmt.getUserIdent().getHost());
+        Assert.assertEquals("test", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("%", stmt.getUserIdentity().getHost());
         Assert.assertEquals("abc", stmt.getOriginalPassword());
 
         sql = "create user 'aaa~bbb'";
@@ -102,6 +104,32 @@ public class PrivilegeStmtAnalyzerV2Test {
         } catch (AnalysisException e) {
             Assert.assertTrue(e.getMessage().contains("invalid user name"));
         }
+
+        sql = "create user u1 identified with mysql_native_password by '123456'";
+        CreateUserStmt createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
+        Assert.assertEquals("*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9",
+                new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
+
+        sql = "create user u2 identified with mysql_native_password as '123456'";
+        analyzeFail(sql, "Password hash should be a 41-digit hexadecimal number");
+
+        sql = "create user u2 identified with mysql_native_password as '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'";
+        createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
+        Assert.assertEquals("*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9",
+                new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
+
+        sql = "create user u3 identified by '123456'";
+        createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
+        Assert.assertEquals("*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9",
+                new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
+
+        sql = "create user u4 identified by password '123456'";
+        analyzeFail(sql, "Password hash should be a 41-digit hexadecimal number");
+
+        sql = "create user u4 identified by password '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'";
+        createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
+        Assert.assertEquals("*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9",
+                new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -175,7 +203,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one"));
+            Assert.assertTrue(e.getMessage().contains("cannot find catalog"));
         }
 
         sql = "grant drop on database dbx to test_user";
@@ -201,8 +229,8 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testAlterDropUser() throws Exception {
         String sql = "alter user test_user identified by 'abc'";
         AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_user", alterUserStmt.getUserIdent().getQualifiedUser());
-        Assert.assertEquals("%", alterUserStmt.getUserIdent().getHost());
+        Assert.assertEquals("test_user", alterUserStmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("%", alterUserStmt.getUserIdentity().getHost());
         Assert.assertEquals("abc", alterUserStmt.getOriginalPassword());
 
         sql = "alter user 'test'@'10.1.1.1' identified by 'abc'";
@@ -210,22 +238,27 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("cannot find user 'test'@'10.1.1.1'!"));
+            Assert.assertTrue(e.getMessage().contains("Operation ALTER USER failed for 'test'@'10.1.1.1' : user not exists"));
         }
 
-        sql = "drop user test";
-        DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", dropUserStmt.getUserIdent().getQualifiedUser());
+
+        try {
+            sql = "drop user test";
+            DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("Operation DROP USER failed for 'test'@'%' : user not exists"));
+        }
 
         sql = "drop user test_user";
-        dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_user", dropUserStmt.getUserIdent().getQualifiedUser());
+        DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals("test_user", dropUserStmt.getUserIdentity().getQualifiedUser());
 
         sql = "drop user root";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("cannot drop root!"));
+            Assert.assertTrue(e.getMessage().contains("Operation DROP USER failed for 'root'@'%' : cannot drop user'root'@'%'"));
         }
     }
 
@@ -233,12 +266,12 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testRole() throws Exception {
         String sql = "create role test_role";
         CreateRoleStmt createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_role", createStmt.getQualifiedRole());
+        Assert.assertEquals("test_role", createStmt.getRoles().get(0));
         ctx.getGlobalStateMgr().getPrivilegeManager().createRole(createStmt);
 
         sql = "create role test_role2";
         createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_role2", createStmt.getQualifiedRole());
+        Assert.assertEquals("test_role2", createStmt.getRoles().get(0));
         ctx.getGlobalStateMgr().getPrivilegeManager().createRole(createStmt);
 
         // bad name
@@ -252,7 +285,7 @@ public class PrivilegeStmtAnalyzerV2Test {
 
         sql = "drop role test_role";
         DropRoleStmt dropStmt = (DropRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_role", dropStmt.getQualifiedRole());
+        Assert.assertEquals("test_role", dropStmt.getRoles().get(0));
 
         sql = "drop role ___";
         try {
@@ -267,18 +300,18 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can not drop role: cannot find role bad_role"));
+            Assert.assertTrue(e.getMessage().contains("Operation DROP ROLE failed for bad_role : role not exists"));
         }
 
         sql = "grant test_role to test_user";
         GrantRoleStmt grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("[test_role]", grantRoleStmt.getGranteeRole().toString());
-        Assert.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdent().toString());
+        Assert.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdentity().toString());
 
         sql = "grant test_role, test_role2 to test_user";
         grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("[test_role, test_role2]", grantRoleStmt.getGranteeRole().toString());
-        Assert.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdent().toString());
+        Assert.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdentity().toString());
 
         sql = "grant ___ to test_user";
         try {
@@ -287,6 +320,9 @@ public class PrivilegeStmtAnalyzerV2Test {
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("invalid role format"));
         }
+
+        sql = "create role r1, r2";
+        createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
     }
 
     @Test
@@ -335,6 +371,9 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.assertTrue(e.getMessage().contains("Cannot set role: cannot find role bad_role"));
         }
 
+        sql = "drop role role1, role2";
+        UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+
         for (int i = 1; i != 4; ++i) {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop role role" + i, ctx), ctx);
         }
@@ -375,6 +414,21 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertEquals("role1",
                 privilegeManager.getRolePrivilegeCollectionUnlocked(roleId.get(0), true).getName());
 
+        sql = "set default role xxx to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("cannot find role xxx!"));
+        }
+
+        sql = "set default role role3 to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Role role3 is not granted to 'test_user'@'%'"));
+        }
 
         for (int i = 1; i != 4; ++i) {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop role role" + i, ctx), ctx);
@@ -421,7 +475,8 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("You have an error in your SQL syntax"));
+            Assert.assertTrue(e.getMessage().contains("Getting syntax error at line 1, column 35. " +
+                    "Detail message: Input 'tables' is not valid at this position, please check the SQL Reference."));
         }
 
         sql = "revoke select on ALL tables IN ALL tables from test_user";
@@ -429,7 +484,8 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("You have an error in your SQL syntax"));
+            Assert.assertTrue(e.getMessage().contains("Getting syntax error at line 1, column 35. " +
+                    "Detail message: Input 'tables' is not valid at this position"));
         }
 
         sql = "grant create_table on ALL databases in database db1 to test_user";
@@ -437,7 +493,8 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one"));
+            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("cannot find catalog"));
         }
 
         sql = "grant impersonate on ALL users in all databases to test_user";
@@ -458,13 +515,13 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "grant impersonate on USER root to test_user with grant option";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke impersonate on USER 'root'@'%' from test_user with grant option";
+        sql = "revoke impersonate on USER 'root'@'%' from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
         sql = "grant impersonate on user 'root'@'%', 'test_user'@'%' to test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke impersonate on user root, test_user from test_user with grant option";
+        sql = "revoke impersonate on user root, test_user from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
         sql = "revoke impersonate on user root, 'test_user'@'%' from test_user";
@@ -484,7 +541,8 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser("grant grant on system to test_user", ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("cannot grant/revoke system privilege"));
+            Assert.assertTrue(e.getMessage().contains(
+                    "Operation not permitted, 'GRANT' cannot be granted to user or role directly"));
         }
     }
 
@@ -558,7 +616,8 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("You have an error in your SQL syntax"));
+            Assert.assertTrue(e.getMessage().contains("Getting syntax error at line 1, column 34. " +
+                    "Detail message: Input 'views' is not valid at this position, please check the SQL Reference."));
         }
 
         sql = "revoke select on ALL views IN ALL views from test_user";
@@ -566,7 +625,8 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("You have an error in your SQL syntax"));
+            Assert.assertTrue(e.getMessage().contains("Getting syntax error at line 1, column 34. " +
+                    "Detail message: Input 'views' is not valid at this position"));
         }
     }
 
@@ -590,12 +650,123 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testGrantMultiObject() {
         String sql = "grant SELECT on TABLE test.t0 to test_user";
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
-        Assert.assertEquals("GRANT SELECT ON TABLE test.t0 TO 'test_user'@'%'",
+        Assert.assertEquals("GRANT SELECT ON TABLE test.t0 TO USER 'test_user'@'%'",
                 AstToSQLBuilder.toSQL(grantPrivilegeStmt));
 
         sql = "GRANT SELECT on TABLE test.t0, test.t1 to role public";
         grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
         Assert.assertEquals("GRANT SELECT ON TABLE test.t0, test.t1 TO ROLE 'public'",
                 AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+    }
+
+    @Test
+    public void testGrantRevokePriv() {
+        String sql = "grant SELECT, INSERT on table test.t0 to role public";
+        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT SELECT, INSERT ON TABLE test.t0 TO ROLE 'public'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant ALL PRIVILEGES on table test.t0 to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE " +
+                "ON TABLE test.t0 TO USER 'test_user'@'%'", AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant SELECT on all tables in all databases to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT SELECT ON ALL TABLES IN ALL DATABASES TO USER 'test_user'@'%'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant SELECT on all tables in all databases to user test_user with grant option";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT SELECT ON ALL TABLES IN ALL DATABASES TO USER 'test_user'@'%' WITH GRANT OPTION",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant SELECT on all tables in database test to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT SELECT ON ALL TABLES IN DATABASE test TO USER 'test_user'@'%'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant ALTER on database test to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT ALTER ON DATABASE test TO USER 'test_user'@'%'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant ALTER on all databases to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT ALTER ON ALL DATABASES TO USER 'test_user'@'%'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant GRANT on system to user test_user";
+        analyzeFail(sql, "Operation not permitted, 'GRANT' cannot be granted to user or role directly");
+
+        sql = "revoke GRANT on system from role root";
+        analyzeFail(sql, "Operation not permitted, 'GRANT' cannot be granted to user or role directly");
+
+        sql = "grant NODE on system to user test_user";
+        analyzeFail(sql, "Operation not permitted, 'NODE' cannot be granted to user or role directly");
+
+        sql = "revoke NODE on system from role root";
+        analyzeFail(sql, "Operation not permitted, 'NODE' cannot be granted to user or role directly");
+
+        sql = "grant CREATE_RESOURCE on system to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT CREATE_RESOURCE ON SYSTEM TO USER 'test_user'@'%'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant NODE, CREATE_RESOURCE on system to user test_user";
+        analyzeFail(sql, "Operation not permitted, 'NODE' cannot be granted to user or role directly");
+
+        sql = "grant IMPERSONATE on user test_user to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT IMPERSONATE ON USER 'test_user'@'%' TO USER 'test_user'@'%'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+    }
+
+    @Test
+    public void testExistsCheck() throws Exception {
+        ConnectContext context = AnalyzeTestUtil.getConnectContext();
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create user user_exists", context);
+        context.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
+
+        analyzeSuccess("create user user_not_exists");
+        analyzeSuccess("create user if not exists user_not_exists");
+        analyzeFail("create user user_exists", "Operation CREATE USER failed for 'user_exists'@'%' : user already exists");
+        analyzeSuccess("create user if not exists user_exists");
+
+        analyzeSuccess("drop user user_exists");
+        analyzeSuccess("drop user if exists user_exists");
+        analyzeFail("drop user user_not_exists", "Operation DROP USER failed for 'user_not_exists'@'%' : user not exists");
+        analyzeSuccess("drop user if exists user_not_exists");
+
+        analyzeSuccess("alter user user_exists identified by 'xxx'");
+        analyzeSuccess("alter user if exists user_exists identified by 'xxx'");
+        analyzeFail("alter user user_not_exists identified by 'xxx'",
+                "Operation ALTER USER failed for 'user_not_exists'@'%' : user not exists");
+        analyzeSuccess("alter user if exists user_not_exists identified by 'xxx'");
+
+        context = AnalyzeTestUtil.getConnectContext();
+        CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create role role_exists", context);
+        context.getGlobalStateMgr().getPrivilegeManager().createRole(createRoleStmt);
+
+        analyzeSuccess("create role role_not_exists");
+        analyzeSuccess("create role if not exists role_not_exists");
+        analyzeFail("create role role_exists", "Operation CREATE ROLE failed for role_exists : role already exists");
+        analyzeSuccess("create role if not exists role_exists");
+
+        analyzeSuccess("drop role role_exists");
+        analyzeSuccess("drop role if exists role_exists");
+        analyzeFail("drop role role_not_exists", "Operation DROP ROLE failed for role_not_exists : role not exists");
+        analyzeSuccess("drop role if exists role_not_exists");
+    }
+
+    @Test
+    public void testGrantFunction() {
+        String sql = "GRANT usage ON GLOBAL_FUNCTION xxx to user test_user";
+        analyzeFail(sql, "cannot find function: xxx");
+
+        sql = "GRANT usage ON FUNCTION db1.xxx to user test_user";
+        analyzeFail(sql, "cannot find function: xxx");
     }
 }

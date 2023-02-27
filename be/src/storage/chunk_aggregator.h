@@ -113,8 +113,8 @@ private:
 
     // element memory usage and bytes usage calculation cost of object column is high,
     // so cache calculated element memory usage and bytes usage to avoid repeated calculation.
-    size_t _element_memory_usage = 0;
-    size_t _element_memory_usage_num_rows = 0;
+    size_t _reference_memory_usage = 0;
+    size_t _reference_memory_usage_num_rows = 0;
     size_t _bytes_usage = 0;
     size_t _bytes_usage_num_rows = 0;
 

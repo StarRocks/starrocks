@@ -23,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // Show database statement.
 public class ShowDbStmt extends ShowStmt {
@@ -38,20 +39,23 @@ public class ShowDbStmt extends ShowStmt {
     private String catalogName;
 
     public ShowDbStmt(String pattern) {
-        this.pattern = pattern;
+        this(pattern, null, null, NodePosition.ZERO);
     }
 
     public ShowDbStmt(String pattern, Expr where) {
-        this.pattern = pattern;
-        this.where = where;
+        this(pattern, where, null, NodePosition.ZERO);
     }
 
     public ShowDbStmt(String pattern, String catalogName) {
-        this.pattern = pattern;
-        this.catalogName = catalogName;
+        this(pattern, null, catalogName, NodePosition.ZERO);
     }
 
     public ShowDbStmt(String pattern, Expr where, String catalogName) {
+        this(pattern, where, catalogName, NodePosition.ZERO);
+    }
+
+    public ShowDbStmt(String pattern, Expr where, String catalogName, NodePosition pos) {
+        super(pos);
         this.pattern = pattern;
         this.where = where;
         this.catalogName = catalogName;

@@ -21,6 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.proc.TransProcDir;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // syntax:
 //      SHOW TRANSACTION  WHERE id=123
@@ -31,6 +32,11 @@ public class ShowTransactionStmt extends ShowStmt {
     private long txnId;
 
     public ShowTransactionStmt(String dbName, Expr whereClause) {
+        this(dbName, whereClause, NodePosition.ZERO);
+    }
+
+    public ShowTransactionStmt(String dbName, Expr whereClause, NodePosition pos) {
+        super(pos);
         this.dbName = dbName;
         this.whereClause = whereClause;
     }

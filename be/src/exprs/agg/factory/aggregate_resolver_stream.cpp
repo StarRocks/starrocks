@@ -21,13 +21,13 @@
 namespace starrocks {
 
 struct RetractMinMaxDispatcher {
-    template <LogicalType pt>
+    template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt>) {
-            resolver->add_aggregate_mapping<pt, pt, MinAggregateDataRetractable<pt>>(
-                    "retract_min", true, AggregateFactory::MakeRetractMinAggregateFunction<pt>());
-            resolver->add_aggregate_mapping<pt, pt, MaxAggregateDataRetractable<pt>>(
-                    "retract_max", true, AggregateFactory::MakeRetractMaxAggregateFunction<pt>());
+        if constexpr (lt_is_aggregate<lt> || lt_is_string<lt>) {
+            resolver->add_aggregate_mapping<lt, lt, MinAggregateDataRetractable<lt>>(
+                    "retract_min", true, AggregateFactory::MakeRetractMinAggregateFunction<lt>());
+            resolver->add_aggregate_mapping<lt, lt, MaxAggregateDataRetractable<lt>>(
+                    "retract_max", true, AggregateFactory::MakeRetractMaxAggregateFunction<lt>());
         }
     }
 };

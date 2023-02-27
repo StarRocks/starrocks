@@ -17,9 +17,9 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.sql.ast.UserIdentity;
 import mockit.Expectations;
 
 public class MockedAuth {
@@ -64,7 +64,6 @@ public class MockedAuth {
                 ctx.getCurrentUserIdentity();
                 minTimes = 0;
                 UserIdentity userIdentity = new UserIdentity(user, ip);
-                userIdentity.setIsAnalyzed();
                 result = userIdentity;
             }
         };

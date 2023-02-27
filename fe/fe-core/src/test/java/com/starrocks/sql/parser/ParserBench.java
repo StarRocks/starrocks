@@ -110,7 +110,7 @@ public class ParserBench {
         parser.addErrorListener(new BaseErrorListener());
         parser.removeParseListeners();
         if (isLimit) {
-            parser.addParseListener(new TokenNumberListener(100000000, Config.expr_children_limit));
+            parser.addParseListener(new PostProcessListener(100000000, Config.expr_children_limit));
         }
         parser.getInterpreter().setPredictionMode(mode.equals("SLL") ? PredictionMode.SLL : PredictionMode.LL);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();

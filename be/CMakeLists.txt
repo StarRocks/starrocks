@@ -324,6 +324,14 @@ set_target_properties(opentelemetry_trace PROPERTIES IMPORTED_LOCATION ${THIRDPA
 add_library(opentelemetry_resources STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_resources.a)
 
+add_library(jansson STATIC IMPORTED GLOBAL)
+set_target_properties(jansson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libjansson.a)
+
+add_library(avro STATIC IMPORTED GLOBAL)
+set_target_properties(avro PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libavro.a)
+
+add_library(serdes STATIC IMPORTED GLOBAL)
+set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libserdes.a)
 
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
@@ -689,6 +697,9 @@ set(STARROCKS_DEPENDENCIES
     opentelemetry_resources
     opentelemetry_common
     opentelemetry_exporter_jaeger_trace
+    jansson
+    avro
+    serdes
     ${WL_END_GROUP}
 )
 

@@ -38,4 +38,6 @@ void run_release_snapshot_task(const std::shared_ptr<ReleaseSnapshotAgentTaskReq
 void run_move_dir_task(const std::shared_ptr<MoveDirAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
 void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTaskRequest>& agent_task_req,
                                ExecEnv* exec_env);
+void run_drop_auto_increment_map_task(const std::shared_ptr<DropAutoIncrementMapAgentTaskRequest>& agent_task_req,
+                                      ExecEnv* exec_env);
 } // namespace starrocks

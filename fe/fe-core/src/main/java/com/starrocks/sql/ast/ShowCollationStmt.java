@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 /**
  * Show collation statement:
@@ -42,14 +43,11 @@ public class ShowCollationStmt extends ShowStmt {
     private Expr where;
 
     public ShowCollationStmt() {
-
+        super(NodePosition.ZERO);
     }
 
-    public ShowCollationStmt(String pattern) {
-        this.pattern = pattern;
-    }
-
-    public ShowCollationStmt(String pattern, Expr where) {
+    public ShowCollationStmt(String pattern, Expr where, NodePosition pos) {
+        super(pos);
         this.pattern = pattern;
         this.where = where;
     }

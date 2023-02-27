@@ -269,7 +269,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   (
       "type" = "iceberg",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "<arn:aws:iam::081976408565:role/test_s3_role>",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2",
       "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
   );
@@ -283,11 +283,11 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   (
       "type" = "iceberg",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "<arn:aws:iam::081976408565:role/test_s3_role>",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
-      "aws.glue.iam_role_arn" = "<arn:aws:iam::081976408565:role/test_glue_role>",
+      "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
       "aws.glue.region" = "us-west-2"
   );
   ```
@@ -328,9 +328,9 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   );
   ```
 
-## View the schema of a table
+## View the schema of an Iceberg table
 
-You can use one of the following syntaxes to view the schema of a table:
+You can use one of the following syntaxes to view the schema of an Iceberg table:
 
 - View schema
 
@@ -346,23 +346,23 @@ You can use one of the following syntaxes to view the schema of a table:
 
 ## Query an Iceberg table
 
-To view the databases in your Iceberg cluster, use the following syntax:
+1. Use the following syntax to view the databases in your Iceberg cluster:
 
-```SQL
-SHOW DATABASES FROM <catalog_name>
-```
+   ```SQL
+   SHOW DATABASES FROM <catalog_name>
+   ```
 
-To connect to your target Iceberg database, use the following syntax:
+2. Use the following syntax to connect to your target Iceberg database:
 
-```SQL
-USE <catalog_name>.<database_name>
-```
+   ```SQL
+   USE <catalog_name>.<database_name>
+   ```
 
-To query an Iceberg table, use the following syntax:
+3. Use the following syntax to query the Iceberg table:
 
-```SQL
-SELECT count(*) FROM <table_name> LIMIT 10
-```
+   ```SQL
+   SELECT count(*) FROM <table_name> LIMIT 10
+   ```
 
 ## Load data from Iceberg
 
@@ -376,7 +376,7 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM iceberg_table
 
 ### Manual update
 
-By default, StarRocks caches the metadata of Iceberg and automatically updates the metadata in asynchronous mode to deliver better performance. However, after some schema changes or table updates are made on an Iceberg table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+By default, StarRocks caches the metadata of Iceberg and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on an Iceberg table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>
@@ -443,7 +443,7 @@ You can enable automatic incremental update for a single Iceberg catalog or for 
   );
   ```
 
-- To enable automatic incremental update for all Iceberg catalogs, add the `enable_hms_events_incremental_sync` parameter to the `$FE_HOME/conf/fe.conf` file of each FE, and then restart each FE to make the parameter setting take effect.
+- To enable automatic incremental update for all Iceberg catalogs, add `"enable_hms_events_incremental_sync" = "true"` to the `$FE_HOME/conf/fe.conf` file of each FE, and then restart each FE to make the parameter setting take effect.
 
 You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file of each FE based on your business requirements, and then restart each FE to make the parameter settings take effect.
 
@@ -463,7 +463,7 @@ By default (namely, when the `enable_hive_metastore_cache` and `enable_remote_fi
 For example, there is an Iceberg table named `table2`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hits `p1`, and StarRocks caches the metadata of `p1` and the metadata of the underlying data files of `p1`. Assume that the default time intervals to update and discard the cached metadata are as follows:
 
 - The time interval (specified by the `metastore_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of `p1` is 2 hours.
-- The time interval (specified by the `remote_file_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of the underlying data files of `p1`is 60 seconds.
+- The time interval (specified by the `remote_file_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of the underlying data files of `p1` is 60 seconds.
 - The time interval (specified by the `metastore_cache_ttl_sec` parameter) to automatically discard the cached metadata of `p1` is 24 hours.
 - The time interval (specified by the `remote_file_cache_ttl_sec` parameter) to automatically discard the cached metadata of the underlying data files of `p1` is 36 hours.
 

@@ -18,6 +18,7 @@ package com.starrocks.privilege;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 import java.util.Objects;
@@ -111,5 +112,18 @@ public class ResourceGroupPEntryObject implements PEntryObject {
     @Override
     public int hashCode() {
         return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        if (getId() == ResourceGroupPEntryObject.ALL_RESOURCE_GROUP_ID) {
+            return "ALL RESOURCE_GROUPS";
+        } else {
+            ResourceGroup resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(getId());
+            if (resourceGroup == null) {
+                throw new MetaNotFoundException("Can't find resource group : " + id);
+            }
+            return resourceGroup.toString();
+        }
     }
 }

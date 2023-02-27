@@ -22,10 +22,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.StatisticUtils;
 
@@ -33,8 +34,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class ShowBasicStatsMetaStmt extends ShowStmt {
+
     public ShowBasicStatsMetaStmt(Predicate predicate) {
-        setPredicate(predicate);
+        this(predicate, NodePosition.ZERO);
+    }
+
+    public ShowBasicStatsMetaStmt(Predicate predicate, NodePosition pos) {
+        super(pos);
+        this.predicate = predicate;
     }
 
     private static final ShowResultSetMetaData META_DATA =
@@ -68,7 +75,7 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
 
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         if (context.getGlobalStateMgr().isUsingNewPrivilege() &&
-                !PrivilegeManager.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
+                !PrivilegeActions.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
             return null;
         }
 

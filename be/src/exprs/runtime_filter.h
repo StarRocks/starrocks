@@ -261,7 +261,7 @@ public:
 
     // create a min/max LT/GT RuntimeFilter with val
     template <bool is_min>
-    static RuntimeBloomFilter* create_with_range(ObjectPool* pool, CppType val) {
+    static RuntimeBloomFilter* create_with_range(ObjectPool* pool, CppType val, bool is_close_interval) {
         auto* p = pool->add(new RuntimeBloomFilter());
         p->_init_full_range();
         p->init(1);
@@ -273,10 +273,10 @@ public:
 
         if constexpr (is_min) {
             p->_min = val;
-            p->_left_open_interval = false;
+            p->_left_close_interval = is_close_interval;
         } else {
             p->_max = val;
-            p->_right_open_interval = false;
+            p->_right_close_interval = is_close_interval;
         }
 
         p->_always_true = true;
@@ -333,8 +333,8 @@ public:
 
     CppType max_value() const { return _max; }
 
-    bool left_open_interval() const { return _left_open_interval; }
-    bool right_open_interval() const { return _right_open_interval; }
+    bool left_close_interval() const { return _left_close_interval; }
+    bool right_close_interval() const { return _right_close_interval; }
 
     void evaluate(Column* input_column, RunningContext* ctx) const override {
         if (_num_hash_partitions != 0) {
@@ -366,9 +366,9 @@ public:
     }
 
     std::string debug_string() const override {
-        LogicalType ptype = Type;
+        LogicalType ltype = Type;
         std::stringstream ss;
-        ss << "RuntimeBF(type = " << ptype << ", bfsize = " << _size << ", has_null = " << _has_null;
+        ss << "RuntimeBF(type = " << ltype << ", bfsize = " << _size << ", has_null = " << _has_null;
         if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
             if constexpr (!std::is_same_v<CppType, __int128>) {
                 ss << ", _min = " << _min << ", _max = " << _max;
@@ -401,10 +401,10 @@ public:
     }
 
     size_t serialize(uint8_t* data) const override {
-        LogicalType ptype = Type;
+        LogicalType ltype = Type;
         size_t offset = 0;
-        memcpy(data + offset, &ptype, sizeof(ptype));
-        offset += sizeof(ptype);
+        memcpy(data + offset, &ltype, sizeof(ltype));
+        offset += sizeof(ltype);
         offset += JoinRuntimeFilter::serialize(data + offset);
         memcpy(data + offset, &_has_min_max, sizeof(_has_min_max));
         offset += sizeof(_has_min_max);
@@ -434,10 +434,10 @@ public:
     }
 
     size_t deserialize(const uint8_t* data) override {
-        LogicalType ptype = Type;
+        LogicalType ltype = Type;
         size_t offset = 0;
-        memcpy(&ptype, data + offset, sizeof(ptype));
-        offset += sizeof(ptype);
+        memcpy(&ltype, data + offset, sizeof(ltype));
+        offset += sizeof(ltype);
         offset += JoinRuntimeFilter::deserialize(data + offset);
 
         bool has_min_max = false;
@@ -751,8 +751,8 @@ private:
     std::string _slice_min;
     std::string _slice_max;
     bool _has_min_max = true;
-    bool _left_open_interval = true;
-    bool _right_open_interval = true;
+    bool _left_close_interval = true;
+    bool _right_close_interval = true;
 };
 
 } // namespace starrocks

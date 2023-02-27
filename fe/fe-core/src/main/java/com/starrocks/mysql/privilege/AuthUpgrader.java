@@ -18,7 +18,6 @@ package com.starrocks.mysql.privilege;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.Database;
@@ -30,6 +29,7 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivObjNotFoundException;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeCollection;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
@@ -37,6 +37,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -784,18 +785,18 @@ public class AuthUpgrader {
             if (db.equals(STAR)) {
                 // for *.*
                 objects = Collections.singletonList(
-                        privilegeManager.analyzeObject(ObjectType.DATABASE, Lists.newArrayList("*")));
+                        privilegeManager.generateObject(ObjectType.DATABASE, Lists.newArrayList("*")));
                 if (privilege == Privilege.CREATE_PRIV) {
                     // for CREATE_PRIV on *.*, we also need to grant create_database on default_catalog
                     collection.grant(ObjectType.CATALOG,
                             Collections.singletonList(PrivilegeType.CREATE_DATABASE),
-                            Collections.singletonList(privilegeManager.analyzeObject(ObjectType.CATALOG,
+                            Collections.singletonList(privilegeManager.generateObject(ObjectType.CATALOG,
                                     Collections.singletonList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))),
                             isGrant);
                 }
             } else {
                 // for db.*
-                objects = Collections.singletonList(privilegeManager.analyzeObject(
+                objects = Collections.singletonList(privilegeManager.generateObject(
                         ObjectType.DATABASE, Collections.singletonList(db)));
             }
         } catch (PrivObjNotFoundException e) {
@@ -841,15 +842,15 @@ public class AuthUpgrader {
         List<PEntryObject> objects;
         try {
             if (db.equals(STAR)) {
-                objects = Collections.singletonList(privilegeManager.analyzeObject(
+                objects = Collections.singletonList(privilegeManager.generateObject(
                         ObjectType.VIEW, Lists.newArrayList("*", "*")));
             } else if (view.equals(STAR)) {
                 // ALL TABLES in db
                 objects = Collections.singletonList(
-                        privilegeManager.analyzeObject(ObjectType.VIEW, Lists.newArrayList(db, "*")));
+                        privilegeManager.generateObject(ObjectType.VIEW, Lists.newArrayList(db, "*")));
             } else {
                 // db.view
-                objects = Collections.singletonList(privilegeManager.analyzeObject(
+                objects = Collections.singletonList(privilegeManager.generateObject(
                         ObjectType.VIEW, Arrays.asList(db, view)));
             }
         } catch (PrivObjNotFoundException e) {
@@ -904,15 +905,15 @@ public class AuthUpgrader {
         List<PEntryObject> objects;
         try {
             if (db.equals(STAR)) {
-                objects = Collections.singletonList(privilegeManager.analyzeObject(ObjectType.TABLE,
+                objects = Collections.singletonList(privilegeManager.generateObject(ObjectType.TABLE,
                         Lists.newArrayList("*", "*")));
             } else if (table.equals(STAR)) {
                 // ALL TABLES in db
-                objects = Collections.singletonList(privilegeManager.analyzeObject(ObjectType.TABLE,
+                objects = Collections.singletonList(privilegeManager.generateObject(ObjectType.TABLE,
                         Lists.newArrayList(db, "*")));
             } else {
                 // db.table
-                objects = Collections.singletonList(privilegeManager.analyzeObject(ObjectType.TABLE,
+                objects = Collections.singletonList(privilegeManager.generateObject(ObjectType.TABLE,
                         Arrays.asList(db, table)));
             }
         } catch (PrivObjNotFoundException e) {
@@ -960,15 +961,15 @@ public class AuthUpgrader {
         try {
             if (db.equals(STAR)) {
                 objects = Collections.singletonList(
-                        privilegeManager.analyzeObject(ObjectType.MATERIALIZED_VIEW, Lists.newArrayList("*", "*")));
+                        privilegeManager.generateObject(ObjectType.MATERIALIZED_VIEW, Lists.newArrayList("*", "*")));
             } else if (mv.equals(STAR)) {
                 // ALL TABLES in db
-                objects = Collections.singletonList(privilegeManager.analyzeObject(
+                objects = Collections.singletonList(privilegeManager.generateObject(
                         ObjectType.MATERIALIZED_VIEW, Lists.newArrayList(db, "*")));
             } else {
                 // db.mv
                 objects = Collections.singletonList(
-                        privilegeManager.analyzeObject(ObjectType.MATERIALIZED_VIEW, Arrays.asList(db, mv)));
+                        privilegeManager.generateObject(ObjectType.MATERIALIZED_VIEW, Arrays.asList(db, mv)));
             }
         } catch (PrivObjNotFoundException e) {
             LOG.info("Privilege '{}' on materialized view {}.{} is ignored when upgrading from" +
@@ -997,7 +998,7 @@ public class AuthUpgrader {
             throws PrivilegeException {
         List<PEntryObject> objects;
         try {
-            objects = Collections.singletonList(privilegeManager.analyzeUserObject(ObjectType.USER, user));
+            objects = Collections.singletonList(privilegeManager.generateUserObject(ObjectType.USER, user));
         } catch (PrivObjNotFoundException e) {
             LOG.info("Privilege 'IMPERSONATE' on user {} is ignored when upgrading from" +
                     " old auth because of non-existed object, message: {}", user, e.getMessage());
@@ -1014,10 +1015,10 @@ public class AuthUpgrader {
                 List<PEntryObject> objects;
                 try {
                     if (name.equals(STAR)) {
-                        objects = Collections.singletonList(privilegeManager.analyzeObject(
+                        objects = Collections.singletonList(privilegeManager.generateObject(
                                 ObjectType.RESOURCE, Lists.newArrayList("*")));
                     } else {
-                        objects = Collections.singletonList(privilegeManager.analyzeObject(
+                        objects = Collections.singletonList(privilegeManager.generateObject(
                                 ObjectType.RESOURCE, Collections.singletonList(name)));
                     }
                 } catch (PrivObjNotFoundException e) {
@@ -1039,13 +1040,13 @@ public class AuthUpgrader {
         switch (privilege) {
             case ADMIN_PRIV:   // ADMIN_PRIV -> db_admin + user_admin
                 grantRoleToCollection(collection, roleId,
-                        PrivilegeManager.DB_ADMIN_ROLE_ID, PrivilegeManager.USER_ADMIN_ROLE_ID);
+                        PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID, PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID);
                 break;
             case NODE_PRIV:    // NODE_PRIV -> cluster_admin
-                grantRoleToCollection(collection, roleId, PrivilegeManager.CLUSTER_ADMIN_ROLE_ID);
+                grantRoleToCollection(collection, roleId, PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_ID);
                 break;
             case GRANT_PRIV:   // GRANT_PRIV -> user_admin
-                grantRoleToCollection(collection, roleId, PrivilegeManager.USER_ADMIN_ROLE_ID);
+                grantRoleToCollection(collection, roleId, PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID);
                 break;
 
             default:

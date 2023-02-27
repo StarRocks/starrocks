@@ -51,6 +51,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
+
 public class CreateTableTest {
     private static ConnectContext connectContext;
 
@@ -161,6 +163,17 @@ public class CreateTableTest {
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'zlib');"));
 
+        ExceptionChecker
+                .expectThrowsNoException(() -> createTable("create table test.tb12(col1 bigint AUTO_INCREMENT, \n"
+                        + "col2 varchar(10)) \n"
+                        + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                        + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+
+        ExceptionChecker
+                .expectThrowsNoException(() -> createTable("create table test.tb13(col1 bigint, col2 bigint AUTO_INCREMENT) \n"
+                        + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                        + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl6 = (OlapTable) db.getTable("tbl6");
         Assert.assertTrue(tbl6.getColumn("k1").isKey());
@@ -228,6 +241,32 @@ public class CreateTableTest {
                         () -> createTable("create table test.atbl8\n" + "(key1 int, key2 varchar(10))\n"
                                 + "distributed by hash(key1) buckets 1\n"
                                 + "properties('replication_num' = '1', 'compression' = 'xxx');"));
+
+        ExceptionChecker
+                .expectThrowsWithMsg(IllegalArgumentException.class, "The AUTO_INCREMENT column must be BIGINT",
+                        () -> createTable("create table test.atbl9(col1 int AUTO_INCREMENT, col2 varchar(10)) \n"
+                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+
+        ExceptionChecker
+                .expectThrowsWithMsg(AnalysisException.class, "AUTO_INCREMENT column col1 must be NOT NULL",
+                        () -> createTable("create table test.atbl10(col1 bigint NULL AUTO_INCREMENT, col2 varchar(10)) \n"
+                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+
+        ExceptionChecker
+                .expectThrowsWithMsg(IllegalArgumentException.class,
+                        "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement",
+                        () -> createTable("create table test.atbl11(col1 bigint AUTO_INCREMENT, col2 bigint AUTO_INCREMENT) \n"
+                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+
+        ExceptionChecker
+                .expectThrowsWithMsg(DdlException.class, "Table with AUTO_INCREMENT column must use Replicated Storage",
+                        () -> createTable("create table test.atbl12(col1 bigint AUTO_INCREMENT, col2 varchar(10)) \n"
+                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                + "properties('replication_num' = '1', 'replicated_storage' = 'FALSE');"));
+
     }
 
     @Test
@@ -706,5 +745,191 @@ public class CreateTableTest {
         Assert.assertTrue(table.isBinlogEnabled());
         Assert.assertEquals(0, table.getBinlogVersion());
         Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
+    }
+
+    @Test
+    public void testCreateTableWithConstraint() {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.parent_table1(\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n," +
+                        "\"unique_constraints\" = \"k1,k2\"\n" +
+                        ");"
+        ));
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("parent_table1");
+
+        Assert.assertTrue(table.hasUniqueConstraints());
+        List<UniqueConstraint> uniqueConstraint = table.getUniqueConstraints();
+        Assert.assertEquals(1, uniqueConstraint.size());
+        Assert.assertEquals(2, uniqueConstraint.get(0).getUniqueColumns().size());
+        Assert.assertEquals("k1", uniqueConstraint.get(0).getUniqueColumns().get(0));
+        Assert.assertEquals("k2", uniqueConstraint.get(0).getUniqueColumns().get(1));
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.parent_table2(\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n," +
+                        "\"unique_constraints\" = \"k1;k2\"\n" +
+                        ");"
+        ));
+
+        OlapTable table2 = (OlapTable) db.getTable("parent_table2");
+
+        Assert.assertTrue(table2.hasUniqueConstraints());
+        List<UniqueConstraint> uniqueConstraint2 = table2.getUniqueConstraints();
+        Assert.assertEquals(2, uniqueConstraint2.size());
+        Assert.assertEquals(1, uniqueConstraint2.get(0).getUniqueColumns().size());
+        Assert.assertEquals("k1", uniqueConstraint2.get(0).getUniqueColumns().get(0));
+        Assert.assertEquals(1, uniqueConstraint2.get(1).getUniqueColumns().size());
+        Assert.assertEquals("k2", uniqueConstraint2.get(1).getUniqueColumns().get(0));
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.parent_primary_key_table1(\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "PRIMARY KEY(k1, k2)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1, k2) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.parent_unique_key_table1(\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "UNIQUE KEY(k1, k2)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1, k2) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.parent_table3(\n" +
+                        "_k1 INT,\n" +
+                        "_k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(_k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(_k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n," +
+                        "\"unique_constraints\" = \"_k1,_k2\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.base_table1(\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20),\n" +
+                        "k3 INT,\n" +
+                        "k4 VARCHAR(20),\n" +
+                        "k5 INT,\n" +
+                        "k6 VARCHAR(20),\n" +
+                        "k7 INT,\n" +
+                        "k8 VARCHAR(20),\n" +
+                        "k9 INT,\n" +
+                        "k10 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table1(k1, k2);" +
+                        " (k5, k6) REFERENCES parent_primary_key_table1(k1, k2 );" +
+                        " (k9, k10) references parent_table3(_k1, _k2 );" +
+                        " (k7, k8) REFERENCES parent_unique_key_table1(k1, k2 )\"\n" +
+                        ");"
+        ));
+
+        // column types do not match
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "processing constraint failed when creating table",
+                () -> createTable(
+                "CREATE TABLE test.base_table2(\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20),\n" +
+                        "k3 INT,\n" +
+                        "k4 VARCHAR(20),\n" +
+                        "k5 INT,\n" +
+                        "k6 VARCHAR(20),\n" +
+                        "k7 INT,\n" +
+                        "k8 VARCHAR(20),\n" +
+                        "k9 INT,\n" +
+                        "k10 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table1(k2, k1)\"\n" +
+                        ");"
+        ));
+
+        // key size does not match
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "processing constraint failed when creating table",
+                () -> createTable(
+                "CREATE TABLE test.base_table2(\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20),\n" +
+                        "k3 INT,\n" +
+                        "k4 VARCHAR(20),\n" +
+                        "k5 INT,\n" +
+                        "k6 VARCHAR(20),\n" +
+                        "k7 INT,\n" +
+                        "k8 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table2(k1, k2)\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "processing constraint failed when creating table",
+                () -> createTable(
+                        "CREATE TABLE test.base_table2(\n" +
+                                "k1 INT,\n" +
+                                "k2 VARCHAR(20),\n" +
+                                "k3 INT,\n" +
+                                "k4 VARCHAR(20),\n" +
+                                "k5 INT,\n" +
+                                "k6 VARCHAR(20),\n" +
+                                "k7 INT,\n" +
+                                "k8 VARCHAR(20)\n" +
+                                ") ENGINE=OLAP\n" +
+                                "DUPLICATE KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table2(k1)\"\n" +
+                                ");"
+                ));
     }
 }

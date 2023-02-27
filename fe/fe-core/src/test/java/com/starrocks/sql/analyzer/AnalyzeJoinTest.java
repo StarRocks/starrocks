@@ -88,7 +88,8 @@ public class AnalyzeJoinTest {
         analyzeSuccess("select * from tnotnull inner join (select * from t0) t using (v1)");
 
         analyzeSuccess("select * from (t0 join tnotnull using(v1)) , t1");
-        analyzeFail("select * from (t0 join tnotnull using(v1)) t , t1", "the right syntax to use near 't'");
+        analyzeFail("select * from (t0 join tnotnull using(v1)) t , t1",
+                "Getting syntax error at line 1, column 43. Detail message: Input 't' is not valid at this position");
         analyzeFail("select v1 from (t0 join tnotnull using(v1)), t1", "Column 'v1' is ambiguous");
         analyzeSuccess("select a.v1 from (t0 a join tnotnull b using(v1)), t1");
     }
@@ -188,7 +189,8 @@ public class AnalyzeJoinTest {
         analyzeSuccess(sql);
 
         sql = "select * from (t0 a, (t1) b)";
-        analyzeFail(sql, "the right syntax to use near 'b'");
+        analyzeFail(sql, "Getting syntax error at line 1, column 26. " +
+                "Detail message: Input 'b' is not valid at this position");
 
         sql = "select * from (t0 a, t1 a)";
         analyzeFail(sql, "Not unique table/alias: 'a'");
@@ -203,7 +205,8 @@ public class AnalyzeJoinTest {
         analyzeFail(sql, "Not unique table/alias: 't1'");
 
         sql = "select * from (t0 join t1) t,t1";
-        analyzeFail(sql, "the right syntax to use near 't'");
+        analyzeFail(sql, "Getting syntax error at line 1, column 27. " +
+                "Detail message: Input 't' is not valid at this position");
 
         sql = "select * from (t0 join t1 t) ,t1";
         analyzeSuccess(sql);

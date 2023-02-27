@@ -140,9 +140,10 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitShowBackupStatement(ShowBackupStmt showBackupStmt, ConnectContext context) {
-            String dbName = getDbName(showBackupStmt.getDbName(), context);
-            showBackupStmt.setDbName(dbName);
-            getDatabase(dbName, context);
+            String dbName = showBackupStmt.getDbName();
+            if (dbName != null) {
+                getDatabase(dbName, context);
+            }
             return null;
         }
 
@@ -243,9 +244,10 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitShowRestoreStatement(ShowRestoreStmt showRestoreStmt, ConnectContext context) {
-            String dbName = getDbName(showRestoreStmt.getDbName(), context);
-            showRestoreStmt.setDbName(dbName);
-            getDatabase(dbName, context);
+            String dbName = showRestoreStmt.getDbName();
+            if (dbName != null) {
+                getDatabase(dbName, context);
+            }
             return null;
         }
     }

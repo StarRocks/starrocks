@@ -4,21 +4,6 @@
 
 A successfully executed cannot be executed again. To execute the task again, you need to reinitiate it. This is because the imported labels are not reusable, avoiding loss or duplication of imported tasks. You can use show load to see the import history, then copy it, modify the label and re-import it.
 
-## Garbles in Broker Load
-
-Issue description:
-
-The import reports errors. Corresponding url errors show content garbles.
-
-```SQL
-Reason: column count mismatch, expect=6 real=1. src line: [$交通];
-zcI~跟团+v];   count mismatch, expect=6 real=2. src line: [租e�rD��食休闲娱乐
-```
-
-**Solution:**
-
-Wrong specification for format as. Change file type and reload the task.
-
 ## In Broker Load, hdfs data import exceptional date fields (+8h)
 
 Issue description:

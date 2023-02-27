@@ -15,35 +15,48 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.UserDesc;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
 // CreateUserStmt and AlterUserStmt share the same parameter and check logic
 public class BaseCreateAlterUserStmt extends DdlStmt {
-    protected UserIdentity userIdent;
+    protected UserIdentity userIdentity;
     protected String password;
-    protected byte[] scramblePassword;
     protected boolean isPasswordPlain;
-    protected String authPlugin;
-    protected String authString;
-    protected String userForAuthPlugin;
+    protected String authPluginName;
+    protected String authStringUnResolved;
 
     protected SetRoleType setRoleType;
     protected List<String> defaultRoles;
     // used in new RBAC privilege framework
     private UserAuthenticationInfo authenticationInfo = null;
 
+    @Deprecated
+    protected String userForAuthPlugin;
+    @Deprecated
+    protected byte[] scramblePassword;
+
     public BaseCreateAlterUserStmt(UserDesc userDesc, SetRoleType setRoleType, List<String> defaultRoles) {
-        this.userIdent = userDesc.getUserIdent();
+        this(userDesc, setRoleType, defaultRoles, NodePosition.ZERO);
+    }
+
+    public BaseCreateAlterUserStmt(UserDesc userDesc, SetRoleType setRoleType, List<String> defaultRoles,
+                                   NodePosition pos) {
+        super(pos);
+        this.userIdentity = userDesc.getUserIdentity();
         this.password = userDesc.getPassword();
         this.isPasswordPlain = userDesc.isPasswordPlain();
-        this.authPlugin = userDesc.getAuthPlugin();
-        this.authString = userDesc.getAuthString();
+        this.authPluginName = userDesc.getAuthPlugin();
+        this.authStringUnResolved = userDesc.getAuthString();
 
         this.setRoleType = setRoleType;
         this.defaultRoles = defaultRoles;
+    }
+
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
     }
 
     public String getOriginalPassword() {
@@ -54,37 +67,12 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
         return isPasswordPlain;
     }
 
-    public String getAuthString() {
-        return authString;
+    public String getAuthPluginName() {
+        return authPluginName;
     }
 
-    public void setScramblePassword(byte[] scramblePassword) {
-        this.scramblePassword = scramblePassword;
-    }
-
-    public void setUserForAuthPlugin(String userForAuthPlugin) {
-        this.userForAuthPlugin = userForAuthPlugin;
-    }
-
-    public byte[] getPassword() {
-        return scramblePassword;
-    }
-
-    public UserIdentity getUserIdent() {
-        return userIdent;
-    }
-
-    public String getAuthPlugin() {
-        return authPlugin;
-    }
-
-    public String getUserForAuthPlugin() {
-        return userForAuthPlugin;
-    }
-
-
-    public SetRoleType getSetRoleType() {
-        return setRoleType;
+    public String getAuthStringUnResolved() {
+        return authStringUnResolved;
     }
 
     public List<String> getDefaultRoles() {
@@ -107,5 +95,25 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
     @Override
     public boolean needAuditEncryption() {
         return true;
+    }
+
+    @Deprecated
+    public void setScramblePassword(byte[] scramblePassword) {
+        this.scramblePassword = scramblePassword;
+    }
+
+    @Deprecated
+    public byte[] getPassword() {
+        return scramblePassword;
+    }
+
+    @Deprecated
+    public String getUserForAuthPlugin() {
+        return userForAuthPlugin;
+    }
+
+    @Deprecated
+    public void setUserForAuthPlugin(String userForAuthPlugin) {
+        this.userForAuthPlugin = userForAuthPlugin;
     }
 }

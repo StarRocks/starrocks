@@ -52,6 +52,7 @@ private:
     Status _create_src_chunk(ChunkPtr* chunk);
     Status _open_next_reader();
     StatusOr<ChunkPtr> _cast_chunk(const ChunkPtr& src_chunk);
+    void _materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
 
     friend class JsonReader;
 

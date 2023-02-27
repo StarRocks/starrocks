@@ -211,6 +211,12 @@ public class Config extends ConfigBase {
     public static String big_query_log_delete_age = "7d";
 
     /**
+     * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
+     * to avoid creating too many partitions at one time.
+     */
+    @ConfField(mutable = true) public static int max_dynamic_partition_num = 500;
+
+    /**
      * plugin_dir:
      * plugin install directory
      */
@@ -1648,17 +1654,30 @@ public class Config extends ConfigBase {
     public static int hms_process_events_parallel_num = 4;
 
     /**
-     * Metastore event processor refresh table column statistic interval in seconds.
-     */
-    @ConfField(mutable = true)
-    public static int hms_refresh_columns_statistic_interval_s = 600;
-
-    /**
      * Used to split files stored in dfs such as object storage
      * or hdfs into smaller files for hive external table
      */
     @ConfField(mutable = true)
     public static long hive_max_split_size = 64L * 1024L * 1024L;
+
+    /**
+     * Enable background refresh all hive external tables all partitions metadata on internal catalog.
+     */
+    @ConfField
+    public static boolean enable_background_refresh_hive_metadata = false;
+
+    /**
+     * Background refresh hive external table metadata interval in milliseconds.
+     */
+    @ConfField(mutable = true)
+    public static int background_refresh_hive_metadata_interval_millis = 600000;
+
+    /**
+     * Enable refresh hive partition statistics.
+     * The `getPartitionColumnStats()` requests of hive metastore has a high latency, and some users env may return timeout.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_refresh_hive_partitions_statistics = true;
 
     /**
      * size of iceberg worker pool
@@ -1760,31 +1779,12 @@ public class Config extends ConfigBase {
     public static int heartbeat_retry_times = 3;
 
     /**
-     * Temporary use, it will be removed later.
-     * Set true if using StarOS to manage tablets for StarRocks lake table.
+     * shared_data: means run on cloud-native
+     * shared_nothing: means run on local
+     * hybrid: run on both, not production ready, should only be used in test environment now.
      */
     @ConfField
-    public static boolean use_staros = false;
-    @ConfField
-    public static String starmgr_address = "127.0.0.1:6090";
-    @ConfField
-    public static boolean integrate_starmgr = false;
-    @ConfField
-    public static String starmgr_s3_bucket = "";
-    @ConfField
-    public static String starmgr_s3_region = "";
-    @ConfField
-    public static String starmgr_s3_endpoint = "";
-    @ConfField
-    public static String starmgr_aws_credential_type = "simple";
-    @ConfField
-    public static String starmgr_simple_credential_access_key_id = "";
-    @ConfField
-    public static String starmgr_simple_credential_access_key_secret = "";
-    @ConfField
-    public static String starmgr_assume_role_credential_arn = "";
-    @ConfField
-    public static String starmgr_assume_role_credential_external_id = "";
+    public static String run_mode = "shared_nothing";
 
     /**
      * empty shard group clean threshold (by create time).
@@ -1798,18 +1798,61 @@ public class Config extends ConfigBase {
     @ConfField
     public static long shard_deleter_run_interval_sec = 600L;
 
-    @ConfField
-    public static String hdfs_url = "";
-
-    /* default file store type used */
-    @ConfField
-    public static String default_fs_type = "S3";
-
+    // ***********************************************************
+    // * BEGIN: Cloud native meta server related configurations
+    // ***********************************************************
     /**
-     * starmgr disable auto shard balance or not
+     * Cloud native meta server rpc listen port
      */
     @ConfField
-    public static boolean starmgr_disable_shard_balance = false;
+    public static int cloud_native_meta_port = 6090;
+    // remote storage related configuration
+    /**
+     * storage type for cloud native table. Available options: "S3", "HDFS", case-sensitive
+     */
+    @ConfField
+    public static String cloud_native_storage_type = "S3";
+
+    // HDFS storage configuration
+    /**
+     * cloud native storage: hdfs storage url
+     */
+    public static String cloud_native_hdfs_url = "";
+
+    // AWS S3 storage configuration
+    @ConfField
+    public static String cloud_native_aws_s3_bucket = "";
+    @ConfField
+    public static String cloud_native_aws_s3_region = "";
+    @ConfField
+    public static String cloud_native_aws_s3_endpoint = "";
+    /**
+     * Sub path to used for the backend storage
+     */
+    @ConfField
+    public static String cloud_native_aws_s3_path = "";
+    // AWS credential configuration
+    /**
+     * AWS credential type, can be one of the following value, case-sensitive
+     * - "simple"
+     * - "instance_profile"
+     * - "assume_role"
+     */
+    @ConfField
+    public static String cloud_native_aws_credential_type = "simple";
+    // Configurations for aws credential_type = "simple"
+    @ConfField
+    public static String cloud_native_simple_credential_access_key_id = "";
+    @ConfField
+    public static String cloud_native_simple_credential_access_key_secret = "";
+    // Configurations for aws credential_type = "assume_role"
+    @ConfField
+    public static String cloud_native_assume_role_credential_arn = "";
+    @ConfField
+    public static String cloud_native_assume_role_credential_external_id = "";
+    // ***********************************************************
+    // * END: of Cloud native meta server related configurations
+    // ***********************************************************
 
     /**
      * default storage cache ttl of lake table
@@ -1820,8 +1863,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 
+    /**
+     * Each automatic partition will create a hidden partition, which is not displayed to the user by default.
+     * Sometimes this display can be enabled to check problems.
+     */
     @ConfField(mutable = true)
-    public static boolean enable_expression_partition = false;
+    public static boolean enable_display_shadow_partitions = false;
 
     @ConfField
     public static boolean enable_dict_optimize_routine_load = false;
@@ -2004,4 +2051,10 @@ public class Config extends ConfigBase {
      **/
     @ConfField(mutable = true)
     public static boolean enable_auto_tablet_distribution = false;
+
+    /**
+     * default size of minimum cache size of auto increment id allocation
+     **/
+    @ConfField(mutable = true)
+    public static long auto_increment_cache_size = 100000;
 }

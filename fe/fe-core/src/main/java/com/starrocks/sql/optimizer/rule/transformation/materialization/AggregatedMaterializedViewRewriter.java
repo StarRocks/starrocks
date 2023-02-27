@@ -53,8 +53,8 @@ import java.util.stream.Collectors;
 /**
  * SPJG materialized view rewriter, based on
  * 《Optimizing Queries Using Materialized Views: A Practical, Scalable Solution》
- *
- *  This rewriter is for aggregated query rewrite
+ * <p>
+ * This rewriter is for aggregated query rewrite
  */
 public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter {
     private static final Logger LOG = LogManager.getLogger(AggregatedMaterializedViewRewriter.class);

@@ -39,6 +39,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TCaseExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -82,7 +83,11 @@ public class CaseExpr extends Expr {
     private boolean hasElseExpr;
 
     public CaseExpr(Expr caseExpr, List<CaseWhenClause> whenClauses, Expr elseExpr) {
-        super();
+        this(caseExpr, whenClauses, elseExpr, NodePosition.ZERO);
+    }
+
+    public CaseExpr(Expr caseExpr, List<CaseWhenClause> whenClauses, Expr elseExpr, NodePosition pos) {
+        super(pos);
         if (caseExpr != null) {
             children.add(caseExpr);
             hasCaseExpr = true;

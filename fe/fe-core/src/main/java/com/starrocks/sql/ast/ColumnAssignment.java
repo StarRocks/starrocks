@@ -16,12 +16,20 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ColumnAssignment implements ParseNode {
     private final String column;
     private Expr expr;
 
+    private final NodePosition pos;
+
     public ColumnAssignment(String column, Expr expr) {
+        this(column, expr, NodePosition.ZERO);
+    }
+
+    public ColumnAssignment(String column, Expr expr, NodePosition pos) {
+        this.pos = pos;
         this.column = column;
         this.expr = expr;
     }
@@ -36,5 +44,10 @@ public class ColumnAssignment implements ParseNode {
 
     public void setExpr(Expr expr) {
         this.expr = expr;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

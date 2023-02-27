@@ -70,6 +70,7 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
+import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
@@ -415,7 +416,8 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager().alterUser(stmt);
+                    context.getGlobalStateMgr().getAuthenticationManager()
+                            .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo());
                 } else {
                     context.getGlobalStateMgr().getAuth().alterUser(stmt);
                 }
@@ -431,7 +433,6 @@ public class DDLStmtExecutor {
                 } else {
                     context.getGlobalStateMgr().getAuth().dropUser(stmt);
                 }
-
             });
             return null;
         }
@@ -776,6 +777,13 @@ public class DDLStmtExecutor {
         }
 
         @Override
+        public ShowResultSet visitDropAnalyzeStatement(DropAnalyzeJobStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(
+                    () -> context.getGlobalStateMgr().getAnalyzeManager().removeAnalyzeJob(stmt.getId()));
+            return null;
+        }
+
+        @Override
         public ShowResultSet visitRefreshTableStatement(RefreshTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().refreshExternalTable(stmt);
@@ -874,6 +882,7 @@ public class DDLStmtExecutor {
                 throw new RuntimeException(e);
             }
         }
+
     }
 
 }

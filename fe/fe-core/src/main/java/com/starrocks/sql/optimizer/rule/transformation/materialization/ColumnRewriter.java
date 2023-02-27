@@ -15,12 +15,11 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -84,7 +83,7 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
-    private static class ColumnRewriteVisitor extends ScalarOperatorVisitor<ScalarOperator, Void> {
+    private static class ColumnRewriteVisitor extends BaseScalarOperatorShuttle {
         private final boolean enableRelationRewrite;
         private final boolean enableEquivalenceClassesRewrite;
 
@@ -113,19 +112,6 @@ public class ColumnRewriter {
         }
 
         @Override
-        public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
-            List<ScalarOperator> children = Lists.newArrayList(scalarOperator.getChildren());
-            for (int i = 0; i < children.size(); ++i) {
-                ScalarOperator child = scalarOperator.getChild(i).accept(this, context);
-                if (child == null) {
-                    return null;
-                }
-                scalarOperator.setChild(i, child);
-            }
-            return scalarOperator;
-        }
-
-        @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator columnRef, Void context) {
             ColumnRefOperator result = columnRef;
             if (enableRelationRewrite && srcToDstRelationIdMapping != null) {
@@ -149,7 +135,8 @@ public class ColumnRewriter {
                     }
                 }
                 if (!found) {
-                    LOG.warn("can not find column ref:{} in target relation:{}", columnRef, targetRelationId);
+                    LOG.warn("can not find column ref id:{} name:{} in target relation:{}",
+                            columnRef.getId(), columnRef.getName(), targetRelationId);
                 }
             }
             if (enableEquivalenceClassesRewrite && equivalenceClasses != null) {

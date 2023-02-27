@@ -57,6 +57,7 @@
 #include "util/raw_container.h"
 #include "util/ref_count_closure.h"
 #include "util/reusable_closure.h"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -98,7 +99,7 @@ struct AddBatchCounter {
 
 class NodeChannel {
 public:
-    NodeChannel(OlapTableSink* parent, int64_t node_id);
+    NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental);
     ~NodeChannel() noexcept;
 
     // called before open, used to add tablet loacted in this backend
@@ -112,6 +113,7 @@ public:
     // if is_open_done() return true, open_wait() will not block
     // otherwise open_wait() will block
     void try_open();
+    void try_incremental_open();
     bool is_open_done();
     Status open_wait();
 
@@ -120,15 +122,15 @@ public:
     bool is_full();
 
     Status add_chunk(Chunk* input, const std::vector<int64_t>& tablet_ids, const std::vector<uint32_t>& indexes,
-                     uint32_t from, uint32_t size, bool eos);
+                     uint32_t from, uint32_t size);
 
     Status add_chunks(Chunk* input, const std::vector<std::vector<int64_t>>& tablet_ids,
-                      const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size, bool eos);
+                      const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size);
 
     // async close interface: try_close() -> [is_close_done()] -> close_wait()
     // if is_close_done() return true, close_wait() will not block
     // otherwise close_wait() will block
-    Status try_close();
+    Status try_close(bool wait_all_sender_close = false);
     bool is_close_done();
     Status close_wait(RuntimeState* state);
 
@@ -147,6 +149,8 @@ public:
     std::string name() const { return _name; }
     bool enable_colocate_mv_index() const { return _enable_colocate_mv_index; }
 
+    bool is_incremental() const { return _is_incremental; }
+
 private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
     Status _wait_all_prev_request();
@@ -154,9 +158,10 @@ private:
     bool _check_prev_request_done();
     bool _check_all_prev_request_done();
     Status _serialize_chunk(const Chunk* src, ChunkPB* dst);
-    void _open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure);
+    void _open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure,
+               std::vector<PTabletWithPartition>& tablets, bool incrmental_open);
     Status _open_wait(RefCountClosure<PTabletWriterOpenResult>* open_closure);
-    Status _send_request(bool eos);
+    Status _send_request(bool eos, bool wait_all_sender_close = false);
     void _cancel(int64_t index_id, const Status& err_st);
 
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
@@ -215,6 +220,8 @@ private:
     bool _enable_colocate_mv_index = config::enable_load_colocate_mv;
 
     WriteQuorumTypePB _write_quorum_type = WriteQuorumTypePB::MAJORITY;
+
+    bool _is_incremental;
 };
 
 class IndexChannel {
@@ -222,11 +229,27 @@ public:
     IndexChannel(OlapTableSink* parent, int64_t index_id) : _parent(parent), _index_id(index_id) {}
     ~IndexChannel();
 
-    Status init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets);
+    Status init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental);
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
             func(it.second.get());
+        }
+    }
+
+    void for_each_initial_node_channel(const std::function<void(NodeChannel*)>& func) {
+        for (auto& it : _node_channels) {
+            if (!it.second->is_incremental()) {
+                func(it.second.get());
+            }
+        }
+    }
+
+    void for_each_incremental_node_channel(const std::function<void(NodeChannel*)>& func) {
+        for (auto& it : _node_channels) {
+            if (it.second->is_incremental()) {
+                func(it.second.get());
+            }
         }
     }
 
@@ -235,6 +258,8 @@ public:
     bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
 
     bool has_intolerable_failure();
+
+    bool has_incremental_node_channel() const { return _has_incremental_node_channel; }
 
 private:
     friend class OlapTableSink;
@@ -251,6 +276,8 @@ private:
     std::set<int64_t> _failed_channels;
 
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
+
+    bool _has_incremental_node_channel = false;
 };
 
 // Write data to Olap Table.
@@ -306,8 +333,11 @@ public:
 
     Status reset_epoch(RuntimeState* state);
 
+    void set_nonblocking_send_chunk(bool nonblocking_send_chunk) { _nonblocking_send_chunk = nonblocking_send_chunk; }
+    bool nonblocking_send_chunk() const { return _nonblocking_send_chunk; }
+
 private:
-    template <LogicalType PT>
+    template <LogicalType LT>
     void _validate_decimal(RuntimeState* state, Column* column, const SlotDescriptor* desc,
                            std::vector<uint8_t>* validate_selection);
     // This method will change _validate_selection
@@ -328,6 +358,10 @@ private:
     Status _send_chunk_with_colocate_index(Chunk* chunk);
 
     Status _send_chunk_by_node(Chunk* chunk, IndexChannel* channel, std::vector<uint16_t>& selection_idx);
+
+    Status _fill_auto_increment_id(Chunk* chunk);
+
+    Status _fill_auto_increment_id_internal(Chunk* chunk, SlotDescriptor* slot, int64_t table_id);
 
     void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
     bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
@@ -352,6 +386,10 @@ private:
             index_channel->for_each_node_channel(func);
         }
     }
+
+    Status _automatic_create_partition();
+
+    Status _incremental_open_node_channel(const std::vector<TOlapTablePartition>& partitions);
 
     friend class NodeChannel;
     friend class IndexChannel;
@@ -433,6 +471,7 @@ private:
     RuntimeProfile::Counter* _send_rpc_timer = nullptr;
     RuntimeProfile::Counter* _client_rpc_timer = nullptr;
     RuntimeProfile::Counter* _server_rpc_timer = nullptr;
+    RuntimeProfile::Counter* _alloc_auto_increment_timer = nullptr;
 
     // load mem limit is for remote load channel
     int64_t _load_mem_limit = 0;
@@ -453,6 +492,29 @@ private:
     bool _enable_replicated_storage = false;
 
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
+
+    SlotId _auto_increment_slot_id = -1;
+
+    bool _has_auto_increment = false;
+
+    bool _null_expr_in_auto_increment = false;
+
+    bool _miss_auto_increment_column = false;
+
+    bool _abort_delete = false;
+
+    std::unique_ptr<ThreadPoolToken> _automatic_partition_token;
+
+    std::vector<std::vector<std::string>> _partition_not_exist_row_values;
+
+    bool _enable_automatic_partition = false;
+
+    bool _nonblocking_send_chunk = false;
+
+    bool _has_automatic_partition = false;
+
+    std::atomic<bool> _is_automatic_partition_running = false;
+    Status _automatic_partition_status;
 };
 
 } // namespace stream_load

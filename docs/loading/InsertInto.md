@@ -1,16 +1,18 @@
 # Load data using INSERT
 
-This topic describes how to load data into StarRocks by using a DML statement - INSERT.
+This topic describes how to load data into StarRocks by using a SQL statement - INSERT.
 
-Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT command. You can insert one or more rows with the VALUES syntax to test a function or a DEMO. You can also insert data defined by the results of a query on an internal or an [external table](../data_source/External_table.md) to build mathematical models for small-scale datasets or back up your data in HDFS.
+Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT. You can insert one or more rows directly with the VALUES clause to test a function or a DEMO. You can also insert data defined by the results of a query into an internal table from an [external table](../data_source/External_table.md).
 
-StarRocks v2.4 further supports overwriting data into a table by using INSERT OVERWRITE statement. The INSERT OVERWRITE statement integrates the following operations to implement the overwriting function:
+StarRocks v2.4 further supports overwriting data into a table by using INSERT OVERWRITE. The INSERT OVERWRITE statement integrates the following operations to implement the overwriting function:
 
-1. Creating temporary partitions according to the partitions that store the original data
-2. Inserting data into the temporary partitions
-3. Swapping the original partitions with the temporary partitions
+1. Creates temporary partitions according to the partitions that store the original data.
+2. Inserts data into the temporary partitions.
+3. Swaps the original partitions with the temporary partitions.
 
-If you need to verify the data before swapping the partitions, you can follow these steps to implement the overwriting function based on your own scenario.
+> **NOTE**
+>
+> If you need to verify the data before overwriting it, instead of using INSERT OVERWRITE, you can follow the above procedures to overwrite your data and verify it before swapping the partitions.
 
 ## Precautions
 
@@ -24,7 +26,7 @@ If you need to verify the data before swapping the partitions, you can follow th
 
 ## Preparation
 
-Create a database named `load_test`, and create an AGGREGATE KEY table `insert_wiki_edit` and a data source table `source_wiki_edit`.
+Create a database named `load_test`, and create a table `insert_wiki_edit` as the destination table and a table `source_wiki_edit` as the source table.
 
 > **NOTE**
 >
@@ -47,7 +49,17 @@ CREATE TABLE insert_wiki_edit
     added INT DEFAULT '0',
     deleted INT DEFAULT '0'
 )
-DUPLICATE KEY(event_time, channel, user, is_anonymous, is_minor, is_new, is_robot, is_unpatrolled)
+DUPLICATE KEY
+(
+    event_time,
+    channel,
+    user,
+    is_anonymous,
+    is_minor,
+    is_new,
+    is_robot,
+    is_unpatrolled
+)
 PARTITION BY RANGE(event_time)
 (
     PARTITION p06 VALUES LESS THAN ('2015-09-12 06:00:00'),
@@ -71,7 +83,17 @@ CREATE TABLE source_wiki_edit
     added INT DEFAULT '0',
     deleted INT DEFAULT '0'
 )
-DUPLICATE KEY(event_time, channel, user, is_anonymous, is_minor, is_new, is_robot, is_unpatrolled)
+DUPLICATE KEY
+(
+    event_time,
+    channel,
+    user,
+    is_anonymous,
+    is_minor,
+    is_new,
+    is_robot,
+    is_unpatrolled
+)
 PARTITION BY RANGE(event_time)
 (
     PARTITION p06 VALUES LESS THAN ('2015-09-12 06:00:00'),

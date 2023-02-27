@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.common;
 
-import com.starrocks.common.Config;
-
 public enum EngineType {
     OLAP,
     MYSQL,
@@ -25,10 +23,9 @@ public enum EngineType {
     ICEBERG,
     HUDI,
     JDBC,
-    STARROCKS,
     FILE;
 
     public static EngineType defaultEngine() {
-        return Config.use_staros ? STARROCKS : OLAP;
+        return OLAP;
     }
 }

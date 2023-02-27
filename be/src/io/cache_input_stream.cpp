@@ -65,7 +65,7 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
                 return Status::OK();
             }
         }
-        if (!res.status().is_not_found()) Status::NotFound("");
+        if (!res.status().is_not_found()) return res.status();
         DCHECK(res.status().is_not_found());
 
         int64_t block_id = offset / BLOCK_SIZE;

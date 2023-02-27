@@ -491,7 +491,7 @@ void GroupReader::DictFilterContext::init_chunk(const GroupReaderParam& param, C
         const auto& column = param.read_cols[col_idx];
         SlotId slot_id = column.slot_id;
         auto dict_code_column =
-                ColumnHelper::create_column(TypeDescriptor::from_primtive_type(kDictCodePrimitiveType), true);
+                ColumnHelper::create_column(TypeDescriptor::from_logical_type(kDictCodePrimitiveType), true);
         dict_code_column->reserve(chunk_size);
         (*chunk)->update_column(dict_code_column, slot_id);
     }

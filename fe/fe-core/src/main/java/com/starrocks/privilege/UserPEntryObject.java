@@ -16,8 +16,8 @@
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.Objects;
 
@@ -125,5 +125,14 @@ public class UserPEntryObject implements PEntryObject {
     @Override
     public PEntryObject clone() {
         return new UserPEntryObject(userIdentity);
+    }
+
+    @Override
+    public String toString() {
+        if (userIdentity == null) {
+            return "ALL USERS";
+        } else {
+            return userIdentity.toString();
+        }
     }
 }

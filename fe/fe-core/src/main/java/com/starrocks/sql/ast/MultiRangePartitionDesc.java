@@ -26,6 +26,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -54,19 +55,25 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             TimestampArithmeticExpr.TimeUnit.YEAR
     );
 
+    public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long offset) {
+        this(partitionBegin, partitionEnd, offset, null, NodePosition.ZERO);
+    }
+
     public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long step,
                                    String timeUnit) {
+        this(partitionBegin, partitionEnd, step, timeUnit, NodePosition.ZERO);
+    }
+
+    public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long step,
+                                   String timeUnit, NodePosition pos) {
+        super(pos);
         this.partitionBegin = partitionBegin;
         this.partitionEnd = partitionEnd;
         this.step = step;
         this.timeUnit = timeUnit;
     }
 
-    public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long offset) {
-        this.partitionBegin = partitionBegin;
-        this.partitionEnd = partitionEnd;
-        this.step = offset;
-    }
+
 
     public Long getStep() {
         return step;
@@ -228,7 +235,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             }
             if (!(standardBeginTime.equals(beginTime) && standardEndTime.equals(endTime))) {
                 String msg = "Batch build partition range [" + partitionBegin + "," + partitionEnd + ")" +
-                        " should be a standard unit of time (" + timeUnitType + ") " + extraMsg  + ". suggest range ["
+                        " should be a standard unit of time (" + timeUnitType + ") " + extraMsg + ". suggest range ["
                         + standardBeginTime.format(outputDateFormat) + "," + standardEndTime.format(outputDateFormat)
                         + "). If you want to create partial partitions in batch, you can turn off this check by " +
                         "setting the FE config enable_create_partial_partition_in_batch=true.";

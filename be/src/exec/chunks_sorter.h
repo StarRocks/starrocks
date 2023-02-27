@@ -105,7 +105,7 @@ public:
                                                             const SortExecExprs& sort_exec_exprs,
                                                             const std::vector<OrderByType>& order_by_types);
 
-    virtual void setup_runtime(RuntimeProfile* profile);
+    virtual void setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker);
 
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
@@ -143,29 +143,30 @@ protected:
 
 namespace detail {
 struct SortRuntimeFilterBuilder {
-    template <LogicalType ptype>
-    JoinRuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc) {
+    template <LogicalType ltype>
+    JoinRuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc,
+                                  bool is_close_interval) {
         auto data_column = ColumnHelper::get_data_column(column.get());
-        auto runtime_data_column = down_cast<RunTimeColumnType<ptype>*>(data_column);
+        auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];
         if (asc) {
-            return RuntimeBloomFilter<ptype>::template create_with_range<false>(pool, data);
+            return RuntimeBloomFilter<ltype>::template create_with_range<false>(pool, data, is_close_interval);
         } else {
-            return RuntimeBloomFilter<ptype>::template create_with_range<true>(pool, data);
+            return RuntimeBloomFilter<ltype>::template create_with_range<true>(pool, data, is_close_interval);
         }
     }
 };
 
 struct SortRuntimeFilterUpdater {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     std::nullptr_t operator()(JoinRuntimeFilter* filter, const ColumnPtr& column, int rid, bool asc) {
         auto data_column = ColumnHelper::get_data_column(column.get());
-        auto runtime_data_column = down_cast<RunTimeColumnType<ptype>*>(data_column);
+        auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];
         if (asc) {
-            down_cast<RuntimeBloomFilter<ptype>*>(filter)->template update_min_max<false>(data);
+            down_cast<RuntimeBloomFilter<ltype>*>(filter)->template update_min_max<false>(data);
         } else {
-            down_cast<RuntimeBloomFilter<ptype>*>(filter)->template update_min_max<true>(data);
+            down_cast<RuntimeBloomFilter<ltype>*>(filter)->template update_min_max<true>(data);
         }
         return nullptr;
     }

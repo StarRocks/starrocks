@@ -90,7 +90,7 @@ public class RangeSimplifier {
                 if (!srcColumnIdToRange.containsKey(targetEntry.getKey())
                         && !targetEntry.getValue().hasUpperBound()
                         && !targetEntry.getValue().hasLowerBound()) {
-                    return  null;
+                    return null;
                 }
                 Range<ConstantOperator> srcRange = srcColumnIdToRange.get(targetEntry.getKey());
                 Range<ConstantOperator> targetRange = targetEntry.getValue();

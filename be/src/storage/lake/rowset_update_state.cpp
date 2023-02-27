@@ -278,8 +278,9 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
         total_rows += _partial_update_states[i].src_rss_rowids.size();
         total_nondefault_rows += _partial_update_states[i].src_rss_rowids.size() - num_default;
         // get column values by rowid, also get default values if needed
-        RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(tablet, metadata, tablet_schema, read_column_ids,
-                                                                num_default > 0, rowids_by_rssid, &read_columns[i]));
+        RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(tablet, metadata, op_write, tablet_schema,
+                                                                read_column_ids, num_default > 0, rowids_by_rssid,
+                                                                &read_columns[i]));
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
             _partial_update_states[i].write_columns[col_idx]->append_selective(*read_columns[i][col_idx], idxes.data(),
                                                                                0, idxes.size());

@@ -137,7 +137,10 @@ enum TSchemaTableType {
     SCH_TASKS,
     SCH_TASK_RUNS,
     SCH_VERBOSE_SESSION_VARIABLES,
-    SCH_INVALID
+    SCH_BE_TABLETS,
+    SCH_BE_METRICS,
+    SCH_BE_TXNS,
+    SCH_BE_CONFIGS
 }
 
 enum THdfsCompression {
@@ -175,7 +178,8 @@ struct TColumn {
     5: optional bool is_allow_null                                                                    
     6: optional string default_value               
     7: optional bool is_bloom_filter_column     
-    8: optional Exprs.TExpr define_expr                                                               
+    8: optional Exprs.TExpr define_expr 
+    9: optional bool is_auto_increment                                                              
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
@@ -224,6 +228,8 @@ struct TOlapTablePartitionParam {
 
     7: optional list<string> partition_columns
     8: optional list<Exprs.TExpr> partition_exprs
+
+    9: optional bool enable_automatic_partition
 }
 
 struct TOlapTableIndexSchema {

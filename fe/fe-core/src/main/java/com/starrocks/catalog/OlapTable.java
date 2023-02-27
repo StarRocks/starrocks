@@ -44,6 +44,10 @@ import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.binlog.BinlogConfig;
@@ -55,10 +59,12 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
+import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
@@ -69,12 +75,15 @@ import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
+import com.starrocks.task.AgentTaskQueue;
+import com.starrocks.task.DropAutoIncrementMapTask;
 import com.starrocks.task.DropReplicaTask;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTable;
@@ -103,6 +112,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
@@ -530,6 +540,20 @@ public class OlapTable extends Table {
         }
     }
 
+    public boolean isAbortDelete() {
+        boolean abortDelete = false;
+        if (keysType == keysType.PRIMARY_KEYS) {
+            for (Column col : getBaseSchema()) {
+                if (col.isAutoIncrement() && !col.isKey()) {
+                    abortDelete = true;
+                    break;
+                }
+            }
+        }
+
+        return abortDelete;
+    }
+
     public Status resetIdsForRestore(GlobalStateMgr globalStateMgr, Database db, int restoreReplicationNum) {
         // table id
         id = globalStateMgr.getNextId();
@@ -558,7 +582,7 @@ public class OlapTable extends Table {
         }
 
         // reset partition info and idToPartition map
-        if (partitionInfo.getType() == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
                 long newPartId = globalStateMgr.getNextId();
@@ -736,6 +760,58 @@ public class OlapTable extends Table {
 
     public PartitionInfo getPartitionInfo() {
         return partitionInfo;
+    }
+
+    public void sendDropAutoIncrementMapTask() {
+        Set<Long> fullBackendId = Sets.newHashSet();
+        for (Partition partition : this.getAllPartitions()) {
+            List<MaterializedIndex> allIndices =
+                    partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+            for (MaterializedIndex materializedIndex : allIndices) {
+                for (Tablet tablet : materializedIndex.getTablets()) {
+                    List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                    for (Replica replica : replicas) {
+                        long backendId = replica.getBackendId();
+                        fullBackendId.add(backendId);
+                    }
+                }
+            }
+        }
+
+        AgentBatchTask batchTask = new AgentBatchTask();;
+
+        for (long backendId : fullBackendId) {
+            DropAutoIncrementMapTask dropAutoIncrementMapTask = new DropAutoIncrementMapTask(backendId, this.id,
+                                                                GlobalStateMgr.getCurrentState().getNextId());
+            batchTask.addTask(dropAutoIncrementMapTask);
+        }
+
+        if (batchTask.getTaskNum() > 0) {
+            MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<Long, Long>(batchTask.getTaskNum());
+            for (AgentTask task : batchTask.getAllTasks()) {
+                latch.addMark(task.getBackendId(), -1L);
+                ((DropAutoIncrementMapTask) task).setLatch(latch);
+                AgentTaskQueue.addTask(task);
+            }
+            AgentTaskExecutor.submit(batchTask);
+
+            // estimate timeout, at most 10 min
+            long timeout = 1L * 60L * 1000L;
+            boolean ok = false;
+            try {
+                LOG.info("begin to send drop auto increment map tasks to BE, total {} tasks. timeout: {}",
+                        batchTask.getTaskNum(), timeout);
+                ok = latch.await(timeout, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                LOG.warn("InterruptedException: ", e);
+            }
+
+            if (!ok) {
+                LOG.warn("drop auto increment map tasks failed");
+            }
+
+            return;
+        }
     }
 
     // partition Name -> Range
@@ -1165,7 +1241,7 @@ public class OlapTable extends Table {
         adler32.update(partitionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
         LOG.debug("signature. partition type: {}", partitionInfo.getType().name());
         // partition columns
-        if (partitionInfo.getType() == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
             adler32.update(Util.schemaHash(0, partitionColumns, null, 0));
@@ -1484,7 +1560,7 @@ public class OlapTable extends Table {
                 partition.setState(PartitionState.NORMAL);
                 for (MaterializedIndex idx : partition.getMaterializedIndices(extState)) {
                     idx.setState(IndexState.NORMAL);
-                    if (copied.isLakeTable()) {
+                    if (copied.isCloudNativeTable()) {
                         continue;
                     }
                     for (Tablet tablet : idx.getTablets()) {
@@ -1531,12 +1607,24 @@ public class OlapTable extends Table {
         boolean isInMemory = partitionInfo.getIsInMemory(oldPartition.getId());
         StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(oldPartition.getId());
 
-        if (partitionInfo.getType() == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
                     replicationNum, isInMemory, storageCacheInfo);
+        } else if (partitionInfo.getType() == PartitionType.LIST) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+            List<String> values = listPartitionInfo.getIdToValues().get(oldPartition.getId());
+            List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(oldPartition.getId());
+            listPartitionInfo.dropPartition(oldPartition.getId());
+            try {
+                listPartitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory,
+                        storageCacheInfo, values, multiValues);
+            } catch (AnalysisException ex) {
+                LOG.warn("failed to add list partition", ex);
+                throw new SemanticException(ex.getMessage());
+            }
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
             partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageCacheInfo);
@@ -1983,6 +2071,21 @@ public class OlapTable extends Table {
         return tableProperty.getStorageFormat();
     }
 
+    public void setStorageVolume(String storageVolume) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, storageVolume);
+        tableProperty.buildStorageVolume();
+    }
+
+    public String getStorageVolume() {
+        if (tableProperty == null) {
+            return RunMode.getCurrentRunMode().isAllowCreateLakeTable() ? "default" : "local";
+        }
+        return tableProperty.getStorageVolume();
+    }
+
     public void setCompressionType(TCompressionType compressionType) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -1996,6 +2099,14 @@ public class OlapTable extends Table {
             return TCompressionType.LZ4_FRAME;
         }
         return tableProperty.getCompressionType();
+    }
+
+    public void setPartitionLiveNumber(int number) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, String.valueOf(number));
+        tableProperty.buildPartitionLiveNumber();
     }
 
     public Map<String, String> buildBinlogAvailableVersion() {
@@ -2030,8 +2141,75 @@ public class OlapTable extends Table {
         tableProperty.clearBinlogAvailableVersion();
     }
 
+    public boolean hasUniqueConstraints() {
+        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
+        return uniqueConstraint != null;
+    }
+
+    public List<UniqueConstraint> getUniqueConstraints() {
+        if (tableProperty == null) {
+            return null;
+        }
+        return tableProperty.getUniqueConstraints();
+    }
+
+    public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        Map<String, String> properties = Maps.newHashMap();
+        String newProperty = uniqueConstraints.stream().map(UniqueConstraint::toString).collect(Collectors.joining(";"));
+        properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, newProperty);
+        tableProperty.modifyTableProperties(properties);
+        tableProperty.setUniqueConstraints(uniqueConstraints);
+    }
+
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        if (tableProperty == null) {
+            return null;
+        }
+        return tableProperty.getForeignKeyConstraints();
+    }
+
+    public void setForeignKeyConstraint(List<ForeignKeyConstraint> foreignKeyConstraints) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        Map<String, String> properties = Maps.newHashMap();
+        String newProperty = foreignKeyConstraints
+                .stream().map(ForeignKeyConstraint::toString).collect(Collectors.joining(";"));
+        properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, newProperty);
+        tableProperty.modifyTableProperties(properties);
+        tableProperty.setForeignKeyConstraints(foreignKeyConstraints);
+    }
+
     @Override
     public void onCreate() {
+        analyzePartitionInfo();
+    }
+
+    private void analyzePartitionInfo() {
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            return;
+        }
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        // currently, automatic partition only supports one expression
+        Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+        // for Partition slot ref, the SlotDescriptor is not serialized, so should recover it here.
+        // the SlotDescriptor is used by toThrift, which influences the execution process.
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        partitionExpr.collect(SlotRef.class, slotRefs);
+        Preconditions.checkState(slotRefs.size() == 1);
+        if (slotRefs.get(0).getSlotDescriptorWithoutCheck() == null) {
+            for (int i = 0; i < fullSchema.size(); i++) {
+                Column column = fullSchema.get(i);
+                if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
+                    SlotDescriptor slotDescriptor =
+                            new SlotDescriptor(new SlotId(i), column.getName(), column.getType(), column.isAllowNull());
+                    slotRefs.get(0).setDesc(slotDescriptor);
+                }
+            }
+        }
     }
 
     @Override

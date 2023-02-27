@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -52,7 +53,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class FunctionSet {
@@ -177,6 +177,7 @@ public class FunctionSet {
     public static final String REGEXP_EXTRACT = "regexp_extract";
     public static final String REGEXP_REPLACE = "regexp_replace";
     public static final String REPEAT = "repeat";
+    public static final String REPLACE = "replace";
     public static final String REVERSE = "reverse";
     public static final String RIGHT = "right";
     public static final String RPAD = "rpad";
@@ -472,7 +473,7 @@ public class FunctionSet {
     // we could evaluate the function only with the dict content, not all string column data.
     public final ImmutableSet<String> couldApplyDictOptimizationFunctions =
             ImmutableSet.of(APPEND_TRAILING_CHAR_IF_ABSENT, CONCAT, CONCAT_WS, HEX, LEFT, LIKE, LOWER, LPAD, LTRIM,
-                    REGEXP_EXTRACT, REGEXP_REPLACE, REPEAT, REVERSE, RIGHT, RPAD, RTRIM, SPLIT_PART, SUBSTR, SUBSTRING,
+                    REGEXP_EXTRACT, REGEXP_REPLACE, REPEAT, REPLACE, REVERSE, RIGHT, RPAD, RTRIM, SPLIT_PART, SUBSTR, SUBSTRING,
                     TRIM, UPPER, IF);
 
     public static final Set<String> alwaysReturnNonNullableFunctions =
@@ -500,7 +501,7 @@ public class FunctionSet {
                     .add(FunctionSet.EXCHANGE_SPEED)
                     .build();
 
-    public static final Set<String> decimalRoundFunctions =
+    public static final Set<String> DECIMAL_ROUND_FUNCTIONS =
             ImmutableSet.<String>builder()
                     .add(TRUNCATE)
                     .add(ROUND)
@@ -525,7 +526,7 @@ public class FunctionSet {
             .add(FunctionSet.FIRST_VALUE_REWRITE)
             .build();
 
-    public static final Set<String> varianceFunctions = ImmutableSet.<String>builder()
+    public static final Set<String> VARIANCE_FUNCTIONS = ImmutableSet.<String>builder()
             .add(FunctionSet.VAR_POP)
             .add(FunctionSet.VAR_SAMP)
             .add(FunctionSet.VARIANCE)
@@ -535,6 +536,18 @@ public class FunctionSet {
             .add(FunctionSet.STDDEV)
             .add(FunctionSet.STDDEV_POP)
             .add(FunctionSet.STDDEV_SAMP).build();
+
+    public static final List<String> ARRAY_DECIMAL_FUNCTIONS = ImmutableList.<String>builder()
+            // @todo: support later
+            // .add("array_sum")
+            // .add("array_avg")
+            // .add("array_min")
+            // .add("array_max")
+            .add(ARRAY_DISTINCT)
+            .add(ARRAY_SORT)
+            .add(REVERSE)
+            .add(ARRAY_INTERSECT)
+            .build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
@@ -610,7 +623,7 @@ public class FunctionSet {
         // First check for identical
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_IDENTICAL)) {
-                return PolymorphicFunctionAnalyzer.checkPolymorphicFunction(f, desc.getArgs());
+                return PolymorphicFunctionAnalyzer.generatePolymorphicFunction(f, desc.getArgs());
             }
         }
         if (mode == Function.CompareMode.IS_IDENTICAL) {
@@ -620,7 +633,7 @@ public class FunctionSet {
         // Next check for indistinguishable
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_INDISTINGUISHABLE)) {
-                return PolymorphicFunctionAnalyzer.checkPolymorphicFunction(f, desc.getArgs());
+                return PolymorphicFunctionAnalyzer.generatePolymorphicFunction(f, desc.getArgs());
             }
         }
         if (mode == Function.CompareMode.IS_INDISTINGUISHABLE) {
@@ -630,7 +643,7 @@ public class FunctionSet {
         // Next check for strict supertypes
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_SUPERTYPE_OF) && isCastMatchAllowed(desc, f)) {
-                return PolymorphicFunctionAnalyzer.checkPolymorphicFunction(f, desc.getArgs());
+                return PolymorphicFunctionAnalyzer.generatePolymorphicFunction(f, desc.getArgs());
             }
         }
         if (mode == Function.CompareMode.IS_SUPERTYPE_OF) {
@@ -640,7 +653,7 @@ public class FunctionSet {
         // Finally, check for non-strict supertypes
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF) && isCastMatchAllowed(desc, f)) {
-                return PolymorphicFunctionAnalyzer.checkPolymorphicFunction(f, desc.getArgs());
+                return PolymorphicFunctionAnalyzer.generatePolymorphicFunction(f, desc.getArgs());
             }
         }
         return null;

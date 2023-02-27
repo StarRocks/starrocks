@@ -39,6 +39,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BaseTableRef;
 import com.starrocks.analysis.BrokerDesc;
@@ -69,6 +70,7 @@ import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.MysqlScanNode;
@@ -124,12 +126,12 @@ public class ExportJob implements Writable {
     // descriptor used to register all column and table need
     private final DescriptorTable desc;
     private final Set<String> exportedTempFiles = Sets.newConcurrentHashSet();
-    private final Set<String> exportedFiles = Sets.newConcurrentHashSet();
+    private Set<String> exportedFiles = Sets.newConcurrentHashSet();
     private final Analyzer analyzer;
     private final List<Coordinator> coordList = Lists.newArrayList();
     private final AtomicInteger nextId = new AtomicInteger(0);
     // backedn_address => snapshot path
-    private final List<Pair<TNetworkAddress, String>> snapshotPaths = Lists.newArrayList();
+    private List<Pair<TNetworkAddress, String>> snapshotPaths = Lists.newArrayList();
     // backend id => backend lastStartTime 
     private final Map<Long, Long> beLastStartTime = Maps.newHashMap();
 
@@ -472,8 +474,24 @@ public class ExportJob implements Writable {
         return exportTable.isOlapTable();
     }
 
+    public void setSnapshotPaths(List<Pair<TNetworkAddress, String>> snapshotPaths) {
+        this.snapshotPaths = snapshotPaths;
+    }
+
+    public void setExportTempPath(String exportTempPath) {
+        this.exportTempPath = exportTempPath;
+    }
+
+    public void setExportedFiles(Set<String> exportedFiles) {
+        this.exportedFiles = exportedFiles;
+    }
+
     public void setBeStartTime(long beId, long lastStartTime) {
         this.beLastStartTime.put(beId, lastStartTime);
+    }
+
+    public void setFailMsg(ExportFailMsg failMsg) {
+        this.failMsg = failMsg;
     }
 
     public Map<Long, Long> getBeStartTimeMap() {
@@ -574,6 +592,14 @@ public class ExportJob implements Writable {
         return this.exportedTempFiles;
     }
 
+    public String getExportedTempPath() {
+        return this.exportTempPath;
+    }
+
+    public Set<String> getExportedFiles() {
+        return this.exportedFiles;
+    }
+
     public synchronized void addExportedTempFiles(List<String> files) {
         exportedTempFiles.addAll(files);
         LOG.debug("exported temp files: {}", this.exportedTempFiles);
@@ -648,7 +674,8 @@ public class ExportJob implements Writable {
                 break;
         }
         if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState);
+            GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState,
+                    snapshotPaths, exportTempPath, exportedFiles, failMsg);
         }
         return true;
     }
@@ -656,7 +683,6 @@ public class ExportJob implements Writable {
     public Status releaseSnapshots() {
         switch (exportTable.getType()) {
             case OLAP:
-                return Status.OK;
             case MYSQL:
                 return releaseSnapshotPaths();
             case LAKE:
@@ -738,69 +764,79 @@ public class ExportJob implements Writable {
     }
 
     public synchronized void cancelInternal(ExportFailMsg.CancelType type, String msg) {
-        if (!updateState(ExportJob.JobState.CANCELLED)) {
+        if (isExportDone()) {
+            LOG.warn("export job state is finished or cancelled");
             return;
         }
 
-        if (msg != null) {
-            failMsg = new ExportFailMsg(type, msg);
-        }
-
-        // release snapshot
-        releaseSnapshots();
-
-        // cancel all running coordinators
-        for (Coordinator coord : coordList) {
-            coord.cancel();
-        }
-
-        // try to remove exported temp files
         try {
-            if (!brokerDesc.hasBroker()) {
-                HdfsUtil.deletePath(exportTempPath, brokerDesc);
-            } else {
-                BrokerUtil.deletePath(exportTempPath, brokerDesc);
+            if (msg != null && failMsg.getCancelType() == ExportFailMsg.CancelType.UNKNOWN) {
+                failMsg = new ExportFailMsg(type, msg);
             }
-            LOG.info("remove export temp path success, path: {}", exportTempPath);
-        } catch (UserException e) {
-            LOG.warn("remove export temp path fail, path: {}", exportTempPath);
-        }
-        // try to remove exported files
-        for (String exportedFile : exportedFiles) {
+
+            // cancel all running coordinators
+            for (Coordinator coord : coordList) {
+                coord.cancel();
+            }
+
+            // try to remove exported temp files
             try {
                 if (!brokerDesc.hasBroker()) {
-                    HdfsUtil.deletePath(exportedFile, brokerDesc);
+                    HdfsUtil.deletePath(exportTempPath, brokerDesc);
                 } else {
-                    BrokerUtil.deletePath(exportedFile, brokerDesc);
+                    BrokerUtil.deletePath(exportTempPath, brokerDesc);
                 }
-                LOG.info("remove exported file success, path: {}", exportedFile);
+                LOG.info("remove export temp path success, path: {}", exportTempPath);
             } catch (UserException e) {
-                LOG.warn("remove exported file fail, path: {}", exportedFile);
+                LOG.warn("remove export temp path fail, path: {}", exportTempPath);
             }
+            // try to remove exported files
+            for (String exportedFile : exportedFiles) {
+                try {
+                    if (!brokerDesc.hasBroker()) {
+                        HdfsUtil.deletePath(exportedFile, brokerDesc);
+                    } else {
+                        BrokerUtil.deletePath(exportedFile, brokerDesc);
+                    }
+                    LOG.info("remove exported file success, path: {}", exportedFile);
+                } catch (UserException e) {
+                    LOG.warn("remove exported file fail, path: {}", exportedFile);
+                }
+            }
+
+            // release snapshot
+            releaseSnapshots();
+        } finally {
+            updateState(ExportJob.JobState.CANCELLED);
+            LOG.info("export job cancelled. job: {}", this);
         }
-        LOG.info("export job cancelled. job: {}", this);
     }
 
     public synchronized void finish() {
-        if (!updateState(JobState.FINISHED)) {
+        if (isExportDone()) {
+            LOG.warn("export job state is finished or cancelled");
             return;
         }
 
-        // release snapshot
-        releaseSnapshots();
-
-        // try to remove exported temp files
         try {
-            if (!brokerDesc.hasBroker()) {
-                HdfsUtil.deletePath(exportTempPath, brokerDesc);
-            } else {
-                BrokerUtil.deletePath(exportTempPath, brokerDesc);
+            // release snapshot
+            releaseSnapshots();
+
+            // try to remove exported temp files
+            try {
+                if (!brokerDesc.hasBroker()) {
+                    HdfsUtil.deletePath(exportTempPath, brokerDesc);
+                } else {
+                    BrokerUtil.deletePath(exportTempPath, brokerDesc);
+                }
+                LOG.info("remove export temp path success, path: {}", exportTempPath);
+            } catch (UserException e) {
+                LOG.warn("remove export temp path fail, path: {}", exportTempPath);
             }
-            LOG.info("remove export temp path success, path: {}", exportTempPath);
-        } catch (UserException e) {
-            LOG.warn("remove export temp path fail, path: {}", exportTempPath);
+        } finally {
+            updateState(JobState.FINISHED);
+            LOG.info("export job finished. job: {}", this);
         }
-        LOG.info("export job finished. job: {}", this);
     }
 
     @Override
@@ -875,6 +911,15 @@ public class ExportJob implements Writable {
         exportPath = Text.readString(in);
         columnSeparator = Text.readString(in);
         rowDelimiter = Text.readString(in);
+
+        GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
+        Database db = null;
+        if (stateMgr.getMetadata() != null) {
+            db = stateMgr.getDb(dbId);
+        }
+        if (db != null) {
+            exportTable = db.getTable(tableId);
+        }
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_53) {
             int count = in.readInt();
@@ -992,6 +1037,79 @@ public class ExportJob implements Writable {
         public void readFields(DataInput in) throws IOException {
             jobId = in.readLong();
             state = JobState.valueOf(Text.readString(in));
+        }
+    }
+
+    public static class ExportUpdateInfo implements Writable {
+        @SerializedName("jobId")
+        long jobId;
+        @SerializedName("state")
+        JobState state;
+        @SerializedName("snapshotPaths")
+        List<Pair<TNetworkAddress, String>> snapshotPaths;
+        @SerializedName("exportTempPath")
+        String exportTempPath;
+        @SerializedName("exportedFiles")
+        Set<String> exportedFiles;
+        @SerializedName("failMsg")
+        ExportFailMsg failMsg;
+
+        public ExportUpdateInfo() {
+            this.jobId = -1;
+            this.state = JobState.CANCELLED;
+            this.snapshotPaths =  Lists.newArrayList();
+            this.exportTempPath = "";
+            this.exportedFiles = Sets.newConcurrentHashSet();
+            this.failMsg = new ExportFailMsg();
+        }
+
+        public ExportUpdateInfo(long jobId, JobState state, List<Pair<TNetworkAddress, String>> snapshotPaths,
+                String exportTempPath, Set<String> exportedFiles, ExportFailMsg failMsg) {
+            this.jobId = jobId;
+            this.state = state;
+            this.snapshotPaths = snapshotPaths;
+            this.exportTempPath = exportTempPath;
+            this.exportedFiles = exportedFiles;
+            this.failMsg = failMsg;
+        }
+
+        public long getJobId() {
+            return jobId;
+        }
+
+        public JobState getState() {
+            return state;
+        }
+
+        @Override
+        public void write(DataOutput out) throws IOException {
+            String json = GsonUtils.GSON.toJson(this, ExportUpdateInfo.class);
+            Text.writeString(out, json);
+
+            // Due to TNetworkAddress unsupport to_json, snapshotPaths can not be seralized to GSON automatically,
+            // here we manually seralize it
+            out.writeInt(snapshotPaths.size());
+            for (Pair<TNetworkAddress, String> entry : snapshotPaths) {
+                Text.writeString(out, entry.first.hostname);
+                out.writeInt(entry.first.port);
+                Text.writeString(out, entry.second);
+            }
+        }
+
+        public static ExportUpdateInfo read(DataInput input) throws IOException {
+            ExportUpdateInfo info = GsonUtils.GSON.fromJson(Text.readString(input), ExportUpdateInfo.class);
+
+            int snapshotPathsLen = input.readInt();
+            for (int i = 0; i < snapshotPathsLen; i++) {
+                String hostName = Text.readString(input);
+                int port = input.readInt();
+                String path = Text.readString(input);
+                TNetworkAddress address = new TNetworkAddress(hostName, port);
+                Pair<TNetworkAddress, String> entry = new Pair<TNetworkAddress, String>(address, path);
+                info.snapshotPaths.set(i, entry);
+            }
+
+            return info;
         }
     }
 }

@@ -147,6 +147,9 @@ public abstract class Type implements Cloneable {
     public static final Type ARRAY_DATETIME = new ArrayType(Type.DATETIME);
     public static final Type ARRAY_VARCHAR = new ArrayType(Type.VARCHAR);
     public static final Type ARRAY_JSON = new ArrayType(Type.JSON);
+    public static final Type ARRAY_DECIMAL32 = new ArrayType(Type.DECIMAL32);
+    public static final Type ARRAY_DECIMAL64 = new ArrayType(Type.DECIMAL64);
+    public static final Type ARRAY_DECIMAL128 = new ArrayType(Type.DECIMAL128);
 
     public static final ImmutableList<ScalarType> INTEGER_TYPES =
             ImmutableList.of(BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
@@ -577,7 +580,7 @@ public abstract class Type implements Cloneable {
     /**
      * Used for Nest Type
      */
-    public void setSelectedField(int pos, boolean needSetChildren) {
+    public void setSelectedField(ComplexTypeAccessPath accessPath, boolean needSetChildren) {
         throw new IllegalStateException("setSelectedField() is not implemented for type " + toSql());
     }
 

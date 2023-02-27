@@ -32,7 +32,6 @@ statement
     : queryStatement
 
     // Warehouse Statement
-    | useWarehouseStatement
     | createWarehouseStatement
     | dropWarehouseStatement
     | showWarehousesStatement
@@ -89,7 +88,7 @@ statement
 
     // Materialized View Statement
     | createMaterializedViewStatement
-    | showMaterializedViewStatement
+    | showMaterializedViewsStatement
     | dropMaterializedViewStatement
     | alterMaterializedViewStatement
     | refreshMaterializedViewStatement
@@ -249,6 +248,7 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
+    | setWarehouseStatement
 
     //Unsupported Statement
     | unsupportedStatement
@@ -261,7 +261,7 @@ useDatabaseStatement
     ;
 
 useCatalogStatement
-    : USE CATALOG identifierOrString
+    : USE string
     ;
 
 showDatabasesStatement
@@ -317,7 +317,7 @@ createTableStatement
      ;
 
 columnDesc
-    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)? defaultDesc? comment?
+    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)? (defaultDesc | AUTO_INCREMENT)? comment?
     ;
 
 charsetName
@@ -517,8 +517,8 @@ materializedViewDesc
     | properties
     ;
 
-showMaterializedViewStatement
-    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+showMaterializedViewsStatement
+    : SHOW MATERIALIZED VIEWS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 dropMaterializedViewStatement
@@ -621,10 +621,6 @@ showWarehousesStatement
     : SHOW WAREHOUSES ((LIKE pattern=string) | (WHERE expression))?
     ;
 
-useWarehouseStatement
-    : USE WAREHOUSE identifierOrString
-    ;
-
 dropWarehouseStatement
     : DROP WAREHOUSE (IF EXISTS)? warehouseName=identifierOrString
     ;
@@ -662,6 +658,7 @@ alterClause
     | dropComputeNodeClause
     | modifyBrokerClause
     | alterLoadErrorUrlClause
+    | createImageClause
 
     //Alter table clause
     | createIndexClause
@@ -733,6 +730,10 @@ modifyBrokerClause
 
 alterLoadErrorUrlClause
     : SET LOAD ERRORS HUB properties?
+    ;
+
+createImageClause
+    : CREATE IMAGE
     ;
 
 // ---------Alter table clause---------
@@ -1004,7 +1005,7 @@ classifier
     : '(' expressionList ')'
     ;
 
-// ------------------------------------------- Function ----------------------------------------------------
+// ------------------------------------------- UDF Statement ----------------------------------------------------
 
 showFunctionsStatement
     : SHOW FULL? (BUILTIN|GLOBAL)? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
@@ -1050,7 +1051,9 @@ dataDesc
         INTO TABLE dstTableName=identifier
         partitions=partitionNames?
         (COLUMNS TERMINATED BY colSep=string)?
+        (ROWS TERMINATED BY rowSep=string)?
         format=fileFormat?
+        (formatPropsField=formatProps)?
         colList=columnAliases?
         (COLUMNS FROM PATH AS colFromPath=identifierList)?
         (SET colMappingList=classifier)?
@@ -1061,6 +1064,15 @@ dataDesc
         partitions=partitionNames?
         (SET colMappingList=classifier)?
         (WHERE where=expression)?
+    ;
+
+formatProps
+    :  '('
+            (SKIP_HEADER '=' INTEGER_VALUE)?
+            (TRIM_SPACE '=' booleanValue)?
+            (ENCLOSE '=' encloseCharacter=string)?
+            (ESCAPE '=' escapeCharacter=string)?
+        ')'
     ;
 
 brokerDesc
@@ -1196,12 +1208,12 @@ createUserStatement
     ;
 
 dropUserStatement
-    : DROP USER user
+    : DROP USER (IF EXISTS)? user
     ;
 
 alterUserStatement
-    : ALTER USER user authOption
-    | ALTER USER user DEFAULT ROLE (NONE| ALL | roleList)
+    : ALTER USER (IF EXISTS)? user authOption
+    | ALTER USER (IF EXISTS)? user DEFAULT ROLE (NONE| ALL | roleList)
     ;
 
 showUserStatement
@@ -1218,11 +1230,11 @@ executeAsStatement
     ;
 
 createRoleStatement
-    : CREATE ROLE identifierOrString
+    : CREATE ROLE (IF NOT EXISTS)? roleList
     ;
 
 dropRoleStatement
-    : DROP ROLE identifierOrString
+    : DROP ROLE (IF EXISTS)? roleList
     ;
 
 showRolesStatement
@@ -1250,19 +1262,20 @@ setDefaultRoleStatement
     : SET DEFAULT ROLE (NONE | ALL | roleList) TO user;
 
 grantRevokeClause
-    : (USER? user | ROLE identifierOrString) (WITH GRANT OPTION)?
+    : (USER? user | ROLE identifierOrString)
     ;
 
 grantPrivilegeStatement
-    : GRANT IMPERSONATE ON USER user (',' user)* TO grantRevokeClause                                   #grantImpersonate
-    | GRANT privilegeTypeList ON privObjectNameList TO grantRevokeClause                                #grantTablePrivBrief
+    : GRANT IMPERSONATE ON USER user (',' user)* TO grantRevokeClause (WITH GRANT OPTION)?              #grantImpersonate
+    | GRANT privilegeTypeList ON privObjectNameList TO grantRevokeClause (WITH GRANT OPTION)?           #grantTablePrivBrief
     | GRANT privilegeTypeList ON privObjectType (privObjectNameList)?
-        TO grantRevokeClause                                                                            #grantPrivWithType
-    | GRANT privilegeTypeList ON GLOBAL? privObjectType qualifiedName '(' typeList ')'
-        TO grantRevokeClause                                                                            #grantPrivWithFunc
+        TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithType
+    | GRANT privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
+        TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithFunc
     | GRANT privilegeTypeList ON ALL privObjectType
-        (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? TO grantRevokeClause                  #grantOnAll
-    | GRANT privilegeTypeList ON ALL GLOBAL FUNCTIONS TO grantRevokeClause                              #grantOnAllGlobalFunctions
+        (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? TO grantRevokeClause
+        (WITH GRANT OPTION)?                                                                            #grantOnAll
+    | GRANT privilegeTypeList ON ALL GLOBAL FUNCTIONS TO grantRevokeClause (WITH GRANT OPTION)?         #grantOnAllGlobalFunctions
     ;
 
 revokePrivilegeStatement
@@ -1270,7 +1283,7 @@ revokePrivilegeStatement
     | REVOKE privilegeTypeList ON privObjectNameList FROM grantRevokeClause                             #revokeTablePrivBrief
     | REVOKE privilegeTypeList ON privObjectType (privObjectNameList)?
         FROM grantRevokeClause                                                                          #revokePrivWithType
-    | REVOKE privilegeTypeList ON GLOBAL? privObjectType qualifiedName '(' typeList ')'
+    | REVOKE privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         FROM grantRevokeClause                                                                          #revokePrivWithFunc
     | REVOKE privilegeTypeList ON ALL privObjectType
         (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? FROM grantRevokeClause                #revokeOnAll
@@ -1294,6 +1307,10 @@ privObjectName
 
 privObjectNameList
     : privObjectName (',' privObjectName)*
+    ;
+
+privFunctionObjectNameList
+    : qualifiedName '(' typeList ')' (',' qualifiedName '(' typeList ')')*
     ;
 
 privilegeTypeList
@@ -1471,6 +1488,10 @@ setUserPropertyStatement
 
 roleList
     : identifierOrString (',' identifierOrString)*
+    ;
+
+setWarehouseStatement
+    : SET WAREHOUSE identifierOrString
     ;
 
 unsupportedStatement
@@ -1802,6 +1823,7 @@ informationFunctionExpression
     | name = CONNECTION_ID '(' ')'
     | name = CURRENT_USER ('(' ')')?
     | name = CURRENT_ROLE '(' ')'
+    | name = CURRENT_CATALOG ('(' ')')?
     ;
 
 specialDateTimeExpression
@@ -1854,7 +1876,7 @@ whenClause
 
 over
     : OVER '('
-        (PARTITION BY partition+=expression (',' partition+=expression)*)?
+        (bracketHint? PARTITION BY partition+=expression (',' partition+=expression)*)?
         (ORDER BY sortItem (',' sortItem)*)?
         windowFrame?
       ')'
@@ -1900,6 +1922,7 @@ partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY LIST identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
     | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
+    | PARTITION BY functionCall
     ;
 
 listPartitionDesc
@@ -2163,7 +2186,7 @@ nonReserved
     | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
-    | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+    | IDENTIFIED | IMAGE | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL
     | MANUAL | MAP | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
@@ -2172,14 +2195,14 @@ nonReserved
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
-    | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
+    | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW
     | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER | USERS
-    | VALUE | VARIABLES | VIEW | VERBOSE
+    | VALUE | VARIABLES | VIEW | VIEWS | VERBOSE
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
     | DOTDOTDOT

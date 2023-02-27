@@ -23,12 +23,12 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlPassword;
@@ -47,9 +47,11 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyVar;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.system.HeartbeatFlags;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.lang3.StringUtils;
@@ -172,6 +174,15 @@ public class SetStmtAnalyzer {
 
         if (variable.equalsIgnoreCase(SessionVariable.TABLET_INTERNAL_PARALLEL_MODE)) {
             validateTabletInternalParallelModeValue(resolvedExpression.getStringValue());
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.DEFAULT_TABLE_COMPRESSION)) {
+            String compressionName = resolvedExpression.getStringValue();
+            TCompressionType compressionType = CompressionUtils.getCompressTypeByName(compressionName);
+            if (compressionType == null) {
+                throw new SemanticException(String.format("Unsupported compression type: %s, supported list is %s",
+                        compressionName, StringUtils.join(CompressionUtils.getSupportedCompressionNames(), ",")));
+            }
         }
 
         var.setResolvedExpression(resolvedExpression);

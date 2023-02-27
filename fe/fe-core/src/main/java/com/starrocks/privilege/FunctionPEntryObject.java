@@ -19,6 +19,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 
@@ -58,6 +59,7 @@ public class FunctionPEntryObject implements PEntryObject {
         if (tokens.get(0).equals("*")) {
             dbId = ALL_DATABASE_ID;
             funcSig = ALL_FUNCTIONS_SIG;
+            return new FunctionPEntryObject(dbId, funcSig);
         } else {
             Database database = mgr.getDb(tokens.get(0));
             if (database == null) {
@@ -67,12 +69,16 @@ public class FunctionPEntryObject implements PEntryObject {
 
             if (tokens.get(1).equals("*")) {
                 funcSig = ALL_FUNCTIONS_SIG;
+                return new FunctionPEntryObject(dbId, funcSig);
             } else {
                 funcSig = tokens.get(1);
+                FunctionPEntryObject functionPEntryObject = new FunctionPEntryObject(dbId, funcSig);
+                if (!functionPEntryObject.validate(mgr)) {
+                    throw new PrivObjNotFoundException("cannot find function: " + funcSig);
+                }
+                return functionPEntryObject;
             }
         }
-
-        return new FunctionPEntryObject(dbId, funcSig);
     }
 
     @Override
@@ -154,5 +160,29 @@ public class FunctionPEntryObject implements PEntryObject {
     @Override
     public PEntryObject clone() {
         return new FunctionPEntryObject(databaseId, functionSig);
+    }
+
+    @Override
+    public String toString() {
+        if (databaseId == FunctionPEntryObject.ALL_DATABASE_ID) {
+            return "ALL FUNCTIONS IN ALL DATABASES";
+        } else {
+            String functionSig = getFunctionSig();
+            Database database = GlobalStateMgr.getCurrentState().getDb(getDatabaseId());
+            if (database == null) {
+                throw new MetaNotFoundException("Can't find database : " + databaseId);
+            }
+
+            StringBuilder sb = new StringBuilder();
+            if (functionSig.equals(FunctionPEntryObject.ALL_FUNCTIONS_SIG)) {
+                sb.append("ALL FUNCTIONS ");
+                sb.append("IN DATABASE ");
+                sb.append(database.getFullName());
+            } else {
+                sb.append(functionSig);
+                sb.append(" IN DATABASE ").append(database.getFullName());
+            }
+            return sb.toString();
+        }
     }
 }
