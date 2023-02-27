@@ -392,7 +392,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
         LogicalAggregationOperator aggregate;
         List<ColumnRefOperator> groupBys = Lists.newArrayList(context.groupBys.keySet());
-        if ("preaggregation".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) ||
+        if ("local".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) ||
                 ("auto".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) && groupBys.size() <= 1)) {
             // local && un-split
             aggregate = new LogicalAggregationOperator(AggType.LOCAL, groupBys, context.aggregations);
