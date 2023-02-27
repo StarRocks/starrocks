@@ -43,6 +43,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -805,6 +806,11 @@ public class PrivilegeCheckerV2Test {
                         "revoke select on table db1.tbl1 from test"
                 ),
                 "Access denied for user 'test' to database 'db1'");
+        // check CTAS: don't need 'INSERT' priv for InsertStmt created by CTAS statement
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateTableAsSelectStmt createTableAsSelectStmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create table db1.ctas_t2 as select k1,k2 from db1.tbl1", ctx);
+        PrivilegeCheckerV2.check(createTableAsSelectStmt.getInsertStmt(), ctx);
 
         // check create table like: CREATE_TABLE on db and SELECT on existed table
         String createTableLikeSql = "create table db1.like_tbl like db1.tbl1;";
@@ -875,7 +881,6 @@ public class PrivilegeCheckerV2Test {
         }
 
         // check show table status: only return table user has any privilege on
-        ConnectContext ctx = starRocksAssert.getCtx();
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser("show table status from db1", ctx);
         grantRevokeSqlAsRoot("grant SELECT on db1.tbl2 to test");
         ctxToTestUser();
