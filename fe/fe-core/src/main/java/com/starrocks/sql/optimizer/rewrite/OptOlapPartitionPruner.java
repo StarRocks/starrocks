@@ -205,6 +205,7 @@ public class OptOlapPartitionPruner {
         // Currently queries either specify a temporary partition, or do not. There is no situation
         // where two partitions are checked at the same time
         boolean isTemporaryPartitionPrune = false;
+        List<Long> specifyPartitionIds = null;
         // single item list partition has only one column mapper
         Map<Long, List<LiteralExpr>> literalExprValuesMap = listPartitionInfo.getLiteralExprValues();
         List<Long> partitionIds = Lists.newArrayList();
@@ -220,6 +221,7 @@ public class OptOlapPartitionPruner {
                 }
                 partitionIds.add(part.getId());
             }
+            specifyPartitionIds = partitionIds;
         } else {
             partitionIds = listPartitionInfo.getPartitionIds(false);
         }
@@ -268,7 +270,7 @@ public class OptOlapPartitionPruner {
 
         List<ScalarOperator> scalarOperatorList = Utils.extractConjuncts(operator.getPredicate());
         PartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
-                columnToNullPartitions, scalarOperatorList);
+                columnToNullPartitions, scalarOperatorList, specifyPartitionIds);
         try {
             List<Long> prune = partitionPruner.prune();
             if (prune == null && isTemporaryPartitionPrune)  {
