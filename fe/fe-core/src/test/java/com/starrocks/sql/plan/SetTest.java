@@ -259,8 +259,6 @@ public class SetTest extends PlanTestBase {
         String sql = "select count(*) from (select null as c1 union all select null as c1) t group by t.c1";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [5, BOOLEAN, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [2, BOOLEAN, true]\n" +
                 "  |      [4, BOOLEAN, true]");

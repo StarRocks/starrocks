@@ -120,7 +120,7 @@ public class ScalarOperatorToExpr {
         public Expr visitVariableReference(ColumnRefOperator node, FormatterContext context) {
             Expr expr = context.colRefToExpr.get(node);
             if (context.projectOperatorMap.containsKey(node) && expr == null) {
-                expr = buildExpr.build(context.projectOperatorMap.get(node), context);
+                expr = buildExecExpression(context.projectOperatorMap.get(node), context);
                 hackTypeNull(expr);
                 context.colRefToExpr.put(node, expr);
                 return expr;
@@ -142,8 +142,11 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitArrayElement(ArrayElementOperator node, FormatterContext context) {
-            return new ArrayElementExpr(node.getType(), buildExecExpression(node.getChild(0), context),
+            ArrayElementExpr expr = new ArrayElementExpr(node.getType(), buildExecExpression(node.getChild(0), context),
                     buildExecExpression(node.getChild(1), context));
+            hackTypeNull(expr);
+            return expr;
+        }
 
         @Override
         public Expr visitArraySlice(ArraySliceOperator node, FormatterContext context) {
