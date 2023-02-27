@@ -160,7 +160,7 @@ public class CatalogMgr {
     }
 
     public static boolean isExternalCatalog(String name) {
-        return !isInternalCatalog(name) && !isResourceMappingCatalog(name);
+        return !Strings.isNullOrEmpty(name) && !isInternalCatalog(name) && !isResourceMappingCatalog(name);
     }
 
     public void replayCreateCatalog(Catalog catalog) throws DdlException {

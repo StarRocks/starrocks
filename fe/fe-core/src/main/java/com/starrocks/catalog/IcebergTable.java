@@ -243,6 +243,11 @@ public class IcebergTable extends Table {
         }
 
         Map<String, String> copiedProps = Maps.newHashMap(properties);
+        catalog = copiedProps.remove(ICEBERG_CATALOG);
+        if (Strings.isNullOrEmpty(catalog)) {
+            throw new DdlException(String.format(PROPERTY_MISSING_MSG, ICEBERG_CATALOG, ICEBERG_CATALOG));
+        }
+
         db = copiedProps.remove(ICEBERG_DB);
         if (Strings.isNullOrEmpty(db)) {
             throw new DdlException(String.format(PROPERTY_MISSING_MSG, ICEBERG_DB, ICEBERG_DB));

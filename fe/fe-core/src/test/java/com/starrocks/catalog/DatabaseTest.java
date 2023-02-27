@@ -241,6 +241,6 @@ public class DatabaseTest {
         // External database
         Database db3 = new Database(101, "db3");
         db3.setCatalogName("hive");
-        Assert.assertEquals("hive.db4", db3.getUUID());
+        Assert.assertEquals("hive.db3", db3.getUUID());
     }
 }
