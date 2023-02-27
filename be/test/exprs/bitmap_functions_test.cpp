@@ -2332,7 +2332,7 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
 
         auto column = BitmapFunctions::bitmap_subset_limit(ctx, columns).value();
         auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
-        ASSERT_EQ("5,64,128,256,512", res->get_object(0)->to_string());
+        ASSERT_EQ("5,64,128,256,512,1024", res->get_object(0)->to_string());
     }
 
     {
@@ -2484,8 +2484,8 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
         limit->append(INT64_MAX);
 
         columns.emplace_back(bitmap_column);
-        columns.emplace_back(offset);
-        columns.emplace_back(len);
+        columns.emplace_back(start);
+        columns.emplace_back(limit);
 
         auto column = BitmapFunctions::bitmap_subset_limit(ctx, columns).value();
         ASSERT_TRUE(column->is_null(0));
@@ -2506,7 +2506,7 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
         columns.emplace_back(limit);
 
         auto column = BitmapFunctions::bitmap_subset_limit(ctx, columns).value();
-        ASSERT_TRUE(column->is_null(0));
+        ASSERT_EQ("5,64,128,256,512", res->get_object(0)->to_string());
     }
 }
 } // namespace starrocks
