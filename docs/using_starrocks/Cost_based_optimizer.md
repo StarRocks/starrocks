@@ -81,7 +81,10 @@ The following table describes the default settings. If you need to modify them, 
 | enable_collect_full_statistic         | BOOLEAN  | TRUE              | Whether to enable automatic full collection. This switch is turned on by default. |
 | statistic_collect_interval_sec        | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
-| statistics_max_full_collect_data_size | INT      | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_max_full_collect_data_size | INT      | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_collect_max_row_count_per_query | INT  | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
+| statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
+| statistic_auto_analyze_end_time | STRING      | 23:59:59  | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 
 You can rely on automatic jobs for a majority of statistics collection, but if you have specific statistics requirements, you can manually create a task by executing the ANALYZE TABLE statement or customize an automatic task by executing the CREATE ANALYZE  statement.
 
@@ -396,7 +399,8 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 | enable_statistic_collect             | BOOLEAN  | TRUE              | Whether to collect statistics. This parameter is turned on by default. |
 | enable_collect_full_statistic        | BOOLEAN  | TRUE              | Whether to enable automatic full statistics collection. This parameter is turned on by default. |
 | statistic_auto_collect_ratio         | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
-| statistic_max_full_collect_data_size | LONG     | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_max_full_collect_data_size | LONG     | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_collect_max_row_count_per_query | INT | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
 | statistic_collect_interval_sec       | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_sample_collect_rows        | LONG     | 200000            | The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
 | statistic_collect_concurrency        | INT      | 3                 | The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. |
