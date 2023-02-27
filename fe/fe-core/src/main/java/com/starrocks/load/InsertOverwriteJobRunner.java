@@ -21,7 +21,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -300,7 +299,7 @@ public class InsertOverwriteJobRunner {
                 }
             });
 
-            if (targetTable.getPartitionInfo().getType() == PartitionType.RANGE) {
+            if (targetTable.getPartitionInfo().isRangePartition()) {
                 targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
             } else {
                 targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));

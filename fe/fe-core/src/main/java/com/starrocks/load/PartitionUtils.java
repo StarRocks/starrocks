@@ -22,7 +22,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -71,7 +70,7 @@ public class PartitionUtils {
                 Partition partition = newTempPartitions.get(i);
                 // range is null for UNPARTITIONED type
                 Range<PartitionKey> range = null;
-                if (partitionInfo.getType() == PartitionType.RANGE) {
+                if (partitionInfo.isRangePartition()) {
                     RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                     rangePartitionInfo.setRange(partition.getId(), true,
                             rangePartitionInfo.getRange(sourcePartitionId));

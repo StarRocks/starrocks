@@ -59,7 +59,7 @@ public class OptOlapPartitionPruner {
 
         PartitionInfo partitionInfo = table.getPartitionInfo();
 
-        if (partitionInfo.getType() == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             selectedPartitionIds = rangePartitionPrune(table, (RangePartitionInfo) partitionInfo, logicalOlapScanOperator);
         } else if (partitionInfo.getType() == PartitionType.LIST) {
             selectedPartitionIds = listPartitionPrune(table, (ListPartitionInfo) partitionInfo, logicalOlapScanOperator);
@@ -103,7 +103,7 @@ public class OptOlapPartitionPruner {
 
         OlapTable table = (OlapTable) logicalOlapScanOperator.getTable();
         PartitionInfo tablePartitionInfo = table.getPartitionInfo();
-        if (tablePartitionInfo.getType() != PartitionType.RANGE) {
+        if (!tablePartitionInfo.isRangePartition()) {
             return null;
         }
 
@@ -314,7 +314,7 @@ public class OptOlapPartitionPruner {
         boolean probeResult = true;
         if (candidatePartitions.isEmpty()) {
             probeResult = false;
-        } else if (partitionInfo.getType() != PartitionType.RANGE) {
+        } else if (!partitionInfo.isRangePartition()) {
             probeResult = false;
         } else if (((RangePartitionInfo) partitionInfo).getPartitionColumns().size() > 1) {
             probeResult = false;

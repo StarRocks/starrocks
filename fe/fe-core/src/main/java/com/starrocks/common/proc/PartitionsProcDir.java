@@ -319,7 +319,7 @@ public class PartitionsProcDir implements ProcDirInterface {
 
             // for range partitions, we return partitions in ascending range order by default.
             // this is to be consistent with the behaviour before 0.12
-            if (tblPartitionInfo.getType() == PartitionType.RANGE) {
+            if (tblPartitionInfo.isRangePartition()) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) tblPartitionInfo;
                 partitionIds = rangePartitionInfo.getSortedRangeMap(isTempPartition).stream()
                         .map(Map.Entry::getKey).collect(Collectors.toList());
@@ -418,7 +418,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         List<Column> partitionColumns;
         if (this.partitionType == PartitionType.LIST) {
             partitionColumns = ((ListPartitionInfo) partitionInfo).getPartitionColumns();
-        } else if (this.partitionType == PartitionType.RANGE) {
+        } else if (partitionInfo.isRangePartition()) {
             partitionColumns = ((RangePartitionInfo) partitionInfo).getPartitionColumns();
         } else {
             partitionColumns = new ArrayList<>();
@@ -430,7 +430,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         if (this.partitionType == PartitionType.LIST) {
             return ((ListPartitionInfo) partitionInfo).getValuesFormat(partitionId);
         }
-        if (this.partitionType == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             return ((RangePartitionInfo) partitionInfo).getRange(partitionId).toString();
         }
         return "";

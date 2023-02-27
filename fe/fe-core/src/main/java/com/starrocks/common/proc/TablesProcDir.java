@@ -177,7 +177,7 @@ public class TablesProcDir implements ProcDirInterface {
         if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
             PartitionType partitionType = olapTable.getPartitionInfo().getType();
-            if (partitionType == PartitionType.RANGE
+            if (partitionType == PartitionType.RANGE || partitionType == PartitionType.EXPR_RANGE
                     || partitionType == PartitionType.LIST) {
                 return olapTable.getPartitions().size();
             }
