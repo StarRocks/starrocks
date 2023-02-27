@@ -261,7 +261,7 @@ public:
 
     // create a min/max LT/GT RuntimeFilter with val
     template <bool is_min>
-    static RuntimeBloomFilter* create_with_range(ObjectPool* pool, CppType val) {
+    static RuntimeBloomFilter* create_with_range(ObjectPool* pool, CppType val, bool is_close_interval) {
         auto* p = pool->add(new RuntimeBloomFilter());
         p->_init_full_range();
         p->init(1);
@@ -273,10 +273,10 @@ public:
 
         if constexpr (is_min) {
             p->_min = val;
-            p->_left_open_interval = false;
+            p->_left_close_interval = is_close_interval;
         } else {
             p->_max = val;
-            p->_right_open_interval = false;
+            p->_right_close_interval = is_close_interval;
         }
 
         p->_always_true = true;
@@ -333,8 +333,8 @@ public:
 
     CppType max_value() const { return _max; }
 
-    bool left_open_interval() const { return _left_open_interval; }
-    bool right_open_interval() const { return _right_open_interval; }
+    bool left_close_interval() const { return _left_close_interval; }
+    bool right_close_interval() const { return _right_close_interval; }
 
     void evaluate(Column* input_column, RunningContext* ctx) const override {
         if (_num_hash_partitions != 0) {
@@ -751,8 +751,8 @@ private:
     std::string _slice_min;
     std::string _slice_max;
     bool _has_min_max = true;
-    bool _left_open_interval = true;
-    bool _right_open_interval = true;
+    bool _left_close_interval = true;
+    bool _right_close_interval = true;
 };
 
 } // namespace starrocks
