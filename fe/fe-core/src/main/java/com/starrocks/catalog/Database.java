@@ -99,7 +99,7 @@ public class Database extends MetaObject implements Writable {
 
     private long id;
 
-    // add comments
+    // catalogName is set if the database comes from an external catalog
     private String catalogName;
     private String fullQualifiedName;
     private QueryableReentrantReadWriteLock rwLock;
