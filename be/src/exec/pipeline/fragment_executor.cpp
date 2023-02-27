@@ -238,6 +238,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     const auto& params = request.params;
     const auto& fragment = request.fragment;
+    const int chunk_size = runtime_state->chunk_size();
 
     // Set up plan
     RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, desc_tbl, &_fragment_ctx->plan()));
@@ -276,11 +277,13 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
         if (scan_node->limit() > 0) {
-            // the upper bound of records we actually will scan is `limit * dop * io_parallelism`.
+            // The upper bound of records we actually will scan is `limit * dop * io_parallelism`.
             // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
-            // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
+            // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization.
+            // Some chunk sources scan `chunk_size` rows at a time, so normalize `limit` to be rounded up to `chunk_size`.
             logical_scan_limit += scan_node->limit();
-            physical_scan_limit += scan_node->limit() * dop * ScanOperator::MAX_IO_TASKS_PER_OP;
+            int64_t normalized_limit = (scan_node->limit() + chunk_size - 1) / chunk_size * chunk_size;
+            physical_scan_limit += normalized_limit * dop * ScanOperator::MAX_IO_TASKS_PER_OP;
         } else {
             // Not sure how many rows will be scan.
             logical_scan_limit = -1;

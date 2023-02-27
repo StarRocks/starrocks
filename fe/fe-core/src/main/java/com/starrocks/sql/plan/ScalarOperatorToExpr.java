@@ -62,6 +62,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class ScalarOperatorToExpr {
@@ -91,6 +92,24 @@ public class ScalarOperatorToExpr {
     }
 
     public static class Formatter extends ScalarOperatorVisitor<Expr, FormatterContext> {
+
+        /**
+         * For now, backend cannot see the TYPE_NULL and other derived types, like array<null>
+         * So we need to do some hack when transforming ScalarOperator to Expr.
+         */
+        private static void hackTypeNull(Expr expr) {
+            // For primitive types, this can be any legitimate type, for simplicity, we pick boolean.
+            if (expr.getType().isNull()) {
+                expr.setType(Type.BOOLEAN);
+                return;
+            }
+
+            // For array types, itemType can be any legitimate type, for simplicity, we pick boolean.
+            if (Objects.equals(Type.ARRAY_NULL, expr.getType())) {
+                expr.setType(Type.ARRAY_BOOLEAN);
+            }
+        }
+
         @Override
         public Expr visit(ScalarOperator scalarOperator, FormatterContext context) {
             throw new UnsupportedOperationException(
@@ -99,35 +118,44 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitVariableReference(ColumnRefOperator node, FormatterContext context) {
-            if (context.projectOperatorMap.containsKey(node) && context.colRefToExpr.get(node) == null) {
-                Expr expr = buildExecExpression(context.projectOperatorMap.get(node), context);
+            Expr expr = context.colRefToExpr.get(node);
+            if (context.projectOperatorMap.containsKey(node) && expr == null) {
+                expr = buildExecExpression(context.projectOperatorMap.get(node), context);
+                hackTypeNull(expr);
                 context.colRefToExpr.put(node, expr);
                 return expr;
             }
 
-            Preconditions.checkState(context.colRefToExpr.containsKey(node));
-            return context.colRefToExpr.get(node);
+            if (expr.getType().isNull()) {
+                hackTypeNull(expr);
+            }
+            return expr;
         }
 
         @Override
         public Expr visitArray(ArrayOperator node, FormatterContext context) {
-            return new ArrayExpr(node.getType(),
+            ArrayExpr expr = new ArrayExpr(node.getType(),
                     node.getChildren().stream().map(e -> buildExecExpression(e, context)).collect(Collectors.toList()));
+            hackTypeNull(expr);
+            return expr;
         }
 
         @Override
         public Expr visitArrayElement(ArrayElementOperator node, FormatterContext context) {
-            return new ArrayElementExpr(node.getType(), buildExecExpression(node.getChild(0), context),
+            ArrayElementExpr expr = new ArrayElementExpr(node.getType(), buildExecExpression(node.getChild(0), context),
                     buildExecExpression(node.getChild(1), context));
+            hackTypeNull(expr);
+            return expr;
         }
 
         @Override
         public Expr visitArraySlice(ArraySliceOperator node, FormatterContext context) {
-            ArraySliceExpr arraySliceExpr = new ArraySliceExpr(buildExecExpression(node.getChild(0), context),
+            ArraySliceExpr expr = new ArraySliceExpr(buildExecExpression(node.getChild(0), context),
                     buildExecExpression(node.getChild(1), context),
                     buildExecExpression(node.getChild(2), context));
-            arraySliceExpr.setType(node.getType());
-            return arraySliceExpr;
+            expr.setType(node.getType());
+            hackTypeNull(expr);
+            return expr;
         }
 
         @Override
@@ -137,6 +165,7 @@ public class ScalarOperatorToExpr {
                 if (literal.isNull()) {
                     NullLiteral nullLiteral = new NullLiteral();
                     nullLiteral.setType(literal.getType());
+                    hackTypeNull(nullLiteral);
                     nullLiteral.setOriginType(Type.NULL);
                     return nullLiteral;
                 }
@@ -320,7 +349,8 @@ public class ScalarOperatorToExpr {
                 expr = new LikePredicate(LikePredicate.Operator.LIKE, child1, child2);
             }
 
-            expr.setFn(Expr.getBuiltinFunction(expr.getOp().name(), new Type[] {child1.getType(), child2.getType()},
+            expr.setFn(Expr.getBuiltinFunction(expr.getOp().name(),
+                    new Type[] {child1.getType(), child2.getType()},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF));
 
             expr.setType(Type.BOOLEAN);
@@ -422,13 +452,16 @@ public class ScalarOperatorToExpr {
                     break;
             }
             callExpr.setType(call.getType());
+            hackTypeNull(callExpr);
             return callExpr;
         }
 
         @Override
         public Expr visitCastOperator(CastOperator operator, FormatterContext context) {
-            CastExpr expr = new CastExpr(operator.getType(), buildExecExpression(operator.getChild(0), context));
+            CastExpr expr =
+                    new CastExpr(operator.getType(), buildExecExpression(operator.getChild(0), context));
             expr.setImplicit(context.implicitCast);
+            hackTypeNull(expr);
             return expr;
         }
 
@@ -454,6 +487,7 @@ public class ScalarOperatorToExpr {
 
             CaseExpr result = new CaseExpr(caseExpr, list, elseExpr);
             result.setType(operator.getType());
+            hackTypeNull(result);
             return result;
         }
 
@@ -482,6 +516,7 @@ public class ScalarOperatorToExpr {
             }
             Expr result = new DictMappingExpr(dictExpr, callExpr);
             result.setType(operator.getType());
+            hackTypeNull(result);
             return result;
         }
 
