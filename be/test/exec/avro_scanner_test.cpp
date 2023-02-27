@@ -99,58 +99,6 @@ protected:
         return std::make_unique<JsonScanner>(_state, _profile, *broker_scan_range, _counter);
     }
 
-    ChunkPtr test_whole_row_json(int columns, const std::string& input_data, std::string jsonpath,
-                                 const std::vector<std::string>& jsonpaths) {
-        std::vector<TypeDescriptor> types;
-        for (int i = 0; i < columns; i++) {
-            types.emplace_back(TypeDescriptor::create_varchar_type(1024));
-        }
-
-        std::vector<TBrokerRangeDesc> ranges;
-        TBrokerRangeDesc range;
-        range.format_type = TFileFormatType::FORMAT_JSON;
-        range.strip_outer_array = false;
-        range.__isset.strip_outer_array = false;
-        range.__isset.jsonpaths = true;
-        range.jsonpaths = std::move(jsonpath);
-        range.__isset.json_root = false;
-        range.__set_path(input_data);
-        ranges.emplace_back(range);
-
-        auto scanner = create_json_scanner(types, ranges, jsonpaths);
-
-        EXPECT_OK(scanner->open());
-
-        ChunkPtr chunk = scanner->get_next().value();
-        return chunk;
-    }
-
-    ChunkPtr test_with_jsonpath(int columns, const std::string& input_data, std::string jsonpath,
-                                const std::vector<std::string>& jsonpaths) {
-        std::vector<TypeDescriptor> types;
-        for (int i = 0; i < columns; i++) {
-            types.emplace_back(TypeDescriptor::create_json_type());
-        }
-
-        std::vector<TBrokerRangeDesc> ranges;
-        TBrokerRangeDesc range;
-        range.format_type = TFileFormatType::FORMAT_JSON;
-        range.strip_outer_array = false;
-        range.__isset.strip_outer_array = false;
-        range.__isset.jsonpaths = true;
-        range.jsonpaths = std::move(jsonpath);
-        range.__isset.json_root = false;
-        range.__set_path(input_data);
-        ranges.emplace_back(range);
-
-        auto scanner = create_json_scanner(types, ranges, jsonpaths);
-
-        EXPECT_OK(scanner->open());
-
-        ChunkPtr chunk = scanner->get_next().value();
-        return chunk;
-    }
-
     static void SetUpTestCase() {
         ASSERT_TRUE(fs::create_directories("./be/test/exec/test_data/json_scanner/tmp").ok());
     }
@@ -160,7 +108,6 @@ protected:
     }
 
     void SetUp() override {
-        std::cout << "In SetUp" << std::endl;
         config::vector_chunk_size = 4096;
         _profile = _pool.add(new RuntimeProfile("test"));
         _counter = _pool.add(new ScannerCounter());
@@ -168,9 +115,7 @@ protected:
         std::string starrocks_home = getenv("STARROCKS_HOME");
     }
 
-    void TearDown() override {
-        std::cout << "In TearDown" << std::endl;
-    }
+    void TearDown() override {}
 
     void init_avro_value(std::string schema_path, AvroHelper& avro_helper) {
         std::ifstream infile_schema;
@@ -247,7 +192,6 @@ TEST_F(AvroScannerTest, test_basic_type) {
     DeferOp json_deleter([&] {
         free(avro_as_json);
     });
-    std::cout << avro_as_json << std::endl;
     std::string data_path = "./be/test/exec/test_data/json_scanner/tmp/avro_basic_data.json";
     write_json_data(avro_as_json, data_path);
 
@@ -267,7 +211,6 @@ TEST_F(AvroScannerTest, test_basic_type) {
     range.__isset.json_root = false;
     range.__set_path(data_path);
     ranges.emplace_back(range);
-    std::cout << "Test1 End" << std::endl;
 
     auto scanner = create_json_scanner(types, ranges, {"boolean_type", "long_type", "double_type", "string_type", "enum_type"});
 
@@ -341,7 +284,6 @@ TEST_F(AvroScannerTest, test_jsonpaths) {
     DeferOp json_deleter([&] {
         free(avro_as_json);
     });
-    std::cout << avro_as_json << std::endl;
     std::string data_path = "./be/test/exec/test_data/json_scanner/tmp/avro_nest_data.json";
     write_json_data(avro_as_json, data_path);
 
@@ -361,10 +303,8 @@ TEST_F(AvroScannerTest, test_jsonpaths) {
     range.__isset.json_root = false;
     range.__set_path(data_path);
     ranges.emplace_back(range);
-    std::cout << "Test1 End" << std::endl;
 
     auto scanner = create_json_scanner(types, ranges, {"boolean_type", "long_type", "double_type", "string_type", "long_type2"});
-
     Status st = scanner->open();
     ASSERT_TRUE(st.ok());
 
@@ -435,7 +375,6 @@ TEST_F(AvroScannerTest, test_json_type) {
     DeferOp json_deleter([&] {
         free(avro_as_json);
     });
-    std::cout << avro_as_json << std::endl;
     std::string data_path = "./be/test/exec/test_data/json_scanner/tmp/avro_nest_data.json";
     write_json_data(avro_as_json, data_path);
 
@@ -454,10 +393,8 @@ TEST_F(AvroScannerTest, test_json_type) {
     range.__isset.json_root = false;
     range.__set_path(data_path);
     ranges.emplace_back(range);
-    std::cout << "Test1 End" << std::endl;
 
     auto scanner = create_json_scanner(types, ranges, {"boolean_type", "long_type", "double_type", "string_type", "nest_type"});
-
     Status st = scanner->open();
     ASSERT_TRUE(st.ok());
 
@@ -475,13 +412,6 @@ TEST_F(AvroScannerTest, test_json_type) {
     EXPECT_EQ("{\"boolean_type\": false, \"long_type\": 4294967297}", json->to_string_uncheck());
 }
 
-/*
- * TODO: we must support jsonpath * operator 
- * 接下来这块还需要补充多个测试：
- * 1. union_type not null
- * 2. union_type array
- * 3. union_type record
- */
 TEST_F(AvroScannerTest, test_union_type_null) {
     std::string schema_path = "./be/test/exec/test_data/json_scanner/avro_union_schema.json";
     AvroHelper avro_helper;
@@ -507,18 +437,11 @@ TEST_F(AvroScannerTest, test_union_type_null) {
         avro_value_set_double(&double_value, 1.234567);
     }
 
-    /*
-     * avro设置union
-     * jsonpath编写
-     * 表定义
-     * 值比较 
-     */
-
     avro_value_t union_value;
     if (avro_value_get_by_name(&avro_helper.avro_val, "union_type", &union_value, NULL) == 0) {
         avro_value_t null_value;
         avro_value_set_branch(&union_value, 0, &null_value);
-         avro_value_set_null(&null_value);
+        avro_value_set_null(&null_value);
     }
 
     char* avro_as_json = nullptr;
@@ -530,7 +453,6 @@ TEST_F(AvroScannerTest, test_union_type_null) {
     DeferOp json_deleter([&] {
         free(avro_as_json);
     });
-    std::cout << avro_as_json << std::endl;
     std::string data_path = "./be/test/exec/test_data/json_scanner/tmp/avro_union_data.json";
     write_json_data(avro_as_json, data_path);
 
@@ -549,10 +471,8 @@ TEST_F(AvroScannerTest, test_union_type_null) {
     range.__isset.json_root = false;
     range.__set_path(data_path);
     ranges.emplace_back(range);
-    std::cout << "Test1 End" << std::endl;
 
-    auto scanner = create_json_scanner(types, ranges, {"boolean_type", "long_type", "double_type", "string_type", "union_type"});
-
+    auto scanner = create_json_scanner(types, ranges, {"boolean_type", "long_type", "double_type", "union_type"});
     Status st = scanner->open();
     ASSERT_TRUE(st.ok());
 
@@ -566,6 +486,82 @@ TEST_F(AvroScannerTest, test_union_type_null) {
     EXPECT_EQ(4294967296, chunk->get(0)[1].get_int64());
     EXPECT_FLOAT_EQ(1.234567, chunk->get(0)[2].get_double());
     EXPECT_TRUE(chunk->get(0)[3].is_null());
+}
+
+TEST_F(AvroScannerTest, test_union_type_basic) {
+    std::string schema_path = "./be/test/exec/test_data/json_scanner/avro_union_schema.json";
+    AvroHelper avro_helper;
+    init_avro_value(schema_path, avro_helper);
+    DeferOp avro_helper_deleter([&] {
+        avro_schema_decref(avro_helper.schema);
+        avro_value_iface_decref(avro_helper.iface);
+        avro_value_decref(&avro_helper.avro_val);
+    });
+
+    avro_value_t boolean_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "boolean_type", &boolean_value, NULL) == 0) {
+        avro_value_set_boolean(&boolean_value, true);
+    }
+
+    avro_value_t long_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "long_type", &long_value, NULL) == 0) {
+        avro_value_set_long(&long_value, 4294967296);
+    }
+
+    avro_value_t double_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "double_type", &double_value, NULL) == 0) {
+        avro_value_set_double(&double_value, 1.234567);
+    }
+
+    avro_value_t union_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "union_type", &union_value, NULL) == 0) {
+        avro_value_t string_value;
+        avro_value_set_branch(&union_value, 1, &string_value);
+        avro_value_set_string(&string_value, "abcdefg");
+    }
+
+    char* avro_as_json = nullptr;
+    int result = avro_value_to_json(&avro_helper.avro_val, 1, &avro_as_json);
+    if (result != 0) {
+        std::cout << "avro to json failed: " << avro_strerror() << std::endl;
+    }
+    EXPECT_EQ(0, result);
+    DeferOp json_deleter([&] {
+        free(avro_as_json);
+    });
+    std::string data_path = "./be/test/exec/test_data/json_scanner/tmp/avro_union_data.json";
+    write_json_data(avro_as_json, data_path);
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_BOOLEAN);
+    types.emplace_back(TYPE_BIGINT);
+    types.emplace_back(TYPE_DOUBLE);
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_AVRO;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = R"(["$.boolean_type", "$.long_type", "$.double_type", "$.union_type.*"])";    
+    range.__isset.json_root = false;
+    range.__set_path(data_path);
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"boolean_type", "long_type", "double_type", "union_type"});
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    auto st2 = scanner->get_next();
+    ASSERT_TRUE(st2.ok());
+
+    ChunkPtr chunk = st2.value();
+    EXPECT_EQ(4, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+    EXPECT_EQ(1, chunk->get(0)[0].get_int8());
+    EXPECT_EQ(4294967296, chunk->get(0)[1].get_int64());
+    EXPECT_FLOAT_EQ(1.234567, chunk->get(0)[2].get_double());
+    EXPECT_EQ("abcdefg", chunk->get(0)[3].get_slice());
 }
 
 TEST_F(AvroScannerTest, test_array) {
@@ -593,13 +589,6 @@ TEST_F(AvroScannerTest, test_array) {
         avro_value_set_double(&double_value, 1.234567);
     }
 
-    /*
-     * avro设置union
-     * jsonpath编写
-     * 表定义
-     * 值比较 
-     */
-
     avro_value_t array_value;
     if (avro_value_get_by_name(&avro_helper.avro_val, "array_type", &array_value, NULL) == 0) {
         avro_value_t ele1;
@@ -620,7 +609,6 @@ TEST_F(AvroScannerTest, test_array) {
     DeferOp json_deleter([&] {
         free(avro_as_json);
     });
-    std::cout << avro_as_json << std::endl;
     std::string data_path = "./be/test/exec/test_data/json_scanner/tmp/avro_array_data.json";
     write_json_data(avro_as_json, data_path);
 
@@ -640,10 +628,8 @@ TEST_F(AvroScannerTest, test_array) {
     range.__isset.json_root = false;
     range.__set_path(data_path);
     ranges.emplace_back(range);
-    std::cout << "Test1 End" << std::endl;
 
     auto scanner = create_json_scanner(types, ranges, {"boolean_type", "long_type", "double_type", "array_type"});
-
     Status st = scanner->open();
     ASSERT_TRUE(st.ok());
 
@@ -659,6 +645,109 @@ TEST_F(AvroScannerTest, test_array) {
     auto array = chunk->get(0)[3].get_array();
     ASSERT_EQ(4294967297, array[0].get_int64());
     ASSERT_EQ(4294967298, array[1].get_int64());
+}
+
+TEST_F(AvroScannerTest, test_complex_schema) {
+    std::string schema_path = "./be/test/exec/test_data/json_scanner/avro_complex_schema.json";
+    AvroHelper avro_helper;
+    init_avro_value(schema_path, avro_helper);
+    DeferOp avro_helper_deleter([&] {
+        avro_schema_decref(avro_helper.schema);
+        avro_value_iface_decref(avro_helper.iface);
+        avro_value_decref(&avro_helper.avro_val);
+    });
+
+    avro_value_t decoded_logs_value;
+    avro_value_set_branch(&avro_helper.avro_val, 1, &decoded_logs_value);
+    avro_value_t id_value;
+    if (avro_value_get_by_name(&decoded_logs_value, "id", &id_value, NULL) == 0) {
+        avro_value_set_string(&id_value, "12345");
+    }
+    
+    avro_value_t event_signature_val;
+    if (avro_value_get_by_name(&decoded_logs_value, "event_signature", &event_signature_val, NULL) == 0) {
+        avro_value_t null_vale;
+        avro_value_set_branch(&event_signature_val, 0, &null_vale);
+        avro_value_set_null(&null_vale);
+
+    }
+
+    avro_value_t event_params_val;
+    if (avro_value_get_by_name(&decoded_logs_value, "event_params", &event_params_val, NULL) == 0) {
+        avro_value_t array_value;
+        avro_value_set_branch(&event_params_val, 1, &array_value);
+
+        avro_value_t ele1;
+        avro_value_append(&array_value, &ele1, NULL);
+        avro_value_set_string(&ele1, "abc");
+
+        avro_value_t ele2;
+        avro_value_append(&array_value, &ele2, NULL);
+        avro_value_set_string(&ele2, "def");
+    }
+
+    avro_value_t raw_log_val;
+    if (avro_value_get_by_name(&decoded_logs_value, "raw_log", &raw_log_val, NULL) == 0) {
+        avro_value_t record_value;
+        avro_value_set_branch(&raw_log_val, 1, &record_value);
+
+        avro_value_t id_value;
+        if (avro_value_get_by_name(&record_value, "id", &id_value, NULL) == 0) {
+            avro_value_set_string(&id_value, "iop");
+        }
+        avro_value_t data_value;
+        if (avro_value_get_by_name(&record_value, "data", &data_value, NULL) == 0) {
+            avro_value_set_string(&data_value, "klj");
+        }
+    }
+
+    char* avro_as_json = nullptr;
+    int result = avro_value_to_json(&avro_helper.avro_val, 1, &avro_as_json);
+    if (result != 0) {
+        std::cout << "avro to json failed: " << avro_strerror() << std::endl;
+    }
+    EXPECT_EQ(0, result);
+    DeferOp json_deleter([&] {
+        free(avro_as_json);
+    });
+    std::string data_path = "./be/test/exec/test_data/json_scanner/tmp/avro_complex_data.json";
+    write_json_data(avro_as_json, data_path);
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    TypeDescriptor t(TYPE_ARRAY);
+    t.children.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(t);
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+  
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_AVRO;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = R"(["$.decoded_logs.id", "$.decoded_logs.event_signature.*", "$.decoded_logs.event_params.*", "$.decoded_logs.raw_log.*.data"])";    
+    range.__isset.json_root = false;
+    range.__set_path(data_path);
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"id", "event_signature"});
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    auto st2 = scanner->get_next();
+    ASSERT_TRUE(st2.ok());
+
+    ChunkPtr chunk = st2.value();
+    EXPECT_EQ(4, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("12345", chunk->get(0)[0].get_slice());
+    EXPECT_TRUE(chunk->get(0)[1].is_null());
+    auto array = chunk->get(0)[2].get_array();
+    ASSERT_EQ("abc", array[0].get_slice());
+    ASSERT_EQ("def", array[1].get_slice());
+    EXPECT_EQ("klj", chunk->get(0)[3].get_slice());
 }
 
 } // namespace starrocks
