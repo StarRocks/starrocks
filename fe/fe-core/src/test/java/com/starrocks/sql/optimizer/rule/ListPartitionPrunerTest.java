@@ -88,7 +88,7 @@ public class ListPartitionPrunerTest {
         columnToNullPartitions.put(intColumn, Sets.newHashSet(9L));
 
         conjuncts = Lists.newArrayList();
-        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts);
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
     }
 
     @Test
@@ -161,6 +161,40 @@ public class ListPartitionPrunerTest {
     }
 
     @Test
+    public void testSpecifyPartition() throws AnalysisException {
+        // 2 partition columns
+        // int_col1=0/int_col2=10    0
+        // int_col1=0/int_col2=11    1
+        // int_col1=1/int_col2=10    2
+        intColumn = new ColumnRefOperator(2, Type.INT, "int_col", true);
+        ColumnRefOperator intCol1 = new ColumnRefOperator(3, Type.INT, "int_col1", true);
+        ColumnRefOperator intCol2 = new ColumnRefOperator(4, Type.INT, "int_col2", true);
+        ColumnRefOperator intColNotPart = new ColumnRefOperator(5, Type.INT, "int_col_not_part", true);
+
+        // column -> partition values
+        columnToPartitionValuesMap = Maps.newHashMap();
+        TreeMap<LiteralExpr, Set<Long>> intPartitionValuesMap1 = Maps.newTreeMap();
+        columnToPartitionValuesMap.put(intCol1, intPartitionValuesMap1);
+        intPartitionValuesMap1.put(new IntLiteral(0, Type.INT), Sets.newHashSet(0L, 1L));
+        intPartitionValuesMap1.put(new IntLiteral(1, Type.INT), Sets.newHashSet(2L));
+        TreeMap<LiteralExpr, Set<Long>> intPartitionValuesMap2 = Maps.newTreeMap();
+        columnToPartitionValuesMap.put(intCol2, intPartitionValuesMap2);
+        intPartitionValuesMap2.put(new IntLiteral(10, Type.INT), Sets.newHashSet(0L, 2L));
+        intPartitionValuesMap2.put(new IntLiteral(11, Type.INT), Sets.newHashSet(1L));
+
+        // column -> null partitions
+        columnToNullPartitions = Maps.newHashMap();
+        columnToNullPartitions.put(intCol1, Sets.newHashSet());
+        columnToNullPartitions.put(intCol2, Sets.newHashSet());
+
+        List<Long> specifyPartition = Lists.newArrayList(2L);
+        conjuncts = Lists.newArrayList();
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, specifyPartition);
+        List<Long> prune = pruner.prune();
+        Assert.assertNotNull(prune);
+        Assert.assertEquals(prune.get(0), (Long) 2L);
+    }
+    @Test
     public void testComplexBinaryPredicate() throws AnalysisException {
         // 2 partition columns
         // int_col1=0/int_col2=10    0
@@ -189,7 +223,7 @@ public class ListPartitionPrunerTest {
 
         Set<Long> allPartitions = Sets.newHashSet(0L, 1L, 2L);
         conjuncts = Lists.newArrayList();
-        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts);
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
 
         // int_col1 + int_col2 = 10
         conjuncts.clear();
@@ -396,7 +430,7 @@ public class ListPartitionPrunerTest {
         conjuncts = Lists.newArrayList();
         conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT, intColumn,
                 ConstantOperator.createInt(1000)));
-        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts);
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
         Assert.assertNull(pruner.prune());
     }
 
@@ -410,7 +444,7 @@ public class ListPartitionPrunerTest {
         conjuncts = Lists.newArrayList();
         conjuncts.add(new InPredicateOperator(false,
                 Lists.newArrayList(intColumn, ConstantOperator.createInt(1000), ConstantOperator.createInt(2000))));
-        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts);
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
         Assert.assertNull(pruner.prune());
     }
 }
