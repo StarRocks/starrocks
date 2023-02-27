@@ -150,4 +150,48 @@ void BinlogManager::_apply_build_result(BinlogBuildResult* result) {
     _active_binlog_writer = result->active_writer;
 }
 
+StatusOr<int64_t> BinlogManager::register_reader(std::shared_ptr<BinlogReader> reader) {
+    std::unique_lock lock(_meta_lock);
+    int64_t reader_id = _next_reader_id++;
+    _binlog_readers.emplace(reader_id, reader);
+    VLOG(3) << "Register reader " << reader_id << " in binlog manager " << _path;
+    return reader_id;
+}
+
+void BinlogManager::unregister_reader(int64_t reader_id) {
+    std::unique_lock lock(_meta_lock);
+    VLOG(3) << "Unregister reader " << reader_id << " in binlog manager " << _path;
+    _binlog_readers.erase(reader_id);
+}
+
+StatusOr<BinlogFileMetaPBPtr> BinlogManager::find_binlog_meta(int64_t version, int64_t seq_id) {
+    std::shared_lock lock(_meta_lock);
+    int128_t lsn = BinlogUtil::get_lsn(version, seq_id);
+    // find the first file whose start lsn is greater than the target
+    auto upper = _binlog_file_metas.upper_bound(lsn);
+    if (upper == _binlog_file_metas.begin()) {
+        return Status::NotFound(fmt::format("Can't find file meta for version {}, seq_id {}", version, seq_id));
+    }
+
+    BinlogFileMetaPBPtr file_meta;
+    if (upper == _binlog_file_metas.end()) {
+        file_meta = _binlog_file_metas.rbegin()->second;
+    } else {
+        file_meta = (--upper)->second;
+    }
+
+    if (file_meta->end_version() < version) {
+        return Status::NotFound(fmt::format("Can't find file meta for version {}, seq_id {}", version, seq_id));
+    }
+
+    return file_meta;
+}
+
+void BinlogManager::close_active_writer() {
+    if (_active_binlog_writer != nullptr) {
+        _active_binlog_writer->close(true);
+        _active_binlog_writer.reset();
+    }
+}
+
 } // namespace starrocks

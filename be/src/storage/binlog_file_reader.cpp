@@ -89,7 +89,7 @@ Status BinlogFileReader::_seek_to_page(int64_t version, int64_t seq_id) {
             // generate a page with an EMPTY log entry, and only allow to seek with
             // <version, 0> to get the log entry
             if (end_seq_id == -1 || seq_id <= end_seq_id) {
-                CHECK((end_seq_id != -1) || (seq_id == 0));
+                DCHECK((end_seq_id != -1) || (seq_id == 0));
                 RETURN_IF_ERROR(
                         _read_page_content(_next_page_index, &page_header_pb, &(_current_page_context->page_content)));
                 break;

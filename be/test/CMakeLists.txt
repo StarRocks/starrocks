@@ -253,6 +253,7 @@ set(EXEC_FILES
         ./storage/binlog_file_test.cpp
         ./storage/binlog_builder_test.cpp
         ./storage/binlog_manager_test.cpp
+        ./storage/binlog_reader_test.cpp
         ./storage/tablet_binlog_test.cpp
         ./storage/publish_version_task_test.cpp
         ./runtime/buffer_control_block_test.cpp
