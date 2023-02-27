@@ -827,7 +827,7 @@ TEST_F(AggregateTest, test_window_funnel) {
     builder.append(true);
     builder.append(true);
     builder.append(true);
-    auto data_col = NullableColumn::create(builder.build(false), NullColumn::create(6, 0));
+    auto data_col = builder.build(false);
 
     auto offsets = UInt32Column::create();
     offsets->append(2);                                    // [true, true]
@@ -875,7 +875,7 @@ TEST_F(AggregateTest, test_dict_merge) {
     builder.append(Slice("starrocks-1"));
     builder.append(Slice("starrocks-starrocks"));
     builder.append(Slice("starrocks-starrocks"));
-    auto data_col = NullableColumn::create(builder.build(false), NullColumn::create(5, 0));
+    auto data_col = builder.build(false);
 
     auto offsets = UInt32Column::create();
     offsets->append(0);
@@ -905,7 +905,7 @@ TEST_F(AggregateTest, test_dict_merge) {
 
     std::set<std::string> origin_data;
     std::set<int> ids;
-    auto binary_column = down_cast<BinaryColumn*>(data_col->data_column().get());
+    auto binary_column = down_cast<BinaryColumn*>(data_col.get());
     for (int i = 0; i < binary_column->size(); ++i) {
         auto slice = binary_column->get_slice(i);
         origin_data.emplace(slice.data, slice.size);

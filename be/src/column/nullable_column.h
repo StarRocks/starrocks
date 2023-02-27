@@ -20,14 +20,6 @@ class NullableColumn final : public ColumnFactory<Column, NullableColumn> {
     friend class ColumnFactory<Column, NullableColumn>;
 
 public:
-    inline static ColumnPtr wrap_if_necessary(ColumnPtr column) {
-        if (column->is_nullable()) {
-            return column;
-        }
-        auto null = NullColumn::create(column->size(), 0);
-        return NullableColumn::create(std::move(column), std::move(null));
-    }
-
     NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column);
     NullableColumn(ColumnPtr data_column, NullColumnPtr null_column);
 
@@ -262,13 +254,8 @@ public:
         _has_null = false;
     }
 
-<<<<<<< HEAD
     std::string debug_item(uint32_t idx) const override {
         DCHECK(_null_column->size() == _data_column->size());
-=======
-    std::string debug_item(size_t idx) const override {
-        DCHECK_EQ(_null_column->size(), _data_column->size());
->>>>>>> 87163ff66 ([BugFix] Adjust NULL_TYPE hack processing(2) (#17483))
         std::stringstream ss;
         if (_null_column->get_data()[idx]) {
             ss << "NULL";
@@ -279,7 +266,7 @@ public:
     }
 
     std::string debug_string() const override {
-        DCHECK_EQ(_null_column->size(), _data_column->size());
+        DCHECK(_null_column->size() == _data_column->size());
         std::stringstream ss;
         ss << "[";
         int size = _data_column->size();
