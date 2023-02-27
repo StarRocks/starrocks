@@ -53,6 +53,7 @@ class TabletUpdates;
 class CompactionTask;
 class CompactionContext;
 class CompactionCandidate;
+class TabletBasicInfo;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
@@ -270,6 +271,8 @@ public:
     void set_enable_persistent_index(bool enable_persistent_index) {
         return _tablet_meta->set_enable_persistent_index(enable_persistent_index);
     }
+
+    void get_basic_info(TabletBasicInfo& info);
 
 protected:
     void on_shutdown() override;
