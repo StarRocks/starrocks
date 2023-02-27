@@ -24,13 +24,18 @@
 
 namespace starrocks {
 
-Status QuerySpillManager::init(const TUniqueId& uid) {
+std::vector<std::string> QuerySpillManager::_spill_root_paths;
+
+Status QuerySpillManager::init() {
     std::vector<starrocks::StorePath> paths;
     RETURN_IF_ERROR(parse_conf_store_paths(config::storage_root_path, &paths));
     for (const auto& path : paths) {
         _spill_root_paths.emplace_back(path.path + "/" + config::spill_local_storage_dir);
     }
+    return Status::OK();
+}
 
+Status QuerySpillManager::init(const TUniqueId& uid) {
     if (_spill_root_paths.empty()) {
         return Status::InternalError("Not Found Spill Path");
     }

@@ -247,7 +247,9 @@ protected:
 
     RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
 
+    // if _need_spill is true. reserved data in this operator need spill
     bool _need_spill = false;
+    // the memory that can be released by this operator
     size_t _revocable_mem_bytes = 0;
 
     // Common metrics

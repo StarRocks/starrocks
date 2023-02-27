@@ -31,6 +31,7 @@ class TUniqueId;
 // parse conf
 class QuerySpillManager {
 public:
+    static Status init();
     Status init(const TUniqueId& uid);
     SpillPathProviderFactory provider(const std::string& prefix);
 
@@ -38,9 +39,10 @@ public:
     void update_spilled_bytes(size_t spilled_bytes) { _spilled_bytes += spilled_bytes; }
 
 private:
+    static std::vector<std::string> _spill_root_paths;
+
     TUniqueId _uid;
     std::vector<std::string> _spill_paths(const TUniqueId& uid) const;
-    std::vector<std::string> _spill_root_paths;
     std::unordered_map<std::string, SpillPathProviderFactory> _spill_provider_factorys;
     std::mutex _mutex;
     std::atomic_size_t _spilled_bytes;

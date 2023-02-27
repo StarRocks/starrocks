@@ -288,7 +288,7 @@ public:
         return _query_options.spill_mode;
     }
 
-    bool enable_spill() const { return _query_options.enable_spilling; }
+    bool enable_spill() const { return _query_options.enable_spill; }
 
     int32_t spill_mem_table_size() const { return _query_options.spill_mem_table_size; }
 

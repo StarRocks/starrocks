@@ -68,7 +68,7 @@ set(EXEC_FILES
     chunks_sorter_heap_sort.cpp
     chunks_sorter_topn.cpp
     chunks_sorter_full_sort.cpp
-    chunks_sorter_spillable_full_sort.cpp
+    spillable_chunks_sorter_full_sort.cpp
     cross_join_node.cpp
     union_node.cpp
     except_hash_set.cpp

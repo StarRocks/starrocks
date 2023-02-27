@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/chunks_sorter_spillable_full_sort.h"
-
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
+#include "exec/spillable_chunks_sorter_sort.h"
 
 namespace starrocks {
-void ChunksSorterSpillableFullSort::setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
+void SpillableChunksSorterFullSort::setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
     ChunksSorterFullSort::setup_runtime(profile, parent_mem_tracker);
     _spiller->set_metrics(SpillProcessMetrics(profile));
 }
 
-Status ChunksSorterSpillableFullSort::update(RuntimeState* state, const ChunkPtr& chunk) {
+Status SpillableChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) {
     if (_spill_strategy == SpillStrategy::NO_SPILL) {
         RETURN_IF_ERROR(ChunksSorterFullSort::update(state, chunk));
         _update_revocable_mem_bytes();
@@ -55,7 +54,7 @@ Status ChunksSorterSpillableFullSort::update(RuntimeState* state, const ChunkPtr
     return Status::OK();
 }
 
-Status ChunksSorterSpillableFullSort::done(RuntimeState* state) {
+Status SpillableChunksSorterFullSort::done(RuntimeState* state) {
     if (_spill_strategy == SpillStrategy::NO_SPILL) {
         return ChunksSorterFullSort::done(state);
     }
@@ -79,7 +78,7 @@ Status ChunksSorterSpillableFullSort::done(RuntimeState* state) {
     return Status::OK();
 }
 
-void ChunksSorterSpillableFullSort::cancel() {
+void SpillableChunksSorterFullSort::cancel() {
     ChunksSorterFullSort::cancel();
     if (_spill_strategy == SpillStrategy::NO_SPILL) {
         // nothing TODO
@@ -96,7 +95,7 @@ void ChunksSorterSpillableFullSort::cancel() {
     }
 }
 
-Status ChunksSorterSpillableFullSort::get_next(ChunkPtr* chunk, bool* eos) {
+Status SpillableChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     if (!_spiller->spilled()) {
         return ChunksSorterFullSort::get_next(chunk, eos);
     }
@@ -106,14 +105,14 @@ Status ChunksSorterSpillableFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-size_t ChunksSorterSpillableFullSort::get_output_rows() const {
+size_t SpillableChunksSorterFullSort::get_output_rows() const {
     if (!_spiller->spilled()) {
         return ChunksSorterFullSort::get_output_rows();
     }
     return _spiller->spilled_append_rows();
 }
 
-void ChunksSorterSpillableFullSort::_update_revocable_mem_bytes() {
+void SpillableChunksSorterFullSort::_update_revocable_mem_bytes() {
     size_t revocable_mem_bytes = 0;
     if (auto unsorted_chunk = _unsorted_chunk) {
         revocable_mem_bytes += unsorted_chunk->memory_usage();
@@ -128,7 +127,7 @@ void ChunksSorterSpillableFullSort::_update_revocable_mem_bytes() {
     _revocable_mem_bytes = revocable_mem_bytes;
 }
 
-std::function<StatusOr<ChunkPtr>()> ChunksSorterSpillableFullSort::_spill_process_task() {
+std::function<StatusOr<ChunkPtr>()> SpillableChunksSorterFullSort::_spill_process_task() {
     return [this]() -> StatusOr<ChunkPtr> {
         if (_unsorted_chunk != nullptr) {
             return std::move(_unsorted_chunk);
@@ -145,7 +144,7 @@ std::function<StatusOr<ChunkPtr>()> ChunksSorterSpillableFullSort::_spill_proces
     };
 }
 
-Status ChunksSorterSpillableFullSort::_get_result_from_spiller(ChunkPtr* chunk, bool* eos) {
+Status SpillableChunksSorterFullSort::_get_result_from_spiller(ChunkPtr* chunk, bool* eos) {
     auto chunk_st = _spiller->restore(_state, io_executor(), MemTrackerGuard(tls_mem_tracker));
     if (chunk_st.status().is_end_of_file()) {
         *eos = true;

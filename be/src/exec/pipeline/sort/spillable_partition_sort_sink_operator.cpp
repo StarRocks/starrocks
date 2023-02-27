@@ -15,13 +15,13 @@
 #include "exec/pipeline/sort/spillable_partition_sort_sink_operator.h"
 
 #include "exec/chunks_sorter_heap_sort.h"
-#include "exec/chunks_sorter_spillable_full_sort.h"
 #include "exec/chunks_sorter_topn.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/common.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
+#include "exec/spillable_chunks_sorter_sort.h"
 #include "gen_cpp/InternalService_types.h"
 #include "storage/chunk_helper.h"
 
@@ -91,7 +91,7 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
 OperatorPtr SpillablePartitionSortSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     std::shared_ptr<ChunksSorter> chunks_sorter;
 
-    chunks_sorter = std::make_unique<ChunksSorterSpillableFullSort>(
+    chunks_sorter = std::make_unique<SpillableChunksSorterFullSort>(
             runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first, _sort_keys,
             _max_buffered_rows, _max_buffered_bytes, _early_materialized_slots);
 

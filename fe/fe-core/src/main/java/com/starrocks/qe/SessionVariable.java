@@ -134,7 +134,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DISABLE_BUCKET_JOIN = "disable_bucket_join";
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
-    public static final String ENABLE_SPILLING = "enable_spilling";
+    public static final String ENABLE_SPILL = "enable_spill";
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
     // if set to true, some of stmt will be forwarded to leader FE to get result
@@ -631,8 +631,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
-    @VariableMgr.VarAttr(name = ENABLE_SPILLING)
-    private boolean enableSpilling = false;
+    @VariableMgr.VarAttr(name = ENABLE_SPILL)
+    private boolean enableSpill = false;
 
     @VariableMgr.VarAttr(name = SPILL_MODE)
     private String spillMode = "auto";
@@ -1151,12 +1151,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableInsertStrict = enableInsertStrict;
     }
 
-    public boolean getEnableSpilling() {
+    public boolean getEnableSpill() {
         return enableSpilling;
     }
 
-    public void setEnableSpilling(boolean enableSpilling) {
-        this.enableSpilling = enableSpilling;
+    public void setEnableSpill(boolean enableSpill) {
+        this.enableSpilling = enableSpill;
     }
 
     public void setSpillMode(String spillMode) {
@@ -1797,8 +1797,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setMax_pushdown_conditions_per_column(maxPushdownConditionsPerColumn);
         }
 
-        tResult.setEnable_spilling(enableSpilling);
-        if (enableSpilling) {
+        tResult.setEnable_spilling(enableSpill);
+        if (enableSpill) {
             tResult.setSpill_mem_table_size(spillMemTableSize);
             tResult.setSpill_mem_table_num(spillMemTableNum);
             tResult.setSpill_mem_limit_threshold(spillMemLimitThreshold);

@@ -19,11 +19,11 @@
 #include "exec/chunks_sorter.h"
 #include "exec/chunks_sorter_full_sort.h"
 namespace starrocks {
-class ChunksSorterSpillableFullSort : public ChunksSorterFullSort {
+class SpillableChunksSorterFullSort : public ChunksSorterFullSort {
 public:
     template <class... Args>
-    ChunksSorterSpillableFullSort(Args&&... args) : ChunksSorterFullSort(std::forward<Args>(args)...) {}
-    ~ChunksSorterSpillableFullSort() noexcept override = default;
+    SpillableChunksSorterFullSort(Args&&... args) : ChunksSorterFullSort(std::forward<Args>(args)...) {}
+    ~SpillableChunksSorterFullSort() noexcept override = default;
 
     bool is_full() override { return (_spiller != nullptr && _spiller->is_full()) || _spill_channel->has_task(); }
 
