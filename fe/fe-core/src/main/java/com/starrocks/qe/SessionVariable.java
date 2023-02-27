@@ -1152,11 +1152,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean getEnableSpill() {
-        return enableSpilling;
+        return enableSpill;
     }
 
     public void setEnableSpill(boolean enableSpill) {
-        this.enableSpilling = enableSpill;
+        this.enableSpill = enableSpill;
     }
 
     public void setSpillMode(String spillMode) {
@@ -1797,7 +1797,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setMax_pushdown_conditions_per_column(maxPushdownConditionsPerColumn);
         }
 
-        tResult.setEnable_spilling(enableSpill);
+        tResult.setEnable_spill(enableSpill);
         if (enableSpill) {
             tResult.setSpill_mem_table_size(spillMemTableSize);
             tResult.setSpill_mem_table_num(spillMemTableNum);
