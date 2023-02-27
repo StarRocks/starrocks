@@ -3258,6 +3258,12 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
 
         _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
         _apply_version_changed.notify_all();
+        // The function `unload` of index_entry in the following code acquire `_lock` in PrimaryIndex.
+        // If there are other thread to do rowset commit, it will load PrimaryIndex first which hold `_lock` in
+        // PrimaryIndex and it will acquire `_lock` in TabletUpdates which is `l1` to get applied rowset which will
+        // cause dead lock.
+        // Actually, unload PrimayIndex doesn't need to hold `_lock` of TabletUpdates, so we can release l1 in advance
+        // to avoid dead lock.
         l1.unlock();
 
         // unload primary index
