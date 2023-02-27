@@ -37,6 +37,7 @@ package com.starrocks.mysql;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -50,6 +51,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.mysql.MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT;
@@ -82,14 +84,14 @@ public class MysqlProto {
                     return false;
                 }
             } else {
-                Set<UserIdentity> matchedUserIdentities =
-                        authenticationManager.getMatchedUserIdentity(user, remoteIp).keySet();
-                if (matchedUserIdentities.isEmpty()) {
+                Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                        authenticationManager.getBestMatchedUserIdentity(user, remoteIp);
+                if (matchedUserIdentity == null) {
                     LOG.info("enable_auth_check is false, but cannot find user '{}'@'{}'", user, remoteIp);
                     ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
                     return false;
                 } else {
-                    currentUser = matchedUserIdentities.iterator().next();
+                    currentUser = matchedUserIdentity.getKey();
                 }
             }
 

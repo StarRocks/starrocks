@@ -185,29 +185,31 @@ public class AuthenticationManager {
         }
     }
 
-    public Map<UserIdentity, UserAuthenticationInfo> getMatchedUserIdentity(String remoteUser, String remoteHost) {
+    public Map.Entry<UserIdentity, UserAuthenticationInfo> getBestMatchedUserIdentity(
+            String remoteUser, String remoteHost) {
         return userToAuthenticationInfo.entrySet().stream()
                 .filter(entry -> match(remoteUser, remoteHost, entry.getKey().isDomain(), entry.getValue()))
-                .collect(UserAuthInfoTreeMap::new, (m, e) -> m.put(e.getKey(), e.getValue()),
-                        UserAuthInfoTreeMap::putAll);
+                .findFirst().orElse(null);
     }
 
     public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        Map<UserIdentity, UserAuthenticationInfo> matchedUserIdentityMap =
-                getMatchedUserIdentity(remoteUser, remoteHost);
-        for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : matchedUserIdentityMap.entrySet()) {
+        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                getBestMatchedUserIdentity(remoteUser, remoteHost);
+        if (matchedUserIdentity == null) {
+            LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
+        } else {
             try {
                 AuthenticationProvider provider =
-                        AuthenticationProviderFactory.create(entry.getValue().getAuthPlugin());
-                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString, entry.getValue());
-                return entry.getKey();
+                        AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
+                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
+                        matchedUserIdentity.getValue());
+                return matchedUserIdentity.getKey();
             } catch (AuthenticationException e) {
                 LOG.debug("failed to authenticate, ", e);
             }
-            return null;  // authentication failed
         }
-        LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
-        return null; // cannot find user
+
+        return null;
     }
 
     public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
