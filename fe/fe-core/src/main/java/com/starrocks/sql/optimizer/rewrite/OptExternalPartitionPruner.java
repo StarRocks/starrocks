@@ -202,7 +202,7 @@ public class OptExternalPartitionPruner {
             ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
             ListPartitionPruner partitionPruner =
                     new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
-                            scanOperatorPredicates.getPartitionConjuncts());
+                            scanOperatorPredicates.getPartitionConjuncts(), null);
             Collection<Long> selectedPartitionIds = partitionPruner.prune();
             if (selectedPartitionIds == null) {
                 selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
