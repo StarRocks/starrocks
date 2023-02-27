@@ -854,7 +854,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableRewriteSumByAssociativeRule = true;
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
-    private boolean enableRewriteSimpleAggToMetaScan = true;
+    private boolean enableRewriteSimpleAggToMetaScan = false;
 
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;
