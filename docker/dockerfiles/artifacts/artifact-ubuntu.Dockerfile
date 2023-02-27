@@ -2,21 +2,28 @@
 # Please run this command from the git repo root directory to build:
 # DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/artifact-ubuntu.Dockerfile -t starrocks/artifact-ubuntu:tag .
 
+<<<<<<< HEAD
 ARG builder=ghcr.io/StarRocks/starrocks/dev-env-ubuntu:main
+=======
+ARG builder=ghcr.io/starrocks/starrocks/dev-env-ubuntu:main
+ARG RELEASE_VERSION
+>>>>>>> b17a24b7d ([Enhancement] add release version when building artifacts (#18542))
 
 FROM ${builder} as fe-builder
+ARG RELEASE_VERSION
 # clean and build Frontend and Spark Dpp application
 COPY . /build/starrocks
 WORKDIR /build/starrocks
-RUN MAVEN_OPTS='-Dmaven.artifact.threads=128' ./build.sh --fe --clean
+RUN STARROCKS_VERSION=${RELEASE_VERSION} MAVEN_OPTS='-Dmaven.artifact.threads=128' ./build.sh --fe --clean
 
 
 FROM ${builder} as be-builder
+ARG RELEASE_VERSION
 # build Backend in different mode (build_type could be Release, Debug, or Asan. Default value is Release.
 ARG BUILD_TYPE=Release
 COPY . /build/starrocks
 WORKDIR /build/starrocks
-RUN BUILD_TYPE=${BUILD_TYPE} ./build.sh --be --clean -j `nproc`
+RUN STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} ./build.sh --be --clean -j `nproc`
 
 
 FROM busybox:latest
