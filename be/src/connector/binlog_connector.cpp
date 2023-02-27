@@ -137,24 +137,27 @@ Status BinlogDataSource::reset_status() {
 BinlogMetaFieldMap BinlogDataSource::_build_binlog_meta_fields(ColumnId start_cid) {
     BinlogMetaFieldMap fields;
     ColumnId cid = start_cid;
-    FieldPtr op_field = std::make_shared<Field>(cid, BINLOG_OP, get_type_info(TYPE_TINYINT), STORAGE_AGGREGATE_NONE, 1,
-                                                false, false);
-    fields.emplace(BINLOG_OP, op_field);
+    FieldPtr op_field = std::make_shared<Field>(cid, g_PlanNodes_constants.BINLOG_OP_COLUMN_NAME,
+                                                get_type_info(TYPE_TINYINT), STORAGE_AGGREGATE_NONE, 1, false, false);
+    fields.emplace(g_PlanNodes_constants.BINLOG_OP_COLUMN_NAME, op_field);
     cid += 1;
 
-    FieldPtr version_field = std::make_shared<Field>(cid, BINLOG_VERSION, get_type_info(TYPE_BIGINT),
-                                                     STORAGE_AGGREGATE_NONE, 8, false, false);
-    fields.emplace(BINLOG_VERSION, version_field);
+    FieldPtr version_field =
+            std::make_shared<Field>(cid, g_PlanNodes_constants.BINLOG_VERSION_COLUMN_NAME, get_type_info(TYPE_BIGINT),
+                                    STORAGE_AGGREGATE_NONE, 8, false, false);
+    fields.emplace(g_PlanNodes_constants.BINLOG_VERSION_COLUMN_NAME, version_field);
     cid += 1;
 
-    FieldPtr seq_id_field = std::make_shared<Field>(cid, BINLOG_SEQ_ID, get_type_info(TYPE_BIGINT),
-                                                    STORAGE_AGGREGATE_NONE, 8, false, false);
-    fields.emplace(BINLOG_SEQ_ID, seq_id_field);
+    FieldPtr seq_id_field =
+            std::make_shared<Field>(cid, g_PlanNodes_constants.BINLOG_SEQ_ID_COLUMN_NAME, get_type_info(TYPE_BIGINT),
+                                    STORAGE_AGGREGATE_NONE, 8, false, false);
+    fields.emplace(g_PlanNodes_constants.BINLOG_SEQ_ID_COLUMN_NAME, seq_id_field);
     cid += 1;
 
-    FieldPtr timestamp_field = std::make_shared<Field>(cid, BINLOG_TIMESTAMP, get_type_info(TYPE_BIGINT),
-                                                       STORAGE_AGGREGATE_NONE, 8, false, false);
-    fields.emplace(BINLOG_TIMESTAMP, timestamp_field);
+    FieldPtr timestamp_field =
+            std::make_shared<Field>(cid, g_PlanNodes_constants.BINLOG_TIMESTAMP_COLUMN_NAME, get_type_info(TYPE_BIGINT),
+                                    STORAGE_AGGREGATE_NONE, 8, false, false);
+    fields.emplace(g_PlanNodes_constants.BINLOG_TIMESTAMP_COLUMN_NAME, timestamp_field);
     cid += 1;
 
     return fields;
@@ -172,18 +175,18 @@ StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
         int32_t index = _tablet->field_index(slot->col_name());
         if (index >= 0) {
             data_column_cids.push_back(index);
-        } else if (slot->col_name() == BINLOG_OP) {
+        } else if (slot->col_name() == g_PlanNodes_constants.BINLOG_OP_COLUMN_NAME) {
             meta_column_slot_index.push_back(slot_index);
-            meta_fields.emplace_back(binlog_meta_map[BINLOG_OP]);
-        } else if (slot->col_name() == BINLOG_VERSION) {
+            meta_fields.emplace_back(binlog_meta_map[g_PlanNodes_constants.BINLOG_OP_COLUMN_NAME]);
+        } else if (slot->col_name() == g_PlanNodes_constants.BINLOG_VERSION_COLUMN_NAME) {
             meta_column_slot_index.push_back(slot_index);
-            meta_fields.emplace_back(binlog_meta_map[BINLOG_VERSION]);
-        } else if (slot->col_name() == BINLOG_SEQ_ID) {
+            meta_fields.emplace_back(binlog_meta_map[g_PlanNodes_constants.BINLOG_VERSION_COLUMN_NAME]);
+        } else if (slot->col_name() == g_PlanNodes_constants.BINLOG_SEQ_ID_COLUMN_NAME) {
             meta_column_slot_index.push_back(slot_index);
-            meta_fields.emplace_back(binlog_meta_map[BINLOG_SEQ_ID]);
-        } else if (slot->col_name() == BINLOG_TIMESTAMP) {
+            meta_fields.emplace_back(binlog_meta_map[g_PlanNodes_constants.BINLOG_SEQ_ID_COLUMN_NAME]);
+        } else if (slot->col_name() == g_PlanNodes_constants.BINLOG_TIMESTAMP_COLUMN_NAME) {
             meta_column_slot_index.push_back(slot_index);
-            meta_fields.emplace_back(binlog_meta_map[BINLOG_TIMESTAMP]);
+            meta_fields.emplace_back(binlog_meta_map[g_PlanNodes_constants.BINLOG_TIMESTAMP_COLUMN_NAME]);
         } else {
             std::string msg = fmt::format("invalid field name: {}", slot->col_name());
             LOG(WARNING) << msg;
