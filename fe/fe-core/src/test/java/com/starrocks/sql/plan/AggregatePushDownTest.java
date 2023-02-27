@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
@@ -32,5 +31,15 @@ public class AggregatePushDownTest extends PlanTestBase {
     @Test
     public void testPushDown() {
         runFileUnitTest("optimized-plan/agg-pushdown");
+    }
+
+    @Test
+    public void testPushDownPreAgg() {
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            runFileUnitTest("optimized-plan/preagg-pushdown");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+        }
     }
 }

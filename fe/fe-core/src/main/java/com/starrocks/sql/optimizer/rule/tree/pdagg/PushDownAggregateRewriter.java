@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.tree.pdagg;
 
 import com.google.common.base.Preconditions;
@@ -23,6 +22,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -64,6 +64,7 @@ import java.util.stream.Collectors;
 public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpression, AggregatePushDownContext> {
     private final ColumnRefFactory factory;
     private final PushDownAggregateCollector collector;
+    private final SessionVariable sessionVariable;
 
     private Map<LogicalAggregationOperator, List<AggregatePushDownContext>> allRewriteContext;
     // record all push down column on scan node
@@ -73,6 +74,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     public PushDownAggregateRewriter(TaskContext taskContext) {
         this.factory = taskContext.getOptimizerContext().getColumnRefFactory();
         this.collector = new PushDownAggregateCollector(taskContext);
+        this.sessionVariable = taskContext.getOptimizerContext().getSessionVariable();
     }
 
     public OptExpression rewrite(OptExpression root) {
@@ -146,7 +148,8 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
     // rewrite groupBys/aggregation by project expression, maybe needs push down
     // expression with aggregation or rewrite project expression
-    private void rewriteProject(AggregatePushDownContext context, Map<ColumnRefOperator, ScalarOperator> originProjectMap) {
+    private void rewriteProject(AggregatePushDownContext context,
+                                Map<ColumnRefOperator, ScalarOperator> originProjectMap) {
         // rewrite group bys
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(originProjectMap);
         context.groupBys.replaceAll((k, v) -> rewriter.rewrite(v));
@@ -387,9 +390,16 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
             result = OptExpression.create(new LogicalProjectOperator(refs), result);
         }
 
-        LogicalAggregationOperator aggregate = new LogicalAggregationOperator(AggType.GLOBAL,
-                Lists.newArrayList(context.groupBys.keySet()), context.aggregations);
-
+        LogicalAggregationOperator aggregate;
+        List<ColumnRefOperator> groupBys = Lists.newArrayList(context.groupBys.keySet());
+        if ("local".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) ||
+                ("auto".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) && groupBys.size() <= 1)) {
+            // local && un-split
+            aggregate = new LogicalAggregationOperator(AggType.LOCAL, groupBys, context.aggregations);
+            aggregate.setOnlyLocalAggregate();
+        } else {
+            aggregate = new LogicalAggregationOperator(AggType.GLOBAL, groupBys, context.aggregations);
+        }
         return OptExpression.create(aggregate, result);
     }
 
