@@ -159,7 +159,8 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
         if (i == 1) {
             if (col == "*") {
                 // There should be no jsonpath for this pattern, $.*
-                return Status::InvalidArgument(fmt::format("invalid json path: {}", jsonpath[i].key));
+                return Status::InvalidArgument(fmt::format(
+                        "extracting * from root-object is not supported, the json path: {}", jsonpath[i].key));
             } else {
                 HANDLE_SIMDJSON_ERROR(obj.find_field_unordered(col).get(tvalue),
                                       fmt::format("unable to find field: {}", col));
@@ -175,7 +176,8 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
                     return Status::NotFound("null value");
                 }
                 if (tvalue.type() != simdjson::ondemand::json_type::object) {
-                    return Status::InvalidArgument(fmt::format("invalid json path: {}", jsonpath[i].key));
+                    return Status::InvalidArgument(fmt::format(
+                            "extracting * from non-object type is not supported, the json path: {}", jsonpath[i].key));
                 }
                 for (auto field : tvalue.get_object()) {
                     tvalue = field.value();
