@@ -29,7 +29,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 public class DbPEntryObject implements PEntryObject {
-    public static final long ALL_CATALOGS_ID = -10000;
+    public static final long ALL_CATALOGS_ID = -1;
     public static final String ALL_DATABASES_UUID = "ALL_DATABASES_UUID"; // represent all databases
 
     @SerializedName(value = "ci")
