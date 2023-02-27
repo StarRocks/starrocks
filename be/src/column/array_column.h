@@ -171,7 +171,7 @@ public:
     bool empty_null_array(const NullColumnPtr& null_map);
 
 private:
-    // Elements must be NullableColumn to facilitate handling nested types.
+    // _elements must be NullableColumn
     ColumnPtr _elements;
     // Offsets column will store the start position of every array element.
     // Offsets store more one data to indicate the end position.

@@ -321,25 +321,19 @@ protected:
         TabletColumn int_column = create_int_value(0, OLAP_FIELD_AGGREGATION_NONE, true);
         array_column.add_sub_column(int_column);
 
-<<<<<<< HEAD
         auto src_offsets = vectorized::UInt32Column::create();
         auto src_elements = vectorized::Int32Column::create();
         vectorized::ColumnPtr src_column = vectorized::ArrayColumn::create(src_elements, src_offsets);
-=======
-        auto src_offsets = UInt32Column::create();
-        auto src_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        ColumnPtr src_column = ArrayColumn::create(src_elements, src_offsets);
->>>>>>> 87163ff66 ([BugFix] Adjust NULL_TYPE hack processing(2) (#17483))
 
         // insert [1, 2, 3], [4, 5, 6]
-        src_elements->append_datum(1);
-        src_elements->append_datum(2);
-        src_elements->append_datum(3);
+        src_elements->append(1);
+        src_elements->append(2);
+        src_elements->append(3);
         src_offsets->append(3);
 
-        src_elements->append_datum(4);
-        src_elements->append_datum(5);
-        src_elements->append_datum(6);
+        src_elements->append(4);
+        src_elements->append(5);
+        src_elements->append(6);
         src_offsets->append(6);
 
         TypeInfoPtr type_info = get_type_info(array_column);
@@ -409,15 +403,9 @@ protected:
                 auto st = iter->seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-<<<<<<< HEAD
                 auto dst_offsets = vectorized::UInt32Column::create();
                 auto dst_elements = vectorized::Int32Column::create();
                 auto dst_column = vectorized::ArrayColumn::create(dst_elements, dst_offsets);
-=======
-                auto dst_offsets = UInt32Column::create();
-                auto dst_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-                auto dst_column = ArrayColumn::create(dst_elements, dst_offsets);
->>>>>>> 87163ff66 ([BugFix] Adjust NULL_TYPE hack processing(2) (#17483))
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
@@ -428,7 +416,7 @@ protected:
             }
 
             ASSERT_EQ(2, meta.num_rows());
-            ASSERT_EQ(42, reader->total_mem_footprint());
+            ASSERT_EQ(36, reader->total_mem_footprint());
         }
     }
 
