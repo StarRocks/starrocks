@@ -969,4 +969,20 @@ int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& l
     return count;
 }
 
+int64_t BitmapValue::bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
+
+                                                     BitmapValue* ret_bitmap) {
+    auto it = _bitmap->begin();
+    for (; it != _bitmap->end() && *it < range_start;) {
+        ++it;
+    }
+
+    int64_t count = 0;
+
+    for (; it != _bitmap->end() && *it < range_end; ++it, ++count) {
+        ret_bitmap->add(*it);
+    }
+
+    return count;
+}
 } // namespace starrocks
