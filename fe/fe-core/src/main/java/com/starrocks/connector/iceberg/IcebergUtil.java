@@ -32,6 +32,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;

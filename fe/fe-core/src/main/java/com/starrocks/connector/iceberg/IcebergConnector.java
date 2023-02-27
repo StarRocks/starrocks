@@ -15,12 +15,16 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.base.Strings;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -28,37 +32,75 @@ import java.util.Map;
 
 import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG_LEGACY;
 import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.catalog.IcebergTable.ICEBERG_IMPL;
+import static com.starrocks.catalog.IcebergTable.ICEBERG_METASTORE_URIS;
 
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
-
     private final Map<String, String> properties;
     private final CloudConfiguration cloudConfiguration;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
-    private ConnectorMetadata metadata;
+    private final IcebergCatalog icebergNativeCatalog;
+
+    private String metastoreURI;
+    private String catalogImpl;
+    private String catalogType;
+    private Map<String, String> customProperties;
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         this.cloudConfiguration = CloudConfigurationFactory.tryBuildForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(null, cloudConfiguration);
+        this.icebergNativeCatalog = buildIcebergNativeCatalog();
+    }
+
+    private IcebergCatalog buildIcebergNativeCatalog() {
+        IcebergCatalogType nativeCatalogType = getNativeCatalogType();
+        Configuration conf = hdfsEnvironment.getConfiguration();
+        String icebergNativeCatalogName = "native-" + nativeCatalogType.name() + "-" + catalogName;
+        CatalogLoader catalogLoader;
+        switch (nativeCatalogType) {
+            case HIVE_CATALOG:
+                String metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
+                Util.validateMetastoreUris(metastoreURI);
+                catalogLoader = CatalogLoader.hive(icebergNativeCatalogName, conf, properties);
+                this.metastoreURI = metastoreURI;
+                break;
+            case GLUE_CATALOG:
+                catalogLoader = CatalogLoader.glue(icebergNativeCatalogName, conf, properties);
+                break;
+            case REST_CATALOG:
+                catalogLoader = CatalogLoader.rest(icebergNativeCatalogName, conf, properties);
+                break;
+            case CUSTOM_CATALOG:
+                String nativeCatalogImpl = properties.get(ICEBERG_IMPL);
+                catalogLoader = CatalogLoader.custom(icebergNativeCatalogName, conf, properties, nativeCatalogImpl);
+                this.catalogImpl = nativeCatalogImpl;
+                this.customProperties = properties;
+                break;
+            default:
+                throw new StarRocksConnectorException("Property %s is missing or not supported now.", ICEBERG_CATALOG_TYPE);
+        }
+        return  (IcebergCatalog) catalogLoader.loadCatalog();
+    }
+
+    private IcebergCatalogType getNativeCatalogType() {
+        String nativeCatalogTypeStr = properties.get(ICEBERG_CATALOG_TYPE);
+        if (Strings.isNullOrEmpty(nativeCatalogTypeStr)) {
+            nativeCatalogTypeStr = properties.get(ICEBERG_CATALOG_LEGACY);
+        }
+        this.catalogType = nativeCatalogTypeStr;
+        if (Strings.isNullOrEmpty(nativeCatalogTypeStr)) {
+            throw new StarRocksConnectorException("Can't find iceberg native catalog type");
+        }
+        return IcebergCatalogType.fromString(nativeCatalogTypeStr);
     }
 
     @Override
     public ConnectorMetadata getMetadata() {
-        if (metadata == null) {
-            if (null == properties.get(ICEBERG_CATALOG_TYPE) || properties.get(ICEBERG_CATALOG_TYPE).length() == 0) {
-                properties.put(ICEBERG_CATALOG_TYPE, properties.get(ICEBERG_CATALOG_LEGACY));
-            }
-            try {
-                metadata = new IcebergMetadata(catalogName, properties, hdfsEnvironment);
-            } catch (Exception e) {
-                LOG.error("Failed to create iceberg metadata on [catalog : {}]", catalogName, e);
-                throw e;
-            }
-        }
-        return metadata;
+        return new IcebergMetadata(catalogName, icebergNativeCatalog, metastoreURI, catalogImpl, catalogType, customProperties);
     }
 
     public CloudConfiguration getCloudConfiguration() {

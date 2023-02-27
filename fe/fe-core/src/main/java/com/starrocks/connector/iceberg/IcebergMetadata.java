@@ -18,9 +18,7 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -33,50 +31,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG_TYPE;
-import static com.starrocks.catalog.IcebergTable.ICEBERG_IMPL;
-import static com.starrocks.catalog.IcebergTable.ICEBERG_METASTORE_URIS;
-import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergCustomCatalog;
-import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergGlueCatalog;
-import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergHiveCatalog;
-import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergRESTCatalog;
-
 public class IcebergMetadata implements ConnectorMetadata {
 
     private static final Logger LOG = LogManager.getLogger(IcebergMetadata.class);
-    private String metastoreURI;
-    private String catalogType;
-    private String catalogImpl;
     private final String catalogName;
     private IcebergCatalog icebergCatalog;
+    private String metastoreURI;
+    private String catalogImpl;
+    private String catalogType;
     private Map<String, String> customProperties;
 
-    public IcebergMetadata(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
+    public IcebergMetadata(String catalogName, IcebergCatalog icebergCatalog,
+                           String metastoreURI, String catalogImpl, String catalogType, Map<String, String> customProperties) {
         this.catalogName = catalogName;
-
-        if (IcebergCatalogType.HIVE_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
-            catalogType = properties.get(ICEBERG_CATALOG_TYPE);
-            metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
-            icebergCatalog = getIcebergHiveCatalog(metastoreURI, properties, hdfsEnvironment);
-            Util.validateMetastoreUris(metastoreURI);
-        } else if (IcebergCatalogType.CUSTOM_CATALOG ==
-                IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
-            catalogType = properties.get(ICEBERG_CATALOG_TYPE);
-            catalogImpl = properties.get(ICEBERG_IMPL);
-            icebergCatalog = getIcebergCustomCatalog(catalogImpl, properties, hdfsEnvironment);
-            properties.remove(ICEBERG_CATALOG_TYPE);
-            properties.remove(ICEBERG_IMPL);
-            customProperties = properties;
-        } else if (IcebergCatalogType.GLUE_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
-            catalogType = properties.get(ICEBERG_CATALOG_TYPE);
-            icebergCatalog = getIcebergGlueCatalog(catalogName, properties, hdfsEnvironment);
-        } else if (IcebergCatalogType.REST_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
-            catalogType = properties.get(ICEBERG_CATALOG_TYPE);
-            icebergCatalog = getIcebergRESTCatalog(properties, hdfsEnvironment);
-        } else {
-            throw new RuntimeException(String.format("Property %s is missing or not supported now.",
-                    ICEBERG_CATALOG_TYPE));
-        }
+        this.icebergCatalog = icebergCatalog;
+        this.metastoreURI = metastoreURI;
+        this.catalogImpl = catalogImpl;
+        this.catalogType = catalogType;
+        this.customProperties = customProperties;
     }
 
     @Override

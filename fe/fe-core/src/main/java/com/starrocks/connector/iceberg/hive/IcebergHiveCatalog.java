@@ -13,15 +13,18 @@
 // limitations under the License.
 
 
-package com.starrocks.connector.iceberg;
+package com.starrocks.connector.iceberg.hive;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.iceberg.hive.CachedClientPool;
-import com.starrocks.connector.iceberg.hive.HiveTableOperations;
+import com.starrocks.connector.iceberg.CatalogLoader;
+import com.starrocks.connector.iceberg.IcebergCatalog;
+import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -57,14 +60,9 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
     private static final ConcurrentHashMap<String, IcebergHiveCatalog> METASTORE_URI_TO_CATALOG =
             new ConcurrentHashMap<>();
 
-    public static synchronized IcebergHiveCatalog getInstance(String uri, Map<String, String> properties,
-                                                              HdfsEnvironment hdfsEnvironment) {
-        if (!METASTORE_URI_TO_CATALOG.containsKey(uri)) {
-            properties.put(CatalogProperties.URI, uri);
-            METASTORE_URI_TO_CATALOG.put(uri, (IcebergHiveCatalog) CatalogLoader.hive(String.format("hive-%s", uri),
-                    hdfsEnvironment.getConfiguration(), properties).loadCatalog());
-        }
-        return METASTORE_URI_TO_CATALOG.get(uri);
+    public static IcebergHiveCatalog getInstance(String url, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
+        CatalogLoader loader = CatalogLoader.hive(String.format("hive-%s", url), hdfsEnvironment.getConfiguration(), properties);
+        return (IcebergHiveCatalog) loader.loadCatalog();
     }
 
     private String name;

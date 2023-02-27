@@ -16,6 +16,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;

@@ -13,11 +13,15 @@
 // limitations under the License.
 
 
-package com.starrocks.connector.iceberg;
+package com.starrocks.connector.iceberg.rest;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.iceberg.CatalogLoader;
+import com.starrocks.connector.iceberg.IcebergCatalog;
+import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
