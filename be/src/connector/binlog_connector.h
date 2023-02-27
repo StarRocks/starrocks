@@ -85,6 +85,7 @@ private:
     StatusOr<Schema> _build_binlog_schema();
     Status _prepare_non_stream_pipeline();
 
+    const PlanNodesConstants _column_name_constants;
     const BinlogDataSourceProvider* _provider;
     const TBinlogScanRange _scan_range;
     RuntimeState* _runtime_state = nullptr;
