@@ -570,7 +570,7 @@ public class StmtExecutor {
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
         CreateTableAsSelectStmt createTableAsSelectStmt = (CreateTableAsSelectStmt) parsedStmt;
 
-        // if create table failed should not drop table. because table may already exists,
+        // if create table failed should not drop table. because table may already exist,
         // and for other cases the exception will throw and the rest of the code will not be executed.
         createTableAsSelectStmt.createTable(context);
         try {

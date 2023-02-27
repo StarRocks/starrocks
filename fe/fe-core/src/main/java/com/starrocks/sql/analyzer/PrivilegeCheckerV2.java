@@ -505,7 +505,10 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitInsertStatement(InsertStmt statement, ConnectContext context) {
-            checkTableAction(context, statement.getTableName(), PrivilegeType.INSERT);
+            // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
+            if (!statement.isForCTAS()) {
+                checkTableAction(context, statement.getTableName(), PrivilegeType.INSERT);
+            }
             return null;
         }
 
