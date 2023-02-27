@@ -62,6 +62,10 @@ public class SchemaTable extends Table {
         return name.startsWith("be_");
     }
 
+    public boolean isBeSchemaTable() {
+        return SchemaTable.isBeSchemaTable(getName());
+    }
+
     protected SchemaTable(long id, String name, TableType type, List<Column> baseSchema) {
         super(id, name, type, baseSchema);
     }

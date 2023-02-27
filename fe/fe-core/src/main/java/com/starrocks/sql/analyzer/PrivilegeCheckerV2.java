@@ -24,6 +24,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -687,7 +688,11 @@ public class PrivilegeCheckerV2 {
 
             @Override
             public Void visitTable(TableRelation node, Void session) {
-                if (node.getTable().isMaterializedView()) {
+                Table table = node.getTable();
+                if (table instanceof SchemaTable && ((SchemaTable) table).isBeSchemaTable()) {
+                    checkStmtOperatePrivilege(context);
+                }
+                if (table.isMaterializedView()) {
                     checkMvAction(context, node.getName(), PrivilegeType.SELECT);
                 } else {
                     checkTableAction(context, node.getName(), PrivilegeType.SELECT);
