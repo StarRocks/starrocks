@@ -741,7 +741,8 @@ public class AuthUpgraderTest {
                 "create user adminuser",
                 "GRANT admin_priv on *.* to adminuser",
                 "create role adminrole",
-                "GRANT admin_priv on *.* to role adminrole");
+                "GRANT admin_priv on *.* to role adminrole",
+                "GRANT node_priv on *.* to role adminrole");
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
             if (i == 1) {
