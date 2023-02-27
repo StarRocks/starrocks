@@ -120,8 +120,8 @@ public class PartitionPruneRuleTest {
                 olapTable.getPartitionInfo();
                 result = partitionInfo;
 
-                partitionInfo.getType();
-                result = PartitionType.RANGE;
+                partitionInfo.isRangePartition();
+                result = true;
 
                 partitionInfo.getIdToRange(false);
                 result = keyRange;
@@ -238,8 +238,8 @@ public class PartitionPruneRuleTest {
                 olapTable.getPartitionInfo();
                 result = partitionInfo;
 
-                partitionInfo.getType();
-                result = PartitionType.RANGE;
+                partitionInfo.isRangePartition();
+                result = true;
 
                 partitionInfo.getIdToRange(false);
                 result = keyRange;
