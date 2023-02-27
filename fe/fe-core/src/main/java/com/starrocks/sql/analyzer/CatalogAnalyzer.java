@@ -90,7 +90,11 @@ public class CatalogAnalyzer {
                 throw new SemanticException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.");
             }
 
-            FeNameFormat.checkCatalogName(splitParts[1]);
+            try {
+                FeNameFormat.checkCatalogName(splitParts[1]);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
             statement.setCatalogName(splitParts[1]);
 
             return null;
