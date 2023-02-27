@@ -30,7 +30,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 public class TablePEntryObject implements PEntryObject {
-    public static final long ALL_CATALOGS_ID = -10000;
+    public static final long ALL_CATALOGS_ID = -1;
     public static final String ALL_DATABASES_UUID = "ALL_DATABASES_UUID"; // represent all databases
     public static final String ALL_TABLES_UUID = "ALL_TABLES_UUID"; // represent all tables
 

@@ -1982,7 +1982,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
-    private String getCatalogNameById(long catalogId) {
+    private String getCatalogNameById(long catalogId) throws MetaNotFoundException {
         if (CatalogMgr.isInternalCatalog(catalogId)) {
             return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         }
@@ -1990,13 +1990,14 @@ public class ShowExecutor {
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
         Optional<Catalog> catalogOptional = catalogMgr.getCatalogById(catalogId);
         if (!catalogOptional.isPresent()) {
-            throw new SemanticException("cannot find catalog");
+            throw new MetaNotFoundException("cannot find catalog");
         }
 
         return catalogOptional.get().getName();
     }
 
-    private String getCatalogNameFromPEntry(ObjectType objectType, PrivilegeCollection.PrivilegeEntry privilegeEntry) {
+    private String getCatalogNameFromPEntry(ObjectType objectType, PrivilegeCollection.PrivilegeEntry privilegeEntry)
+            throws MetaNotFoundException {
         if (objectType.equals(ObjectType.CATALOG)) {
             CatalogPEntryObject catalogPEntryObject =
                     (CatalogPEntryObject) privilegeEntry.getObject();
@@ -2029,12 +2030,18 @@ public class ShowExecutor {
         for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntry
                 : typeToPrivilegeEntryList.entrySet()) {
             for (PrivilegeCollection.PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
+                ObjectType objectType = typeToPrivilegeEntry.getKey();
+                String catalogName;
+                try {
+                    catalogName = getCatalogNameFromPEntry(objectType, privilegeEntry);
+                } catch (MetaNotFoundException e) {
+                    // ignore this entry
+                    continue;
+                }
                 List<String> info = new ArrayList<>();
                 info.add(userOrRoleName.getRoleName() != null ?
                         userOrRoleName.getRoleName() : userOrRoleName.getUserIdentity().toString());
-
-                ObjectType objectType = typeToPrivilegeEntry.getKey();
-                info.add(getCatalogNameFromPEntry(objectType, privilegeEntry));
+                info.add(catalogName);
 
                 GrantPrivilegeStmt grantPrivilegeStmt = new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(),
                         userOrRoleName, null, privilegeEntry.isWithGrantOption());
