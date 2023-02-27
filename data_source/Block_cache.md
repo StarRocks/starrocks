@@ -27,7 +27,7 @@ hash(filename) + filesize + blockId
 1. StarRocks 检查缓存中是否存在该 block。
 2. 如存在，则从缓存中读取该 block；如不存在，则从 Amazon S3 远端读取该 block 并将其缓存在 BE 上。
 
-StarRocks 默认会缓存从外部存储系统读取的数据。如果只想读取，不缓存，可进行如下设置。
+开启 Local Cache 后，StarRocks 会缓存从外部存储系统读取的数据文件。如不希望缓存，可进行如下设置。
 
 ```SQL
 SET enable_populate_block_cache = false;
