@@ -421,7 +421,7 @@ public class NodeMgr {
                 isVersionFileChanged = true;
             } else if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
                 LOG.error("Upgrading from a cluster with version less than 3.0 to a cluster with run mode {} of " +
-                          "version 3.0 or above is disallowed. exit exit", RunMode.getCurrentRunMode().getName());
+                          "version 3.0 or above is disallowed. will exit", RunMode.getCurrentRunMode().getName());
                 System.exit(-1);
             }
         } else if (!runMode.equalsIgnoreCase(RunMode.getCurrentRunMode().getName())) {
