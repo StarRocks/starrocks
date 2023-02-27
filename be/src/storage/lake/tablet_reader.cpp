@@ -247,7 +247,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
 
     if (seg_iters.empty()) {
         _collect_iter = new_empty_iterator(_schema, params.chunk_size);
-    } else if (is_compaction(params.reader_type) && keys_type == DUP_KEYS) {
+    } else if (is_compaction(params.reader_type) && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS)) {
         //             MergeIterator
         //                   |
         //       +-----------+-----------+
