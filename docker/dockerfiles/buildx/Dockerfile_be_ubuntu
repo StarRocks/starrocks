@@ -19,7 +19,7 @@ RUN apt-get update \
         openssl vim gzip tar mysql-client openjdk-11-jdk \
     && apt-get install -y tzdata
 
-COPY --chown=starrocks:starrocks  docker/bin/be_entrypoint.sh docker/bin/be_prestop.sh /opt/starrocks/
+COPY --chown=starrocks:starrocks docker/dockerfiles/be/be_entrypoint.sh docker/dockerfiles/be/be_prestop.sh /opt/starrocks/
 
 USER starrocks
 RUN  mkdir -p /opt/starrocks/be/storage
