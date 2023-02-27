@@ -194,7 +194,10 @@ Status DataStreamRecvr::get_next(ChunkPtr* chunk, bool* eos) {
 
 Status DataStreamRecvr::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit) {
     DCHECK(_cascade_merger);
-    return _cascade_merger->get_next(chunk, eos, should_exit);
+    ChunkUniquePtr chunk_ptr;
+    RETURN_IF_ERROR(_cascade_merger->get_next(&chunk_ptr, eos, should_exit));
+    *chunk = std::move(chunk_ptr);
+    return Status::OK();
 }
 
 bool DataStreamRecvr::is_data_ready() {
