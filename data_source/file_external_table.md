@@ -103,3 +103,62 @@ SELECT * FROM t0;
 +--------+------+
 2 rows in set (0.08 sec)
 ```
+
+## 示例
+
+示例 1：创建一个文件外部表名为 `table_1`，并使用 Instance Profile 进行认证和鉴权，用来访问存储在 AWS S3 路径 `s3://bucket-test/folder1` 下单个 Parquet 格式文件 `raw_0.parquet`：
+
+```SQL
+CREATE EXTERNAL TABLE table_1
+(
+    name string, 
+    id int
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "s3://bucket-test/folder1/raw_0.parquet", 
+    "format" = "parquet",
+    "aws.s3.use_instance_profile" = "true",
+    "aws.s3.region" = "us-west-2" 
+);
+```
+
+示例 2：创建一个文件外部表名为 `table_1`，并使用 Assumed Role 进行认证和鉴权，用来访问存储在 AWS S3 路径 `s3://bucket-test/folder1` 下所有 ORC 格式文件：
+
+```SQL
+CREATE EXTERNAL TABLE table_1
+(
+    name string, 
+    id int
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "s3://bucket-test/folder1/", 
+    "format" = "orc",
+    "aws.s3.use_instance_profile" = "true",
+    "aws.s3.iam_role_arn" = "arn:aws:iam::51234343412:role/role_name_in_aws_iam",
+    "aws.s3.region" = "us-west-2" 
+);
+```
+
+示例 3：创建一个文件外部表名为 `table_1`，并使用 IAM User 进行认证和鉴权，用来访问存储在 AWS S3 路径 `s3://bucket-test/folder1` 下所有 ORC 格式文件：
+
+```SQL
+CREATE EXTERNAL TABLE table_1
+(
+    name string, 
+    id int
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "s3://bucket-test/folder1/", 
+    "format" = "orc",
+    "aws.s3.use_instance_profile" = "false",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_access_key>",
+    "aws.s3.region" = "us-west-2" 
+);
+```
