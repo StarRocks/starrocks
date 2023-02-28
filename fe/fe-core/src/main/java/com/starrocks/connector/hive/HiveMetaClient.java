@@ -210,11 +210,11 @@ public class HiveMetaClient {
     }
 
     /**
-     * Both 'getPartitionByNames' and 'getPartitionColumnStatistics' could throw exception or no response
+     * Both 'getPartitionsByNames' and 'getPartitionColumnStatistics' could throw exception or no response
      * when querying too many partitions at present. Due to statistics don't affect accuracy, user could adjust
      * session variable 'hive_partition_stats_sample_size' to ensure 'getPartitionColumnStat' normal return.
-     * But "getPartitionByNames" interface must return the full contents due to the need to get partition file information.
-     * So we resend request "getPartitionByNames" when an exception occurs.
+     * But "getPartitionsByNames" interface must return the full contents due to the need to get partition file information.
+     * So we resend request "getPartitionsByNames" when an exception occurs.
      */
     public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
         int size = partitionNames.size();
