@@ -197,7 +197,7 @@ public class PartitionUtil {
 
     public static Map<String, Range<PartitionKey>> getPartitionRange(Table table, Column partitionColumn)
             throws UserException {
-        if (table.isLocalTable()) {
+        if (table.isNativeTable()) {
             return ((OlapTable) table).getRangePartitionMap();
         } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable()) {
             return PartitionUtil.getPartitionRangeFromPartitionList(table, partitionColumn);

@@ -101,8 +101,8 @@ public class MaterializedViewOptimizer {
         for (OptExpression scanExpr : scanExprs) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
             Table scanTable = scanOperator.getTable();
-            if ((scanTable.isLocalTable() && !scanTable.equals(partitionTableAndColumns.first))
-                    || (!scanTable.isLocalTable()) && !scanTable.getTableIdentifier().equals(
+            if ((scanTable.isNativeTable() && !scanTable.equals(partitionTableAndColumns.first))
+                    || (!scanTable.isNativeTable()) && !scanTable.getTableIdentifier().equals(
                     partitionTableAndColumns.first.getTableIdentifier())) {
                 continue;
             }
@@ -123,7 +123,7 @@ public class MaterializedViewOptimizer {
         Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
         List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
                 modifiedPartitionNames);
-        List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForLocalTable(mv, mvPartitionNamesToRefresh);
+        List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
         List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();
         for (Range<PartitionKey> range : baseTableRanges) {
             if (mvRanges.stream().anyMatch(mvRange -> mvRange.encloses(range))) {
@@ -134,8 +134,8 @@ public class MaterializedViewOptimizer {
         return latestBaseTableRanges;
     }
 
-    private List<Range<PartitionKey>> getLatestPartitionRangeForLocalTable(OlapTable partitionTable,
-                                                                           Set<String> modifiedPartitionNames) {
+    private List<Range<PartitionKey>> getLatestPartitionRangeForNativeTable(OlapTable partitionTable,
+                                                                            Set<String> modifiedPartitionNames) {
         // partitions that will be excluded
         Set<Long> filteredIds = Sets.newHashSet();
         for (Partition p : partitionTable.getPartitions()) {
@@ -149,8 +149,8 @@ public class MaterializedViewOptimizer {
 
     private List<Range<PartitionKey>> getLatestPartitionRange(Table table, Column partitionColumn,
                                                               Set<String> modifiedPartitionNames) {
-        if (table.isLocalTable()) {
-            return getLatestPartitionRangeForLocalTable((OlapTable) table, modifiedPartitionNames);
+        if (table.isNativeTable()) {
+            return getLatestPartitionRangeForNativeTable((OlapTable) table, modifiedPartitionNames);
         } else {
             Map<String, Range<PartitionKey>> partitionMap;
             try {

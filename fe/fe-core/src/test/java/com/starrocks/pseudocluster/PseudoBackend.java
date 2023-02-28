@@ -24,6 +24,18 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.proto.AbortTxnRequest;
+import com.starrocks.proto.AbortTxnResponse;
+import com.starrocks.proto.CompactRequest;
+import com.starrocks.proto.CompactResponse;
+import com.starrocks.proto.DeleteDataRequest;
+import com.starrocks.proto.DeleteDataResponse;
+import com.starrocks.proto.DeleteTabletRequest;
+import com.starrocks.proto.DeleteTabletResponse;
+import com.starrocks.proto.DropTableRequest;
+import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.LockTabletMetadataRequest;
+import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
@@ -46,7 +58,20 @@ import com.starrocks.proto.PTabletWriterOpenRequest;
 import com.starrocks.proto.PTabletWriterOpenResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
+import com.starrocks.proto.PublishLogVersionRequest;
+import com.starrocks.proto.PublishLogVersionResponse;
+import com.starrocks.proto.PublishVersionRequest;
+import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.RestoreSnapshotsRequest;
+import com.starrocks.proto.RestoreSnapshotsResponse;
 import com.starrocks.proto.StatusPB;
+import com.starrocks.proto.TabletStatRequest;
+import com.starrocks.proto.TabletStatResponse;
+import com.starrocks.proto.UnlockTabletMetadataRequest;
+import com.starrocks.proto.UnlockTabletMetadataResponse;
+import com.starrocks.proto.UploadSnapshotsRequest;
+import com.starrocks.proto.UploadSnapshotsResponse;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PMVMaintenanceTaskRequest;
@@ -190,6 +215,7 @@ public class PseudoBackend {
     HeartBeatClient heatBeatClient;
     BeThriftClient backendClient;
     PseudoPBackendService pBackendService;
+    PseudoLakeService pLakeService;
 
     private AtomicLong nextRowsetId = new AtomicLong(0);
 
@@ -343,6 +369,7 @@ public class PseudoBackend {
         this.heatBeatClient = new HeartBeatClient();
         this.backendClient = new BeThriftClient();
         this.pBackendService = new PseudoPBackendService();
+        this.pLakeService = new PseudoLakeService();
 
         maintenanceWorkerThread = new Thread(() -> maintenanceWorker(), "be-" + getId());
         maintenanceWorkerThread.start();
@@ -572,6 +599,12 @@ public class PseudoBackend {
 
     private void handleAlter(TAgentTaskRequest request, TFinishTaskRequest finishTaskRequest) throws Exception {
         TAlterTabletReqV2 task = request.alter_tablet_req_v2;
+        if (task.tablet_type == TTabletType.TABLET_TYPE_LAKE) {
+            finishTaskRequest.finish_tablet_infos = Lists.newArrayList(
+                    new TTabletInfo(task.new_tablet_id, task.new_schema_hash, task.alter_version, 0, 0, 0));
+            return;
+        }
+
         Tablet baseTablet = tabletManager.getTablet(task.base_tablet_id);
         if (baseTablet == null) {
             throw new Exception(
@@ -961,6 +994,68 @@ public class PseudoBackend {
         @Override
         public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request) {
             throw new org.apache.commons.lang.NotImplementedException("TODO");
+        }
+    }
+
+    private class PseudoLakeService implements LakeService {
+        @Override
+        public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<AbortTxnResponse> abortTxn(AbortTxnRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<CompactResponse> compact(CompactRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DeleteDataResponse> deleteData(DeleteDataRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<TabletStatResponse> getTabletStats(TabletStatRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DropTableResponse> dropTable(DropTableRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<LockTabletMetadataResponse> lockTabletMetadata(LockTabletMetadataRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<UnlockTabletMetadataResponse> unlockTabletMetadata(UnlockTabletMetadataRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<UploadSnapshotsResponse> uploadSnapshots(UploadSnapshotsRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<RestoreSnapshotsResponse> restoreSnapshots(RestoreSnapshotsRequest request) {
+            return CompletableFuture.completedFuture(null);
         }
     }
 

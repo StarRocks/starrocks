@@ -594,7 +594,7 @@ public class Database extends MetaObject implements Writable {
     public List<MaterializedView> getMaterializedViews() {
         List<MaterializedView> materializedViews = new ArrayList<>();
         for (Table table : idToTable.values()) {
-            if (TableType.MATERIALIZED_VIEW == table.getType()) {
+            if (table.isMaterializedView()) {
                 materializedViews.add((MaterializedView) table);
             }
         }

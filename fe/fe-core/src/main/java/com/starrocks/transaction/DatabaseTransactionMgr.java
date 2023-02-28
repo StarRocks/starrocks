@@ -945,7 +945,7 @@ public class DatabaseTransactionMgr {
                         return;
                     }
 
-                    if (table.isLakeTable()) {
+                    if (table.isCloudNativeTable()) {
                         continue;
                     }
 
