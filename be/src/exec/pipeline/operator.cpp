@@ -62,7 +62,7 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
 Status Operator::prepare(RuntimeState* state) {
     _mem_tracker = std::make_shared<MemTracker>(_common_metrics.get(), std::make_tuple(true, true, true), "Operator",
-                                                -1, _name, state->instance_mem_tracker());
+                                                -1, _name, nullptr);
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
