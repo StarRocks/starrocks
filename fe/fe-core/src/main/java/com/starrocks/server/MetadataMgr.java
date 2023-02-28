@@ -138,7 +138,12 @@ public class MetadataMgr {
 
     public Database getDb(String catalogName, String dbName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        return connectorMetadata.map(metadata -> metadata.getDb(dbName)).orElse(null);
+        Database db = connectorMetadata.map(metadata -> metadata.getDb(dbName)).orElse(null);
+        // set catalog name if external catalog
+        if (db != null && CatalogMgr.isExternalCatalog(catalogName)) {
+            db.setCatalogName(catalogName);
+        }
+        return db;
     }
 
     public Table getTable(String catalogName, String dbName, String tblName) {
