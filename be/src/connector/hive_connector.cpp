@@ -47,6 +47,16 @@ DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_
 HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.hdfs_scan_range) {}
 
+Status HiveDataSource::_check_all_slots_nullable() {
+    for (const auto* slot : _tuple_desc->slots()) {
+        if (!slot->is_nullable()) {
+            return Status::RuntimeError(fmt::format(
+                    "All columns must be nullable for external table. Column '{}' is not nullable", slot->col_name()));
+        }
+    }
+    return Status::OK();
+}
+
 Status HiveDataSource::open(RuntimeState* state) {
     // right now we don't force user to set JAVA_HOME.
     // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,
@@ -67,6 +77,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (_hive_table == nullptr) {
         return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi/delta lake/file table are supported");
     }
+    RETURN_IF_ERROR(_check_all_slots_nullable());
 
     _use_block_cache = config::block_cache_enable;
     if (state->query_options().__isset.use_scan_block_cache) {
