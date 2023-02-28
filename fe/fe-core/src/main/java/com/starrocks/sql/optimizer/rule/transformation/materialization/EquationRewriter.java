@@ -99,7 +99,7 @@ public class EquationRewriter {
                     if (extendedExpr == null) {
                         return replaced.clone();
                     }
-                    ScalarOperator newExpr = mappedColumnAndExprRef.get().second.clone();
+                    ScalarOperator newExpr = extendedExpr.clone();
                     return replaceColInExpr(newExpr, basedColumn,
                             replaced.clone()) ? newExpr : null;
 
@@ -126,7 +126,7 @@ public class EquationRewriter {
         return equationMap.containsKey(scalarOperator);
     }
 
-    public void addMapping(ColumnRefOperator col, ScalarOperator expr) {
+    public void addMapping(ScalarOperator expr, ColumnRefOperator col) {
         equationMap.put(expr, Pair.create(col, null));
         Pair<ScalarOperator, ScalarOperator> extendedEntry = new EquationTransformer(expr, col).getMapping();
         if (extendedEntry.second != col) {

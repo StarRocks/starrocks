@@ -792,7 +792,7 @@ public class MaterializedViewRewriter {
                 // and ColumnRefOperator may conflict between mv and query(same id but not same name),
                 // so do not put it into the reversedMap
                 if (rewriteScalarOp != rewritten || rewritten.getUsedColumns().isEmpty()) {
-                    rewriter.addMapping(entry.getKey(), rewriteScalarOp);
+                    rewriter.addMapping(rewriteScalarOp, entry.getKey());
                 }
             } else {
                 if (isViewBased) {
@@ -800,7 +800,7 @@ public class MaterializedViewRewriter {
                 } else {
                     rewriteScalarOp = columnRewriter.rewriteByQueryEc(rewritten);
                 }
-                rewriter.addMapping(entry.getKey(), rewriteScalarOp);
+                rewriter.addMapping(rewriteScalarOp, entry.getKey());
             }
 
         }
