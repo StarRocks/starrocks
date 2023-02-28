@@ -2113,7 +2113,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 distributionInfo.setBucketNum(bucketNum);
             }
 
-            if (stmt.isOlapEngine() && RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+            if (stmt.isOlapEngine() && RunMode.allowCreateLakeTable()) {
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
 
                 // storage cache property
@@ -2185,7 +2185,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // analyze replication_num
-        short replicationNum = FeConstants.default_replication_num;
+        short replicationNum = RunMode.defaultReplicationNum();
         try {
             boolean isReplicationNumSet =
                     properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
@@ -2235,7 +2235,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         if (table.hasAutoIncrementColumn() && stmt.isOlapEngine()
-                && RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+                && RunMode.allowCreateLakeTable()) {
             throw new DdlException("Table with AUTO_INCREMENT column can not be lake table");
         }
 
@@ -2367,7 +2367,7 @@ public class LocalMetastore implements ConnectorMetadata {
         table.setStorageFormat(storageFormat);
 
         // get storage volume
-        String storageVolume = RunMode.getCurrentRunMode().isAllowCreateLakeTable() ? "default" : "local";
+        String storageVolume = RunMode.allowCreateLakeTable() ? "default" : "local";
         table.setStorageVolume(storageVolume);
 
         // get compression type
@@ -3450,7 +3450,7 @@ public class LocalMetastore implements ConnectorMetadata {
             properties = Maps.newHashMap();
         }
         // set replication_num
-        short replicationNum = FeConstants.default_replication_num;
+        short replicationNum = RunMode.defaultReplicationNum();
         try {
             boolean isReplicationNumSet = properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
             replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);

@@ -62,7 +62,6 @@ import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
@@ -1767,7 +1766,7 @@ public class OlapTable extends Table {
         if (tableProperty != null) {
             return tableProperty.getReplicationNum();
         }
-        return FeConstants.default_replication_num;
+        return RunMode.defaultReplicationNum();
     }
 
     public Boolean isInMemory() {
@@ -2081,7 +2080,7 @@ public class OlapTable extends Table {
 
     public String getStorageVolume() {
         if (tableProperty == null) {
-            return RunMode.getCurrentRunMode().isAllowCreateLakeTable() ? "default" : "local";
+            return RunMode.allowCreateLakeTable() ? "default" : "local";
         }
         return tableProperty.getStorageVolume();
     }

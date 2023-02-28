@@ -18,23 +18,18 @@ import com.starrocks.common.Config;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public class RunMode {
-    public static final RunMode SHARED_NOTHING = new RunMode("shared_nothing", true, false, false);
-    public static final RunMode SHARED_DATA = new RunMode("shared_data", false, true, true);
-    public static final RunMode HYBRID = new RunMode("experimental_hybrid", true, true, false);
+public abstract class RunMode {
+    public static final RunMode SHARED_NOTHING = new SharedNothing();
+    public static final RunMode SHARED_DATA = new SharedData();
+    public static final RunMode HYBRID = new Hybrid();
     private static final Logger LOG = LogManager.getLogger(RunMode.class);
+    // Database and table's default configurations, we will never change them
     private static RunMode currentRunMode = SHARED_NOTHING;
 
     private final String name;
-    private final boolean allowCreateOlapTable;
-    private final boolean allowCreateLakeTable;
-    private final boolean ignoreReplicationNum;
 
-    private RunMode(String name, boolean allowCreateOlapTable, boolean allowCreateLakeTable, boolean ignoreReplicationNum) {
+    private RunMode(String name) {
         this.name = name;
-        this.allowCreateOlapTable = allowCreateOlapTable;
-        this.allowCreateLakeTable = allowCreateLakeTable;
-        this.ignoreReplicationNum = ignoreReplicationNum;
     }
 
     public static void detectRunMode() {
@@ -56,24 +51,97 @@ public class RunMode {
         return currentRunMode;
     }
 
+    public static String name() {
+        return getCurrentRunMode().getName();
+    }
+
+    public static boolean allowCreateOlapTable() {
+        return getCurrentRunMode().isAllowCreateOlapTable();
+    }
+
+    public static boolean allowCreateLakeTable() {
+        return getCurrentRunMode().isAllowCreateLakeTable();
+    }
+
+    public static short defaultReplicationNum() {
+        return getCurrentRunMode().getDefaultReplicationNum();
+    }
+
     public String getName() {
         return name;
     }
 
-    public boolean isAllowCreateOlapTable() {
-        return allowCreateOlapTable;
-    }
+    public abstract boolean isAllowCreateOlapTable();
 
-    public boolean isAllowCreateLakeTable() {
-        return allowCreateLakeTable;
-    }
+    public abstract boolean isAllowCreateLakeTable();
 
-    public boolean isIgnoreReplicationNum() {
-        return ignoreReplicationNum;
-    }
+    public abstract short getDefaultReplicationNum();
 
     @Override
     public String toString() {
         return getName();
+    }
+
+    private static class SharedNothing extends RunMode {
+        private SharedNothing() {
+            super("shared_nothing");
+        }
+
+        @Override
+        public boolean isAllowCreateOlapTable() {
+            return true;
+        }
+
+        @Override
+        public boolean isAllowCreateLakeTable() {
+            return false;
+        }
+
+        @Override
+        public short getDefaultReplicationNum() {
+            return 3;
+        }
+    }
+
+    private static class SharedData extends RunMode {
+        private SharedData() {
+            super("shared_data");
+        }
+
+        @Override
+        public boolean isAllowCreateOlapTable() {
+            return false;
+        }
+
+        @Override
+        public boolean isAllowCreateLakeTable() {
+            return true;
+        }
+
+        @Override
+        public short getDefaultReplicationNum() {
+            return 1;
+        }
+    }
+
+    private static class Hybrid extends RunMode {
+        private Hybrid() {
+            super("experimental_hybrid");
+        }
+
+        @Override
+        public boolean isAllowCreateOlapTable() {
+            return true;
+        }
+
+        @Override
+        public boolean isAllowCreateLakeTable() {
+            return true;
+        }
+
+        @Override
+        public short getDefaultReplicationNum() {
+            return 3;
+        }
     }
 }
