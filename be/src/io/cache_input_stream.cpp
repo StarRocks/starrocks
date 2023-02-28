@@ -78,6 +78,8 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
                 _stats.write_cache_count += 1;
                 _stats.write_cache_bytes += load_size;
             } else {
+                _stats.write_cache_fail_count += 1;
+                _stats.write_cache_fail_bytes += load_size;
                 LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
                 // Failed to write cache, but we can keep processing query.
             }
@@ -128,5 +130,4 @@ StatusOr<int64_t> CacheInputStream::position() {
 StatusOr<int64_t> CacheInputStream::get_size() {
     return _stream->get_size();
 }
-
 } // namespace starrocks::io
