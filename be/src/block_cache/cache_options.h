@@ -21,6 +21,8 @@ struct CacheOptions {
     // advanced
     size_t block_size;
     bool checksum;
+    size_t max_parcel_memory_mb;
+    size_t max_concurrent_inserts;
 };
 
 } // namespace starrocks

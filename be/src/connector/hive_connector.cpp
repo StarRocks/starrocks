@@ -242,6 +242,10 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
         _profile.block_cache_write_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteBytes", TUnit::BYTES, prefix);
         _profile.block_cache_write_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockCacheWriteTimer", prefix);
+        _profile.block_cache_write_fail_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_write_fail_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailBytes", TUnit::BYTES, prefix);
     }
 
     if (hdfs_scan_node.__isset.table_name) {
