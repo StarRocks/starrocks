@@ -428,6 +428,11 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     std::unique_lock wrlock(_meta_lock);
 
     Version rowset_version(version, version);
+    // rowset is already set version here, memory is changed, if save failed it maybe a fatal error
+    // Note make rowset visible before generate binlog to update create time to the visible time
+    // which will be used by binlog
+    rowset->make_visible(rowset_version);
+
     // Status::OK() means the full data set does not contain the version
     Status contain_status = _contains_version(rowset_version);
     bool need_binlog = false;
@@ -435,8 +440,6 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
         ASSIGN_OR_RETURN(need_binlog, _prepare_binlog_if_needed(rowset, version));
     }
 
-    // rowset is already set version here, memory is changed, if save failed it maybe a fatal error
-    rowset->make_visible(rowset_version);
     auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
     // No matter whether contains the version, the rowset meta should always be saved. TxnManager::publish_txn
     // will remove the in-memory txn information if Status::AlreadlyExist, but not the committed rowset meta
@@ -508,9 +511,12 @@ void Tablet::_delete_unused_binlog() {
         return;
     }
     {
+        int64_t now = UnixSeconds();
         std::shared_lock rdlock(_meta_lock);
         auto config = _tablet_meta->get_binlog_config();
-        _binlog_manager->check_expire_and_capacity(config->binlog_ttl_second, config->binlog_max_size);
+        if (config != nullptr) {
+            _binlog_manager->check_expire_and_capacity(now, config->binlog_ttl_second, config->binlog_max_size);
+        }
     }
     _binlog_manager->delete_unused_binlog();
 }
