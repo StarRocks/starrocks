@@ -92,6 +92,37 @@ private:
     Tablet& _tablet;
 };
 
+class BinlogRange {
+public:
+    BinlogRange(int64_t start_version, int64_t start_seq_id, int64_t end_version, int64_t end_seq_id)
+            : _start_version(start_version),
+              _start_seq_id(start_seq_id),
+              _end_version(end_version),
+              _end_seq_id(end_seq_id) {}
+
+    bool is_empty() {
+        return _start_version > _end_version || (_start_version == _end_version && _start_seq_id > _end_seq_id);
+    }
+
+    int64_t start_version() const { return _start_version; }
+    int64_t start_seq_id() const { return _start_seq_id; }
+    int64_t end_version() const { return _end_version; }
+    int64_t end_seq_id() const { return _end_seq_id; }
+
+    std::string debug_string() const {
+        std::stringstream out;
+        out << "BinlogRange(start_version=" << _start_version << ", start_seq_id=" << _start_seq_id
+            << ", end_version=" << _end_version << ", end_seq_id=" << _end_seq_id << ")";
+        return out.str();
+    }
+
+private:
+    int64_t _start_version;
+    int64_t _start_seq_id;
+    int64_t _end_version;
+    int64_t _end_seq_id;
+};
+
 // Manages the binlog metas and files, including generation, deletion and read.
 class BinlogManager {
 public:
@@ -152,6 +183,8 @@ public:
     StatusOr<BinlogFileMetaPBPtr> find_binlog_meta(int64_t version, int64_t seq_id);
 
     std::string get_binlog_file_path(int64_t file_id) { return BinlogUtil::binlog_file_path(_path, file_id); }
+
+    BinlogRange current_binlog_range();
 
     // For testing
     int64_t next_file_id() { return _next_file_id; }
