@@ -535,18 +535,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 extProperties.put(property.getKey(), property.getValue());
             }
         }
+        TableName tableName = qualifiedNameToTableName(getQualifiedName(context.qualifiedName()));
+
+        List<ColumnDef> columnDefs = null;
+        if (context.columnDesc() != null) {
+            columnDefs = getColumnDefs(context.columnDesc());
+        }
+
         return new CreateTableStmt(
                 context.IF() != null,
                 context.EXTERNAL() != null,
-                qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
-                context.columnDesc() == null ? null : getColumnDefs(context.columnDesc()),
+                tableName,
+                columnDefs,
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 context.engineDesc() == null ? EngineType.defaultEngine().name() :
                         ((Identifier) visit(context.engineDesc().identifier())).getValue(),
                 context.charsetDesc() == null ? null :
                         ((Identifier) visit(context.charsetDesc().identifierOrString())).getValue(),
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
-                context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc()),
+                context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), columnDefs),
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
                 properties,
                 extProperties,
@@ -558,7 +565,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                                 .stream().map(Identifier::getValue).collect(toList()));
     }
 
-    private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {
+    private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context, List<ColumnDef> columnDefs) {
         List<PartitionDesc> partitionDescList = new ArrayList<>();
         if (context.functionCall() != null) {
             for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
@@ -566,6 +573,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionDescList.add(rangePartitionDesc);
             }
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
+<<<<<<< HEAD
             String functionName = functionCallExpr.getFnName().getFunction();
             List<String> columnList = Lists.newArrayList();
             List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
@@ -611,6 +619,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             } else {
                 throw new ParsingException("Unsupported partition expression: %s", functionCallExpr.toSql());
             }
+=======
+            List<String> columnList = checkAndExtractPartitionCol(functionCallExpr, columnDefs);
+>>>>>>> bfa8c41f8 ([Enhancement] Restrict automatic partition expressions (#18564))
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
             return new ExpressionPartitionDesc(rangePartitionDesc, functionCallExpr);
         }
@@ -634,6 +645,106 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return partitionDesc;
     }
 
+<<<<<<< HEAD
+=======
+    // check the partition expr is legal and extract partition columns
+    private List<String> checkAndExtractPartitionCol(FunctionCallExpr expr, List<ColumnDef> columnDefs) {
+        String functionName = expr.getFnName().getFunction();
+        NodePosition pos = expr.getPos();
+        List<String> columnList = Lists.newArrayList();
+        List<Expr> paramsExpr = expr.getParams().exprs();
+        if (FunctionSet.DATE_TRUNC.equals(functionName)) {
+            if (paramsExpr.size() != 2) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr firstExpr = paramsExpr.get(0);
+            Expr secondExpr = paramsExpr.get(1);
+            String partitionColumnName;
+            if (secondExpr instanceof SlotRef) {
+                partitionColumnName = ((SlotRef) secondExpr).getColumnName();
+                columnList.add(partitionColumnName);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+
+            if (firstExpr instanceof StringLiteral) {
+                StringLiteral stringLiteral = (StringLiteral) firstExpr;
+                String fmt = stringLiteral.getValue();
+                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                }
+                checkPartitionColumnTypeValid(expr, columnDefs, pos, partitionColumnName, fmt);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+
+        } else if (FunctionSet.TIME_SLICE.equals(functionName)) {
+            if (paramsExpr.size() != 4) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr firstExpr = paramsExpr.get(0);
+            String partitionColumnName;
+            if (firstExpr instanceof SlotRef) {
+                partitionColumnName = ((SlotRef) firstExpr).getColumnName();
+                columnList.add(partitionColumnName);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr secondExpr = paramsExpr.get(1);
+            Expr thirdExpr = paramsExpr.get(2);
+            if (secondExpr instanceof IntLiteral && thirdExpr instanceof StringLiteral) {
+                StringLiteral stringLiteral = (StringLiteral) thirdExpr;
+                String fmt = stringLiteral.getValue();
+                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                }
+                // For materialized views currently columnDefs == null
+                checkPartitionColumnTypeValid(expr, columnDefs, pos, partitionColumnName, fmt);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr fourthExpr = paramsExpr.get(3);
+            if (fourthExpr instanceof StringLiteral) {
+                StringLiteral boundaryLiteral = (StringLiteral) fourthExpr;
+                String boundary = boundaryLiteral.getValue();
+                if (!"floor".equalsIgnoreCase(boundary)) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(expr.toSql(),
+                            "PARTITION BY", "Automatic partitioning does not support the ceil parameter"), pos);
+                }
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+        }
+        return columnList;
+    }
+
+    private void checkPartitionColumnTypeValid(FunctionCallExpr expr, List<ColumnDef> columnDefs,
+                                               NodePosition pos, String partitionColumnName, String fmt) {
+        // For materialized views currently columnDefs == null
+        if (columnDefs != null && "hour".equalsIgnoreCase(fmt)) {
+            ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionColumnName);
+            if (partitionDef == null)  {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            if (partitionDef.getType() != Type.DATETIME) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(expr.toSql(),
+                        "PARTITION BY", "The hour parameter only supports datetime type"), pos);
+            }
+        }
+    }
+
+    private ColumnDef findPartitionDefByName(List<ColumnDef> columnDefs, String partitionName) {
+        for (ColumnDef columnDef : columnDefs) {
+            if (partitionName.equalsIgnoreCase(columnDef.getName())) {
+                return columnDef;
+            }
+        }
+        return null;
+    }
+
+>>>>>>> bfa8c41f8 ([Enhancement] Restrict automatic partition expressions (#18564))
     private AlterClause getRollup(StarRocksParser.RollupItemContext rollupItemContext) {
         String rollupName = ((Identifier) visit(rollupItemContext.identifier())).getValue();
         List<Identifier> columnList =
@@ -1229,12 +1340,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 if (expr instanceof SlotRef) {
                     expressionPartitionDesc = new ExpressionPartitionDesc(expr);
                 } else if (expr instanceof FunctionCallExpr) {
+<<<<<<< HEAD
                     for (Expr child : expr.getChildren()) {
                         if (child instanceof SlotRef) {
                             expressionPartitionDesc = new ExpressionPartitionDesc(expr);
                             break;
                         }
                     }
+=======
+                    checkAndExtractPartitionCol((FunctionCallExpr) expr, null);
+                    expressionPartitionDesc = new ExpressionPartitionDesc(expr);
+>>>>>>> bfa8c41f8 ([Enhancement] Restrict automatic partition expressions (#18564))
                 } else {
                     throw new IllegalArgumentException("Partition exp not supports:" + expr.toSql());
                 }
