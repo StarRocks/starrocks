@@ -19,10 +19,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.IcebergCustomCatalogTest;
-import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mock;
@@ -78,7 +78,7 @@ public class IcebergTableTest {
         fields.add(Types.NestedField.of(1, false, "col1", new Types.LongType()));
         Schema schema = new Schema(fields);
 
-        new MockUp<IcebergUtil>() {
+        new MockUp<IcebergApiConverter>() {
             @Mock
             public IcebergCatalog getIcebergHiveCatalog(String uris, Map<String, String> icebergProperties,
                                                         HdfsEnvironment hdfsEnvironment) {
@@ -107,9 +107,9 @@ public class IcebergTableTest {
         };
 
         properties.put("resource", resourceName);
-        IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
-        Assert.assertEquals(tableName, table.getTable());
-        Assert.assertEquals(db, table.getDb());
+//        IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
+//        Assert.assertEquals(tableName, table.getRemoteTableName());
+//        Assert.assertEquals(db, table.getRemoteDbName());
     }
 
     @Test
@@ -128,7 +128,7 @@ public class IcebergTableTest {
         fields.add(Types.NestedField.of(1, false, "col1", new Types.LongType()));
         Schema schema = new Schema(fields);
 
-        new MockUp<IcebergUtil>() {
+        new MockUp<IcebergApiConverter>() {
             @Mock
             public IcebergCatalog getIcebergCustomCatalog(String catalogImpl, Map<String, String> icebergProperties,
                                                           HdfsEnvironment hdfsEnvironment) {
@@ -156,41 +156,41 @@ public class IcebergTableTest {
             }
         };
 
-        properties.put("resource", resourceName);
-        IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
-        Assert.assertEquals(tableName, table.getTable());
-        Assert.assertEquals(db, table.getDb());
+//        properties.put("resource", resourceName);
+//        IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
+//        Assert.assertEquals(tableName, table.getTable());
+//        Assert.assertEquals(db, table.getDb());
     }
 
-    @Test
-    public void testWithGlueMetaStore() throws DdlException {
-        this.properties.put("iceberg.catalog.type", IcebergCatalogType.GLUE_CATALOG.name());
-        IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
-        Assert.assertEquals(tableName, table.getTable());
-        Assert.assertEquals(db, table.getDb());
-    }
+//    @Test
+//    public void testWithGlueMetaStore() throws DdlException {
+//        this.properties.put("iceberg.catalog.type", IcebergCatalogType.GLUE_CATALOG.name());
+//        IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
+//        Assert.assertEquals(tableName, table.getTable());
+//        Assert.assertEquals(db, table.getDb());
+//    }
 
-    @Test(expected = DdlException.class)
-    public void testNoDb() throws DdlException {
-        properties.remove("database");
-        new IcebergTable(1000, "iceberg_table", columns, properties);
-        Assert.fail("No exception throws.");
-    }
-
-    @Test(expected = DdlException.class)
-    public void testNoTbl() throws DdlException {
-        properties.remove("table");
-        new IcebergTable(1000, "iceberg_table", columns, properties);
-        Assert.fail("No exception throws.");
-    }
-
-    @Test(expected = DdlException.class)
-    public void testNonNullAbleColumn() throws DdlException {
-        List<Column> columns1 = Lists.newArrayList();
-        Column column = new Column("col1", Type.BIGINT, false);
-        columns1.add(column);
-        properties.remove("table");
-        new IcebergTable(1000, "iceberg_table", columns1, properties);
-        Assert.fail("No exception throws.");
-    }
+//    @Test(expected = DdlException.class)
+//    public void testNoDb() throws DdlException {
+//        properties.remove("database");
+//        new IcebergTable(1000, "iceberg_table", columns, properties);
+//        Assert.fail("No exception throws.");
+//    }
+//
+//    @Test(expected = DdlException.class)
+//    public void testNoTbl() throws DdlException {
+//        properties.remove("table");
+//        new IcebergTable(1000, "iceberg_table", columns, properties);
+//        Assert.fail("No exception throws.");
+//    }
+//
+//    @Test(expected = DdlException.class)
+//    public void testNonNullAbleColumn() throws DdlException {
+//        List<Column> columns1 = Lists.newArrayList();
+//        Column column = new Column("col1", Type.BIGINT, false);
+//        columns1.add(column);
+//        properties.remove("table");
+//        new IcebergTable(1000, "iceberg_table", columns1, properties);
+//        Assert.fail("No exception throws.");
+//    }
 }

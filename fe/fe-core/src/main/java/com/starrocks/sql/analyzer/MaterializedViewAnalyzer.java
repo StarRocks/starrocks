@@ -134,7 +134,7 @@ public class MaterializedViewAnalyzer {
                 return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
             } else if (table instanceof IcebergTable) {
                 IcebergTable icebergTable = (IcebergTable) table;
-                String catalogName = icebergTable.getCatalog();
+                String catalogName = icebergTable.getCatalogName();
                 return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
             } else {
                 return true;
@@ -547,7 +547,7 @@ public class MaterializedViewAnalyzer {
         }
 
         private void checkPartitionColumnWithBaseIcebergTable(SlotRef slotRef, IcebergTable table) {
-            org.apache.iceberg.Table icebergTable = table.getIcebergTable();
+            org.apache.iceberg.Table icebergTable = table.getNativeTable();
             PartitionSpec partitionSpec = icebergTable.spec();
             if (partitionSpec.isUnpartitioned()) {
                 throw new SemanticException("Materialized view partition column in partition exp " +

@@ -18,11 +18,9 @@ package com.starrocks.connector.iceberg.glue;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.iceberg.CatalogLoader;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
-import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import com.starrocks.connector.iceberg.hive.HiveTableOperations;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
@@ -51,22 +49,13 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static com.starrocks.connector.iceberg.IcebergUtil.convertToSRDatabase;
+import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
 
 public class IcebergGlueCatalog extends BaseMetastoreCatalog implements IcebergCatalog, Configurable<Configuration> {
     private static final Logger LOG = LogManager.getLogger(IcebergGlueCatalog.class);
 
     private static final ConcurrentHashMap<String, IcebergGlueCatalog> CATALOG_MAP =
             new ConcurrentHashMap<>();
-
-    public static synchronized IcebergGlueCatalog getInstance(String catalogName, Map<String, String> properties,
-                                                              HdfsEnvironment hdfsEnvironment) {
-        if (!CATALOG_MAP.containsKey(catalogName)) {
-            CATALOG_MAP.put(catalogName, (IcebergGlueCatalog) CatalogLoader.glue(catalogName,
-                    hdfsEnvironment.getConfiguration(), properties).loadCatalog());
-        }
-        return CATALOG_MAP.get(catalogName);
-    }
 
     private String name;
     private Configuration conf;
@@ -79,19 +68,19 @@ public class IcebergGlueCatalog extends BaseMetastoreCatalog implements IcebergC
     }
 
     @Override
-    public Table loadTable(IcebergTable table) throws StarRocksIcebergException {
-        TableIdentifier tableId = IcebergUtil.getIcebergTableIdentifier(table);
+    public Table loadTable(IcebergTable table) throws StarRocksConnectorException {
+        TableIdentifier tableId = TableIdentifier.of(table.getRemoteDbName(), table.getRemoteTableName());
         return loadTable(tableId, null, null);
     }
 
     @Override
-    public Table loadTable(TableIdentifier tableIdentifier) throws StarRocksIcebergException {
+    public Table loadTable(TableIdentifier tableIdentifier) throws StarRocksConnectorException {
         return loadTable(tableIdentifier, null, null);
     }
 
     @Override
     public Table loadTable(TableIdentifier tableId, String tableLocation,
-                           Map<String, String> properties) throws StarRocksIcebergException {
+                           Map<String, String> properties) throws StarRocksConnectorException {
         Preconditions.checkState(tableId != null);
         try {
             TableOperations ops = this.newTableOps(tableId);
@@ -163,7 +152,7 @@ public class IcebergGlueCatalog extends BaseMetastoreCatalog implements IcebergC
         if (db == null || db.getName() == null) {
             throw new TException("Glue db " + dbName + " doesn't exist");
         }
-        return convertToSRDatabase(dbName);
+        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName);
     }
 
     @Override

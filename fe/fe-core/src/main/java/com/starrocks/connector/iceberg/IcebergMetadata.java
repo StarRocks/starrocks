@@ -15,13 +15,33 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.CombinedScanTask;
+import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.StructLike;
+import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -29,26 +49,28 @@ import org.apache.thrift.TException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+
+import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
+import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
+import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
+import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
     private static final Logger LOG = LogManager.getLogger(IcebergMetadata.class);
     private final String catalogName;
-    private IcebergCatalog icebergCatalog;
-    private String metastoreURI;
-    private String catalogImpl;
-    private String catalogType;
-    private Map<String, String> customProperties;
+    private final IcebergCatalog icebergCatalog;
+    private final IcebergStatisticProvider statisticProvider;
 
-    public IcebergMetadata(String catalogName, IcebergCatalog icebergCatalog,
-                           String metastoreURI, String catalogImpl, String catalogType, Map<String, String> customProperties) {
+    private final Map<TableIdentifier, Table> tables = new ConcurrentHashMap<>();
+    private final Map<IcebergTableKey, List<FileScanTask>> tasks = new ConcurrentHashMap<>();
+
+    public IcebergMetadata(String catalogName, IcebergCatalog icebergCatalog) {
         this.catalogName = catalogName;
         this.icebergCatalog = icebergCatalog;
-        this.metastoreURI = metastoreURI;
-        this.catalogImpl = catalogImpl;
-        this.catalogType = catalogType;
-        this.customProperties = customProperties;
+        this.statisticProvider = new IcebergStatisticProvider();
     }
 
     @Override
@@ -77,23 +99,19 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(String dbName, String tblName) {
+        TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
+        if (tables.containsKey(identifier)) {
+            return tables.get(identifier);
+        }
+
         try {
-            org.apache.iceberg.Table icebergTable
-                    = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
-            // Submit a future task for refreshing
-            GlobalStateMgr.getCurrentState().getIcebergRepository().refreshTable(icebergTable);
-            if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.CUSTOM_CATALOG)) {
-                return IcebergUtil.convertCustomCatalogToSRTable(icebergTable, catalogImpl, catalogName, dbName,
-                        tblName, customProperties);
-            } else if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.GLUE_CATALOG)) {
-                return IcebergUtil.convertGlueCatalogToSRTable(icebergTable, catalogName, dbName, tblName);
-            } else if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.REST_CATALOG)) {
-                return IcebergUtil.convertRESTCatalogToSRTable(icebergTable, catalogName, dbName, tblName);
-            } else {
-                return IcebergUtil.convertHiveCatalogToSRTable(icebergTable, metastoreURI, catalogName, dbName, tblName);
-            }
-        } catch (DdlException e) {
-            LOG.error("Failed to get iceberg table " + IcebergUtil.getIcebergTableIdentifier(dbName, tblName), e);
+            org.apache.iceberg.Table icebergTable = icebergCatalog.loadTable(identifier);
+            Table table = IcebergApiConverter.toIcebergTable(
+                    icebergTable, catalogName, dbName, tblName, icebergCatalog.getIcebergCatalogType().name());
+            tables.put(identifier, table);
+            return table;
+        } catch (StarRocksConnectorException e) {
+            LOG.error("Failed to get iceberg table {}", identifier, e);
             return null;
         }
     }
@@ -101,19 +119,112 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public List<String> listPartitionNames(String dbName, String tblName) {
         org.apache.iceberg.Table icebergTable
-                = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
-        if (!IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.HIVE_CATALOG)
-                && !IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.REST_CATALOG)
-                && !IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.GLUE_CATALOG)) {
+                = icebergCatalog.loadTable(TableIdentifier.of(dbName, tblName));
+        IcebergCatalogType nativeType = icebergCatalog.getIcebergCatalogType();
+
+        if (nativeType != HIVE_CATALOG && nativeType != REST_CATALOG && nativeType != GLUE_CATALOG) {
             throw new StarRocksIcebergException(
-                    "Do not support get partitions from catalog type: " + catalogType);
+                    "Do not support get partitions from catalog type: " + nativeType);
         }
+
         if (icebergTable.spec().fields().stream()
                 .anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
             throw new StarRocksIcebergException(
                     "Do not support get partitions from No-Identity partition transform now");
         }
 
-        return IcebergUtil.getIdentityPartitionNames(icebergTable);
+        List<String> partitionNames = Lists.newArrayList();
+        TableScan tableScan = icebergTable.newScan();
+        List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
+        if (icebergTable.spec().isUnpartitioned()) {
+            return partitionNames;
+        }
+
+        if (icebergTable.spec().fields().stream()
+                .anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
+            return partitionNames;
+        }
+
+        for (FileScanTask fileScanTask : tasks) {
+            StructLike partition = fileScanTask.file().partition();
+            partitionNames.add(convertIcebergPartitionToPartitionName(icebergTable.spec(), partition));
+        }
+        return partitionNames;
+    }
+
+    @Override
+    public Statistics getTableStatistics(
+            OptimizerContext session,
+            Table table,
+            Map<ColumnRefOperator, Column> columns,
+            List<PartitionKey> partitionKeys,
+            ScalarOperator predicate) {
+        return statisticProvider.getTableStatistics((IcebergTable) table, predicate, columns);
+    }
+
+    @Override
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
+                                            long snapshotId, ScalarOperator predicate) {
+        return getRemoteFileInfos((IcebergTable) table, snapshotId, predicate);
+    }
+
+    private List<RemoteFileInfo> getRemoteFileInfos(IcebergTable table, long snapshotId, ScalarOperator predicate) {
+        RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
+        IcebergTableKey key = IcebergTableKey.of(table.getRemoteDbName(), table.getRemoteTableName(), snapshotId, predicate);
+
+        if (!tasks.containsKey(key)) {
+            List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
+            org.apache.iceberg.Table nativeTbl = table.getNativeTable();
+            Types.StructType schema = nativeTbl.schema().asStruct();
+            ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
+            Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+
+            ImmutableList.Builder<FileScanTask> builder = ImmutableList.builder();
+            org.apache.iceberg.Table nativeTable = table.getNativeTable();
+            TableScan scan = nativeTable.newScan().useSnapshot(snapshotId).filter(icebergPredicate);
+
+            for (CombinedScanTask combinedScanTask : scan.planTasks()) {
+                for (FileScanTask fileScanTask : combinedScanTask.files()) {
+                    builder.add(fileScanTask);
+                }
+            }
+            tasks.put(key, builder.build());
+        }
+
+        List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(new RemoteFileDesc(tasks.get(key)));
+        remoteFileInfo.setFiles(remoteFileDescs);
+
+        return Lists.newArrayList(remoteFileInfo);
+    }
+
+    @Override
+    public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
+        org.apache.iceberg.Table nativeTable = ((IcebergTable) table).getNativeTable();
+        try {
+            if (nativeTable instanceof BaseTable) {
+                BaseTable baseTable = (BaseTable) nativeTable;
+                if (baseTable.operations().refresh() == null) {
+                    // If table is loaded successfully, current table metadata will never be null.
+                    // So when we get a null metadata after refresh, it indicates the table has been dropped.
+                    // See: https://github.com/StarRocks/starrocks/issues/3076
+                    throw new NoSuchTableException("No such table: %s", nativeTable.name());
+                }
+            } else {
+                // table loaded by GlobalStateMgr should be a base table
+                throw new StarRocksConnectorException("Invalid table type of %s, it should be a BaseTable!", nativeTable.name());
+            }
+        } catch (NoSuchTableException e) {
+            throw new StarRocksConnectorException("No such table  %s", nativeTable.name());
+        } catch (IllegalStateException ei) {
+            throw new StarRocksConnectorException("Refresh table %s with failure, the table under hood" +
+                            " may have been dropped. You should re-create the external table. cause %s",
+                    nativeTable.name(), ei.getMessage());
+        }
+    }
+
+    @Override
+    public void clear() {
+        tasks.clear();
+        tables.clear();
     }
 }

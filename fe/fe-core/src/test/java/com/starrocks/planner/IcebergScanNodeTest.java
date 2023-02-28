@@ -12,7 +12,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
-import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -134,7 +134,7 @@ public class IcebergScanNodeTest {
 
     private void setUpMock(boolean isPosDelete, com.starrocks.catalog.IcebergTable table,
                            Table iTable, Snapshot snapshot) {
-        new MockUp<IcebergUtil>() {
+        new MockUp<IcebergApiConverter>() {
             @Mock
             public TableScan getTableScan(Table table,
                                           Snapshot snapshot,
@@ -180,7 +180,7 @@ public class IcebergScanNodeTest {
 
         new Expectations() {
             {
-                table.getIcebergTable();
+                table.getNativeTable();
                 result = iTable;
 
                 iTable.currentSnapshot();

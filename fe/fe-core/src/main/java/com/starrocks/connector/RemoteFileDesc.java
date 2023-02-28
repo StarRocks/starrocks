@@ -16,7 +16,12 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.connector.hive.TextFileFormatDesc;
+import org.apache.iceberg.FileScanTask;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class RemoteFileDesc {
     private String fileName;
@@ -26,6 +31,11 @@ public class RemoteFileDesc {
     private boolean splittable;
     private TextFileFormatDesc textFileFormatDesc;
     private ImmutableList<String> hudiDeltaLogs;
+    private List<FileScanTask> icebergScanTasks = new ArrayList<>();
+
+    public RemoteFileDesc(List<FileScanTask> tasks) {
+        icebergScanTasks = Lists.newArrayList(tasks);
+    }
 
     public RemoteFileDesc(String fileName, String compression, long length,
                           ImmutableList<RemoteFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs) {
@@ -58,6 +68,10 @@ public class RemoteFileDesc {
 
     public TextFileFormatDesc getTextFileFormatDesc() {
         return textFileFormatDesc;
+    }
+
+    public List<FileScanTask> getIcebergScanTasks() {
+        return icebergScanTasks;
     }
 
     public RemoteFileDesc setSplittable(boolean splittable) {
