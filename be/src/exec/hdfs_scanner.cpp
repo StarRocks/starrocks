@@ -270,6 +270,8 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->block_cache_write_counter, stats.write_cache_count);
         COUNTER_UPDATE(profile->block_cache_write_bytes, stats.write_cache_bytes);
         COUNTER_UPDATE(profile->block_cache_write_timer, stats.write_cache_ns);
+        COUNTER_UPDATE(profile->block_cache_write_fail_counter, stats.write_cache_fail_count);
+        COUNTER_UPDATE(profile->block_cache_write_fail_bytes, stats.write_cache_fail_bytes);
     }
     // update scanner private profile.
     do_update_counter(profile);
