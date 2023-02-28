@@ -90,6 +90,12 @@ Status OlapSchemaScanContext::_prepare_params(RuntimeState* state) {
     if (_tnode.schema_scan_node.__isset.txn_id) {
         _param->txn_id = _tnode.schema_scan_node.txn_id;
     }
+    if (_tnode.schema_scan_node.__isset.type) {
+        _param->type = _obj_pool.add(new std::string(_tnode.schema_scan_node.type));
+    }
+    if (_tnode.schema_scan_node.__isset.state) {
+        _param->state = _obj_pool.add(new std::string(_tnode.schema_scan_node.state));
+    }
 
     return Status::OK();
 }

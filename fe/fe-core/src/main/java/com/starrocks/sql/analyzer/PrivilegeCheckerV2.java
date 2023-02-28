@@ -522,7 +522,7 @@ public class PrivilegeCheckerV2 {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_TABLE_DENIED,
                                 context.getQualifiedUser(), tableName);
                     }
-                } else if (table instanceof SchemaTable && ((SchemaTable) table).isBeSchemaTable()) {
+                } else if (table instanceof SchemaTable && ((SchemaTable) table).requireOperatePrivilege()) {
                     checkStmtOperatePrivilege(context);
                 } else if (table.isMaterializedView()) {
                     checkMvAction(context, tableName, PrivilegeType.SELECT);
@@ -1188,7 +1188,6 @@ public class PrivilegeCheckerV2 {
             }
             String dbName = tableName.getDb() == null ? context.getDatabase() : tableName.getDb();
             checkDbAction(context, catalog, dbName, PrivilegeType.CREATE_TABLE);
-
 
             if (statement.getProperties() != null && statement.getProperties().containsKey("resource")) {
                 String resourceProp = statement.getProperties().get("resource");
