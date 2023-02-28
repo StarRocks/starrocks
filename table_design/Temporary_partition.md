@@ -33,14 +33,6 @@ ALTER TABLE tbl2 ADD TEMPORARY PARTITION tp1 VALUES [("2020-01-01"), ("2020-02-0
 ALTER TABLE tbl1 ADD TEMPORARY PARTITION tp1 VALUES LESS THAN("2020-02-01")
 ("in_memory" = "true", "replication_num" = "1")
 DISTRIBUTED BY HASH(k1) BUCKETS 5;
-
-ALTER TABLE tbl3 ADD TEMPORARY PARTITION tp1 VALUES IN ("Beijing", "Shanghai");
-
-ALTER TABLE tbl4 ADD TEMPORARY PARTITION tp1 VALUES IN ((1, "Beijing"), (1, "Shanghai"));
-
-ALTER TABLE tbl3 ADD TEMPORARY PARTITION tp1 VALUES IN ("Beijing", "Shanghai")
-("in_memory" = "true", "replication_num" = "1")
-DISTRIBUTED BY HASH(k1) BUCKETS 5;
 ```
 
 > 注意
