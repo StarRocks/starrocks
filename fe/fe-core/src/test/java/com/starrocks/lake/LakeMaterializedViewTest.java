@@ -222,7 +222,7 @@ public class LakeMaterializedViewTest {
         String baseProperties = sb.toString();
         Assert.assertTrue(baseProperties.contains("\"enable_storage_cache\" = \"true\""));
         Assert.assertTrue(baseProperties.contains("\"storage_cache_ttl\" = \"3600\""));
-        Assert.assertTrue(baseProperties.contains("\"allow_async_write_back\" = \"true\""));
+        Assert.assertTrue(baseProperties.contains("\"enable_async_write_back\" = \"true\""));
 
         Assert.assertNull(mv.delete(true));
         Assert.assertNotNull(mv.delete(false));
@@ -235,7 +235,7 @@ public class LakeMaterializedViewTest {
                         "PROPERTIES(\n" +
                         "   'enable_storage_cache' = 'true',\n" +
                         "   'storage_cache_ttl' = '3600',\n" +
-                        "   'allow_async_write_back' = 'true'\n" +
+                        "   'enable_async_write_back' = 'true'\n" +
                         ")\n" +
                         "refresh async\n" +
                         "as select k2, sum(k3) as total from base_table group by k2;");
