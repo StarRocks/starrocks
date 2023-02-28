@@ -49,6 +49,7 @@ struct HdfsScanStats {
     // parquet only!
     // read & decode
     int64_t request_bytes_read = 0;
+    int64_t request_bytes_read_uncompressed = 0;
     int64_t level_decode_ns = 0;
     int64_t value_decode_ns = 0;
     int64_t page_read_ns = 0;
