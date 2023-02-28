@@ -4,7 +4,7 @@
 
 ## 前提条件
 
-创建文件外部表前，您需要在 StarRocks 中进行相应的配置，以便能够访问数据文件所在的外部存储系统。StarRocks 当前支持的系统包括 HDFS、Amazon S3（以及兼容 S3 协议的存储对象）、阿里云对象存储 OSS 和腾讯云对象存储 COS。具体配置步骤和 Hive catalog 相同，详细信息请参见 [Hive catalog](../data_source/catalog/hive_catalog.md#前提条件)。
+创建文件外部表前，您需要在 StarRocks 中进行相应的配置，以便能够访问数据文件所在的外部存储系统。StarRocks 当前支持的系统包括 HDFS、Amazon S3（以及兼容 S3 协议的存储对象）、阿里云对象存储 OSS 和腾讯云对象存储 COS。具体配置步骤和 Hive Catalog 相同，详细信息请参见 [Hive catalog - 准备工作](../data_source/catalog/hive_catalog.md#准备工作)。
 
 ## 操作步骤
 
@@ -69,6 +69,8 @@ PROPERTIES("<key>" = "<value>");
 | DECIMAL      | DECIMAL                                                      |
 | BOOLEAN      | BOOLEAN                                                      |
 | ARRAY        | ARRAY                                                        |
+| MAP          | MAP                                                          |
+| STRUCT       | STRUCT                                                       |
 
 ### 步骤三：查询数据文件
 
