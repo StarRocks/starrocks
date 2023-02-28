@@ -617,7 +617,7 @@ public class ConnectProcessor {
                         queryOptions.getParallel_exec_instance_num());
             }
             if (queryOptions.isSetIs_report_success()) {
-                ctx.getSessionVariable().setReportSuccess(queryOptions.getIs_report_success());
+                ctx.getSessionVariable().setReportSuccess(queryOptions.isIs_report_success());
             }
         } else {
             // for compatibility, all following variables are moved to TQueryOptions.

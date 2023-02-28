@@ -168,7 +168,6 @@ struct TQueryOptions {
   //  (if start from a low number, say 80, this id may be used by another param in the new version),
   // start from 1000
   1000: optional i32 parallel_exec_instance_num;
-  1001: optional bool is_report_success;
 }
 
 
