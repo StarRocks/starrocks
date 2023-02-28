@@ -64,6 +64,7 @@ private:
 
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
+    Status _check_all_slots_nullable();
 
     // =====================================
     ObjectPool _pool;
