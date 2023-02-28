@@ -103,6 +103,7 @@ Status ColumnChunkReader::_parse_page_header() {
     RETURN_IF_ERROR(_page_reader->next_header());
     size_t now = _page_reader->get_offset();
     _opts.stats->request_bytes_read += (now - off);
+    _opts.stats->request_bytes_read_uncompressed += (now - off);
 
     // The page num values will be used for late materialization before parsing page data,
     // so we set _num_values when parsing header.
@@ -156,7 +157,7 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
         _data.size = uncompressed_size;
         RETURN_IF_ERROR(_page_reader->read_bytes((const uint8_t**)&_data.data, _data.size));
     }
-
+    _opts.stats->request_bytes_read_uncompressed += uncompressed_size;
     return Status::OK();
 }
 

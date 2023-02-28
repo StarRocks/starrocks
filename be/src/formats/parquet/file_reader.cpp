@@ -92,6 +92,7 @@ Status FileReader::_parse_footer() {
     }
 
     _scanner_ctx->stats->request_bytes_read += footer_size + 8;
+    _scanner_ctx->stats->request_bytes_read_uncompressed += footer_size + 8;
 
     tparquet::FileMetaData t_metadata;
     // deserialize footer
