@@ -346,6 +346,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
                     // because the request is considered as a repeat request.
                     // we make the high part of query id unchanged to facilitate tracing problem by log.
                     TUniqueId newQueryId = new TUniqueId(oldQueryId.hi, uuid.getLeastSignificantBits());
+                    String errorMsg = coord.getExecStatus().getErrorMsg();
                     if (exportJob.needResetCoord()) {
                         try {
                             Coordinator newCoord = exportJob.resetCoord(taskIdx, newQueryId);
@@ -362,7 +363,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
                     coord.setQueryId(newQueryId);
                     LOG.warn(
                             "export sub task fail. err: {}. task idx: {}, task query id: {}. retry: {}, new query id: {}",
-                            coord.getExecStatus().getErrorMsg(), taskIdx, DebugUtil.printId(oldQueryId), i,
+                            errorMsg, taskIdx, DebugUtil.printId(oldQueryId), i,
                             DebugUtil.printId(coord.getQueryId()));
                 }
             }
