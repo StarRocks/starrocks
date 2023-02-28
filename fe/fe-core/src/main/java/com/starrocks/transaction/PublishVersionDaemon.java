@@ -40,6 +40,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -48,7 +49,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.scheduler.Constants;
@@ -263,7 +263,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             for (long tableId : transactionState.getTableIdList()) {
                 Table table = db.getTable(tableId);
                 if (table != null) {
-                    return table.isLakeTable();
+                    return table.isCloudNativeTable();
                 }
             }
         } finally {
@@ -317,6 +317,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
+                    refreshMvIfNecessary(txnState);
                 } catch (UserException e) {
                     throw new RuntimeException(e);
                 }
@@ -378,7 +379,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
         db.readLock();
         try {
-            LakeTable table = (LakeTable) db.getTable(tableId);
+            OlapTable table = (OlapTable) db.getTable(tableId);
             if (table == null) {
                 txnState.removeTable(tableCommitInfo.getTableId());
                 LOG.info("Removed non-exist table {} from transaction {}. txn_id={}", tableId, txnLabel, txnId);

@@ -32,6 +32,7 @@ import java.util.Set;
 
 public class OlapTableTxnLogApplier implements TransactionLogApplier {
     private static final Logger LOG = LogManager.getLogger(OlapTableTxnLogApplier.class);
+    // olap table or olap materialized view
     private final OlapTable table;
 
     public OlapTableTxnLogApplier(OlapTable table) {
