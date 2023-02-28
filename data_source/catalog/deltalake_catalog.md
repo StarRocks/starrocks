@@ -29,7 +29,7 @@ Delta Lake Catalog 是一种 External Catalog。通过 Delta Lake Catalog，您�
 - Assumed Role
 - IAM User
 
-有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作)。
+有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作)。
 
 ### HDFS
 
@@ -104,7 +104,7 @@ StarRocks 访问 Delta Lake 集群元数据服务的相关参数配置。
 
 | 参数                | 是否必须 | 描述                                                         |
 | ------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.uris | 是       | HMS 的 URI。格式：`thrift://<HMS 的 IP 地址>:<HMS 的端口号>`。 |
+| hive.metastore.uris | 是       | HMS 的 URI。格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。<br>如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>","thrift://<HMS IP 地址 2>:<HMS 端口号 2>","thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
 
 ##### AWS Glue
 
