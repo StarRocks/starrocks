@@ -84,7 +84,7 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
     protected Map<Long, TTabletType> idToTabletType;
 
     // for lake table
-    // storage cache, ttl and allow_async_write_back
+    // storage cache, ttl and enable_async_write_back
     @SerializedName(value = "idToStorageCacheInfo")
     protected Map<Long, StorageCacheInfo> idToStorageCacheInfo;
 

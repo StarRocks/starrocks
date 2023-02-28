@@ -407,7 +407,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(new ByteSizeValue(partition.getDataSize())); // DataSize
         partitionInfo.add(partition.getRowCount()); // RowCount
         partitionInfo.add(cacheInfo.isEnableStorageCache() ? cacheInfo.getStorageCacheTtlS() : 0); // CacheTTL
-        partitionInfo.add(cacheInfo.isAllowAsyncWriteBack()); // AsyncWrite
+        partitionInfo.add(cacheInfo.isEnableAsyncWriteBack()); // AsyncWrite
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getAvg() : 0.0)); // AvgCS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getP50() : 0.0)); // P50CS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getMax() : 0.0)); // MaxCS
