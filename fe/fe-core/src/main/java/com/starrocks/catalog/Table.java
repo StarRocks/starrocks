@@ -460,10 +460,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public String getMysqlType() {
         switch (type) {
-            case OLAP:
-            case OLAP_EXTERNAL:
-            case LAKE:
-                return "BASE TABLE";
             case INLINE_VIEW:
             case VIEW:
             case MATERIALIZED_VIEW:
@@ -471,17 +467,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
                 return "VIEW";
             case SCHEMA:
                 return "SYSTEM VIEW";
-            case MYSQL:
-            case BROKER:
-            case ELASTICSEARCH:
-            case HIVE:
-            case ICEBERG:
-            case HUDI:
-            case JDBC:
-            case DELTALAKE:
-            case FILE:
-                return "EXTERNAL TABLE";
             default:
+                // external table also returns "BASE TABLE" for BI compatibility
                 return "BASE TABLE";
         }
     }

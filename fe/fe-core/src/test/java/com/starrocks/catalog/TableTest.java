@@ -125,21 +125,21 @@ public class TableTest {
         Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP_EXTERNAL).getMysqlType());
         Assert.assertEquals("BASE TABLE", new Table(TableType.LAKE).getMysqlType());
 
+        Assert.assertEquals("BASE TABLE", new Table(TableType.MYSQL).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.BROKER).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.ELASTICSEARCH).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.HIVE).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.ICEBERG).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.HUDI).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.JDBC).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.DELTALAKE).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.FILE).getMysqlType());
+
         Assert.assertEquals("VIEW", new Table(TableType.INLINE_VIEW).getMysqlType());
         Assert.assertEquals("VIEW", new Table(TableType.VIEW).getMysqlType());
         Assert.assertEquals("VIEW", new Table(TableType.MATERIALIZED_VIEW).getMysqlType());
         Assert.assertEquals("VIEW", new Table(TableType.LAKE_MATERIALIZED_VIEW).getMysqlType());
 
         Assert.assertEquals("SYSTEM VIEW", new Table(TableType.SCHEMA).getMysqlType());
-
-        Assert.assertEquals("EXTERNAL TABLE", new Table(TableType.MYSQL).getMysqlType());
-        Assert.assertEquals("EXTERNAL TABLE", new Table(TableType.BROKER).getMysqlType());
-        Assert.assertEquals("EXTERNAL TABLE", new Table(TableType.ELASTICSEARCH).getMysqlType());
-        Assert.assertEquals("EXTERNAL TABLE", new Table(TableType.HIVE).getMysqlType());
-        Assert.assertEquals("EXTERNAL TABLE", new Table(TableType.ICEBERG).getMysqlType());
-        Assert.assertEquals("EXTERNAL TABLE", new Table(TableType.HUDI).getMysqlType());
-        Assert.assertEquals("EXTERNAL TABLE", new Table(TableType.JDBC).getMysqlType());
-        Assert.assertEquals("EXTERNAL TABLE", new Table(TableType.DELTALAKE).getMysqlType());
-        Assert.assertEquals("EXTERNAL TABLE", new Table(TableType.FILE).getMysqlType());
     }
 }
