@@ -64,7 +64,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         return INSTANCE;
     }
 
-    Type pickBucketType(int bucketNum) {
+    private Type pickBucketType(int bucketNum) {
         Preconditions.checkArgument(0 < bucketNum && bucketNum <= 65536);
         return (bucketNum <= 256) ? Type.TINYINT : Type.SMALLINT;
     }
@@ -100,7 +100,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         CallOperator aggCall = aggregate.getValue();
         boolean countDistinctAgg =
                 aggCall.isDistinct() && aggCall.getFnName().equalsIgnoreCase(FunctionSet.COUNT);
-        if (!countDistinctAgg || !aggCall.getChild(0).isColumnRef()) {
+        if (!countDistinctAgg || aggCall.getChildren().size() > 1 || !aggCall.getChild(0).isColumnRef()) {
             return Collections.emptyList();
         }
 

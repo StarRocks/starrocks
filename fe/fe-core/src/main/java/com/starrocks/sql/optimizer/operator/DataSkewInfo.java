@@ -17,9 +17,9 @@ package com.starrocks.sql.optimizer.operator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 public class DataSkewInfo {
-    ColumnRefOperator skewColumnRef;
-    double penaltyFactor = 1.0;
-    int stage = 0;
+    private ColumnRefOperator skewColumnRef;
+    private double penaltyFactor = 1.0;
+    private int stage = 0;
 
     public ColumnRefOperator getSkewColumnRef() {
         return skewColumnRef;

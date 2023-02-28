@@ -240,7 +240,7 @@ public class CostModel {
         }
 
         // compute a magic value to select best plan
-        double computeDataSkewPenaltyOfGroupByCountDistinct(PhysicalHashAggregateOperator node,
+        private double computeDataSkewPenaltyOfGroupByCountDistinct(PhysicalHashAggregateOperator node,
                                                             Statistics inputStatistics) {
             DataSkewInfo skewInfo = node.getDistinctColumnDataSkew();
             if (skewInfo.getStage() != 1) {
