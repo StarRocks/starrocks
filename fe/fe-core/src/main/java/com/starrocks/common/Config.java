@@ -1817,6 +1817,7 @@ public class Config extends ConfigBase {
     /**
      * cloud native storage: hdfs storage url
      */
+    @ConfField
     public static String cloud_native_hdfs_url = "";
 
     // AWS S3 storage configuration
