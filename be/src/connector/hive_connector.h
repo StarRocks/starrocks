@@ -64,6 +64,11 @@ private:
 
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
+<<<<<<< HEAD
+=======
+    HdfsScanner* _create_hudi_jni_scanner();
+    Status _check_all_slots_nullable();
+>>>>>>> d06f77c42 ([BugFix] report error when not-nullable column in external table (#18511))
 
     // =====================================
     ObjectPool _pool;
