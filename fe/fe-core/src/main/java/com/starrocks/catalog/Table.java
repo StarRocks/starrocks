@@ -459,13 +459,31 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     }
 
     public String getMysqlType() {
-        if (this instanceof View) {
-            return "VIEW";
+        switch (type) {
+            case OLAP:
+            case OLAP_EXTERNAL:
+            case LAKE:
+                return "BASE TABLE";
+            case INLINE_VIEW:
+            case VIEW:
+            case MATERIALIZED_VIEW:
+            case LAKE_MATERIALIZED_VIEW:
+                return "VIEW";
+            case SCHEMA:
+                return "SYSTEM VIEW";
+            case MYSQL:
+            case BROKER:
+            case ELASTICSEARCH:
+            case HIVE:
+            case ICEBERG:
+            case HUDI:
+            case JDBC:
+            case DELTALAKE:
+            case FILE:
+                return "EXTERNAL TABLE";
+            default:
+                return "BASE TABLE";
         }
-        if (this instanceof MaterializedView) {
-            return "VIEW";
-        }
-        return "BASE TABLE";
     }
 
     public String getComment() {
