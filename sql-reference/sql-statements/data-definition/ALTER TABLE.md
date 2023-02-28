@@ -582,7 +582,8 @@ SWAP WITH table_name;
 11. 修改表的 bloom filter 列。
 
     ```sql
-    ALTER TABLE example_db.my_table SET ("bloom_filter_columns"="k1,k2,k3");
+    ALTER TABLE example_db.my_table
+    SET ("bloom_filter_columns"="k1,k2,k3");
     ```
 
     也可以合并到上面的 schema change 操作中（注意多子句的语法有少许区别）
@@ -596,31 +597,42 @@ SWAP WITH table_name;
 12. 修改表的 Colocate 属性。
 
     ```sql
-    ALTER TABLE example_db.my_table set ("colocate_with" = "t1");
+    ALTER TABLE example_db.my_table
+    SET ("colocate_with" = "t1");
     ```
 
 13. 将表的分桶方式由 Random Distribution 改为 Hash Distribution。
 
     ```sql
-    ALTER TABLE example_db.my_table set ("distribution_type" = "hash");
+    ALTER TABLE example_db.my_table
+    SET ("distribution_type" = "hash");
     ```
 
 14. 修改表的动态分区属性(支持未添加动态分区属性的表添加动态分区属性)。
 
     ```sql
-    ALTER TABLE example_db.my_table set ("dynamic_partition.enable" = "false");
+    ALTER TABLE example_db.my_table
+    SET ("dynamic_partition.enable" = "false");
     ```
 
     如果需要在未添加动态分区属性的表中添加动态分区属性，则需要指定所有的动态分区属性。
 
     ```sql
-    ALTER TABLE example_db.my_table set ("dynamic_partition.enable" = "true", "dynamic_partition.time_unit" = "DAY", "dynamic_partition.end" = "3", "dynamic_partition.prefix" = "p", "dynamic_partition.buckets" = "32");
+    ALTER TABLE example_db.my_table
+    SET (
+        "dynamic_partition.enable" = "true",
+        "dynamic_partition.time_unit" = "DAY",
+        "dynamic_partition.end" = "3",
+        "dynamic_partition.prefix" = "p",
+        "dynamic_partition.buckets" = "32"
+        );
     ```
 
 15. 修改表的 in_memory 属性。
 
     ```sql
-    ALTER TABLE example_db.my_table set ("in_memory" = "true");
+    ALTER TABLE example_db.my_table
+    SET ("in_memory" = "true");
     ```
 
 ### rename
@@ -648,7 +660,8 @@ SWAP WITH table_name;
 1. 在 table1 上为 siteid 创建 bitmap 索引。
 
     ```sql
-    ALTER TABLE table1 ADD INDEX index_name (siteid) [USING BITMAP] COMMENT 'balabala';
+    ALTER TABLE table1
+    ADD INDEX index_name (siteid) [USING BITMAP] COMMENT 'balabala';
     ```
 
 2. 删除 table1 上的 siteid 列的 bitmap 索引。

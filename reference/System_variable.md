@@ -70,7 +70,7 @@ SET forward_to_master = concat('tr', 'u', 'e');
 
 ### 在查询语句中设置变量
 
-在一些场景中，我们可能需要对某些查询专门设置变量。通过使用 SET_VAR 提示可以在查询中设置仅在单个语句内生效的会话变量。举例：
+在一些场景中，可能需要对某些查询专门设置变量。可以使用 SET_VAR 提示 (hint) 在查询中设置仅在单个语句内生效的会话变量。举例：
 
 ```sql
 SELECT /*+ SET_VAR(exec_mem_limit = 8589934592) */ name FROM people ORDER BY name;
@@ -80,8 +80,21 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 > **注意**
 >
-> 1. `SET_VAR` 提示仅支持 MySQL 8.0 之后的版本。
-> 2. 提示必须以 "/*+" 开头，并且只能跟在 SELECT 关键字之后。
+> 1. `SET_VAR` 仅支持 MySQL 8.0 及之后的版本。
+> 2. `SET_VAR` 只能跟在 SELECT 关键字之后，必须以 `/*+` 开头，以 `*/` 结束。
+
+StarRocks 同时支持在单个语句中设置多个变量，参考如下示例：
+
+```sql
+SELECT /*+ SET_VAR
+  (
+  exec_mem_limit = 515396075520,
+  query_timeout=10000000,
+  batch_size=4096,
+  parallel_fragment_exec_instance_num=32
+  )
+  */ * FROM TABLE;
+```
 
 ## 支持的变量
 
@@ -345,22 +358,22 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * enable_global_runtime_filter
 
-  Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数据进行过滤，过滤通常发生在Join 阶段。当多表进行 Join 时，往往伴随着谓词下推等优化手段进行数据过滤，以减少 Join 表的数据扫描以及shuffle 等阶段产生的 IO，从而提升查询性能。StarRocks 中有两种 RF，分别是 Local RF 和 Global RF。Local RF 应用于 broadcast hash join 场景。Global RF 应用于 shuffle join 场景。
+  Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数据进行过滤，过滤通常发生在 Join 阶段。当多表进行 Join 时，往往伴随着谓词下推等优化手段进行数据过滤，以减少 Join 表的数据扫描以及 shuffle 等阶段产生的 IO，从而提升查询性能。StarRocks 中有两种 RF，分别是 Local RF 和 Global RF。Local RF 应用于 Broadcast Hash Join 场景。Global RF 应用于 Shuffle Join 场景。
   
-  默认值 true，表示打开 global runtime filter 开关。关闭该开关后, 不产生 global runtime filter, 但是依然会产生 Local runtime filter。
+  默认值 `true`，表示打开 global runtime filter 开关。关闭该开关后, 不生成 Global RF, 但是依然会生成 Local RF。
 
 * enable_multicolumn_global_runtime_filter
 
-  多列 global runtime filter 开关。默认值为 false，表示关闭该开关。
+  多列 Global runtime filter 开关。默认值为 false，表示关闭该开关。
   
-  对于 Broadcast 和 replicated Join 类型之外的其他 Join，当 Join 的等值条件有多个的情况下：
+  对于 Broadcast 和 Replicated Join 类型之外的其他 Join，当 Join 的等值条件有多个的情况下：
   * 如果该选项关闭: 则只会产生 Local RF。
   * 如果该选项打开, 则会生成 multi-part GRF, 并且该 GRF 需要携带 multi-column 作为 partition-by 表达式.
 
 * runtime_filter_on_exchange_node
 
-  GRF 成功下推跨过 Exchange 算子后，是否在 Exchange Node 上放置 GRF。当一个 GRF 下推跨越 Exchange 算子，最终安装在 Exchange 算子更下层的算子上，则 Exchange 算子本身是不放置 GRF 的，这样可以避免重复性使用 GRF 过滤数据而增加计算时间。但是 GRF 的投递本身是 try-best 模式，如果 query 执行时，Exchange 下层的算子接收 GRF 失败，而 Exchange 本身又没有安装 GRF，数据无法被过滤，会造成性能衰退.
-  该选项打开（设置为 true）时，GRF 即使下推跨过了 Exchange 算子, 依然会在 Exchange 算子上放置 GRF 并生效。默认值为 false。
+  GRF 成功下推跨过 Exchange 算子后，是否在 Exchange Node 上放置 GRF。当一个 GRF 下推跨越 Exchange 算子，最终安装在 Exchange 算子更下层的算子上时，Exchange 算子本身是不放置 GRF 的，这样可以避免重复性使用 GRF 过滤数据而增加计算时间。但是 GRF 的投递本身是 try-best 模式，如果 query 执行时，Exchange 下层的算子接收 GRF 失败，而 Exchange 本身又没有安装 GRF，数据无法被过滤，会造成性能衰退.
+  该选项打开（设置为 `true`）时，GRF 即使下推跨过了 Exchange 算子, 依然会在 Exchange 算子上放置 GRF 并生效。默认值为 `false`。
 
 * runtime_join_filter_push_down_limit
 
