@@ -107,6 +107,7 @@ import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -1019,6 +1020,12 @@ public class PrivilegeCheckerV2 {
             if (!authorizationManager.canExecuteAs(context, statement.getToUser())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "IMPERSONATE");
             }
+            return null;
+        }
+
+        @Override
+        public Void visitExecuteScriptStatement(ExecuteScriptStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
             return null;
         }
 
