@@ -93,7 +93,7 @@ private:
     bool _is_stream_pipeline{false};
     int64_t _run_time = 0;
 
-    StreamEpochManager* _stream_epoch_manager;
+    StreamEpochManager* _stream_epoch_manager = nullptr;
     starrocks::EpochInfo _current_epoch_info;
 
     std::queue<ChunkSourcePtr> _old_chunk_sources;
