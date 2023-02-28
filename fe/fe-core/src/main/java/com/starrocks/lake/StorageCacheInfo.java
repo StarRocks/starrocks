@@ -51,7 +51,7 @@ public class StorageCacheInfo implements GsonPreProcessable, GsonPostProcessable
         return cacheInfo.getTtlSeconds();
     }
 
-    public boolean isAllowAsyncWriteBack() {
+    public boolean isEnableAsyncWriteBack() {
         return cacheInfo.getAsyncWriteBack();
     }
 

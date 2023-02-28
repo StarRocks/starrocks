@@ -207,7 +207,7 @@ public class CreateLakeTableTest {
             StorageCacheInfo partitionStorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partitionId);
             Assert.assertTrue(partitionStorageCacheInfo.isEnableStorageCache());
             Assert.assertEquals(3600, partitionStorageCacheInfo.getStorageCacheTtlS());
-            Assert.assertEquals(false, partitionStorageCacheInfo.isAllowAsyncWriteBack());
+            Assert.assertEquals(false, partitionStorageCacheInfo.isEnableAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -218,7 +218,7 @@ public class CreateLakeTableTest {
                         " partition p2 values less than (\"2022-04-01\"))\n" +
                         "distributed by hash(key2) buckets 2\n" +
                         "properties('enable_storage_cache' = 'true', 'storage_cache_ttl' = '7200'," +
-                        "'allow_async_write_back' = 'true');"));
+                        "'enable_async_write_back' = 'true');"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "multi_partition_aggregate_key_cache");
             // check table property
@@ -234,7 +234,7 @@ public class CreateLakeTableTest {
             StorageCacheInfo partition2StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
             Assert.assertTrue(partition2StorageCacheInfo.isEnableStorageCache());
             Assert.assertEquals(7200, partition2StorageCacheInfo.getStorageCacheTtlS());
-            Assert.assertEquals(true, partition2StorageCacheInfo.isAllowAsyncWriteBack());
+            Assert.assertEquals(true, partition2StorageCacheInfo.isEnableAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -268,13 +268,13 @@ public class CreateLakeTableTest {
     @Test
     public void testCreateLakeTableException() {
 
-        // storage_cache disabled but allow_async_write_back = true
+        // storage_cache disabled but enable_async_write_back = true
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "storage allow_async_write_back can't be enabled when cache is disabled",
+                "enable_async_write_back can't be turned on when cache is disabled",
                 () -> createTable(
                         "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
                         "distributed by hash(key1) buckets 3\n" +
                         " properties('enable_storage_cache' = 'false', 'storage_cache_ttl' = '0'," +
-                        "'allow_async_write_back' = 'true');"));
+                        "'enable_async_write_back' = 'true');"));
     }
 }
