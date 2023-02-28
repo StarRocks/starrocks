@@ -187,6 +187,17 @@ StatusOr<BinlogFileMetaPBPtr> BinlogManager::find_binlog_meta(int64_t version, i
     return file_meta;
 }
 
+BinlogRange BinlogManager::current_binlog_range() {
+    std::shared_lock lock(_meta_lock);
+    if (_binlog_file_metas.empty()) {
+        return {0, 0, -1, -1};
+    }
+
+    BinlogFileMetaPBPtr& start = _binlog_file_metas.begin()->second;
+    BinlogFileMetaPBPtr& end = _binlog_file_metas.rbegin()->second;
+    return BinlogRange(start->start_version(), start->start_seq_id(), end->end_version(), end->end_seq_id());
+}
+
 void BinlogManager::close_active_writer() {
     if (_active_binlog_writer != nullptr) {
         _active_binlog_writer->close(true);
