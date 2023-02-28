@@ -535,18 +535,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 extProperties.put(property.getKey(), property.getValue());
             }
         }
+        TableName tableName = qualifiedNameToTableName(getQualifiedName(context.qualifiedName()));
+
+        List<ColumnDef> columnDefs = null;
+        if (context.columnDesc() != null) {
+            columnDefs = getColumnDefs(context.columnDesc());
+        }
+
         return new CreateTableStmt(
                 context.IF() != null,
                 context.EXTERNAL() != null,
-                qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
-                context.columnDesc() == null ? null : getColumnDefs(context.columnDesc()),
+                tableName,
+                columnDefs,
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 context.engineDesc() == null ? EngineType.defaultEngine().name() :
                         ((Identifier) visit(context.engineDesc().identifier())).getValue(),
                 context.charsetDesc() == null ? null :
                         ((Identifier) visit(context.charsetDesc().identifierOrString())).getValue(),
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
-                context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc()),
+                context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), columnDefs),
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
                 properties,
                 extProperties,
@@ -558,7 +565,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                                 .stream().map(Identifier::getValue).collect(toList()));
     }
 
-    private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {
+    private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context, List<ColumnDef> columnDefs) {
         List<PartitionDesc> partitionDescList = new ArrayList<>();
         if (context.functionCall() != null) {
             for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
@@ -574,25 +581,33 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     throw new ParsingException("The date_trunc function should have 2 parameters");
                 }
                 Expr firstExpr = paramsExpr.get(0);
+                Expr secondExpr = paramsExpr.get(1);
+                String partitionColumnName;
+                if (secondExpr instanceof SlotRef) {
+                    partitionColumnName = ((SlotRef) secondExpr).getColumnName();
+                    columnList.add(partitionColumnName);
+                } else {
+                    throw new ParsingException("The second parameter of date_trunc only supports fields");
+                }
                 if (firstExpr instanceof StringLiteral) {
                     StringLiteral stringLiteral = (StringLiteral) firstExpr;
                     String fmt = stringLiteral.getValue();
                     if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
                         throw new ParsingException("Unsupported date_trunc format %s", fmt);
                     }
+                    checkPartitionColumnTypeValid(columnDefs, partitionColumnName, fmt);
                 } else {
                     throw new ParsingException("Unsupported date_trunc params: %s", firstExpr.toSql());
                 }
-                Expr secondExpr = paramsExpr.get(1);
-                if (secondExpr instanceof SlotRef) {
-                    columnList.add(((SlotRef) secondExpr).getColumnName());
-                } else {
-                    throw new ParsingException("The second parameter of date_trunc only supports fields");
-                }
             } else if (FunctionSet.TIME_SLICE.equals(functionName)) {
+                if (paramsExpr.size() != 4) {
+                    throw new ParsingException("The time_slice function should have 4 parameters");
+                }
                 Expr firstExpr = paramsExpr.get(0);
+                String partitionColumnName;
                 if (firstExpr instanceof SlotRef) {
-                    columnList.add(((SlotRef) firstExpr).getColumnName());
+                    partitionColumnName = ((SlotRef) firstExpr).getColumnName();
+                    columnList.add(partitionColumnName);
                 } else {
                     throw new ParsingException("The first parameter of time_slice only supports fields");
                 }
@@ -604,9 +619,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
                         throw new ParsingException("Unsupported time_slice format %s", fmt);
                     }
+                    checkPartitionColumnTypeValid(columnDefs, partitionColumnName, fmt);
                 } else {
                     throw new ParsingException("Unsupported time_slice params: %s %s",
                             secondExpr.toSql(), thirdExpr.toSql());
+                }
+                Expr fourthExpr = paramsExpr.get(3);
+                if (fourthExpr instanceof StringLiteral) {
+                    StringLiteral boundaryLiteral = (StringLiteral) fourthExpr;
+                    String boundary = boundaryLiteral.getValue();
+                    if (!"floor".equalsIgnoreCase(boundary)) {
+                        throw new ParsingException("Automatic partitioning does not support the ceil parameter");
+                    }
+                } else {
+                    throw new ParsingException("Unsupported partition expression: %s", functionCallExpr.toSql());
                 }
             } else {
                 throw new ParsingException("Unsupported partition expression: %s", functionCallExpr.toSql());
@@ -632,6 +658,28 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
         }
         return partitionDesc;
+    }
+
+    private void checkPartitionColumnTypeValid(List<ColumnDef> columnDefs, String partitionColumnName, String fmt) {
+        // For materialized views currently columnDefs == null
+        if (columnDefs != null && "hour".equalsIgnoreCase(fmt)) {
+            ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionColumnName);
+            if (partitionDef == null)  {
+                throw new ParsingException("could not find partition column");
+            }
+            if (partitionDef.getType() != Type.DATETIME) {
+                throw new ParsingException("The hour parameter only supports datetime type");
+            }
+        }
+    }
+
+    private ColumnDef findPartitionDefByName(List<ColumnDef> columnDefs, String partitionName) {
+        for (ColumnDef columnDef : columnDefs) {
+            if (partitionName.equalsIgnoreCase(columnDef.getName())) {
+                return columnDef;
+            }
+        }
+        return null;
     }
 
     private AlterClause getRollup(StarRocksParser.RollupItemContext rollupItemContext) {
