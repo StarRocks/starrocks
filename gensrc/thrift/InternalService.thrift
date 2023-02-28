@@ -163,6 +163,12 @@ struct TQueryOptions {
   57: optional i64 runtime_filter_scan_wait_time_ms;
 
   60: optional i32 query_delivery_timeout;
+
+  // The following params only exist on 2.2 2.3, to avoid upgrade inconsistency
+  //  (if start from a low number, say 80, this id may be used by another param in the new version),
+  // start from 1000
+  1000: optional i32 parallel_exec_instance_num;
+  1001: optional bool is_report_success;
 }
 
 
