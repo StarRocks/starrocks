@@ -59,6 +59,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -85,6 +86,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -299,6 +301,15 @@ public final class SqlToScalarOperatorTranslator {
             }
 
             return new ArrayOperator(node.getType(), node.isNullable(), arrayElements);
+        }
+
+        @Override
+        public ScalarOperator visitMapExpr(MapExpr node, Context context) {
+            List<ScalarOperator> mapElements = new ArrayList<>();
+            for (Expr expr : node.getChildren()) {
+                mapElements.add(visit(expr, context.clone(node)));
+            }
+            return new MapOperator(node.getType(), node.isNullable(), mapElements);
         }
 
         @Override

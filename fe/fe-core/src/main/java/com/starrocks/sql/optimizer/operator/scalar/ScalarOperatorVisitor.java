@@ -39,6 +39,10 @@ public abstract class ScalarOperatorVisitor<R, C> {
         return visit(array, context);
     }
 
+    public R visitMap(MapOperator map, C context) {
+        return visit(map, context);
+    }
+
     public R visitCollectionElement(CollectionElementOperator collectionElementOp, C context) {
         return visit(collectionElementOp, context);
     }

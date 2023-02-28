@@ -183,9 +183,6 @@ public:
 
     void check_or_die() const override;
 
-    // null map is null, but the corresponding array may not empty, so need empty the unexpected array.
-    bool empty_null_array(const NullColumnPtr& null_map);
-
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 
 private:
