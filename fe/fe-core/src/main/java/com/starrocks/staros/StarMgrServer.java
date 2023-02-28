@@ -125,12 +125,20 @@ public class StarMgrServer {
         com.staros.util.Config.DEFAULT_FS_TYPE = Config.cloud_native_storage_type;
         // HDFS related configuration
         com.staros.util.Config.HDFS_URL = Config.cloud_native_hdfs_url;
+        if (com.staros.util.Config.DEFAULT_FS_TYPE.equals("HDFS") && com.staros.util.Config.HDFS_URL.isEmpty()) {
+            LOG.error("HDFS url is empty.");
+            System.exit(-1);
+        }
         // AWS related configuration
         String[] bucketAndPrefix = getBucketAndPrefix();
         com.staros.util.Config.S3_BUCKET = bucketAndPrefix[0];
         com.staros.util.Config.S3_PATH_PREFIX = bucketAndPrefix[1];
         com.staros.util.Config.S3_REGION = Config.aws_s3_region;
         com.staros.util.Config.S3_ENDPOINT = Config.aws_s3_endpoint;
+        if (com.staros.util.Config.DEFAULT_FS_TYPE.equals("S3") && com.staros.util.Config.S3_BUCKET.isEmpty()) {
+            LOG.error("S3 bucket is empty.");
+            System.exit(-1);
+        }
         // aws credential related configuration
         String credentialType = getAwsCredentialType();
         if (credentialType == null) {
