@@ -145,7 +145,7 @@ public class HiveStatisticsProvider {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         List<Partition> partitions = hmsTbl.isUnPartitioned() ?
                 Lists.newArrayList(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList())) :
-                Lists.newArrayList(hmsOps.getPartitionByNames(table, partitionKeys).values());
+                Lists.newArrayList(hmsOps.getPartitionByPartitionKeys(table, partitionKeys).values());
 
         Optional<String> hudiBasePath = table.isHiveTable() ? Optional.empty() : Optional.of(hmsTbl.getTableLocation());
         List<RemoteFileInfo> remoteFileInfos = fileOps.getRemoteFileInfoForStats(partitions, hudiBasePath);

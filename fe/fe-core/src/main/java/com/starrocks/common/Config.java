@@ -1670,7 +1670,7 @@ public class Config extends ConfigBase {
      * Background refresh hive external table metadata interval in milliseconds.
      */
     @ConfField(mutable = true)
-    public static int background_refresh_hive_metadata_interval_millis = 600000;
+    public static int background_refresh_metadata_interval_millis = 600000;
 
     /**
      * Enable refresh hive partition statistics.

@@ -126,7 +126,7 @@ public class HiveMetastoreOperationsTest {
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
         Map<String, Partition> partitions =
-                hmsOps.getPartitionByNames(hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+                hmsOps.getPartitionByPartitionKeys(hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
 
         Partition partition1 = partitions.get("col1=1");
         Assert.assertEquals(ORC, partition1.getInputFormat());
