@@ -1705,7 +1705,7 @@ TEST_F(TimeFunctionsTest, utctimeTest) {
         starrocks::RuntimeState state(globals);
         starrocks::FunctionUtils futils(&state);
         FunctionContext* ctx = futils.get_fn_ctx();
-        ColumnPtr ptr = TimeFunctions::utc_timestamp(ctx, Columns()).value();
+        ColumnPtr ptr = TimeFunctions::utc_time(ctx, Columns()).value();
         ASSERT_TRUE(ptr->is_constant());
         ASSERT_FALSE(ptr->is_numeric());
         auto v = ColumnHelper::as_column<ConstColumn>(ptr);
