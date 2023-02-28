@@ -291,13 +291,23 @@ public:
               _stream(std::move(stream)),
               _name(std::move(name)) {}
 
+    explicit RandomAccessFile(std::shared_ptr<io::SeekableInputStream> stream, std::string name, bool is_cache_hit)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
+              _stream(std::move(stream)),
+              _name(std::move(name)),
+              _is_cache_hit(is_cache_hit) {}
+
     std::shared_ptr<io::SeekableInputStream> stream() { return _stream; }
 
     const std::string& filename() const { return _name; }
 
+    bool is_cache_hit() const { return _is_cache_hit; }
+
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;
     std::string _name;
+    // for cachefs in fs_starlet
+    bool _is_cache_hit{false};
 };
 
 // A file abstraction for sequential writing.  The implementation
