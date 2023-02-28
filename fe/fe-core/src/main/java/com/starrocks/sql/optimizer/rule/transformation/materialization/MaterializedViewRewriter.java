@@ -475,9 +475,6 @@ public class MaterializedViewRewriter {
         if (mvOriginalPredicates != null && !ConstantOperator.TRUE.equals(mvOriginalPredicates)) {
             mvOriginalPredicates = rewriteMVCompensationExpression(rewriteContext, columnRewriter,
                     mvColumnRefToScalarOp, mvOriginalPredicates, false);
-            if (mvOriginalPredicates == null) {
-                return null;
-            }
             if (!ConstantOperator.TRUE.equals(mvOriginalPredicates)) {
                 mvScanBuilder.setPredicate(mvOriginalPredicates);
             }
@@ -574,6 +571,9 @@ public class MaterializedViewRewriter {
                     }
                 })
                 .collect(Collectors.toList());
+        if (rewrittenConjuncts.isEmpty()) {
+            return null;
+        }
 
         Multimap<ScalarOperator, ColumnRefOperator> normalizedMap =
                 normalizeAndReverseProjection(mvColumnRefToScalarOp, rewriteContext, isMVBased);
