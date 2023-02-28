@@ -99,6 +99,7 @@ public enum OperatorType {
      */
     SCALAR,
     ARRAY,
+    MAP,
     COLLECTION_ELEMENT,
     ARRAY_SLICE,
     VARIABLE,

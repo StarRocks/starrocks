@@ -62,7 +62,9 @@
 #include "exprs/java_function_call_expr.h"
 #include "exprs/lambda_function.h"
 #include "exprs/literal.h"
+#include "exprs/map_apply_expr.h"
 #include "exprs/map_element_expr.h"
+#include "exprs/map_expr.h"
 #include "exprs/placeholder_ref.h"
 #include "exprs/subfield_expr.h"
 #include "gutil/strings/substitute.h"
@@ -327,6 +329,8 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
             *expr = pool->add(VectorizedIsNullPredicateFactory::from_thrift(texpr_node));
         } else if (texpr_node.fn.name.function_name == "array_map") {
             *expr = pool->add(new ArrayMapExpr(texpr_node));
+        } else if (texpr_node.fn.name.function_name == "map_apply") {
+            *expr = pool->add(new MapApplyExpr(texpr_node));
         } else {
             *expr = pool->add(new VectorizedFunctionCallExpr(texpr_node));
         }
@@ -359,6 +363,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     case TExprNodeType::MAP_ELEMENT_EXPR:
         *expr = pool->add(MapElementExprFactory::from_thrift(texpr_node));
+        break;
+    case TExprNodeType::MAP_EXPR:
+        *expr = pool->add(MapExprFactory::from_thrift(texpr_node));
         break;
     case TExprNodeType::SUBFIELD_EXPR:
         *expr = pool->add(SubfieldExprFactory::from_thrift(texpr_node));

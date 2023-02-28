@@ -172,6 +172,43 @@ public class AnalyzeExprTest {
         analyzeFail("select array_filter([],[],[])");
         analyzeFail("select array_filter([2],1)");
     }
+    @Test
+    public void testLambdaFunctionMapApply() {
+        analyzeSuccess("select map_apply((k,v)->(k+1,length(v)), col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'']) as col_map " +
+                "union all select map_from_arrays(null,null) " +
+                "union all select map_from_arrays([],[]) union all select map_from_arrays([null],[null]))A;");
+        analyzeSuccess("select map_apply((k,v)->(null,null), col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'']) as col_map union all select\n" +
+                "map_from_arrays(null,null) union all select map_from_arrays([],[]) " +
+                "union all select map_from_arrays([null],[null]))A");
+        analyzeSuccess("select map_apply((k,v)->(k,null), col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'']) as col_map " +
+                "union all select map_from_arrays(null,null) union all select map_from_arrays([],[]) " +
+                "union all select map_from_arrays([null],[null]))A;");
+
+        analyzeFail("select map_apply((k,v)->(k+1,length(v)), col_map) from (select null as col_map)A;");
+        analyzeFail(" select map_apply((k)->(k,k), col_map) from (select map_from_arrays([1,3,null,2,null]," +
+                "['ab','cdd',null,null,'']) as col_map)A;");
+        analyzeFail("select map_apply((k,k,k)->(k,k), col_map) from (select map_from_arrays([1,3,null,2," +
+                "null],['ab','cdd',null,null,'']) as col_map)A;");
+        analyzeFail("select map_apply((k,k)->(k,k), col_map) from (select map_from_arrays([1,3,null,2," +
+                "null],['ab','cdd',null,null,'']) as col_map)A;");
+        analyzeFail("select map_apply((k,v)->(k,v1), col_map) from (select map_from_arrays([1,3,null,2," +
+                "null],['ab','cdd',null,null,'']) as col_map)A;");
+        analyzeFail("select map_apply(()->(k,k), col_map) from (select map_from_arrays([1,3,null,2," +
+                "null],['ab','cdd',null,null,'']) as col_map)A;");
+        analyzeFail("select map_apply((k,v)->, col_map) from (select map_from_arrays([1,3,null,2," +
+                "null],['ab','cdd',null,null,'']) as col_map)A;");
+        analyzeFail("select map_apply((k,v), col_map) from (select map_from_arrays([1,3,null,2," +
+                "null],['ab','cdd',null,null,'']) as col_map)A;");
+        analyzeFail("select map_apply(null, col_map) from (select map_from_arrays([1,3,null,2," +
+                "null],['ab','cdd',null,null,'']) as col_map)A;");
+        analyzeFail("select map_apply((k,v)->(v,k), null) from (select map_from_arrays([1,3,null,2," +
+                "null],['ab','cdd',null,null,'']) as col_map)A;");
+        analyzeFail("select map_apply((k,v)->(v,k), col_map,col_map) from (select map_from_arrays" +
+                "([1,3,null,2,null],['ab','cdd',null,null,'']) as col_map)A;");
+    }
 
     @Test
     public void testBinaryLiteral() {
