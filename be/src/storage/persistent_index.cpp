@@ -3373,7 +3373,7 @@ Status PersistentIndex::_merge_compaction() {
             strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
     RETURN_IF_ERROR(writer->init(idx_file_path, _version, true));
     RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), 0, _l1_vec.size(), _usage, _size, false));
-    // _usage should be equal to total_kv_size. But they may be differen because of compatibility problemw when we upgrade
+    // _usage should be equal to total_kv_size. But they may be differen because of compatibility problem when we upgrade
     // from old version and _usage maybe not accurate.
     // so we use total_kv_size to correct the _usage.
     if (_usage != writer->total_kv_size()) {
