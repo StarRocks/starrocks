@@ -80,9 +80,12 @@ SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY na
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 ```
 
-> Note: `SET_VAR` can only be placed after the `SELECT` keyword. It must be enclosed in `/*+...*/`. `SET_VAR` is supported only in MySQL 8.0 and later.
+> **NOTE**
+>
+> * `SET_VAR` is supported only in MySQL 8.0 and later.
+> * It can only be placed after the `SELECT` keyword and enclosed in `/*+...*/`.
 
-If you want to set multiple variables in a single statement, see this example:
+You can also set multiple variables in a single statement. Example:
 
 ```sql
 SELECT /*+ SET_VAR
