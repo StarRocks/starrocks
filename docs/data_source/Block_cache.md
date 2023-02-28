@@ -29,7 +29,7 @@ If the query hits the [1 MB, 2 MB) block, StarRocks performs the following opera
 1. Check whether the block exists in the cache.
 2. If the block exists, StarRocks reads the block from the cache. If the block does not exist, StarRocks reads the block from Amazon S3 and caches it on a BE.
 
-By default, StarRocks caches data blocks read from external storage systems. If you do not want to cache data blocks read from external storage systems, run the following command to disable data cache.
+After Local Cache is enabled, StarRocks caches data blocks read from external storage systems. If you do not want to cache such data blocks, run the following command:
 
 ```SQL
 SET enable_populate_block_cache = false;
