@@ -113,6 +113,7 @@ public class MetadataMgrTest {
 
         com.starrocks.catalog.Database database1 = metadataMgr.getDb("hive_catalog", "db2");
         Assert.assertNotNull(database1);
+        Assert.assertEquals("hive_catalog.db2", database1.getUUID());
 
         com.starrocks.catalog.Database database2 = metadataMgr.getDb("hive_catalog", "db3");
         Assert.assertNull(database2);
@@ -135,6 +136,7 @@ public class MetadataMgrTest {
         msTable1.setPartitionKeys(partKeys);
         msTable1.setSd(sd);
         msTable1.setTableType("MANAGED_TABLE");
+        msTable1.setCreateTime(20201010);
         new Expectations() {
             {
                 metaStoreThriftClient.getTable("hive_db", "hive_table");
@@ -151,6 +153,7 @@ public class MetadataMgrTest {
 
         com.starrocks.catalog.Table tbl1 = metadataMgr.getTable("hive_catalog", "hive_db", "hive_table");
         Assert.assertNotNull(tbl1);
+        Assert.assertEquals("hive_catalog.hive_db.hive_table.20201010", tbl1.getUUID());
 
         com.starrocks.catalog.Table tbl2 = metadataMgr.getTable("not_exist_catalog", "xxx", "xxx");
         Assert.assertNull(tbl2);

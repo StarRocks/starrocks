@@ -55,6 +55,7 @@ import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropInfo;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -97,6 +98,9 @@ public class Database extends MetaObject implements Writable {
     public static final long TRY_LOCK_TIMEOUT_MS = 100L;
 
     private long id;
+
+    // catalogName is set if the database comes from an external catalog
+    private String catalogName;
     private String fullQualifiedName;
     private QueryableReentrantReadWriteLock rwLock;
 
@@ -305,6 +309,9 @@ public class Database extends MetaObject implements Writable {
      * @return unique id of database in string format
      */
     public String getUUID() {
+        if (CatalogMgr.isExternalCatalog(catalogName)) {
+            return catalogName + "." + fullQualifiedName;
+        }
         return Long.toString(id);
     }
 
@@ -755,6 +762,14 @@ public class Database extends MetaObject implements Writable {
 
     public void setName(String name) {
         this.fullQualifiedName = name;
+    }
+
+    public void setCatalogName(String name) {
+        this.catalogName = name;
+    }
+
+    public String getCatalogName() {
+        return catalogName;
     }
 
     public synchronized void addFunction(Function function) throws UserException {
