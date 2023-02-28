@@ -193,8 +193,8 @@ public class InformationSchemaDataSource {
                     storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE));
             propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
                     storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL));
-            propsMap.put(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK,
-                    storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK));
+            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
+                    storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK));
         }
 
         // storage type

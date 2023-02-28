@@ -130,9 +130,9 @@ public class LakeMaterializedView extends MaterializedView {
                 properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
                         String.valueOf(storageInfo.getStorageCacheTtlS()));
 
-                // allow_async_write_back
-                properties.put(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK,
-                        String.valueOf(storageInfo.isAllowAsyncWriteBack()));
+                // enable_async_write_back
+                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
+                        String.valueOf(storageInfo.isEnableAsyncWriteBack()));
             }
         }
         return properties;

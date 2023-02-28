@@ -149,7 +149,7 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
-    public static final String PROPERTIES_ALLOW_ASYNC_WRITE_BACK = "allow_async_write_back";
+    public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER  = "partition_ttl_number";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER  = "partition_live_number";
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT  = "auto_refresh_partitions_limit";

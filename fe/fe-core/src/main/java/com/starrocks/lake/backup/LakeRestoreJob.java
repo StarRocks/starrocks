@@ -308,7 +308,7 @@ public class LakeRestoreJob extends RestoreJob {
             LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
             StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
             remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.isEnableStorageCache(),
-                    storageInfo.getStorageCacheTtlS(), storageInfo.isAllowAsyncWriteBack());
+                    storageInfo.getStorageCacheTtlS(), storageInfo.isEnableAsyncWriteBack());
             remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
         } catch (DdlException e) {
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
