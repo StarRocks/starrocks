@@ -366,7 +366,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         " where t1.c3 < 2000")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 11: c3 < 2000, 11: c3 < 2000\n" +
+                        "     PREDICATES: 11: c3 < 2000\n" +
                         "     partitions=1/1\n" +
                         "     rollup: partial_mv_6\n" +
                         "     tabletRatio=2/2");
@@ -379,7 +379,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         " where t1.c3 < 2000 and t2.c3 > 100;")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 11: c3 <= 1999, 11: c3 >= 100, 11: c3 >= 101, 11: c3 < 2000, 11: c3 < 2000\n" +
+                        "     PREDICATES: 11: c3 <= 1999, 11: c3 >= 100, 11: c3 >= 101, 11: c3 < 2000\n" +
                         "     partitions=1/1\n" +
                         "     rollup: partial_mv_6\n" +
                         "     tabletRatio=2/2");
@@ -392,7 +392,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         " where t1.c3 < 1000;")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 11: c3 <= 999, 11: c3 < 2000, 11: c3 < 2000\n" +
+                        "     PREDICATES: 11: c3 <= 999, 11: c3 < 2000\n" +
                         "     partitions=1/1\n" +
                         "     rollup: partial_mv_6\n" +
                         "     tabletRatio=2/2");
@@ -405,7 +405,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         " where t1.c3 < 1000;")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 12: c3 <= 999, 12: c3 < 2000, 12: c3 < 2000\n" +
+                        "     PREDICATES: 12: c3 <= 999, 12: c3 < 2000\n" +
                         "     partitions=1/1\n" +
                         "     rollup: partial_mv_6\n" +
                         "     tabletRatio=2/2");
