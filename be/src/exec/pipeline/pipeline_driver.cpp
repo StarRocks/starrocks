@@ -253,7 +253,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 auto query_mem_tracker = _query_ctx->mem_tracker();
                 if (runtime_state->enable_spill() &&
                     sink_operator()->revocable_mem_bytes() > runtime_state->spill_operator_min_bytes() &&
-                    !sink_operator()->need_spill()) {
+                    !sink_operator()->need_mark_spill()) {
                     auto spill_manager = _query_ctx->spill_manager();
                     if (query_mem_tracker->consumption() - spill_manager->pending_spilled_bytes() >
                         query_mem_tracker->limit() * runtime_state->spill_mem_limit_threshold()) {

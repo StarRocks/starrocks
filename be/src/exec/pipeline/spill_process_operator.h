@@ -23,6 +23,9 @@
 
 namespace starrocks::pipeline {
 // operator for process spill task
+// This operator fetches the task from the process channel and executes this chunk task,
+// and then takes the chunk fetched from the task and tries to execute Spiller::spill().
+// But this thread will never execute any IO task.
 
 class SpillProcessOperator final : public SourceOperator {
 public:

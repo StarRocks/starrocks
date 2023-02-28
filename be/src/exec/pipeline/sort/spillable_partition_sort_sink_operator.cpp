@@ -88,6 +88,12 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
+Status SpillablePartitionSortSinkOperator::set_finished(RuntimeState* state) {
+    _is_finished = true;
+    _chunks_sorter->cancel();
+    return Status::OK();
+}
+
 OperatorPtr SpillablePartitionSortSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     std::shared_ptr<ChunksSorter> chunks_sorter;
 
