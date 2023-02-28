@@ -127,7 +127,9 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
 
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
+        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
 
+<<<<<<< HEAD
         boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
         if (agg.hasSkew() && distinctAggOperatorList.size() > 1 && !hasMultiColumns &&
                 !agg.getGroupingKeys().isEmpty()) {
@@ -138,6 +140,8 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
             return false;
         }
 
+=======
+>>>>>>> 78d92d7db ([Enhancement] Update CTE rewrite count distinct limit (#16587))
         if (!hasMultiColumns && agg.getGroupingKeys().size() > 1) {
             return false;
         }
