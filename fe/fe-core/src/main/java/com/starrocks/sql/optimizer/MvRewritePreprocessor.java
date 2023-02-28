@@ -153,8 +153,49 @@ public class MvRewritePreprocessor {
                 selectTabletIds.addAll(materializedIndex.getTabletIdsInOrder());
             }
         }
+<<<<<<< HEAD
         PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
         LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(mv,
+=======
+        final PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
+
+        // NOTE:
+        // - To partition/distribution prune, need filter predicates that belong to MV.
+        // - Those predicates are only used for partition/distribution pruning and don't affect the real
+        // query compute.
+        // - after partition/distribution pruning, those predicates should be removed from mv rewrite result.
+        final OptExpression mvExpression = mvContext.getMvExpression();
+        final List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(mvExpression);
+        final ColumnRefSet mvOutputColumnRefSet = mvExpression.getOutputColumns();
+        final List<ScalarOperator> mvConjuncts = Lists.newArrayList();
+
+        // Construct partition/distribution key column refs to filter conjunctions which need to retain.
+        Set<String> mvPruneKeyColNames = Sets.newHashSet();
+        distributedColumns.stream().forEach(distKey -> mvPruneKeyColNames.add(distKey.getName()));
+        mv.getPartitionNames().stream().forEach(partName -> mvPruneKeyColNames.add(partName));
+        final Set<Integer> mvPruneColumnIdSet = mvOutputColumnRefSet.getStream().map(
+                        id -> mvContext.getMvColumnRefFactory().getColumnRef(id))
+                .filter(colRef -> mvPruneKeyColNames.contains(colRef.getName()))
+                .map(colRef -> colRef.getId())
+                .collect(Collectors.toSet());
+        // Case1: keeps original predicates which belong to MV table(which are not pruned after mv's partition pruning)
+        for (ScalarOperator conj : conjuncts) {
+            final List<Integer> conjColumnRefOperators =
+                    Utils.extractColumnRef(conj).stream().map(ref -> ref.getId()).collect(Collectors.toList());
+            if (mvPruneColumnIdSet.containsAll(conjColumnRefOperators)) {
+                mvConjuncts.add(conj);
+            }
+        }
+        // Case2: compensated partition predicates which are pruned after mv's partition pruning.
+        // Compensate partition predicates and add them into mv predicate.
+        final ScalarOperator mvPartitionPredicate =
+                MvUtils.compensatePartitionPredicate(mvExpression, mvContext.getMvColumnRefFactory());
+        if (!ConstantOperator.TRUE.equals(mvPartitionPredicate)) {
+            mvConjuncts.add(mvPartitionPredicate);
+        }
+
+        return new LogicalOlapScanOperator(mv,
+>>>>>>> a52bb9384 ([BugFix] Fix rewrite nested mv bugs when mv's partition/distribution predicates is not null (#18375))
                 colRefToColumnMetaMapBuilder.build(),
                 columnMetaToColRefMap,
                 DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
