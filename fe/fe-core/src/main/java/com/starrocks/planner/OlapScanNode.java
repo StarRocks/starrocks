@@ -458,7 +458,7 @@ public class OlapScanNode extends ScanNode {
                 LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
                         tabletId, visibleVersion, replicaInfos);
                 if (LOG.isDebugEnabled()) {
-                    if (olapTable.isLakeTable()) {
+                    if (olapTable.isCloudNativeTable()) {
                         LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
                                 tablet.getBackendIds());
                     } else {
@@ -751,7 +751,7 @@ public class OlapScanNode extends ScanNode {
             }
         }
 
-        if (olapTable.isLakeTable()) {
+        if (olapTable.isCloudNativeTable()) {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
                     new TLakeScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
@@ -859,7 +859,7 @@ public class OlapScanNode extends ScanNode {
     @Override
     public boolean canDoReplicatedJoin() {
         // TODO(wyb): necessary to support?
-        if (olapTable.isLakeTable()) {
+        if (olapTable.isCloudNativeTable()) {
             return false;
         }
         ConnectContext ctx = ConnectContext.get();
