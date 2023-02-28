@@ -7,7 +7,7 @@ Stream Load does not support identifying column names held in the first row of t
 - Modify the settings of the tool that you use to export the data. Then, re-export the data as a source data file that does not hold column names in the first row.
 - Use commands such as `sed -i '1d' filename` to delete the first row of the source data file.
 - In the load command or statement, use `-H "where: <column_name> != '<column_name>'"` to filter out the first row of the source data file. `<column_name>` is any of the column names held in the first row. Note that StarRocks first transforms and then filters the source data. Therefore, if the column names in the first row fail to be transformed into their matching destination data types, `NULL` values are returned for them. This means the destination StarRocks table cannot contain columns that are set to `NOT NULL`.
-- In the load command or statement, add `-H "max_filter_ratio:0.01"` to set a maximum error tolerance that is 1% or lower but can tolerate more than 1 error row, thereby allowing StarRocks to ignore the data transformation failures in the first row. In this case, the Stream Load job can still succeed even if `ErrorURL` is returned to indicate error rows. Do not set `max_filter_ratio` to a large value. If you set `max_filter_ratio` to a large value, some important data quality issues may not be missed.
+- In the load command or statement, add `-H "max_filter_ratio:0.01"` to set a maximum error tolerance that is 1% or lower but can tolerate more than 1 error row, thereby allowing StarRocks to ignore the data transformation failures in the first row. In this case, the Stream Load job can still succeed even if `ErrorURL` is returned to indicate error rows. Do not set `max_filter_ratio` to a large value. If you set `max_filter_ratio` to a large value, some important data quality issues may be missed.
 
 ## 2. The data to be loaded into the partition column is not of standard DATE or INT type. For example, the data is in a format like 202106.00. How do I transform the data if I load it by using Stream Load?
 
@@ -26,4 +26,4 @@ In the preceding example, `DATE_1` can be considered to be a temporarily named c
 The size of the source data file exceeds 10 GB, which is the maximum file size supported by Stream Load. Take one of the following actions:
 
 - Use `seq -w 0 n` to split the source data file into smaller files.
-- Use `curl -XPOST http:///be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` to adjust the value of the [BE configuration item](../../administration/Configuration.md#configure-be-dynamic-parameters) to increase the maximum file size.
+- Use `curl -XPOST http:///be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` to adjust the value of the [BE configuration item](../../administration/Configuration.md#configure-be-dynamic-parameters) `streaming_load_max_mb` to increase the maximum file size.
