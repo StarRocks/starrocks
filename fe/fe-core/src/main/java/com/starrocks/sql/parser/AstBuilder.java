@@ -222,6 +222,7 @@ import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
+import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -5358,7 +5359,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             names.add(((Identifier) visit(context.identifier())).getValue());
         }
         List<Expr> arguments = Lists.newLinkedList();
-        Expr expr = (Expr) visit(context.expression());
+        Expr expr = null;
+        if (context.expression() != null) {
+            expr = (Expr) visit(context.expression());
+        } else if (context.expressionList() != null) {
+            List<Expr> exprs = visit(context.expressionList().expression(), Expr.class);
+            if (exprs.size() != 2) {
+                throw new IllegalArgumentException("The right part of map lambda functions can accept at most 2 " +
+                        "expressions, but there are " + exprs.size());
+            }
+            expr = new MapExpr(Type.ANY_MAP, exprs); // key expr, value expr.
+        }
         arguments.add(expr); // put lambda body to the first argument
         for (int i = 0; i < names.size(); ++i) {
             arguments.add(new LambdaArgument(names.get(i)));
