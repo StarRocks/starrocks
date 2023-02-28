@@ -86,6 +86,10 @@ class ConfigurationWrap extends Configuration {
             } else {
                 return regionId.substring(4);
             }
+        } else if (tObjectStoreType == TObjectStoreType.TOS) {
+            String[] hostSplit = endPoint.split("\\.");
+            String regionId = hostSplit[0].replace("tos-s3-", "").replace("tos-", "");
+            return regionId;
         } else {
             String[] hostSplit = endPoint.split("\\.");
             return hostSplit[1];
@@ -203,6 +207,25 @@ class ConfigurationWrap extends Configuration {
                             tProperties.setSsl_enable(Boolean.parseBoolean(value));
                             break;
                     }
+                case TOS:
+                    switch (key) {
+                        case HdfsFsManager.FS_TOS_ACCESS_KEY:
+                            tProperties.setAccess_key(value);
+                            break;
+                        case HdfsFsManager.FS_TOS_SECRET_KEY:
+                            tProperties.setSecret_key(value);
+                            break;
+                        case HdfsFsManager.FS_TOS_ENDPOINT:
+                            tProperties.setEnd_point(value);
+                            tProperties.setRegion(parseRegionFromEndpoint(tObjectStoreType, value));
+                            break;
+                        case HdfsFsManager.FS_TOS_IMPL_DISABLE_CACHE:
+                            tProperties.setDisable_cache(Boolean.parseBoolean(value));
+                            break;
+                        case HdfsFsManager.FS_TOS_CONNECTION_SSL_ENABLED:
+                            tProperties.setSsl_enable(Boolean.parseBoolean(value));
+                            break;
+                    }
             }
         }
         return;
@@ -245,6 +268,7 @@ public class HdfsFsManager {
     private static final String COS_SCHEME = "cosn";
     private static final String KS3_SCHEME = "ks3";
     private static final String OBS_SCHEME = "obs";
+    private static final String TOS_SCHEME = "tos";
 
     private static final String USER_NAME_KEY = "username";
     private static final String PASSWORD_KEY = "password";
@@ -301,6 +325,16 @@ public class HdfsFsManager {
     public static final String FS_OBS_IMPL_DISABLE_CACHE = "fs.obs.impl.disable.cache";
     public static final String FS_OBS_CONNECTION_SSL_ENABLED = "fs.obs.connection.ssl.enabled";
     public static final String FS_OBS_IMPL = "fs.obs.impl";
+
+    // arguments for tos
+    public static final String FS_TOS_ACCESS_KEY = "fs.tos.access.key";
+    public static final String FS_TOS_SECRET_KEY = "fs.tos.secret.key";
+    public static final String FS_TOS_ENDPOINT = "fs.tos.endpoint";
+    // This property is used like 'fs.hdfs.impl.disable.cache'
+    public static final String FS_TOS_IMPL_DISABLE_CACHE = "fs.tos.impl.disable.cache";
+    public static final String FS_TOS_CONNECTION_SSL_ENABLED = "fs.tos.connection.ssl.enabled";
+    public static final String FS_TOS_IMPL = "fs.tos.impl";
+    public static final String FS_TOS_REGION = "fs.tos.region";
 
     private ScheduledExecutorService handleManagementPool = Executors.newScheduledThreadPool(1);
 
@@ -367,6 +401,8 @@ public class HdfsFsManager {
             brokerFileSystem = getKS3FileSystem(path, loadProperties, tProperties);
         } else if (scheme.equals(OBS_SCHEME)) {
             brokerFileSystem = getOBSFileSystem(path, loadProperties, tProperties);
+        } else if (scheme.equals(TOS_SCHEME)) {
+            brokerFileSystem = getTOSFileSystem(path, loadProperties, tProperties);
         } else {
             // If all above match fails, then we will read the settings from hdfs-site.xml, core-site.xml of FE,
             // and try to create a universal file system. The reason why we can do this is because hadoop/s3 
@@ -987,6 +1023,85 @@ public class HdfsFsManager {
         }
     }
 
+    /**
+     * file system handle is cached, the identity is endpoint + bucket +
+     * accessKey secretKey
+     * for tos
+     * @throws UserException
+     */
+    public HdfsFs getTOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+        throws UserException {
+        WildcardURI pathUri = new WildcardURI(path);
+        String accessKey = loadProperties.getOrDefault(FS_TOS_ACCESS_KEY, "");
+        String secretKey = loadProperties.getOrDefault(FS_TOS_SECRET_KEY, "");
+        String endpoint = loadProperties.getOrDefault(FS_TOS_ENDPOINT, "");
+        String disableCache = loadProperties.getOrDefault(FS_TOS_IMPL_DISABLE_CACHE, "true");
+        String connectionSSLEnabled = loadProperties.getOrDefault(FS_TOS_CONNECTION_SSL_ENABLED, "false");
+        String region = loadProperties.getOrDefault(FS_TOS_REGION, "");
+        if (accessKey.equals("")) {
+            LOG.warn("Invalid load_properties, TOS must provide access_key");
+            throw new UserException("Invalid load_properties, TOS must provide access_key");
+        }
+        if (secretKey.equals("")) {
+            LOG.warn("Invalid load_properties, TOS must provide secret_key");
+            throw new UserException("Invalid load_properties, TOS must provide secret_key");
+        }
+        if (endpoint.equals("")) {
+            LOG.warn("Invalid load_properties, TOS must provide endpoint");
+            throw new UserException("Invalid load_properties, TOS must provide endpoint");
+        }
+        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+        // we should use these two params as the host identity, because FileSystem will
+        // cache both.
+        String host = TOS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+        String tosUgi = accessKey + "," + secretKey;
+        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, tosUgi);
+        HdfsFs fileSystem = null;
+        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
+        fileSystem = cachedFileSystem.get(fileSystemIdentity);
+        if (fileSystem == null) {
+            // it means it is removed concurrently by checker thread
+            return null;
+        }
+        fileSystem.getLock().lock();
+        try {
+            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
+                // this means the file system is closed by file system checker thread
+                // it is a corner case
+                return null;
+            }
+            if (fileSystem.getDFSFileSystem() == null) {
+                LOG.info("could not find file system for path " + path + " create a new one");
+                // create a new filesystem
+                Configuration conf = new ConfigurationWrap();
+                conf.set(FS_TOS_ACCESS_KEY, accessKey);
+                conf.set(FS_TOS_SECRET_KEY, secretKey);
+                conf.set(FS_TOS_ENDPOINT, endpoint);
+                conf.set(FS_TOS_IMPL, "com.volcengine.cloudfs.fs.TosFileSystem");
+                conf.set(FS_TOS_IMPL_DISABLE_CACHE, disableCache);
+                conf.set(FS_TOS_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
+                conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
+                conf.set(FS_TOS_REGION, region);
+                FileSystem tosFileSystem = FileSystem.get(pathUri.getUri(), conf);
+                fileSystem.setFileSystem(tosFileSystem);
+                fileSystem.setConfiguration(conf);
+                if (tProperties != null) {
+                    convertObjectStoreConfToProperties(path, conf, tProperties, TObjectStoreType.TOS);
+                }
+            } else {
+                if (tProperties != null) {
+                    convertObjectStoreConfToProperties(path, fileSystem.getConfiguration(), tProperties, TObjectStoreType.TOS);
+                }
+            }
+            return fileSystem;
+        } catch (Exception e) {
+            LOG.error("errors while connect to " + path, e);
+            throw new UserException(e);
+        } finally {
+            fileSystem.getLock().unlock();
+        }
+    }
+    
     public void getTProperties(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
         getFileSystem(path, loadProperties, tProperties);
