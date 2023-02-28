@@ -4,7 +4,7 @@ This topic describes how to use file external tables to directly query Parquet a
 
 ## Before you begin
 
-Before you create a file external table, configure your StarRocks cluster so that StarRocks can access the external storage system where your data files are located. StarRocks supports the following systems: HDFS, Amazon S3 (and S3-Compatible Object Storage), Alibaba Cloud Object Storage Service (OSS), and Tencent Cloud Object Storage (COS). The configurations required for a file external table are the same as that required for a Hive catalog. Therefore, see [Hive catalog](../data_source/catalog/hive_catalog.md#before-you-begin) for more information about configurations.
+Before you create a file external table, configure your StarRocks cluster so that StarRocks can access the external storage system where your data files are located. StarRocks supports the following systems: HDFS, Amazon S3 (and S3-Compatible Object Storage), Alibaba Cloud Object Storage Service (OSS), and Tencent Cloud Object Storage (COS). The configurations required for a file external table are the same as that required for a Hive catalog. Therefore, see [Hive catalog - Integration preparations](../data_source/catalog/hive_catalog.md#integration-preparations) for more information about configurations.
 
 ## Procedure
 
@@ -69,6 +69,8 @@ When you create a file external table, specify column types in the file external
 | DECIMAL       | DECIMAL                                                      |
 | BOOLEAN       | BOOLEAN                                                      |
 | ARRAY         | ARRAY                                                        |
+| MAP          | MAP                                                          |
+| STRUCT       | STRUCT                                                       |
 
 ### Step 3: Query data from data files
 
