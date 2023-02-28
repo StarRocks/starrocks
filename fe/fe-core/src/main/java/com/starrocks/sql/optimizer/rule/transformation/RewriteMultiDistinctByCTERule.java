@@ -143,7 +143,12 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
 
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
+        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
 
+        if (!hasMultiColumns && agg.getGroupingKeys().size() > 1) {
+            return false;
+        }
+        
         return distinctAggOperatorList.size() > 1 || agg.getAggregations().values().stream()
                 .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG));
     }
