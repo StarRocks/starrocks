@@ -238,8 +238,10 @@ public:
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }
+
+        bool is_cache_hit = (*file_st)->is_cache_hit();
         auto istream = std::make_shared<StarletInputStream>(std::move(*file_st));
-        return std::make_unique<RandomAccessFile>(std::move(istream), path);
+        return std::make_unique<RandomAccessFile>(std::move(istream), path, is_cache_hit);
     }
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,

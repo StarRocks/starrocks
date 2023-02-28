@@ -261,6 +261,11 @@ struct OlapReaderStatistics {
     int64_t total_columns_data_page_count = 0;
 
     int64_t runtime_stats_filtered = 0;
+
+    // for lake tablet
+    int64_t cache_io_ns = 0;
+    int64_t cache_compressed_bytes_read = 0;
+    int64_t cache_segments_read_count = 0;
 };
 
 typedef uint32_t ColumnId;

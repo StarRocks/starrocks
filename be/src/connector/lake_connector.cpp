@@ -136,6 +136,11 @@ private:
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
+
+    RuntimeProfile::Counter* _cache_timer = nullptr;
+    RuntimeProfile::Counter* _cache_io_timer = nullptr;
+    RuntimeProfile::Counter* _cache_read_compressed_counter = nullptr;
+    RuntimeProfile::Counter* _cache_segments_read_count = nullptr;
 };
 
 // ================================
@@ -510,6 +515,13 @@ void LakeDataSource::init_counter(RuntimeState* state) {
 
     // IOTime
     _io_timer = ADD_TIMER(_runtime_profile, "IOTime");
+
+    // Cache
+    _cache_timer = ADD_TIMER(_runtime_profile, "Cache");
+    _cache_io_timer = ADD_CHILD_TIMER(_runtime_profile, "CacheIOTime", "Cache");
+    _cache_read_compressed_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "CacheCompressedBytesRead", TUnit::BYTES, "Cache");
+    _cache_segments_read_count = ADD_CHILD_COUNTER(_runtime_profile, "CacheSegmentsReadCount", TUnit::UNIT, "Cache");
 }
 
 void LakeDataSource::update_realtime_counter(Chunk* chunk) {
@@ -585,6 +597,11 @@ void LakeDataSource::update_counter() {
         COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
     }
+
+    COUNTER_UPDATE(_cache_timer, _reader->stats().cache_io_ns);
+    COUNTER_UPDATE(_cache_io_timer, _reader->stats().cache_io_ns);
+    COUNTER_UPDATE(_cache_read_compressed_counter, _reader->stats().cache_compressed_bytes_read);
+    COUNTER_UPDATE(_cache_segments_read_count, _reader->stats().cache_segments_read_count);
 }
 
 // ================================
