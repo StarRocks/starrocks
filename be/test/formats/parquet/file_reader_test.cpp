@@ -200,6 +200,8 @@ protected:
 
     std::string _file_map_null_path = "./be/test/exec/test_data/parquet_scanner/map_null.parquet";
 
+    std::string _file_array_map_path = "./be/test/exec/test_data/parquet_scanner/hudi_array_map.parquet";
+
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
     ObjectPool _pool;
@@ -1796,6 +1798,60 @@ TEST_F(FileReaderTest, TestReadMapNull) {
     EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
     EXPECT_EQ("[2, NULL]", chunk->debug_row(1));
     EXPECT_EQ("[3, NULL]", chunk->debug_row(2));
+}
+
+TEST_F(FileReaderTest, TestReadArrayMap) {
+    // optional group col_array_map (LIST) {
+    //     repeated group array (MAP) {
+    //         repeated group map (MAP_KEY_VALUE) {
+    //             required binary key (UTF8);
+    //             optional int32 value;
+    //         }
+    //     }
+    // }
+
+    auto file = _create_file(_file_array_map_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file_array_map_path));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_string = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+
+    TypeDescriptor type_map(LogicalType::TYPE_MAP);
+    type_map.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_map.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+
+    TypeDescriptor type_array_map(LogicalType::TYPE_ARRAY);
+    type_array_map.children.emplace_back(type_map);
+
+    SlotDesc slot_descs[] = {
+            {"uuid", type_string},
+            {"col_array_map", type_array_map},
+            {""},
+    };
+
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file_array_map_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_array_map, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(2, chunk->num_rows());
+
+    EXPECT_EQ("['0', [{'def':11,'abc':10},{'ghi':12},{'jkl':13}]]", chunk->debug_row(0));
+    EXPECT_EQ("['1', [{'happy new year':11,'hello world':10},{'vary happy':12},{'ok':13}]]", chunk->debug_row(1));
 }
 
 TEST_F(FileReaderTest, TestStructArrayNull) {
