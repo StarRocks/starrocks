@@ -1474,6 +1474,7 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testMultiDistinctAggregate() throws Exception {
         String sql = "select count(distinct t1b), count(distinct t1b, t1c) from test_all_type";
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
         String plan = getFragmentPlan(sql);
         assertContains(plan, "MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
@@ -2173,5 +2174,20 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "percentile_union[([14: percentile_union, PERCENTILE, true]); args: PERCENTILE; " +
                 "result: PERCENTILE; args nullable: true;");
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testMultiCountDistinctWithMoreGroupBy() throws Exception {
+        String sql = "select count(distinct t1c), count(distinct t1d), count(distinct t1e)" +
+                "from test_all_type group by t1a, t1b";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "multi_distinct_count");
+
+        sql = "select count(distinct t1c), count(distinct t1d), count(distinct t1e)" +
+                "from test_all_type group by t1a";
+
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "multi_distinct_count");
     }
 }
