@@ -26,7 +26,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.NoAliveBackendException;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.rpc.BrpcProxy;
@@ -45,13 +44,14 @@ import java.util.stream.Collectors;
 public class LakeTableTxnStateListener implements TransactionStateListener {
     private static final Logger LOG = LogManager.getLogger(LakeTableTxnStateListener.class);
     private final DatabaseTransactionMgr dbTxnMgr;
-    private final LakeTable table;
+    // lake table or lake materialized view
+    private final OlapTable table;
 
     private Set<Long> dirtyPartitionSet;
     private Set<String> invalidDictCacheColumns;
     private Set<String> validDictCacheColumns;
 
-    public LakeTableTxnStateListener(DatabaseTransactionMgr dbTxnMgr, LakeTable table) {
+    public LakeTableTxnStateListener(DatabaseTransactionMgr dbTxnMgr, OlapTable table) {
         this.dbTxnMgr = dbTxnMgr;
         this.table = table;
     }
