@@ -221,7 +221,8 @@ class ParquetScannerTest : public ::testing::Test {
                 {"col_json_json_string", TypeDescriptor::create_json_type()},
                 {"issue_17693_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
                 {"issue_17822_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
-                {"nested_array_c0", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR)))}};
+                {"nested_array_c0", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
+                                            TypeDescriptor::from_logical_type(TYPE_VARCHAR)))}};
         SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
@@ -335,9 +336,9 @@ class ParquetScannerTest : public ::testing::Test {
                                          test_exec_dir + "/test_data/parquet_data/issue_17693_2.parquet"};
         _issue_17822_file_names =
                 std::vector<std::string>{test_exec_dir + "/test_data/parquet_data/issue_17822.parquet"};
-        _nested_array_file_names = 
+        _nested_array_file_names =
                 std::vector<std::string>{test_exec_dir + "/test_data/parquet_data/nested_array_test1.parquet",
-                                        test_exec_dir + "/test_data/parquet_data/nested_array_test2.parquet"};
+                                         test_exec_dir + "/test_data/parquet_data/nested_array_test2.parquet"};
     }
 
 private:
