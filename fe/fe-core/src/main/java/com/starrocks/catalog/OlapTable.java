@@ -40,6 +40,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
@@ -2318,4 +2320,22 @@ public class OlapTable extends Table {
         }
         return properties;
     }
+
+    // ------ for lake table and lake materialized view start ------
+    public String getStoragePath() {
+        throw new SemanticException("getStoragePath is not supported");
+    }
+
+    public FilePathInfo getPartitionFilePathInfo() {
+        throw new SemanticException("getPartitionFilePathInfo is not supported");
+    }
+
+    public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
+        throw new SemanticException("getPartitionFileCacheInfo is not supported");
+    }
+
+    public void setStorageInfo(FilePathInfo pathInfo, boolean enableCache, long cacheTtlS, boolean asyncWriteBack) {
+        throw new SemanticException("setStorageInfo is not supported");
+    }
+    // ------ for lake table and lake materialized view end ------
 }
