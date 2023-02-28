@@ -1584,7 +1584,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TCreatePartitionResult createPartition(TCreatePartitionRequest request) throws TException {
 
-        LOG.info("Recieve create partition: {}", request);
+        LOG.info("Receive create partition: {}", request);
 
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
@@ -1630,7 +1630,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setStatus(errorStatus);
             return result;
         }
-        List<Expr> partitionExprs = ((ExpressionRangePartitionInfo) partitionInfo).getPartitionExprs();
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs();
         if (partitionExprs.size() != 1) {
             errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support one expression partitionExpr."));
             result.setStatus(errorStatus);
@@ -1693,8 +1694,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         Map<String, AddPartitionClause> addPartitionClauseMap;
         try {
+            Column firstPartitionColumn = expressionRangePartitionInfo.getPartitionColumns().get(0);
             addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
-                    partitionValues, interval, granularity);
+                    partitionValues, interval, granularity, firstPartitionColumn.getType());
         } catch (AnalysisException ex) {
             errorStatus.setError_msgs(Lists.newArrayList(ex.getMessage()));
             result.setStatus(errorStatus);

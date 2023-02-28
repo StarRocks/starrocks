@@ -158,6 +158,19 @@ public class FrontendServiceImplTest {
                         "PROPERTIES(\n" +
                         "    \"replication_num\" = \"1\"\n" +
                         ");")
+                .withTable("CREATE TABLE site_access_hour (\n" +
+                        "    event_day DATETIME,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('hour', event_day)\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");")
                 .withTable("CREATE TABLE site_access_day (\n" +
                         "    event_day DATE,\n" +
                         "    site_id INT DEFAULT '10',\n" +
@@ -317,6 +330,30 @@ public class FrontendServiceImplTest {
 
         partition = impl.createPartition(request);
         Assert.assertEquals(2, partition.partitions.size());
+    }
+
+    @Test
+    public void testCreatePartitionApiHour() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_hour");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24 12:34:56");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
+        Partition p1990042412 = table.getPartition("p1990042412");
+        Assert.assertNotNull(p1990042412);
+
+        partition = impl.createPartition(request);
+        Assert.assertEquals(1, partition.partitions.size());
     }
 
     @Test
