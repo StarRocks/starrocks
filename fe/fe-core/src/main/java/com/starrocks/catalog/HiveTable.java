@@ -152,6 +152,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+    public String getUUID() {
+        return String.join(".", catalogName, hiveDbName, hiveTableName, Long.toString(createTime));
+    }
+
+    @Override
     public List<Column> getPartitionColumns() {
         return partColumnNames.stream()
                 .map(name -> nameToColumn.get(name))

@@ -134,6 +134,11 @@ public class IcebergTable extends Table {
         return table;
     }
 
+    @Override
+    public String getUUID() {
+        return String.join(".", catalog, db, table, Long.toString(createTime));
+    }
+
     public List<Column> getPartitionColumns() {
         List<PartitionField> identityPartitionFields = this.getIcebergTable().spec().fields().stream().
                 filter(partitionField -> partitionField.transform().isIdentity()).collect(Collectors.toList());

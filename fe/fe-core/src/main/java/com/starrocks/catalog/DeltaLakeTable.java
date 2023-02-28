@@ -78,6 +78,11 @@ public class DeltaLakeTable extends Table {
         return tableName;
     }
 
+    @Override
+    public String getUUID() {
+        return String.join(".", catalogName, dbName, tableName, Long.toString(createTime));
+    }
+
     public List<Column> getPartitionColumns() {
         return partColumnNames.stream()
                 .map(name -> nameToColumn.get(name))
