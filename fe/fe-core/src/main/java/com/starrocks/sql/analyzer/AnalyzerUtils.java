@@ -631,8 +631,9 @@ public class AnalyzerUtils {
         }
     }
 
-    public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(
-            OlapTable olapTable, List<String> partitionValues, long interval, String granularity) throws AnalysisException {
+    public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
+            List<String> partitionValues, long interval, String granularity, Type firstPartitionColumnType)
+            throws AnalysisException {
         Map<String, AddPartitionClause> result = Maps.newHashMap();
         String partitionPrefix = "p";
         for (String partitionValue : partitionValues) {
@@ -669,8 +670,12 @@ public class AnalyzerUtils {
                     default:
                         throw new AnalysisException("unsupported automatic partition granularity:" + granularity);
                 }
-                String lowerBound = beginTime.format(DateUtils.DATEKEY_FORMATTER);
-                String upperBound = endTime.format(DateUtils.DATEKEY_FORMATTER);
+                DateTimeFormatter outputDateFormat = DateUtils.DATE_FORMATTER;
+                if (firstPartitionColumnType == Type.DATETIME) {
+                    outputDateFormat = DateUtils.DATE_TIME_FORMATTER;
+                }
+                String lowerBound = beginTime.format(outputDateFormat);
+                String upperBound = endTime.format(outputDateFormat);
                 PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
                         Collections.singletonList(new PartitionValue(lowerBound)),
                         Collections.singletonList(new PartitionValue(upperBound)));
