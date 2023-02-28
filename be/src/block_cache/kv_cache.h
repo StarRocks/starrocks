@@ -36,6 +36,8 @@ public:
     // Remove data from cache. The offset must be aligned by block size
     virtual Status remove_cache(const std::string& key) = 0;
 
+    virtual std::unordered_map<std::string, double> cache_stats() = 0;
+
     virtual Status shutdown() = 0;
 };
 
