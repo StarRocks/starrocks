@@ -123,6 +123,10 @@ public class StarMgrServer {
 
         // Storage fs type
         com.staros.util.Config.DEFAULT_FS_TYPE = Config.cloud_native_storage_type;
+        if (!com.staros.util.Config.DEFAULT_FS_TYPE.equals("HDFS") && !com.staros.util.Config.DEFAULT_FS_TYPE.equals("S3")) {
+            LOG.error("invalid cloud native storage type: {}, must be HDFS or S3", com.staros.util.Config.DEFAULT_FS_TYPE);
+            System.exit(-1);
+        }
         // HDFS related configuration
         com.staros.util.Config.HDFS_URL = Config.cloud_native_hdfs_url;
         if (com.staros.util.Config.DEFAULT_FS_TYPE.equals("HDFS") && com.staros.util.Config.HDFS_URL.isEmpty()) {
