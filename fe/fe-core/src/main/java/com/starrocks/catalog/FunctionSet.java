@@ -399,6 +399,7 @@ public class FunctionSet {
     // high-order functions related lambda functions
     public static final String ARRAY_MAP = "array_map";
     public static final String TRANSFORM = "transform";
+    public static final String MAP_APPLY = "map_apply";
 
     // Struct functions:
     public static final String ROW = "row";

@@ -316,6 +316,9 @@ public:
 
     inline size_t filter(const Filter& filter, size_t count) { return filter_range(filter, 0, count); }
 
+    // get rid of the case where the map/array is null but the map/array'elements are not empty.
+    bool empty_null_in_complex_column(const Filter& null_data, const std::vector<uint32_t>& offsets);
+
     // FIXME: Many derived implementation assume |to| equals to size().
     virtual size_t filter_range(const Filter& filter, size_t from, size_t to) = 0;
 
