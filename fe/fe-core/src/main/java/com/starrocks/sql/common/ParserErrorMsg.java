@@ -78,6 +78,9 @@ public interface ParserErrorMsg {
     @BaseMessage("Unsupported expr ''{0}'' in {1} clause")
     String unsupportedExprWithInfo(String a0, String a1);
 
+    @BaseMessage("Unsupported expr ''{0}'' in {1} clause. {2}")
+    String unsupportedExprWithInfoAndExplain(String a0, String a1, String a2);
+
     @BaseMessage("Cannot use duplicated {0} clause in building materialized view")
     String duplicatedClause(String a0);
 
