@@ -46,6 +46,14 @@ public class SchemaTable extends Table {
     private static final int MY_CS_NAME_SIZE = 32;
     private SchemaTableType schemaTableType;
 
+    public static boolean isBeSchemaTable(String name) {
+        return name.startsWith("be_");
+    }
+
+    public boolean isBeSchemaTable() {
+        return SchemaTable.isBeSchemaTable(getName());
+    }
+
     protected SchemaTable(long id, String name, TableType type, List<Column> baseSchema) {
         super(id, name, type, baseSchema);
     }
@@ -459,6 +467,65 @@ public class SchemaTable extends Table {
                                                     ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .column("TABLE_ROWS", ScalarType.createVarchar(50))
                                             .build()))
+                    .put("be_tablets", new SchemaTable(
+                            SystemId.BE_TABLETS_ID,
+                            "be_tablets",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TABLE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("PARTITION_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TABLET_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NUM_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("MAX_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("MIN_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NUM_ROWSET", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NUM_ROW", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("DATA_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("INDEX_MEM", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CREATE_TIME", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
+                    .put("be_metrics", new SchemaTable(
+                            SystemId.BE_METRICS_ID,
+                            "be_metrics",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("LABELS", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("VALUE", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .build()))
+                    .put("be_txns", new SchemaTable(
+                            SystemId.BE_TXNS_ID,
+                            "be_txns",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("LOAD_ID", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TXN_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("PARTITION_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TABLET_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CREATE_TIME", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("COMMIT_TIME", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("PUBLISH_TIME", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("ROWSET_ID", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("NUM_SEGMENT", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NUM_DELFILE", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NUM_ROW", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("DATA_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .build()))
+                    .put("be_configs", new SchemaTable(
+                            SystemId.BE_CONFIGS_ID,
+                            "be_configs",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("VALUE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
                     .build();
 
     public static class Builder {
