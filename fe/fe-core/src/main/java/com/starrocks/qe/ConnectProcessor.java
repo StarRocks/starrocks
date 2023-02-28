@@ -616,6 +616,10 @@ public class ConnectProcessor {
                 ctx.getSessionVariable().setParallelExecInstanceNum(
                         queryOptions.getParallel_exec_instance_num());
             }
+            if (queryOptions.isSetMax_parallel_scan_instance_num()) {
+                ctx.getSessionVariable().setMaxParallelScanInstanceNum(
+                        queryOptions.getMaxParallel_scan_instance_num());
+            }
             if (queryOptions.isSetIs_report_success()) {
                 ctx.getSessionVariable().setReportSuccess(queryOptions.isIs_report_success());
             }
