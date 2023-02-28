@@ -1778,6 +1778,7 @@ primaryExpression
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression
     | (identifier | identifierList) '->' expression                                       #lambdaFunctionExpr
+    | identifierList '->' '('(expressionList)?')'                                         #lambdaFunctionExpr
     ;
 
 literalExpression

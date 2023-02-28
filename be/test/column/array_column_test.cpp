@@ -1100,21 +1100,21 @@ PARALLEL_TEST(ArrayColumnTest, test_empty_null_array) {
     offsets->append(6);
 
     auto null_map = NullColumn::create(2, 0);
-    auto res = column->empty_null_array(null_map);
+    auto res = column->empty_null_in_complex_column(null_map->get_data(), column->offsets_column()->get_data());
     ASSERT_FALSE(res);
     ASSERT_EQ(2, column->size());
     ASSERT_EQ("[1,2,3]", column->debug_item(0));
     ASSERT_EQ("[4,5,6]", column->debug_item(1));
 
     null_map->get_data()[0] = 1;
-    res = column->empty_null_array(null_map);
+    res = column->empty_null_in_complex_column(null_map->get_data(), column->offsets_column()->get_data());
     ASSERT_TRUE(res);
     ASSERT_EQ(2, column->size());
     ASSERT_EQ("[]", column->debug_item(0));
     ASSERT_EQ("[4,5,6]", column->debug_item(1));
 
     null_map->get_data()[1] = 1;
-    res = column->empty_null_array(null_map);
+    res = column->empty_null_in_complex_column(null_map->get_data(), column->offsets_column()->get_data());
     ASSERT_TRUE(res);
     ASSERT_EQ(2, column->size());
     ASSERT_EQ("[]", column->debug_item(0));

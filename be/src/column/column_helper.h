@@ -117,6 +117,15 @@ public:
         return column;
     }
 
+    static inline bool offsets_equal(const UInt32Column::Ptr& offset0, const UInt32Column::Ptr& offset1) {
+        if (offset0->size() != offset1->size()) {
+            return false;
+        }
+        auto data1 = offset0->get_data();
+        auto data2 = offset1->get_data();
+        return std::equal(data1.begin(), data1.end(), data2.begin());
+    }
+
     static ColumnPtr unfold_const_column(const TypeDescriptor& type_desc, size_t size, const ColumnPtr& column) {
         if (column->only_null()) {
             auto col = ColumnHelper::create_column(type_desc, true);

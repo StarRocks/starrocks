@@ -1353,7 +1353,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         } else if (num == 0) {
             if (expression instanceof FunctionCallExpr) {
                 String funcName = ((FunctionCallExpr) expression).getFnName().getFunction();
-                if (funcName.equals(FunctionSet.ARRAY_MAP) || funcName.equals(FunctionSet.TRANSFORM)) {
+                if (funcName.equals(FunctionSet.ARRAY_MAP) || funcName.equals(FunctionSet.TRANSFORM) ||
+                        funcName.equals(FunctionSet.MAP_APPLY)) {
                     throw new SemanticException("There are no lambda functions in high-order function " + funcName);
                 }
             }
