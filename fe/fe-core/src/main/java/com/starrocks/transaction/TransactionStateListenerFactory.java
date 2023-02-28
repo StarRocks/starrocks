@@ -17,12 +17,11 @@ package com.starrocks.transaction;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.lake.LakeTable;
 
 public class TransactionStateListenerFactory {
     public TransactionStateListener create(DatabaseTransactionMgr dbTxnMgr, Table table) {
-        if (table.isLakeTable()) {
-            return new LakeTableTxnStateListener(dbTxnMgr, (LakeTable) table);
+        if (table.isCloudNativeTable()) {
+            return new LakeTableTxnStateListener(dbTxnMgr, (OlapTable) table);
         }
         if (table.isLocalTable()) {
             return new OlapTableTxnStateListener(dbTxnMgr, (OlapTable) table);

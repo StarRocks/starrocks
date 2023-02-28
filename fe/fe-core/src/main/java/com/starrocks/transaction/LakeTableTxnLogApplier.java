@@ -18,8 +18,8 @@ package com.starrocks.transaction;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.compaction.CompactionManager;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
@@ -29,9 +29,10 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import java.util.List;
 
 public class LakeTableTxnLogApplier implements TransactionLogApplier {
-    private final LakeTable table;
+    // lake table or lake materialized view
+    private final OlapTable table;
 
-    LakeTableTxnLogApplier(LakeTable table) {
+    LakeTableTxnLogApplier(OlapTable table) {
         this.table = table;
     }
 

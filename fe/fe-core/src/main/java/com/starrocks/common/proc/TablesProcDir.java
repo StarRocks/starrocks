@@ -50,7 +50,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.lake.LakeTable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -65,7 +64,7 @@ public class TablesProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("TableId").add("TableName").add("IndexNum").add("PartitionColumnName")
             .add("PartitionNum").add("State").add("Type").add("LastConsistencyCheckTime")
-            .add("ReplicaCount").add("PartitionType").add("StorageGroup")
+            .add("ReplicaCount").add("PartitionType").add("StoragePath")
             .build();
     private static final int PARTITION_NUM_DEFAULT = 1;
     private static final int PARTITION_REPLICA_COUNT_DEFAULT = 0;
@@ -131,7 +130,7 @@ public class TablesProcDir implements ProcDirInterface {
                 tableInfo.add(TimeUtils.longToTimeString(table.getLastCheckTime()));
                 tableInfo.add(findReplicaCount(table));
                 tableInfo.add(findPartitionType(table));
-                tableInfo.add(findStorageGroup(table));
+                tableInfo.add(findStoragePath(table));
                 tableInfos.add(tableInfo);
             }
         } finally {
@@ -224,10 +223,10 @@ public class TablesProcDir implements ProcDirInterface {
         return NULL_STRING_DEFAULT;
     }
 
-    private String findStorageGroup(Table table) {
+    private String findStoragePath(Table table) {
         String storageGroup = null;
-        if (table.isLakeTable()) {
-            storageGroup = ((LakeTable) table).getStorageGroup();
+        if (table.isCloudNativeTable()) {
+            storageGroup = ((OlapTable) table).getStoragePath();
         }
         return storageGroup != null ? storageGroup : NULL_STRING_DEFAULT;
     }

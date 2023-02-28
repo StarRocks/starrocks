@@ -134,7 +134,7 @@ public class LakeTableTest {
         Assert.assertTrue(newTable.isLakeTable());
         LakeTable newLakeTable = (LakeTable) newTable;
 
-        Assert.assertEquals("s3://test-bucket/1/", newLakeTable.getStorageGroup());
+        Assert.assertEquals("s3://test-bucket/1/", newLakeTable.getStoragePath());
 
         Partition p1 = newLakeTable.getPartition(partitionId);
         MaterializedIndex newIndex = p1.getBaseIndex();

@@ -125,7 +125,7 @@ public class MVMaintenanceJob implements Writable {
     // TODO recover the entire job state, include execution plan
     public void restore() {
         Table table = GlobalStateMgr.getCurrentState().getDb(dbId).getTable(viewId);
-        Preconditions.checkState(table != null && table.getType().equals(Table.TableType.MATERIALIZED_VIEW));
+        Preconditions.checkState(table != null && table.isMaterializedView());
         this.view = (MaterializedView) table;
         this.serializedState = JobState.INIT;
         this.state.set(serializedState);
