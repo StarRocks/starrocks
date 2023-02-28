@@ -942,6 +942,10 @@ public abstract class AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
+    public R visitMapExpr(MapExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
     public R visitCollectionElementExpr(CollectionElementExpr node, C context) {
         return visitExpression(node, context);
     }
