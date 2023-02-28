@@ -210,10 +210,30 @@ public class MaterializedViewRewriter {
     private OptExpression tryRewriteForRelationMapping(RewriteContext rewriteContext) {
         // the rewritten expression to replace query
         // should copy the op because the op will be modified and reused
+<<<<<<< HEAD
         Operator.Builder builder = OperatorBuilderFactory.build(materializationContext.getScanMvOperator());
         builder.withOperator(materializationContext.getScanMvOperator());
         OptExpression rewrittenExpression = OptExpression.create(builder.build());
         deriveLogicalProperty(rewrittenExpression);
+=======
+        final LogicalOlapScanOperator mvScanOperator = materializationContext.getScanMvOperator();
+        final Operator.Builder mvScanBuilder = OperatorBuilderFactory.build(mvScanOperator);
+        mvScanBuilder.withOperator(mvScanOperator);
+
+        // Rewrite original mv's predicates into query if needed.
+        final ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
+        final Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp = rewriteContext.getMVColumnRefToScalarOp();
+        ScalarOperator mvOriginalPredicates = mvScanOperator.getPredicate();
+        if (mvOriginalPredicates != null && !ConstantOperator.TRUE.equals(mvOriginalPredicates)) {
+            mvOriginalPredicates = rewriteMVCompensationExpression(rewriteContext, columnRewriter,
+                    mvColumnRefToScalarOp, mvOriginalPredicates, false);
+            if (!ConstantOperator.TRUE.equals(mvOriginalPredicates)) {
+                mvScanBuilder.setPredicate(mvOriginalPredicates);
+            }
+        }
+        OptExpression mvScanOptExpression = OptExpression.create(mvScanBuilder.build());
+        deriveLogicalProperty(mvScanOptExpression);
+>>>>>>> a52bb9384 ([BugFix] Fix rewrite nested mv bugs when mv's partition/distribution predicates is not null (#18375))
 
         // construct query based view EC
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
@@ -298,6 +318,66 @@ public class MaterializedViewRewriter {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private ScalarOperator getMVCompensationPredicate(RewriteContext rewriteContext,
+                                                      ColumnRewriter rewriter,
+                                                      Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
+                                                      ScalarOperator equalPredicates,
+                                                      ScalarOperator otherPredicates) {
+
+
+        if (!ConstantOperator.TRUE.equals(equalPredicates)) {
+            equalPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
+                    mvColumnRefToScalarOp, equalPredicates, true);
+            if (equalPredicates == null) {
+                return null;
+            }
+        }
+
+
+        if (!ConstantOperator.TRUE.equals(otherPredicates)) {
+            otherPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
+                    mvColumnRefToScalarOp, otherPredicates, false);
+            if (otherPredicates == null) {
+                return null;
+            }
+        }
+
+        return MvUtils.canonizePredicate(Utils.compoundAnd(equalPredicates, otherPredicates));
+    }
+
+    private ScalarOperator rewriteMVCompensationExpression(RewriteContext rewriteContext,
+                                                           ColumnRewriter rewriter,
+                                                           Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
+                                                           ScalarOperator predicate,
+                                                           boolean isMVBased) {
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        // swapped by query based view ec
+        List<ScalarOperator> rewrittenConjuncts = conjuncts.stream()
+                .map(conjunct ->  {
+                    if (isMVBased) {
+                        return rewriter.rewriteByViewEc(conjunct);
+                    } else {
+                        return rewriter.rewriteByQueryEc(conjunct);
+                    }
+                })
+                .collect(Collectors.toList());
+        if (rewrittenConjuncts.isEmpty()) {
+            return null;
+        }
+
+        Multimap<ScalarOperator, ColumnRefOperator> normalizedMap =
+                normalizeAndReverseProjection(mvColumnRefToScalarOp, rewriteContext, isMVBased);
+        List<ScalarOperator> candidates = rewriteScalarOpToTarget(rewrittenConjuncts, normalizedMap,
+                rewriteContext.getOutputMapping(), new ColumnRefSet(rewriteContext.getQueryColumnSet()));
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        return Utils.compoundAnd(candidates);
+    }
+
+>>>>>>> a52bb9384 ([BugFix] Fix rewrite nested mv bugs when mv's partition/distribution predicates is not null (#18375))
     private OptExpression tryUnionRewrite(RewriteContext rewriteContext, OptExpression mvOptExpr) {
         PredicateSplit mvCompensationToQuery = getCompensationPredicates(rewriteContext, false);
         if (mvCompensationToQuery == null) {

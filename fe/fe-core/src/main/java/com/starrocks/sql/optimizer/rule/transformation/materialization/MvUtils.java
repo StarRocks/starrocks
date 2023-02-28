@@ -29,6 +29,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
+>>>>>>> a52bb9384 ([BugFix] Fix rewrite nested mv bugs when mv's partition/distribution predicates is not null (#18375))
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.RangeUtils;
@@ -568,4 +573,76 @@ public class MvUtils {
         }
         return mergedRanges;
     }
+<<<<<<< HEAD
+=======
+
+    public static ScalarOperator compensatePartitionPredicate(OptExpression plan, ColumnRefFactory columnRefFactory) {
+        List<LogicalOlapScanOperator> olapScanOperators = MvUtils.getOlapScanNode(plan);
+        if (olapScanOperators.isEmpty()) {
+            return ConstantOperator.createBoolean(true);
+        }
+        List<ScalarOperator> partitionPredicates = Lists.newArrayList();
+        for (LogicalOlapScanOperator olapScanOperator : olapScanOperators) {
+            Preconditions.checkState(olapScanOperator.getTable().isNativeTable());
+            OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
+
+            if (olapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
+                continue;
+            }
+
+            if (olapScanOperator.getSelectedPartitionId() != null
+                    && olapScanOperator.getSelectedPartitionId().size() == olapTable.getPartitions().size()) {
+                continue;
+            }
+
+            if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
+                ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
+                Expr partitionExpr = partitionInfo.getPartitionExprs().get(0);
+                List<SlotRef> slotRefs = Lists.newArrayList();
+                partitionExpr.collect(SlotRef.class, slotRefs);
+                Preconditions.checkState(slotRefs.size() == 1);
+                Optional<ColumnRefOperator> partitionColumn = olapScanOperator.getColRefToColumnMetaMap().keySet().stream()
+                        .filter(columnRefOperator -> columnRefOperator.getName().equals(slotRefs.get(0).getColumnName()))
+                        .findFirst();
+                if (!partitionColumn.isPresent()) {
+                    return null;
+                }
+                ExpressionMapping mapping = new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()));
+                mapping.put(slotRefs.get(0), partitionColumn.get());
+                ScalarOperator partitionScalarOperator =
+                        SqlToScalarOperatorTranslator.translate(partitionExpr, mapping, columnRefFactory);
+                List<Range<PartitionKey>> selectedRanges = Lists.newArrayList();
+                for (long pid : olapScanOperator.getSelectedPartitionId()) {
+                    selectedRanges.add(partitionInfo.getRange(pid));
+                }
+                List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
+                List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionScalarOperator, mergedRanges);
+                ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+                partitionPredicates.add(partitionPredicate);
+            } else if (olapTable.getPartitionInfo() instanceof RangePartitionInfo) {
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                if (partitionColumns.size() != 1) {
+                    // now do not support more than one partition columns
+                    return null;
+                }
+                List<Range<PartitionKey>> selectedRanges = Lists.newArrayList();
+                for (long pid : olapScanOperator.getSelectedPartitionId()) {
+                    selectedRanges.add(rangePartitionInfo.getRange(pid));
+                }
+                List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
+                ColumnRefOperator partitionColumnRef = olapScanOperator.getColumnReference(partitionColumns.get(0));
+                List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionColumnRef, mergedRanges);
+                ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+                if (partitionPredicate != null) {
+                    partitionPredicates.add(partitionPredicate);
+                }
+            } else {
+                return null;
+            }
+        }
+        return partitionPredicates.isEmpty() ?
+                ConstantOperator.createBoolean(true) : Utils.compoundAnd(partitionPredicates);
+    }
+>>>>>>> a52bb9384 ([BugFix] Fix rewrite nested mv bugs when mv's partition/distribution predicates is not null (#18375))
 }
