@@ -14,6 +14,7 @@
 
 package com.starrocks.lake;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
@@ -29,6 +30,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -58,14 +60,17 @@ public class LakeMaterializedView extends MaterializedView {
         return tableProperty.getStorageInfo().getFilePathInfo();
     }
 
-    public String getStorageGroup() {
+    @Override
+    public String getStoragePath() {
         return getDefaultFilePathInfo().getFullPath();
     }
 
+    @Override
     public FilePathInfo getPartitionFilePathInfo() {
         return getDefaultFilePathInfo();
     }
 
+    @Override
     public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
         FileCacheInfo cacheInfo = null;
         StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(partitionId);
@@ -77,6 +82,7 @@ public class LakeMaterializedView extends MaterializedView {
         return cacheInfo;
     }
 
+    @Override
     public void setStorageInfo(FilePathInfo pathInfo, boolean enableCache, long cacheTtlS, boolean asyncWriteBack) {
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
                 .setAsyncWriteBack(asyncWriteBack).build();
@@ -141,6 +147,28 @@ public class LakeMaterializedView extends MaterializedView {
     @Override
     public Short getDefaultReplicationNum() {
         return 1;
+    }
+
+    @Override
+    protected void appendBaseProperties(StringBuilder sb) {
+        Preconditions.checkNotNull(sb);
+
+        Map<String, String> storageProperties = getProperties();
+
+        // enable_storage_cache
+        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE).append("\" = \"");
+        sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
+
+        // storage_cache_ttl
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)
+                .append("\" = \"");
+        sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
+
+        // allow_sync_write_back
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
+                .append("\" = \"");
+        sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
     }
 
     @Override

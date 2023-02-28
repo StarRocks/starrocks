@@ -70,14 +70,17 @@ public class LakeTable extends OlapTable {
         return tableProperty.getStorageInfo().getFilePathInfo();
     }
 
-    public String getStorageGroup() {
+    @Override
+    public String getStoragePath() {
         return getDefaultFilePathInfo().getFullPath();
     }
 
+    @Override
     public FilePathInfo getPartitionFilePathInfo() {
         return getDefaultFilePathInfo();
     }
 
+    @Override
     public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
         FileCacheInfo cacheInfo = null;
         StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(partitionId);
@@ -89,6 +92,7 @@ public class LakeTable extends OlapTable {
         return cacheInfo;
     }
 
+    @Override
     public void setStorageInfo(FilePathInfo pathInfo, boolean enableCache, long cacheTtlS, boolean asyncWriteBack) {
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
                 .setAsyncWriteBack(asyncWriteBack).build();
