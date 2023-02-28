@@ -620,6 +620,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
     }
 
+    public void setMaxParallelScanInstanceNum(int maxParallelScanInstanceNum) {
+        this.parallelExecInstanceNum = maxParallelScanInstanceNum;
+    }
+
     public void setLoadMemLimit(long loadMemLimit) {
         this.loadMemLimit = loadMemLimit;
     }
