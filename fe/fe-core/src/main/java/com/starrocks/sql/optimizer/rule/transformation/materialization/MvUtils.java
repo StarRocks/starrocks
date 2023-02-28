@@ -34,6 +34,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.RangeUtils;
@@ -655,6 +656,11 @@ public class MvUtils {
         for (LogicalOlapScanOperator olapScanOperator : olapScanOperators) {
             Preconditions.checkState(olapScanOperator.getTable().isNativeTable());
             OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
+
+            if (olapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
+                continue;
+            }
+
             if (olapScanOperator.getSelectedPartitionId() != null
                     && olapScanOperator.getSelectedPartitionId().size() == olapTable.getPartitions().size()) {
                 continue;

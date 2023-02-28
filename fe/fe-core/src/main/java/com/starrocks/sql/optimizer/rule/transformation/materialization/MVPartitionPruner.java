@@ -69,6 +69,7 @@ public class MVPartitionPruner {
 
                 LogicalOlapScanOperator.Builder rewrittenBuilder = new LogicalOlapScanOperator.Builder();
                 scanOperator = rewrittenBuilder.withOperator(prunedOlapScanOperator)
+                        .setPredicate(MvUtils.canonizePredicate(prunedOlapScanOperator.getPredicate()))
                         .setSelectedTabletId(selectedTabletIds)
                         .build();
             } else if (scanOperator instanceof LogicalHiveScanOperator ||
