@@ -50,11 +50,16 @@ public:
 
     Status remove_cache(const std::string& key) override;
 
+    std::unordered_map<std::string, double> cache_stats() override;
+
     Status shutdown() override;
 
 private:
+    void _dump_cache_stats();
+
     std::unique_ptr<Cache> _cache = nullptr;
     PoolId _default_pool;
+    std::string _meta_path;
 };
 
 } // namespace starrocks
