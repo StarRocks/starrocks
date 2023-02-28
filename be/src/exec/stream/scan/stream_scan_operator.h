@@ -93,7 +93,7 @@ private:
     bool _is_stream_pipeline{false};
     int64_t _run_time = 0;
 
-    StreamEpochManager* _stream_epoch_manager;
+    StreamEpochManager* _stream_epoch_manager = nullptr;
     starrocks::EpochInfo _current_epoch_info;
 
     std::queue<ChunkSourcePtr> _old_chunk_sources;
@@ -104,6 +104,8 @@ class StreamChunkSource : public ConnectorChunkSource {
 public:
     StreamChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
                       ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+
+    Status prepare(RuntimeState* state) override;
 
     Status set_stream_offset(int64_t table_version, int64_t changelog_id);
     void set_epoch_limit(int64_t epoch_rows_limit, int64_t epoch_time_limit);

@@ -104,6 +104,8 @@ public:
 
     void close();
 
+    int64_t reader_id() { return _reader_id; }
+
 private:
     Status _seek_binlog_file_reader(int64_t version, int64_t seq_id);
     Status _init_segment_iterator();

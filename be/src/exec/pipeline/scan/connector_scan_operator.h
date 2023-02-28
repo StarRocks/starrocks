@@ -90,6 +90,8 @@ public:
 
 protected:
     virtual bool _reach_eof() { return _limit != -1 && _rows_read >= _limit; }
+    Status _open_data_source(RuntimeState* state);
+
     connector::DataSourcePtr _data_source;
     [[maybe_unused]] ConnectorScanNode* _scan_node;
 
