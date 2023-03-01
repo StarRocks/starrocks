@@ -496,6 +496,17 @@ message PMVMaintenanceTaskResult {
     required StatusPB status = 1;
 };
 
+message ExecuteCommandRequestPB {
+    optional string command = 1;
+    optional string params = 2;
+};
+
+message ExecuteCommandResultPB {
+    optional StatusPB status = 1;
+    optional string result = 2;
+};
+
+
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
 service PInternalService {
@@ -527,5 +538,7 @@ service PInternalService {
     rpc local_tablet_reader_multi_get(PTabletReaderMultiGetRequest) returns (PTabletReaderMultiGetResult);
     rpc local_tablet_reader_scan_open(PTabletReaderScanOpenRequest) returns (PTabletReaderScanOpenResult);
     rpc local_tablet_reader_scan_get_next(PTabletReaderScanGetNextRequest) returns (PTabletReaderScanGetNextResult);
+
+    rpc execute_command(ExecuteCommandRequestPB) returns (ExecuteCommandResultPB);
 };
 
