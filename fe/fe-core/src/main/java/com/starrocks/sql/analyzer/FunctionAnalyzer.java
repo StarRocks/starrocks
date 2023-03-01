@@ -201,7 +201,7 @@ public class FunctionAnalyzer {
                 throw new SemanticException("retention only support Array<BOOLEAN>");
             }
             ArrayType type = (ArrayType) arg.getType();
-            if (!type.getItemType().isBoolean()) {
+            if (!type.getItemType().isNull() && !type.getItemType().isBoolean()) {
                 throw new SemanticException("retention only support Array<BOOLEAN>");
             }
             // For Array<BOOLEAN> that have different size, we just extend result array to Compatible with it
