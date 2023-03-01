@@ -974,6 +974,7 @@ public class ExpressionAnalyzer {
                     if (node.getChildren().size() < 2) {
                         throw new SemanticException(fnName + " should have at least two inputs");
                     }
+                    break;
                 case FunctionSet.MAP_FILTER:
                     if (node.getChildren().size() != 2) {
                         throw new SemanticException(fnName + " should have 2 inputs, " +
@@ -993,8 +994,7 @@ public class ExpressionAnalyzer {
                                 node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
                     }
                     node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
-                    argumentTypes[1] = Type.ARRAY_BOOLEAN;
-                break;
+                    break;
             }
         }
 
