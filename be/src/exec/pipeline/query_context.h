@@ -22,6 +22,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/stream_epoch_manager.h"
+#include "exec/spill/query_spill_manager.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "gen_cpp/internal_service.pb.h"
@@ -161,6 +162,8 @@ public:
     // STREAM MV
     StreamEpochManager* stream_epoch_manager() const { return _stream_epoch_manager.get(); }
 
+    QuerySpillManager* spill_manager() { return _spill_manager.get(); }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -202,6 +205,8 @@ private:
 
     // STREAM MV
     std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
+
+    std::unique_ptr<QuerySpillManager> _spill_manager;
 };
 
 class QueryContextManager {

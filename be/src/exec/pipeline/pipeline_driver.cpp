@@ -242,6 +242,21 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                     return _state;
                 }
 
+                // Run spill stragety
+                // TODO: FIXME
+                // a simple spill stragety
+                auto query_mem_tracker = _query_ctx->mem_tracker();
+                if (runtime_state->enable_spill() &&
+                    sink_operator()->revocable_mem_bytes() > runtime_state->spill_operator_min_bytes() &&
+                    !sink_operator()->need_mark_spill()) {
+                    auto spill_manager = _query_ctx->spill_manager();
+                    if (query_mem_tracker->consumption() - spill_manager->pending_spilled_bytes() >
+                        query_mem_tracker->limit() * runtime_state->spill_mem_limit_threshold()) {
+                        spill_manager->update_spilled_bytes(sink_operator()->revocable_mem_bytes());
+                        sink_operator()->mark_need_spill();
+                    }
+                }
+
                 // pull chunk from current operator and push the chunk onto next
                 // operator
                 StatusOr<ChunkPtr> maybe_chunk;

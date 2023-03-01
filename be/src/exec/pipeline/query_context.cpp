@@ -20,6 +20,7 @@
 #include "agent/master_info.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
@@ -141,6 +142,10 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
             } else {
                 st = maybe_token.status();
             }
+
+            _spill_manager = std::make_unique<QuerySpillManager>();
+            auto init_status = _spill_manager->init(_query_id);
+            st = init_status.ok() ? st : init_status;
         });
     }
 

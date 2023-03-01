@@ -15,6 +15,7 @@
 #include "formats/parquet/file_reader.h"
 
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
@@ -124,8 +125,8 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
     // filter by min/max conjunct ctxs.
     if (!_scanner_ctx->min_max_conjunct_ctxs.empty()) {
         const TupleDescriptor& tuple_desc = *(_scanner_ctx->min_max_tuple_desc);
-        auto min_chunk = ChunkHelper::new_chunk(tuple_desc, 0);
-        auto max_chunk = ChunkHelper::new_chunk(tuple_desc, 0);
+        ChunkPtr min_chunk = ChunkHelper::new_chunk(tuple_desc, 0);
+        ChunkPtr max_chunk = ChunkHelper::new_chunk(tuple_desc, 0);
 
         bool exist = false;
         RETURN_IF_ERROR(_read_min_max_chunk(row_group, tuple_desc.slots(), &min_chunk, &max_chunk, &exist));
@@ -171,8 +172,8 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
             }
             if (!slot) continue;
             min_max_slots[0] = slot;
-            auto min_chunk = ChunkHelper::new_chunk(min_max_slots, 0);
-            auto max_chunk = ChunkHelper::new_chunk(min_max_slots, 0);
+            ChunkPtr min_chunk = ChunkHelper::new_chunk(min_max_slots, 0);
+            ChunkPtr max_chunk = ChunkHelper::new_chunk(min_max_slots, 0);
             bool exist = false;
             RETURN_IF_ERROR(_read_min_max_chunk(row_group, min_max_slots, &min_chunk, &max_chunk, &exist));
             if (!exist) continue;
