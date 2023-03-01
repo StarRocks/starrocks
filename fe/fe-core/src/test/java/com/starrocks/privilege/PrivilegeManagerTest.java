@@ -153,7 +153,7 @@ public class PrivilegeManagerTest {
         String sql = "grant select on table db.tbl1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantStmt);
-        sql = "grant ALTER on materialized_view db3.mv1 to test_user";
+        sql = "grant ALTER on materialized view db3.mv1 to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantStmt);
 
@@ -170,7 +170,7 @@ public class PrivilegeManagerTest {
         sql = "revoke select on db.tbl1 from test_user";
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.revoke(revokeStmt);
-        sql = "revoke ALTER on materialized_view db3.mv1 from test_user";
+        sql = "revoke ALTER on materialized view db3.mv1 from test_user";
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.revoke(revokeStmt);
 
@@ -532,8 +532,8 @@ public class PrivilegeManagerTest {
         manager.grant(grantTableStmt);
         Assert.assertEquals(1, grantTableStmt.getObjectList().size());
         TablePEntryObject goodTableObject = (TablePEntryObject) grantTableStmt.getObjectList().get(0);
-        // 2. add validate entry: create_table + drop on db to test_user
-        sql = "grant create_table, drop on DATABASE db to test_user";
+        // 2. add validate entry: create table + drop on db to test_user
+        sql = "grant create table, drop on DATABASE db to test_user";
         GrantPrivilegeStmt grantDbStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantDbStmt);
         List<PEntryObject> objects = Arrays.asList(goodTableObject);
@@ -543,7 +543,7 @@ public class PrivilegeManagerTest {
         // 4. add invalidate entry: select on db.invalidatetable
         objects = Arrays.asList(new TablePEntryObject(goodTableObject.databaseUUID, "-1"));
         manager.grantToUser(grantTableStmt.getObjectType(), grantTableStmt.getPrivilegeTypes(), objects, false, testUser);
-        // 5. add invalidate entry: create_table, drop on invalidatedb
+        // 5. add invalidate entry: create table, drop on invalidatedb
         objects = Arrays.asList(new DbPEntryObject("-1"));
         manager.grantToUser(grantDbStmt.getObjectType(), grantDbStmt.getPrivilegeTypes(), objects, false, testUser);
         // 6. add valid entry: ALL databases
@@ -627,7 +627,7 @@ public class PrivilegeManagerTest {
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
-                "GRANT CREATE_TABLE ON ALL DATABASES TO test_user", ctx);
+                "GRANT create table ON ALL DATABASES TO test_user", ctx);
         manager.grant(grantStmt);
 
         ctx.setCurrentUserIdentity(testUser);
@@ -636,7 +636,7 @@ public class PrivilegeManagerTest {
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
-                "REVOKE CREATE_TABLE ON ALL DATABASES FROM test_user", ctx);
+                "REVOKE create table ON ALL DATABASES FROM test_user", ctx);
         manager.revoke(revokeStmt);
 
         ctx.setCurrentUserIdentity(testUser);
@@ -788,20 +788,20 @@ public class PrivilegeManagerTest {
         PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
 
-        // grant create_table on database db to role1
+        // grant create table on database db to role1
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create role role1;", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant create_table on database db to role role1;", ctx), ctx);
+                "grant create table on database db to role role1;", ctx), ctx);
 
-        // can't create_table
+        // can't create table
         assertDbActionsOnTest(false, false, testUser);
 
         // grant role1 to test_user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to test_role_user", ctx), ctx);
 
-        // can create_table but can't drop
+        // can create table but can't drop
         assertDbActionsOnTest(true, false, testUser);
 
         // grant role2 to test_user
@@ -812,37 +812,37 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role2 to test_role_user;", ctx), ctx);
 
-        // can create_table & drop
+        // can create table & drop
         assertDbActionsOnTest(true, true, testUser);
 
         // grant drop to test_user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant drop on database db to test_role_user;", ctx), ctx);
 
-        // still, can create_table & drop
+        // still, can create table & drop
         assertDbActionsOnTest(true, true, testUser);
 
         // revoke role1 from test_user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke role1 from test_role_user;", ctx), ctx);
 
-        // can drop but can't create_table
+        // can drop but can't create table
         assertDbActionsOnTest(false, true, testUser);
 
-        // grant role1 to test_user; revoke create_table from role1
+        // grant role1 to test_user; revoke create table from role1
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to test_role_user", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "revoke create_table on database db from role role1", ctx), ctx);
+                "revoke create table on database db from role role1", ctx), ctx);
 
-        // can drop but can't create_table
+        // can drop but can't create table
         assertDbActionsOnTest(false, true, testUser);
 
         // revoke empty role role1
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke role1 from test_role_user;", ctx), ctx);
 
-        // can drop but can't create_table
+        // can drop but can't create table
         assertDbActionsOnTest(false, true, testUser);
 
         // revoke role2 from test_user
@@ -1388,7 +1388,7 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant usage on all catalogs to test_catalog_user", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant create_database on all catalogs to test_catalog_user", ctx), ctx);
+                "grant create database on all catalogs to test_catalog_user", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant alter on all catalogs to test_catalog_user with grant option", ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("test_catalog_user", "%");
@@ -1405,7 +1405,7 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user test_catalog_user2", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant create_database on catalog " + InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME +
+                "grant create database on catalog " + InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME +
                         " to test_catalog_user2 with grant option", ctx), ctx);
         ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_catalog_user2", "%"));
         Assert.assertTrue(PrivilegeActions.checkCatalogAction(ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,

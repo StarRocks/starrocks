@@ -91,7 +91,7 @@ public class RBACExecutorTest {
         ShowGrantsStmt stmt = new ShowGrantsStmt(new UserIdentity("u1", "%"));
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
-        Assert.assertEquals("[['u1'@'%', default_catalog, GRANT USAGE, CREATE_DATABASE, DROP, ALTER " +
+        Assert.assertEquals("[['u1'@'%', default_catalog, GRANT USAGE, CREATE DATABASE, DROP, ALTER " +
                 "ON CATALOG default_catalog TO USER 'u1'@'%']]", resultSet.getResultRows().toString());
 
         sql = "grant all on CATALOG default_catalog to role r1";
@@ -101,7 +101,7 @@ public class RBACExecutorTest {
         stmt = new ShowGrantsStmt("r1");
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
-        Assert.assertEquals("[[r1, default_catalog, GRANT USAGE, CREATE_DATABASE, DROP, ALTER " +
+        Assert.assertEquals("[[r1, default_catalog, GRANT USAGE, CREATE DATABASE, DROP, ALTER " +
                 "ON CATALOG default_catalog TO ROLE 'r1']]", resultSet.getResultRows().toString());
 
         sql = "grant r1 to role r0";
