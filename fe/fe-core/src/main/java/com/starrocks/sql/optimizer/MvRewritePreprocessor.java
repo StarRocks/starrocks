@@ -186,7 +186,7 @@ public class MvRewritePreprocessor {
         // - To partition/distribution prune, need filter predicates that belong to MV.
         // - Those predicates are only used for partition/distribution pruning and don't affect the real
         // query compute.
-        // - TODO: after partition/distribution pruning, those predicates should be removed from mv rewrite result.
+        // - after partition/distribution pruning, those predicates should be removed from mv rewrite result.
         final OptExpression mvExpression = mvContext.getMvExpression();
         final List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(mvExpression);
         final ColumnRefSet mvOutputColumnRefSet = mvExpression.getOutputColumns();
