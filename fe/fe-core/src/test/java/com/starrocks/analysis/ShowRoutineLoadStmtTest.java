@@ -70,4 +70,13 @@ public class ShowRoutineLoadStmtTest {
         Assert.assertEquals("db_test", stmt.getDbFullName());
         Assert.assertEquals("rl_test", stmt.getName());
     }
+
+    @Test
+    public void testWithoutLabel() {
+        String sql = "SHOW ROUTINE LOAD";
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable());
+        ShowRoutineLoadStmt stmt = (ShowRoutineLoadStmt) stmts.get(0);
+        Assert.assertNull(stmt.getName());
+        Assert.assertNull(stmt.getDbFullName());
+    }
 }
