@@ -649,6 +649,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
             for (Column mvColumn : mv.getColumns()) {
                 if (modifiedColumns.contains(mvColumn.getName())) {
+                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                            "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
+                            tbl.getName(), mvColumn.getName());
                     mv.setActive(false);
                 }
             }
