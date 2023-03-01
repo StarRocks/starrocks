@@ -14,12 +14,17 @@
 
 #pragma once
 
+#include <memory>
+
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "exec/pipeline/spill_process_channel.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
+#include "exec/spill/executor.h"
+#include "exec/spill/spiller.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter.h"
 #include "runtime/descriptors.h"
@@ -107,6 +112,12 @@ public:
 
     virtual void setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker);
 
+    void set_spiller(std::shared_ptr<Spiller> spiller) { _spiller = std::move(spiller); }
+
+    void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
+    const SpillProcessChannelPtr& spill_channel() { return _spill_channel; }
+    auto& io_executor() { return *spill_channel()->io_executor(); }
+
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
@@ -115,12 +126,24 @@ public:
     // get_next only works after done().
     virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;
 
+    // RuntimeFilter generate by ChunkSorter only works in TopNSorter and HeapSorter
     virtual std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) { return nullptr; }
 
     // Return accurate output rows of this operator
     virtual size_t get_output_rows() const = 0;
 
     virtual int64_t mem_usage() const = 0;
+
+    virtual bool is_full() { return false; }
+
+    virtual bool has_pending_data() { return false; }
+
+    const std::shared_ptr<Spiller>& spiller() const { return _spiller; }
+
+    size_t revocable_mem_bytes() const { return _revocable_mem_bytes; }
+    void set_spill_stragety(SpillStrategy stragety) { _spill_strategy = stragety; }
+
+    virtual void cancel() {}
 
 protected:
     size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
@@ -139,6 +162,11 @@ protected:
     RuntimeProfile::Counter* _sort_timer = nullptr;
     RuntimeProfile::Counter* _merge_timer = nullptr;
     RuntimeProfile::Counter* _output_timer = nullptr;
+
+    size_t _revocable_mem_bytes = 0;
+    SpillStrategy _spill_strategy = SpillStrategy::NO_SPILL;
+    std::shared_ptr<Spiller> _spiller;
+    SpillProcessChannelPtr _spill_channel;
 };
 
 namespace detail {

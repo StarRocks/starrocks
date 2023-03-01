@@ -283,7 +283,20 @@ public:
 
     int num_per_fragment_instances() const { return _num_per_fragment_instances; }
 
-    bool enable_spill() const { return _query_options.enable_spilling; }
+    TSpillMode::type spill_mode() const {
+        DCHECK(_query_options.__isset.spill_mode);
+        return _query_options.spill_mode;
+    }
+
+    bool enable_spill() const { return _query_options.enable_spill; }
+
+    int32_t spill_mem_table_size() const { return _query_options.spill_mem_table_size; }
+
+    int32_t spill_mem_table_num() const { return _query_options.spill_mem_table_num; }
+
+    double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
+
+    int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 

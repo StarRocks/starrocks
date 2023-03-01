@@ -394,7 +394,7 @@ ColumnPtr ChunkHelper::column_from_field(const Field& field) {
     }
 }
 
-ChunkPtr ChunkHelper::new_chunk(const Schema& schema, size_t n) {
+ChunkUniquePtr ChunkHelper::new_chunk(const Schema& schema, size_t n) {
     size_t fields = schema.num_fields();
     Columns columns;
     columns.reserve(fields);
@@ -403,15 +403,15 @@ ChunkPtr ChunkHelper::new_chunk(const Schema& schema, size_t n) {
         columns.emplace_back(column_from_field(*f));
         columns.back()->reserve(n);
     }
-    return std::make_shared<Chunk>(std::move(columns), std::make_shared<Schema>(schema));
+    return std::make_unique<Chunk>(std::move(columns), std::make_shared<Schema>(schema));
 }
 
-std::shared_ptr<Chunk> ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
+ChunkUniquePtr ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
     return new_chunk(tuple_desc.slots(), n);
 }
 
-std::shared_ptr<Chunk> ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    auto chunk = std::make_shared<Chunk>();
+ChunkUniquePtr ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
+    auto chunk = std::make_unique<Chunk>();
     for (const auto slot : slots) {
         auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
         column->reserve(n);

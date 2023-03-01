@@ -68,6 +68,7 @@ set(EXEC_FILES
     chunks_sorter_heap_sort.cpp
     chunks_sorter_topn.cpp
     chunks_sorter_full_sort.cpp
+    spillable_chunks_sorter_full_sort.cpp
     cross_join_node.cpp
     union_node.cpp
     except_hash_set.cpp
@@ -177,6 +178,7 @@ set(EXEC_FILES
     pipeline/sort/local_partition_topn_source.cpp
     pipeline/sort/local_partition_topn_context.cpp
     pipeline/sort/local_merge_sort_source_operator.cpp
+    pipeline/sort/spillable_partition_sort_sink_operator.cpp
     pipeline/sort/sort_context.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
@@ -226,6 +228,8 @@ set(EXEC_FILES
     pipeline/adaptive/utils.cpp
     pipeline/chunk_accumulate_operator.cpp
     pipeline/pipeline.cpp
+    pipeline/spill_process_operator.cpp
+    pipeline/spill_process_channel.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
@@ -238,8 +242,9 @@ set(EXEC_FILES
     spill/spiller.cpp
     spill/spiller_factory.cpp
     spill/spilled_stream.cpp
-    spill/mem_table.cpp
     spill/spiller_path_provider.cpp
+    spill/mem_table.cpp
+    spill/query_spill_manager.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
     stream/aggregate/agg_group_state.cpp

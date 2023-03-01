@@ -44,11 +44,6 @@ Status LocalPartitionTopnSinkOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
-LocalPartitionTopnSinkOperatorFactory::LocalPartitionTopnSinkOperatorFactory(
-        int32_t id, int32_t plan_node_id, LocalPartitionTopnContextFactoryPtr partition_topn_ctx_factory)
-        : OperatorFactory(id, "local_partition_topn_sink", plan_node_id),
-          _partition_topn_ctx_factory(std::move(partition_topn_ctx_factory)) {}
-
 OperatorPtr LocalPartitionTopnSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<LocalPartitionTopnSinkOperator>(this, _id, _plan_node_id, driver_sequence,
                                                             _partition_topn_ctx_factory->create(driver_sequence));

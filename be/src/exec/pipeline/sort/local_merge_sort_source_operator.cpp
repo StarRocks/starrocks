@@ -40,11 +40,13 @@ Status LocalMergeSortSourceOperator::set_finishing(RuntimeState* state) {
 }
 
 Status LocalMergeSortSourceOperator::set_finished(RuntimeState* state) {
+    _sort_context->cancel();
     return _sort_context->set_finished();
 }
 
 bool LocalMergeSortSourceOperator::has_output() const {
-    return _sort_context->is_partition_sort_finished() && !_sort_context->is_output_finished();
+    return _sort_context->is_partition_sort_finished() && !_sort_context->is_output_finished() &&
+           _sort_context->is_partition_ready();
 }
 
 bool LocalMergeSortSourceOperator::is_finished() const {
