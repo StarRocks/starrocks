@@ -399,6 +399,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _add_batch_counter.add_batch_num++;
     }
 
+<<<<<<< HEAD
     for (auto& tablet : closure->result.tablet_vec()) {
         TTabletCommitInfo commit_info;
         commit_info.tabletId = tablet.tablet_id();
@@ -408,14 +409,61 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
             invalid_dict_cache_columns.emplace_back(col_name);
         }
         commit_info.__set_invalid_dict_cache_columns(invalid_dict_cache_columns);
-
-        std::vector<std::string> valid_dict_cache_columns;
-        for (auto& col_name : tablet.valid_dict_cache_columns()) {
-            valid_dict_cache_columns.emplace_back(col_name);
+=======
+    std::vector<int64_t> tablet_ids;
+    std::vector<int64_t> backend_ids;
+    std::unordered_set<std::string> invalid_dict_cache_column_set;
+    std::unordered_set<std::string> valid_dict_cache_column_set;
+    for (auto& tablet : closure->result.tablet_vec()) {
+        TTabletCommitInfo commit_info;
+        commit_info.tabletId = tablet.tablet_id();
+        if (tablet.has_node_id()) {
+            commit_info.backendId = tablet.node_id();
+        } else {
+            commit_info.backendId = _node_id;
         }
-        commit_info.__set_valid_dict_cache_columns(valid_dict_cache_columns);
+>>>>>>> 18c83e548 ([Enhancement] Only send valid and invalid dict cache columns info once (#18658))
+
+        for (auto& col_name : tablet.invalid_dict_cache_columns()) {
+            invalid_dict_cache_column_set.insert(col_name);
+        }
+
+        for (auto& col_name : tablet.valid_dict_cache_columns()) {
+            valid_dict_cache_column_set.insert(col_name);
+        }
 
         _tablet_commit_infos.emplace_back(std::move(commit_info));
+<<<<<<< HEAD
+=======
+
+        if (tablet_ids.size() < 128) {
+            tablet_ids.emplace_back(commit_info.tabletId);
+            backend_ids.emplace_back(commit_info.backendId);
+        }
+    }
+
+    // Only send valid and invalid dict cache columns info once
+    if (!_tablet_commit_infos.empty()) {
+        std::vector<std::string> invalid_dict_cache_columns;
+        invalid_dict_cache_columns.assign(invalid_dict_cache_column_set.begin(), invalid_dict_cache_column_set.end());
+        _tablet_commit_infos[0].__set_invalid_dict_cache_columns(invalid_dict_cache_columns);
+
+        std::vector<std::string> valid_dict_cache_columns;
+        std::set_difference(valid_dict_cache_column_set.begin(), valid_dict_cache_column_set.end(),
+                            invalid_dict_cache_column_set.begin(), invalid_dict_cache_column_set.end(),
+                            std::back_inserter(valid_dict_cache_columns));
+        _tablet_commit_infos[0].__set_valid_dict_cache_columns(valid_dict_cache_columns);
+    }
+
+    if (!tablet_ids.empty()) {
+        string commit_tablet_id_list_str;
+        JoinInts(tablet_ids, ",", &commit_tablet_id_list_str);
+        string backend_id_list_str;
+        JoinInts(backend_ids, ",", &backend_id_list_str);
+        LOG(INFO) << "OlapTableSink txn_id: " << _parent->_txn_id << " load_id: " << print_id(_parent->_load_id)
+                  << " commit " << _tablet_commit_infos.size() << " tablets: " << commit_tablet_id_list_str
+                  << " backends: " << backend_id_list_str;
+>>>>>>> 18c83e548 ([Enhancement] Only send valid and invalid dict cache columns info once (#18658))
     }
 
     return Status::OK();
