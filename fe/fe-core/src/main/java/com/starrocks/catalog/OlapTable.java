@@ -44,7 +44,6 @@ import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
-import com.starrocks.analysis.Expr;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
@@ -192,12 +191,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
 
-    @SerializedName(value = "materializedColumnMetas")
-    protected List<MaterializedColumnMeta> materializedColumnMetas = Lists.newArrayList();
     @SerializedName(value = "materializedColumns")
     protected List<Column> materializedColumns = Lists.newArrayList();
-    @SerializedName(value = "nameToMaterializedColumn")
-    protected Map<String, MaterializedColumnMeta> nameToMaterializedColumn = Maps.newHashMap();
 
     public OlapTable() {
         this(TableType.OLAP);
@@ -364,31 +359,16 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 origStmt, null);
     }
 
-    public void setMaterializedColumnMeta(Column column, String stmt, Expr expr) {
-        OriginStatement s = new OriginStatement(stmt, 0);
-        MaterializedColumnMeta columnMeta = new MaterializedColumnMeta(getId(), s, expr, column);
-        materializedColumnMetas.add(columnMeta);
-
+    public void addMaterializedColumn(Column column) {
         materializedColumns.add(column);
-        nameToMaterializedColumn.put(column.getName(), columnMeta);
-
-        column.setIsMaterializedColumn();
-        column.setMaterializedColumnExpr(expr);
-    }
-
-    public List<MaterializedColumnMeta> getMaterializedColumnMeta() {
-        return materializedColumnMetas;
     }
 
     public List<Column> getMaterializedColumns() {
         return materializedColumns;
     }
 
-    public MaterializedColumnMeta getMaterializedColumnMeta(String columnName) {
-        return nameToMaterializedColumn.get(columnName);
-    }
     public boolean hasMaterializedColumn() {
-        return !nameToMaterializedColumn.isEmpty();
+        return !materializedColumns.isEmpty();
     }
 
 
@@ -1406,6 +1386,13 @@ public class OlapTable extends Table implements GsonPostProcessable {
         // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
         // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
         rebuildFullSchema();
+
+        // rebuild materializedColumns
+        for (Column column : getFullSchema()) {
+            if (column.isMaterializedColumn()) {
+                addMaterializedColumn(column);
+            }
+        }
     }
 
     @Override

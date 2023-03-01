@@ -20,7 +20,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MaterializedColumnMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -114,19 +113,19 @@ public class MaterializedColumnRule extends Rule {
         Map<ColumnRefOperator, ScalarOperator> newProjectColumnRefMap = new HashMap<>();
         Map<ColumnRefOperator, Column> newScanColumnRefScan = new HashMap<>(scanOperator.getColRefToColumnMetaMap());
 
-        List<MaterializedColumnMeta> materializedColumns = table.getMaterializedColumnMeta();
+        List<Column> materializedColumns = table.getMaterializedColumns();
         boolean hasMaterializedColumns = false;
         for (ColumnRefOperator column : project.getColumnRefMap().keySet()) {
             ScalarOperator val = project.getColumnRefMap().get(column);
-            MaterializedColumnMeta foundMetaColumn = null;
+            Column foundMetaColumn = null;
             if (val instanceof CallOperator) {
                 CallOperator callOp = (CallOperator) val;
 
-                for (MaterializedColumnMeta meta : materializedColumns) {
-                    if (matches(meta.getDefineExpr(), callOp)) {
-                        newScanColumnRefScan.put(scanOperator.getColumnMetaToColRefMap().get(meta.getColumn()), meta.getColumn());
+                for (Column col : materializedColumns) {
+                    if (matches(col.materializedColumnExpr(), callOp)) {
+                        newScanColumnRefScan.put(scanOperator.getColumnMetaToColRefMap().get(col), col);
                         hasMaterializedColumns = true;
-                        foundMetaColumn = meta;
+                        foundMetaColumn = col;
                         break;
 
                     }
@@ -134,7 +133,7 @@ public class MaterializedColumnRule extends Rule {
 
             }
             if (foundMetaColumn != null) {
-                newProjectColumnRefMap.put(column, scanOperator.getColumnMetaToColRefMap().get(foundMetaColumn.getColumn()));
+                newProjectColumnRefMap.put(column, scanOperator.getColumnMetaToColRefMap().get(foundMetaColumn));
             } else {
                 newProjectColumnRefMap.put(column, val);
             }

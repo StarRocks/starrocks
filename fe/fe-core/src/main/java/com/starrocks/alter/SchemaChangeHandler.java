@@ -155,9 +155,9 @@ public class SchemaChangeHandler extends AlterHandler {
 
         if (alterClause instanceof AddMaterializedColumnClause) {
             AddMaterializedColumnClause clause = (AddMaterializedColumnClause) alterClause;
-            //Expression to sql.
-            String sql = clause.getExpression().toSql();
-            olapTable.setMaterializedColumnMeta(column, clause.getExpression().toSql(), clause.getExpression());
+            column.setIsMaterializedColumn();
+            column.setMaterializedColumnExpr(clause.getExpression());
+            olapTable.addMaterializedColumn(column);
         }
     }
 

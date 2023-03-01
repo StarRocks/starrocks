@@ -105,9 +105,9 @@ public class Column implements Writable {
     // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be analyzed.
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
-
+    @SerializedName(value = "isMaterializedColumn")
     private boolean isMaterializedColumn;
-
+    @SerializedName(value = "materializedColumnExpr")
     private Expr materializedColumnExpr;
 
     public Column() {
