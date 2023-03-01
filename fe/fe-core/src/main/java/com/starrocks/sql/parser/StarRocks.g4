@@ -623,6 +623,7 @@ alterClause
     | columnRenameClause
     | reorderColumnsClause
     | rollupRenameClause
+    | addMaterializedColumnClause
 
     //Alter partition clause
     | addPartitionClause
@@ -706,6 +707,10 @@ modifyTablePropertiesClause
 
 addColumnClause
     : ADD COLUMN columnDesc (FIRST | AFTER identifier)? ((TO | IN) rollupName=identifier)? properties?
+    ;
+
+addMaterializedColumnClause
+    : ADD MATERIALIZED COLUMN columnDesc '(' expression ')'
     ;
 
 addColumnsClause

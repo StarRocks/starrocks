@@ -101,6 +101,7 @@ import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AddFollowerClause;
+import com.starrocks.sql.ast.AddMaterializedColumnClause;
 import com.starrocks.sql.ast.AddObserverClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
@@ -2975,6 +2976,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             rollupName = getIdentifierName(context.rollupName);
         }
         return new AddColumnClause(columnDef, columnPosition, rollupName, getProperties(context.properties()));
+    }
+
+    @Override
+    public ParseNode visitAddMaterializedColumnClause(StarRocksParser.AddMaterializedColumnClauseContext context) {
+        ColumnDef columnDef = getColumnDef(context.columnDesc());
+        String columnName = ((Identifier) visit(context.columnDesc().identifier())).getValue();
+        Expr expr = (Expr) visit(context.expression());
+        Map<String, String> properties = new HashMap<>();
+        return new AddMaterializedColumnClause(columnDef, columnName, expr, properties);
     }
 
     @Override

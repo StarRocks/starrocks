@@ -21,6 +21,7 @@ import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
@@ -155,6 +156,9 @@ public class InsertPlanner {
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
             long tableId = insertStmt.getTargetTable().getId();
             for (Column column : insertStmt.getTargetTable().getFullSchema()) {
+                if (column.isMaterializedColumn()) {
+                    LOG.info("has MaterializedColumn");
+                }
                 SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(column.getType());
@@ -348,6 +352,36 @@ public class InsertPlanner {
                 columnRefMap.put(columnRefOperator, scalarOperator);
                 continue;
             }
+
+            if (targetColumn.isMaterializedColumn()) {
+                List<Expr> slots = targetColumn.getMaterializedRefColumn();
+                ExpressionMapping expressionMapping =
+                        new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
+                                Lists.newArrayList());
+
+                for (Expr expr : slots) {
+                    SlotRef slot = (SlotRef) expr;
+                    String originName = slot.getColumnName();
+
+                    Optional<Column> optOriginColumn = fullSchema.stream()
+                            .filter(c -> c.nameEquals(originName, false)).findFirst();
+                    Column originColumn = optOriginColumn.get();
+                    ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
+
+                    expressionMapping.put(slot, originColRefOp);
+                }
+
+                ScalarOperator scalarOperator =
+                        SqlToScalarOperatorTranslator.translate(targetColumn.materializedColumnExpr(), expressionMapping,
+                                columnRefFactory);
+
+                ColumnRefOperator columnRefOperator =
+                        columnRefFactory.create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+                outputColumns.add(columnRefOperator);
+                columnRefMap.put(columnRefOperator, scalarOperator);
+                continue;
+            }
+            
 
             // columnIdx >= outputColumns.size() mean this is a new add schema change column
             if (columnIdx >= outputColumns.size()) {

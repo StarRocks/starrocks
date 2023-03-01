@@ -284,6 +284,7 @@ public class Optimizer {
             }
         }
 
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.COLUMN_VIEW_REWRITE);
         tree = new MaterializedViewRule().transform(tree, context).get(0);
         deriveLogicalProperty(tree);
 

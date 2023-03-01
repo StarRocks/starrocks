@@ -97,7 +97,6 @@ public abstract class AlterHandler extends LeaderDaemon {
 
     public void addAlterJobV2(AlterJobV2 alterJob) {
         this.alterJobsV2.put(alterJob.getJobId(), alterJob);
-        LOG.info("add {} job {}", alterJob.getType(), alterJob.getJobId());
     }
 
     public List<AlterJobV2> getUnfinishedAlterJobV2ByTableId(long tblId) {

@@ -106,6 +106,10 @@ public class Column implements Writable {
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
 
+    private boolean isMaterializedColumn;
+
+    private Expr materializedColumnExpr;
+
     public Column() {
         this.name = "";
         this.type = Type.NULL;
@@ -166,6 +170,7 @@ public class Column implements Writable {
         }
         this.comment = comment;
         this.stats = new ColumnStats();
+        this.isMaterializedColumn = false;
     }
 
     public Column(Column column) {
@@ -300,6 +305,14 @@ public class Column implements Writable {
         return comment;
     }
 
+    public void setIsMaterializedColumn() {
+        this.isMaterializedColumn = true;
+    }
+
+    public boolean isMaterializedColumn() {
+        return isMaterializedColumn;
+    }
+
     public int getOlapColumnIndexSize() {
         PrimitiveType type = this.getPrimitiveType();
         if (type == PrimitiveType.CHAR) {
@@ -423,6 +436,14 @@ public class Column implements Writable {
         defineExpr = expr;
     }
 
+    public Expr materializedColumnExpr() {
+        return materializedColumnExpr;
+    }
+
+    public void setMaterializedColumnExpr(Expr expr) {
+        materializedColumnExpr = expr;
+    }
+
     public SlotRef getRefColumn() {
         List<Expr> slots = new ArrayList<>();
         if (defineExpr == null) {
@@ -431,6 +452,16 @@ public class Column implements Writable {
             defineExpr.collect(SlotRef.class, slots);
             Preconditions.checkArgument(slots.size() == 1);
             return (SlotRef) slots.get(0);
+        }
+    }
+
+    public List<Expr> getMaterializedRefColumn() {
+        List<Expr> slots = new ArrayList<>();
+        if (materializedColumnExpr == null) {
+            return null;
+        } else {
+            materializedColumnExpr.collect(SlotRef.class, slots);
+            return slots;
         }
     }
 

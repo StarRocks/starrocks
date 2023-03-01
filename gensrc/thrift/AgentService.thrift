@@ -117,6 +117,7 @@ struct TAlterTabletReqV2 {
     7: optional list<TAlterMaterializedViewParam> materialized_view_params
     8: optional TTabletType tablet_type
     9: optional i64 txn_id
+    10: optional map<string, Exprs.TExpr> mc_exprs
 }
 
 struct TAlterMaterializedViewParam {

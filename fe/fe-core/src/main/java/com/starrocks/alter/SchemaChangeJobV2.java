@@ -43,6 +43,13 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.google.common.collect.Table.Cell;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ExprSubstitutionMap;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
@@ -91,6 +98,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -470,10 +478,44 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         db.readLock();
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
+            LOG.info("full schema size: {}", tbl.getFullSchema().size());
             if (tbl == null) {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
+
+            Map<String, Expr> mcExprs = new HashMap<>();
+            Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), null);
+            TupleDescriptor tupleDesc = analyzer.getDescTbl().createTupleDescriptor();
+            Map<String, SlotDescriptor> slotDescByName = new HashMap<>();
+            if (tbl.hasMaterializedColumn()) {
+                for (Column column : tbl.getMaterializedColumns()) {
+                    Expr expr = column.materializedColumnExpr();
+                    ExprSubstitutionMap smap = new ExprSubstitutionMap();
+                    List<SlotRef> slots = Lists.newArrayList();
+                    expr.collect(SlotRef.class, slots);
+                    for (SlotRef slot : slots) {
+                        SlotDescriptor slotDesc = analyzer.getDescTbl().addSlotDescriptor(tupleDesc);
+                        slotDesc.setType(tbl.getColumn(slot.getColumnName()).getType());
+                        slotDesc.setColumn(new Column(slot.getColumnName(), tbl.getColumn(slot.getColumnName()).getType()));
+                        slotDesc.setIsMaterialized(true);
+                        slotDescByName.put(slot.getColumnName(), slotDesc);
+                        
+                        smap.getLhs().add(slot);
+                        SlotRef slotRef = new SlotRef(slotDesc);
+                        slotRef.setColumnName(slot.getColumnName());
+                        smap.getRhs().add(slotRef);
+                    }
+
+                    Expr cloneExpr = expr.clone(smap);
+
+                    cloneExpr = Expr.analyzeAndCastFold(cloneExpr);
+
+                    Expr mcExpr = new CastExpr(column.getType(), cloneExpr);
+
+                    mcExprs.put(column.getName(), mcExpr);
+                }
+            }
 
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 Partition partition = tbl.getPartition(partitionId);
@@ -498,7 +540,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             AlterReplicaTask rollupTask = AlterReplicaTask.alterLocalTablet(
                                     shadowReplica.getBackendId(), dbId, tableId, partitionId,
                                     shadowIdxId, shadowTabletId, originTabletId, shadowReplica.getId(),
-                                    shadowSchemaHash, originSchemaHash, visibleVersion, jobId);
+                                    shadowSchemaHash, originSchemaHash, visibleVersion, jobId, mcExprs.size() == 0 ?
+                                    null : mcExprs);
                             schemaChangeBatchTask.addTask(rollupTask);
                         }
                     }

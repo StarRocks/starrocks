@@ -14,6 +14,7 @@
 
 #include "storage/schema_change_utils.h"
 
+#include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
@@ -29,6 +30,7 @@ ChunkChanger::ChunkChanger(const TabletSchema& tablet_schema) {
 
 ChunkChanger::~ChunkChanger() {
     _schema_mapping.clear();
+    Expr::close(_mc_exprs, nullptr);
 }
 
 ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
@@ -438,6 +440,32 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
         }
     }
     return true;
+}
+
+Status ChunkChanger::fill_materialized_columns(ChunkPtr& new_chunk) {
+    if (_mc_exprs.size() == 0) {
+        return Status::OK();
+    }
+
+    // init for expression evaluation only
+    for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
+        new_chunk->set_slot_id_to_index(i, i);
+    }
+
+    size_t i = new_chunk->num_columns() - 1;
+    for (auto it : _mc_exprs) {
+        ASSIGN_OR_RETURN(ColumnPtr tmp, it->evaluate(new_chunk.get()));
+        ColumnPtr output_column = nullptr;
+        // Unpack normal const column
+        output_column = ColumnHelper::unpack_and_duplicate_const_column(new_chunk->num_rows(), tmp);
+        DCHECK(output_column != nullptr);
+        new_chunk->get_column_by_index(i).swap(output_column);
+    }
+
+    // reset the slot-index map for compatibility
+    new_chunk->reset_slot_id_to_index();
+
+    return Status::OK();
 }
 
 #undef CONVERT_FROM_TYPE

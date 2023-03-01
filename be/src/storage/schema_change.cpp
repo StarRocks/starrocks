@@ -40,6 +40,8 @@
 #include <vector>
 
 #include "exec/sorting/sorting.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -424,6 +426,11 @@ Status SchemaChangeDirectly::process_v2(TabletReader* reader, RowsetWriter* new_
             return Status::InternalError(err_msg);
         }
 
+        if (auto st = _chunk_changer->fill_materialized_columns(new_chunk); !st.ok()) {
+            LOG(WARNING) << "fill materialized columns failed: " << st;
+            return st;
+        }
+
         ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
 
         if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
@@ -445,6 +452,10 @@ Status SchemaChangeDirectly::process_v2(TabletReader* reader, RowsetWriter* new_
                                                       base_tablet->tablet_id(), new_tablet->tablet_id());
             LOG(WARNING) << err_msg;
             return Status::InternalError(err_msg);
+        }
+        if (auto st = _chunk_changer->fill_materialized_columns(new_chunk); !st.ok()) {
+            LOG(WARNING) << "fill materialized columns failed: " << st;
+            return st;
         }
         if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
             LOG(WARNING) << "rowset writer add chunk failed: " << st;
@@ -766,6 +777,20 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
                                                      sc_params.chunk_changer.get(), sc_params.materialized_params_map,
                                                      !base_tablet->delete_predicates().empty(), &sc_params.sc_sorting,
                                                      &sc_params.sc_directly);
+
+    if (request.mc_exprs.size() != 0) {
+        sc_params.sc_directly = true;
+
+        for (auto it : request.mc_exprs) {
+            ExprContext* ctx = nullptr;
+            RETURN_IF_ERROR(Expr::create_expr_tree(sc_params.chunk_changer->get_object_pool(), it.second, &ctx, nullptr));
+            RETURN_IF_ERROR(ctx->prepare(nullptr));
+            RETURN_IF_ERROR(ctx->open(nullptr));
+
+            sc_params.chunk_changer->get_mc_exprs()->emplace_back(ctx);
+        }
+    }
+    
     if (!status.ok()) {
         LOG(WARNING) << "failed to parse the request. res=" << status.get_error_msg();
         return status;

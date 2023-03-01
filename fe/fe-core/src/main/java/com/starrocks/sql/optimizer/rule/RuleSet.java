@@ -53,6 +53,7 @@ import com.starrocks.sql.optimizer.rule.implementation.WindowImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.mv.MaterializedColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
@@ -375,6 +376,8 @@ public class RuleSet {
                 OnlyJoinRule.getInstance(),
                 AggregateJoinRule.getInstance()
         ));
+
+        REWRITE_RULES.put(RuleSetType.COLUMN_VIEW_REWRITE, ImmutableList.of(new MaterializedColumnRule()));
     }
 
     public RuleSet() {

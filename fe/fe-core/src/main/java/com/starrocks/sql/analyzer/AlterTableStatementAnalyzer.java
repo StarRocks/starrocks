@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnPosition;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.DataProperty;
@@ -38,6 +39,7 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddMaterializedColumnClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -59,6 +61,7 @@ import edu.umd.cs.findbugs.annotations.CheckForNull;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
@@ -76,6 +79,7 @@ public class AlterTableStatementAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
         }
         AlterTableClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzerVisitor();
+        alterTableClauseAnalyzerVisitor.setTable(table);
         for (AlterClause alterClause : alterClauseList) {
             alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
         }
@@ -83,6 +87,15 @@ public class AlterTableStatementAnalyzer {
 
     static class AlterTableClauseAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
+        private Table table;
+
+        public void setTable(Table table) {
+            this.table = table;
+        }
+
+        public Table getTable() {
+            return table;
+        }
         public void analyze(AlterClause statement, ConnectContext session) {
             visit(statement, session);
         }
@@ -259,6 +272,33 @@ public class AlterTableStatementAnalyzer {
             clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
             clause.setColumn(columnDef.toColumn());
+            return null;
+        }
+
+        @Override
+        public Void visitAddMaterializedColumnClause(AddMaterializedColumnClause clause, ConnectContext context) {
+            ColumnDef columnDef = clause.getColumnDef();
+            if (columnDef == null) {
+                throw new SemanticException("No column definition in add column clause.");
+            }
+            try {
+                columnDef.analyze(true);
+            } catch (AnalysisException e) {
+                throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
+            }
+
+            clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
+
+            clause.setColumn(columnDef.toColumn());
+
+            Expr expr = clause.getExpression();
+            TableName tableName = new TableName(context.getDatabase(), table.getName());
+
+            ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                    new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
+                                        tableName, null))
+                            .collect(Collectors.toList()))), context);
+
             return null;
         }
 

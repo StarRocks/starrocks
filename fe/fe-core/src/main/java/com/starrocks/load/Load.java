@@ -204,6 +204,15 @@ public class Load {
         return shadowColumnDescs;
     }
 
+    public static List<ImportColumnDesc> getMaterializedShadowColumnDesc(OlapTable tbl, Map<String, Expr> columnExprMap) {
+        List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
+        for (Column column : tbl.getMaterializedColumns()) {
+            ImportColumnDesc importColumnDesc = new ImportColumnDesc(column.getName(), column.materializedColumnExpr());
+            shadowColumnDescs.add(importColumnDesc);
+        }
+        return shadowColumnDescs;
+    }
+
     public static boolean tableSupportOpColumn(Table tbl) {
         return tbl instanceof OlapTable && ((OlapTable) tbl).getKeysType() == KeysType.PRIMARY_KEYS;
     }
@@ -374,6 +383,7 @@ public class Load {
             }
         }
 
+        copiedColumnExprs.addAll(getMaterializedShadowColumnDesc((OlapTable) tbl, columnExprMap));
         // get shadow column desc when table schema change
         copiedColumnExprs.addAll(getSchemaChangeShadowColumnDesc(tbl, columnExprMap));
 
@@ -582,6 +592,9 @@ public class Load {
     private static void replaceSrcSlotDescType(Table tbl, Map<String, Expr> exprsByName, TupleDescriptor srcTupleDesc,
                                                Set<String> excludedColumns) throws UserException {
         for (Map.Entry<String, Expr> entry : exprsByName.entrySet()) {
+            if (tbl.getColumn(entry.getKey()).isMaterializedColumn()) {
+                continue;
+            }
             // if expr is a simple SlotRef such as set(k1=k)
             // we can use k1's type for k, no need to convert to varchar
             if (entry.getValue() instanceof SlotRef && !entry.getKey().equals(Load.LOAD_OP_COLUMN)) {

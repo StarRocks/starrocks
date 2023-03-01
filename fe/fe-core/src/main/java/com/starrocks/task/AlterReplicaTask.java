@@ -51,11 +51,13 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAlterMaterializedViewParam;
 import com.starrocks.thrift.TAlterTabletReqV2;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -78,20 +80,21 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private final TTabletType tabletType;
     private final long txnId;
     private final Map<String, Expr> defineExprs;
+    private final Map<String, Expr> mcExprs;
 
     public static AlterReplicaTask alterLocalTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
                                                     long rollupTabletId, long baseTabletId, long newReplicaId, int newSchemaHash,
-                                                    int baseSchemaHash, long version, long jobId) {
+                                                    int baseSchemaHash, long version, long jobId, Map<String, Expr> mcExprs) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                null, TTabletType.TABLET_TYPE_DISK, 0);
+                null, TTabletType.TABLET_TYPE_DISK, 0, mcExprs);
     }
 
     public static AlterReplicaTask alterLakeTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
                                                    long rollupTabletId, long baseTabletId, long version, long jobId, long txnId) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                null, TTabletType.TABLET_TYPE_LAKE, txnId);
+                null, TTabletType.TABLET_TYPE_LAKE, txnId, null);
     }
 
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
@@ -100,13 +103,13 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                                                      long jobId, Map<String, Expr> defineExprs) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
-                defineExprs, TTabletType.TABLET_TYPE_DISK, 0);
+                defineExprs, TTabletType.TABLET_TYPE_DISK, 0, null);
     }
 
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
                              long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
                              long jobId, AlterJobV2.JobType jobType, Map<String, Expr> defineExprs, TTabletType tabletType,
-                             long txnId) {
+                             long txnId, Map<String, Expr> mcExprs) {
         super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
 
         this.baseTabletId = baseTabletId;
@@ -123,6 +126,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
 
         this.tabletType = tabletType;
         this.txnId = txnId;
+
+        this.mcExprs = mcExprs;
     }
 
     public long getBaseTabletId() {
@@ -166,6 +171,13 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 req.addToMaterialized_view_params(mvParam);
             }
         }
+        Map<String, TExpr> copiedMcExprs = new HashMap<>();
+        if (mcExprs != null) {
+            for (Map.Entry<String, Expr> entry : mcExprs.entrySet()) {
+                copiedMcExprs.put(entry.getKey(), entry.getValue().treeToThrift());
+            }
+        }
+        req.setMc_exprs(copiedMcExprs);
         req.setTablet_type(tabletType);
         req.setTxn_id(txnId);
         return req;

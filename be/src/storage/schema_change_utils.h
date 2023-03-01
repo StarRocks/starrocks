@@ -15,6 +15,7 @@
 #pragma once
 
 #include "common/statusor.h"
+#include "exprs/expr.h"
 #include "storage/column_mapping.h"
 #include "storage/convert_helper.h"
 #include "storage/tablet_meta.h"
@@ -40,11 +41,17 @@ public:
 
     std::vector<ColumnId>* get_mutable_selected_column_indexs() { return &_selected_column_indexs; }
 
+    ObjectPool* get_object_pool() { return &_obj_pool; }
+
+    std::vector<ExprContext*>* get_mc_exprs() { return &_mc_exprs; }
+
     bool change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const TabletMetaSharedPtr& base_tablet_meta,
                       const TabletMetaSharedPtr& new_tablet_meta, MemPool* mem_pool);
 
     bool change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const VectorizedSchema& base_schema,
                          const VectorizedSchema& new_schema, MemPool* mem_pool);
+
+    Status fill_materialized_columns(ChunkPtr& new_chunk);
 
 private:
     const MaterializeTypeConverter* get_materialize_type_converter(const std::string& materialized_function,
@@ -54,6 +61,9 @@ private:
     SchemaMapping _schema_mapping;
 
     std::vector<ColumnId> _selected_column_indexs;
+
+    ObjectPool _obj_pool;
+    std::vector<ExprContext*> _mc_exprs;
 
     DISALLOW_COPY(ChunkChanger);
 };

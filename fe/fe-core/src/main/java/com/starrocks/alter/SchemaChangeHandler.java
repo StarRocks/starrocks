@@ -84,6 +84,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddMaterializedColumnClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelStmt;
@@ -151,6 +152,13 @@ public class SchemaChangeHandler extends AlterHandler {
         Set<String> newColNameSet = Sets.newHashSet(column.getName());
         addColumnInternal(olapTable, column, columnPos, targetIndexId, baseIndexId,
                 indexSchemaMap, newColNameSet);
+
+        if (alterClause instanceof AddMaterializedColumnClause) {
+            AddMaterializedColumnClause clause = (AddMaterializedColumnClause) alterClause;
+            //Expression to sql.
+            String sql = clause.getExpression().toSql();
+            olapTable.setMaterializedColumnMeta(column, clause.getExpression().toSql(), clause.getExpression());
+        }
     }
 
     private void processAddColumns(AddColumnsClause alterClause, OlapTable olapTable,
