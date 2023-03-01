@@ -69,7 +69,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 }
 
                 this.rewritePlan = getFragmentPlan(query);
-                System.out.println(rewritePlan);
             } catch (Exception e) {
                 LOG.warn("test rewwrite failed:", e);
                 this.exception = e;
@@ -178,7 +177,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
             throw new Exception("create materialized view syntax error.");
         }
         String tableName = matcher.group(1);
-        System.out.println(tableName);
         starRocksAssert.withMaterializedView(sql);
         refreshMaterializedView(db, tableName);
     }
