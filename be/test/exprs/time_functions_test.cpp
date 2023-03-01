@@ -1682,6 +1682,37 @@ TEST_F(TimeFunctionsTest, utctimestampTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, utctimeTest) {
+    // without RuntimeState
+    {
+        ColumnPtr utc_timestamp = TimeFunctions::utc_timestamp(_utils->get_fn_ctx(), Columns()).value();
+        ColumnPtr ptr = TimeFunctions::utc_time(_utils->get_fn_ctx(), Columns()).value();
+        ASSERT_TRUE(ptr->is_constant());
+        ASSERT_FALSE(ptr->is_numeric());
+        TimestampValue ts = ColumnHelper::as_column<ConstColumn>(utc_timestamp)->get(0).get_timestamp();
+        auto v = ColumnHelper::as_column<ConstColumn>(ptr);
+
+        int h, m, s, us;
+        ts.to_time(&h, &m, &s, &us);
+        ASSERT_EQ(h * 3600 + m * 60 + s, v->get(0).get_double());
+    }
+    // with RuntimeState
+    {
+        TQueryGlobals globals;
+        globals.__set_now_string("2019-08-06 01:38:57");
+        globals.__set_timestamp_ms(1565080737805);
+        globals.__set_time_zone("America/Los_Angeles");
+        starrocks::RuntimeState state(globals);
+        starrocks::FunctionUtils futils(&state);
+        FunctionContext* ctx = futils.get_fn_ctx();
+        ColumnPtr ptr = TimeFunctions::utc_time(ctx, Columns()).value();
+        ASSERT_TRUE(ptr->is_constant());
+        ASSERT_FALSE(ptr->is_numeric());
+        auto v = ColumnHelper::as_column<ConstColumn>(ptr);
+        ASSERT_EQ(8 * 3600 + 38 * 60 + 57, v->get(0).get_double());
+    }
+}
+
 TEST_F(TimeFunctionsTest, hourTest) {
     auto tc = TimestampColumn::create();
     tc->append(TimestampValue::create(2020, 1, 1, 21, 1, 1));
