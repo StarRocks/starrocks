@@ -22,6 +22,38 @@
 
 namespace starrocks {
 
+struct IsSpace: std::unary_function<int, bool> {
+    bool operator()(int ch) const {
+        return (ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t');
+    }
+};
+
+typedef std::unordered_map<std::string, std::string> HashMap;
+
+class JindoSdkConfig {
+public:
+    JindoSdkConfig() = default;
+    virtual ~JindoSdkConfig() = default;
+
+    int loadConfig(const std::string& config);
+
+    HashMap& get_configs();
+
+private:
+    // trim from start
+    std::string lefttrim(const std::string& s);
+
+    // trim from end
+    std::string righttrim(const std::string& s);
+
+    // trim from both ends
+    std::string trim(const std::string &s);
+
+private:
+    std::vector<std::string> _text;
+    HashMap _configs;
+};
+
 std::unique_ptr<FileSystem> new_fs_jindo(const FSOptions& options);
 
 class JindoClientFactory {
@@ -45,8 +77,6 @@ public:
 private:
     JindoClientFactory();
 
-    static constexpr const char* OSS_PROVIDER_KEY = "fs.oss.provider.endpoint";
-    static constexpr const char* OSS_PROVIDER_VALUE = "ECS_ROLE";
     static constexpr const char* OSS_ENDPOINT_KEY = "fs.oss.endpoint";
     static constexpr int MAX_CLIENTS_ITEMS = 8;
 

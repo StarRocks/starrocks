@@ -15,9 +15,11 @@
 #include "fs/fs_jindo.h"
 
 #include <fmt/format.h>
+#include <fstream>
 #include <pwd.h>
 
 #include <utility>
+#include <filesystem>
 
 #include "common/config.h"
 #include "common/s3_uri.h"
@@ -30,6 +32,54 @@
 using namespace fmt::literals;
 
 namespace starrocks {
+
+int JindoSdkConfig::loadConfig(const std::string& config) {
+    std::ifstream infile { config };
+    std::string line, seg;
+    while (std::getline(infile, line)) {
+        _text.push_back(line);
+
+        line = trim(line);
+        if (line.empty()) {
+            // is empty
+        } else if (line[0] == '#' || line[0] == ';') {
+            // is comment
+        } else if (line.size() >= 3
+                   && line.front() == '[' && line.back() == ']') {
+            // is section
+        } else {
+            auto pos = line.find_first_of('=');
+            std::string key = trim(line.substr(0, pos));
+            std::string value = trim(line.substr(pos + 1));
+            _configs[key] = pos == std::string::npos ? std::string():value;
+        }
+    }
+    return 0;
+}
+
+HashMap& JindoSdkConfig::get_configs() {
+    return _configs;
+}
+
+// trim from start
+std::string JindoSdkConfig::lefttrim(const std::string& s) {
+    std::string r = s;
+    r.erase(r.begin(), std::find_if(
+            r.begin(), r.end(), std::not1(IsSpace())));
+    return r;
+}
+
+// trim from end
+std::string JindoSdkConfig::righttrim(const std::string& s) {
+    std::string r = s;
+    r.erase(std::find_if(r.rbegin(), r.rend(), std::not1(IsSpace())).base(), r.end());
+    return r;
+}
+
+// trim from both ends
+std::string JindoSdkConfig::trim(const std::string &s) {
+    return righttrim(lefttrim(s));
+}
 
 bool JindoClientFactory::option_equals(const JdoOptions_t& left, const JdoOptions_t& right) {
     std::string l(jdo_getOption(left, OSS_ENDPOINT_KEY, "x"));
@@ -64,11 +114,25 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri) {
     std::lock_guard l(_lock);
 
     auto jdo_options = jdo_createOptions();
-    jdo_setOption(jdo_options, OSS_PROVIDER_KEY, OSS_PROVIDER_VALUE);
+
+    std::string jindosdk_conf_path = getenv("STARROCKS_HOME");
+    jindosdk_conf_path.append("/conf/jindosdk.cfg");
+
+    if (!std::filesystem::exists(jindosdk_conf_path)) {
+        std::string msg = "File not found: " + jindosdk_conf_path;
+        return Status::IOError(msg);
+    }
+    std::shared_ptr<JindoSdkConfig> jindo_sdk_config;
+    jindo_sdk_config = std::make_shared<JindoSdkConfig>();
+    jindo_sdk_config->loadConfig(jindosdk_conf_path);
+
+    auto& configMap = jindo_sdk_config->get_configs();
+    for (auto& kv : configMap) {
+        jdo_setOption(jdo_options, kv.first.c_str(), kv.second.c_str());
+    }
+
     if (!uri.endpoint().empty()) {
         jdo_setOption(jdo_options, OSS_ENDPOINT_KEY, uri.endpoint().c_str());
-    } else {
-        jdo_setOption(jdo_options, OSS_ENDPOINT_KEY, config::object_storage_endpoint.c_str());
     }
 
     std::string uri_prefix = uri.scheme() + "://" + uri.bucket();
