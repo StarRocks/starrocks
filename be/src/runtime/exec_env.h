@@ -106,6 +106,7 @@ class ExecEnv {
 public:
     // Initial exec environment. must call this to init all
     static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths);
+    static bool is_init();
     static void destroy(ExecEnv* exec_env);
 
     /// Returns the first created exec env instance. In a normal starrocks, this is
@@ -240,6 +241,7 @@ private:
     Status _init_storage_page_cache();
 
 private:
+    static bool _is_init;
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
