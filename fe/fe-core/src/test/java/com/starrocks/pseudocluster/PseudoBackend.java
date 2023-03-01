@@ -11,6 +11,8 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.proto.ExecuteCommandRequestPB;
+import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
@@ -838,7 +840,6 @@ public class PseudoBackend {
             return CompletableFuture.completedFuture(result);
         }
 
-
         @Override
         public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
                 PExecBatchPlanFragmentsRequest request) {
@@ -935,6 +936,11 @@ public class PseudoBackend {
         @Override
         public Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request) {
             return null;
+        }
+
+        @Override
+        public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
+            throw new org.apache.commons.lang3.NotImplementedException("TODO");
         }
     }
 

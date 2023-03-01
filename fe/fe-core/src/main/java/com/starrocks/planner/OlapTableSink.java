@@ -65,8 +65,6 @@ import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TNodeInfo;
-import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TOlapTableIndexSchema;
 import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTableLocationParam;
@@ -182,7 +180,7 @@ public class OlapTableSink extends DataSink {
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable));
         tSink.setPartition(createPartition(tSink.getDb_id(), dstTable));
         tSink.setLocation(createLocation(dstTable));
-        tSink.setNodes_info(createStarrocksNodesInfo());
+        tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(clusterId));
     }
 
     @Override
@@ -326,18 +324,18 @@ public class OlapTableSink extends DataSink {
         return partitionParam;
     }
 
-    private List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values){
+    private List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values) {
         return values.stream()
                 .map(value -> value.treeToThrift().getNodes().get(0))
                 .collect(Collectors.toList());
     }
 
     private void setListPartitionValues(ListPartitionInfo listPartitionInfo, Partition partition,
-                                        TOlapTablePartition tPartition){
+                                        TOlapTablePartition tPartition) {
         List<List<TExprNode>> inKeysExprNodes = new ArrayList<>();
 
         List<List<LiteralExpr>> multiValues = listPartitionInfo.getMultiLiteralExprValues().get(partition.getId());
-        if(multiValues != null && !multiValues.isEmpty()){
+        if (multiValues != null && !multiValues.isEmpty()) {
             inKeysExprNodes = multiValues.stream()
                     .map(this::literalExprsToTExprNodes)
                     .collect(Collectors.toList());
@@ -345,7 +343,7 @@ public class OlapTableSink extends DataSink {
         }
 
         List<LiteralExpr> values = listPartitionInfo.getLiteralExprValues().get(partition.getId());
-        if (values != null && !values.isEmpty()){
+        if (values != null && !values.isEmpty()) {
             inKeysExprNodes = values.stream()
                     .map(value -> this.literalExprsToTExprNodes(Lists.newArrayList(value)))
                     .collect(Collectors.toList());
@@ -357,7 +355,7 @@ public class OlapTableSink extends DataSink {
     }
 
     private void setRangeKeys(RangePartitionInfo rangePartitionInfo, Partition partition,
-                              TOlapTablePartition tPartition){
+                              TOlapTablePartition tPartition) {
         int partColNum = rangePartitionInfo.getPartitionColumns().size();
         Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
         // set start keys
@@ -376,7 +374,7 @@ public class OlapTableSink extends DataSink {
         }
     }
 
-    private void setIndexAndBucketNums(Partition partition, TOlapTablePartition tPartition){
+    private void setIndexAndBucketNums(Partition partition, TOlapTablePartition tPartition) {
         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
             tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
                     index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
@@ -385,8 +383,8 @@ public class OlapTableSink extends DataSink {
     }
 
     private DistributionInfo setDistributedColumns(TOlapTablePartitionParam partitionParam,
-                                       DistributionInfo selectedDistInfo,
-                                       Partition partition,OlapTable table) throws UserException{
+                                                   DistributionInfo selectedDistInfo,
+                                                   Partition partition, OlapTable table) throws UserException {
         DistributionInfo distInfo = partition.getDistributionInfo();
         if (selectedDistInfo == null) {
             partitionParam.setDistributed_columns(getDistColumns(distInfo, table));
@@ -440,7 +438,7 @@ public class OlapTableSink extends DataSink {
                                 }
                                 if (lowUsageIndex != -1
                                         && bePrimaryMap.getOrDefault(replica.getBackendId(), (long) 0) < bePrimaryMap
-                                                .getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
+                                        .getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
                                         && !replica.getLastWriteFail()
                                         && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
                                     lowUsageIndex = i;
@@ -477,16 +475,6 @@ public class OlapTableSink extends DataSink {
             throw new DdlException(st.getErrorMsg());
         }
         return locationParam;
-    }
-
-    private TNodesInfo createStarrocksNodesInfo() {
-        TNodesInfo nodesInfo = new TNodesInfo();
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
-        for (Long id : systemInfoService.getBackendIds(false)) {
-            Backend backend = systemInfoService.getBackend(id);
-            nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
-        }
-        return nodesInfo;
     }
 
     public boolean canUsePipeLine() {
