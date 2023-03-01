@@ -66,6 +66,11 @@ public class SchemaTable extends Table {
         return SchemaTable.isBeSchemaTable(getName());
     }
 
+    @Override
+    public boolean supportsUpdate() {
+        return name.equals("be_configs");
+    }
+
     protected SchemaTable(long id, String name, TableType type, List<Column> baseSchema) {
         super(id, name, type, baseSchema);
     }
