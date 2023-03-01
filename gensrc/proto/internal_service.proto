@@ -497,12 +497,12 @@ message PMVMaintenanceTaskResult {
 
 message ExecuteCommandRequestPB {
     optional string command = 1;
-    optional string params_json = 2;
+    optional string params = 2;
 };
 
 message ExecuteCommandResultPB {
     optional StatusPB status = 1;
-    optional string result_json = 2;
+    optional string result = 2;
 };
 
 

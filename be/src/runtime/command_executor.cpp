@@ -22,7 +22,9 @@
 
 namespace starrocks {
 
-Status handle_set_config(rapidjson::Document& params) {
+Status handle_set_config(const string& params_str) {
+    rapidjson::Document params;
+    params.Parse(params_str.c_str());
     auto update_config = UpdateConfigAction::instance();
     if (update_config == nullptr) {
         LOG(WARNING) << "write_be_configs_table ignored: UpdateConfigAction is not inited";
@@ -39,10 +41,8 @@ Status handle_set_config(rapidjson::Document& params) {
     return update_config->update_config(name_itr->value.GetString(), value_itr->value.GetString());
 }
 
-Status execute_command(const std::string& command, const std::string& params_json) {
-    rapidjson::Document params;
-    params.Parse(params_json.c_str());
-    LOG(INFO) << "execute command: " << command << " params: " << params_json;
+Status execute_command(const std::string& command, const std::string& params) {
+    LOG(INFO) << "execute command: " << command << " params: " << params;
     if (command == "set_config") {
         return handle_set_config(params);
     }

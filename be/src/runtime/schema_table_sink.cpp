@@ -78,7 +78,7 @@ static Status set_config_remote(const StarRocksNodesInfo& nodes_info, int64_t be
     }
     ExecuteCommandRequestPB request;
     request.set_command("set_config");
-    request.set_params_json(strings::Substitute("{\"name\":\"$0\",\"value\":\"$1\"}", name, value));
+    request.set_params(strings::Substitute("{\"name\":\"$0\",\"value\":\"$1\"}", name, value));
     RefCountClosure<ExecuteCommandResultPB>* closure = new RefCountClosure<ExecuteCommandResultPB>();
     closure->cntl.set_timeout_ms(10000);
     closure->ref();
@@ -97,7 +97,7 @@ static Status set_config_remote(const StarRocksNodesInfo& nodes_info, int64_t be
     Status st = result.status();
     if (!st.ok()) {
         LOG(WARNING) << strings::Substitute("set_config_remote failed be:$0 name:$1 value:$2 ret:$3 st:$4", be_id, name,
-                                            value, result.result_json(), st.to_string());
+                                            value, result.result(), st.to_string());
         return st;
     }
     return Status::OK();

@@ -20,6 +20,6 @@
 
 namespace starrocks {
 
-Status execute_command(const std::string& command, const std::string& params_json);
+Status execute_command(const std::string& command, const std::string& params);
 
 } // namespace starrocks

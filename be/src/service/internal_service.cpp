@@ -913,7 +913,7 @@ void PInternalServiceImplBase<T>::execute_command(google::protobuf::RpcControlle
                                                   const ExecuteCommandRequestPB* request,
                                                   ExecuteCommandResultPB* response, google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
-    Status st = starrocks::execute_command(request->command(), request->params_json());
+    Status st = starrocks::execute_command(request->command(), request->params());
     if (!st.ok()) {
         LOG(WARNING) << "execute_command failed, errmsg=" << st.to_string();
     }
