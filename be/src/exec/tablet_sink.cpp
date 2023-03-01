@@ -1663,11 +1663,6 @@ bool OlapTableSink::is_close_done() {
     return _close_done;
 }
 
-void OlapTableSink::cancel() {
-    Status st = Status::Cancelled("cancel");
-    for_each_index_channel([&st](NodeChannel* ch) { ch->cancel(st); });
-}
-
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
     if (close_status.ok()) {
         SCOPED_TIMER(_profile->total_time_counter());
