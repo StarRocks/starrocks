@@ -259,14 +259,13 @@ CREATE TABLE example_db.example_tbl1 (
     `nationality` varchar(26) NULL COMMENT "国籍", 
     `gender` varchar(26) NULL COMMENT "性别", 
     `price`double NULL COMMENT "支付金额") 
-ENGINE=OLAP 
 PRIMARY KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
 ```
 
 #### 从 Topic 指定分区和起始位点开始消费
 
-如果需要指定待消费分区，例如为 0、1、2、3、4，消费分区对应的起始位点分别为 1000、从分区中有数据的位置开始、分区末尾、Offset 为 2000， 则需要配置参数 `kafka_partitions`、`kafka_offsets`。
+如果需要指定分区，以及各个分区对应的起始位点，则需要配置参数 `kafka_partitions`、`kafka_offsets`。
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl1_ordertest1 ON example_tbl1
@@ -276,7 +275,7 @@ FROM KAFKA
 (
     "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
     "kafka_topic" = "ordertest1",
-    "kafka_partitions" ="0,1,2,3,4",--指定分区
+    "kafka_partitions" ="0,1,2,3",--指定分区
     "kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"--指定起始位点
 );
 ```
@@ -328,7 +327,6 @@ CREATE TABLE example_db.example_tbl2 (
     `nationality` varchar(26) NULL COMMENT "国籍", 
     `price`double NULL COMMENT "支付金额"
 ) 
-ENGINE=OLAP 
 PRIMARY KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
 ```
@@ -459,7 +457,6 @@ CREATE TABLE example_db.example_tbl3 (
     `pay_time` bigint(20) NULL COMMENT "支付时间", 
     `price`double SUM NULL COMMENT "支付金额") 
 AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`) 
-ENGINE=OLAP
 DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
 ```
 
@@ -507,11 +504,11 @@ FROM KAFKA
 CREATE TABLE example_db.example_tbl3 ( 
     `commodity_id` varchar(26) NULL COMMENT "品类ID", 
     `customer_name` varchar(26) NULL COMMENT "顾客姓名", 
-    `country` varchar(26) NULL COMMENT "顾客国籍", 
+    `country` varchar(26) NULL COMMENT "顾客国籍",
+    `pay_time` bigint(20) NULL COMMENT "支付时间",  
     `pay_dt` date NULL COMMENT "支付日期", 
     `price`double SUM NULL COMMENT "支付金额") 
-AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`,`pay_dt`) 
-ENGINE=OLAP
+AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_dt`) 
 DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
 ```
 
@@ -550,8 +547,8 @@ FROM KAFKA
 ```JSON
 {
 "RECORDS":[
-{"commodity_id": "1", "customer_name": "Mark Twain", "country": "US","pay_time": 1589191487,"price": 875}
-{"commodity_id": "2", "customer_name": "Oscar Wilde", "country": "UK","pay_time": 1589191487,"price": 895}
+{"commodity_id": "1", "customer_name": "Mark Twain", "country": "US","pay_time": 1589191487,"price": 875},
+{"commodity_id": "2", "customer_name": "Oscar Wilde", "country": "UK","pay_time": 1589191487,"price": 895},
 {"commodity_id": "3", "customer_name": "Antoine de Saint-Exupéry","country": "France","pay_time": 1589191487,"price": 895}
 ]
 }
@@ -569,7 +566,6 @@ CREATE TABLE example_db.example_tbl3 (
     `pay_time` bigint(20) NULL COMMENT "支付时间", 
     `price`double SUM NULL COMMENT "支付金额") 
 AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`) 
-ENGINE=OLAP
 DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
 ```
 
@@ -581,7 +577,7 @@ DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5;
 CREATE ROUTINE LOAD example_db.example_tbl3_ordertest2 ON example_tbl3
 PROPERTIES
 (
-    "format" ="json"
+    "format" ="json",
     "strip_outer_array" = "true",
     "json_root" = "$.RECORDS"
  )
