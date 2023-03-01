@@ -388,14 +388,14 @@ SWAP WITH table_name;
 
 ### Table
 
-1. Modify the default number of replicas of the table, which is used as the default number of the replicas.
+1. Modify the default number of replicas of the table, which is used as the default number of replicas for newly added partitions.
 
     ```sql
     ALTER TABLE example_db.my_table
     SET ("default.replication_num" = "2");
     ```
 
-2. Modify the actual number of replicas of a single-partition table (single-partition table only).
+2. Modify the actual number of replicas of a single-partition table.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -413,14 +413,14 @@ SWAP WITH table_name;
 
 ### Partition
 
-1. Add partition. Existing partition [MIN, 2013-01-01), add partition [2013-01-01, 2014-01-01), and use default bucket mode.
+1. Add a partition and use the default bucketing mode. The existing partition is [MIN, 2013-01-01). The added partition is [2013-01-01, 2014-01-01).
 
     ```sql
     ALTER TABLE example_db.my_table
     ADD PARTITION p1 VALUES LESS THAN ("2014-01-01");
     ```
 
-2. Add partition and use the new number of buckets.
+2. Add a partition and use the new number of buckets.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -428,7 +428,7 @@ SWAP WITH table_name;
     DISTRIBUTED BY HASH(k1) BUCKETS 20;
     ```
 
-3. Add partition and use the new number of replications.
+3. Add a partition and use the new number of replicas.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -436,35 +436,35 @@ SWAP WITH table_name;
     ("replication_num"="1");
     ```
 
-4. Alter the number of partition replications.
+4. Alter the number of replicas for a partition.
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY PARTITION p1 SET("replication_num"="1");
     ```
 
-5. Batch altering the specified partitions.
+5. Batch alter the `in_memory` property of specified partitions.
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY PARTITION (p1, p2, p4) SET("in_memory"="true");
     ```
 
-6. Batch altering all partitions.
+6. Batch alter the storage medium of all partitions.
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY PARTITION (*) SET("storage_medium"="HDD");
     ```
 
-7. Drop partition.
+7. Drop a partition.
 
     ```sql
     ALTER TABLE example_db.my_table
     DROP PARTITION p1;
     ```
 
-8. Add a partition that specifies upper and lower bounds.
+8. Add a partition that has upper and lower boundaries.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -473,7 +473,7 @@ SWAP WITH table_name;
 
 ### Rollup
 
-1. Create index: example_rollup_index, based on base index(k1,k2,k3,v1,v2). Column-based storage.
+1. Create an index `example_rollup_index` based on the base index (k1,k2,k3,v1,v2). Column-based storage is used.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -481,7 +481,7 @@ SWAP WITH table_name;
     PROPERTIES("storage_type"="column");
     ```
 
-2. Create index: example_rollup_index2, based on example_rollup_index(k1,k3,v1,v2).
+2. Create an index `example_rollup_index2` based on `example_rollup_index(k1,k3,v1,v2)`.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -489,15 +489,15 @@ SWAP WITH table_name;
     FROM example_rollup_index;
     ```
 
-3. Create index: example_rollup_index3, based on base index (k1, k2, k3, v1), and custom rollup timeout time is one hour.
+3. Create an index `example_rollup_index3` based on the base index (k1, k2, k3, v1). The rollup timeout time is set to one hour.
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD ROLLUP example_rollup_index(k1, k3, v1)
+    ADD ROLLUP example_rollup_index3(k1, k3, v1)
     PROPERTIES("storage_type"="column", "timeout" = "3600");
     ```
 
-4. Drop index: example_rollup_index2.
+4. Drop an index `example_rollup_index2`.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -506,7 +506,7 @@ SWAP WITH table_name;
 
 ### Schema Change
 
-1. Add a key column new_col (non-aggregation model) to the col1 of example_rollup_index.
+1. Add a key column `new_col` (non-aggregate column) after the `col1` column of `example_rollup_index`.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -514,7 +514,7 @@ SWAP WITH table_name;
     TO example_rollup_index;
     ```
 
-2. Add a value column new_col (non-aggregation model) to the col1 of example_rollup_index.
+2. Add a value column `new_col` (non-aggregate column) after the `col1` column of `example_rollup_index`.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -522,7 +522,7 @@ SWAP WITH table_name;
     TO example_rollup_index;
     ```
 
-3. Add a key column new_col (aggregation model) to col1 of example_rollup_index.
+3. Add a key column `new_col` (aggregate column) after the `col1` column of `example_rollup_index`.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -530,7 +530,7 @@ SWAP WITH table_name;
     TO example_rollup_index;
     ```
 
-4. Add a value column new_col SUM (aggregation model) to the col1 of example_rollup_index.
+4. Add a value column `new_col SUM` (aggregate column) after the `col1` column of `example_rollup_index`.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -538,7 +538,7 @@ SWAP WITH table_name;
     TO example_rollup_index;
     ```
 
-5. Add multiple columns to the example_rollup_index (aggregation model).
+5. Add multiple columns to `example_rollup_index` (aggregate).
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -546,7 +546,7 @@ SWAP WITH table_name;
     TO example_rollup_index;
     ```
 
-6. Drop a column from example_rollup_index.
+6. Drop a column from `example_rollup_index`.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -554,21 +554,21 @@ SWAP WITH table_name;
     FROM example_rollup_index;
     ```
 
-7. Modify col1 column type of the base index to BIGINT and put it after col2 column.
+7. Modify the column type of col1 of the base index to BIGINT and put it after `col2`.
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY COLUMN col1 BIGINT DEFAULT "1" AFTER col2;
     ```
 
-8. Modify the maximum length of the val1 column of the base index. The original val1 is (val1 VARCHAR(32) REPLACE DEFAULT "abc").
+8. Modify the maximum length of the `val1` column of the base index to 64. The original length is 32.
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY COLUMN val1 VARCHAR(64) REPLACE DEFAULT "abc";
     ```
 
-9. Reorder the columns in example_rollup_index (set the original column order: k1, k2, k3, v1, v2).
+9. Reorder the columns in `example_rollup_index`. The original column order is k1, k2, k3, v1, v2.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -576,7 +576,7 @@ SWAP WITH table_name;
     FROM example_rollup_index;
     ```
 
-10. Perform both operations simultaneously.
+10. Perform two operations (ADD COLUMN and ORDER BY) at one time.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -584,13 +584,14 @@ SWAP WITH table_name;
     ORDER BY (k3,k1,k2,v2,v1) FROM example_rollup_index;
     ```
 
-11. Alter the bloom filter column of the table.
+11. Alter the bloomfilter columns of the table.
 
      ```sql
-     ALTER TABLE example_db.my_table SET ("bloom_filter_columns"="k1,k2,k3");
+     ALTER TABLE example_db.my_table
+     SET ("bloom_filter_columns"="k1,k2,k3");
      ```
 
-     It can also be merged into the above schema change operation (note that the syntax of multiple clauses is slightly different).
+     This operation can also be merged into the above schema change operation (note that the syntax of multiple clauses is slightly different).
 
      ```sql
      ALTER TABLE example_db.my_table
@@ -601,48 +602,59 @@ SWAP WITH table_name;
 12. Alter the Colocate property of the table.
 
      ```sql
-     ALTER TABLE example_db.my_table set ("colocate_with" = "t1");
+     ALTER TABLE example_db.my_table
+     SET ("colocate_with" = "t1");
      ```
 
 13. Alter the bucketing mode of the table from Random Distribution to Hash Distribution.
 
      ```sql
-     ALTER TABLE example_db.my_table set ("distribution_type" = "hash");
+     ALTER TABLE example_db.my_table
+     SET ("distribution_type" = "hash");
      ```
 
-14. Alter the dynamic partition properties of the table (support adding dynamic partition properties to tables).
+14. Alter the dynamic partition property of the table.
 
      ```sql
-     ALTER TABLE example_db.my_table set ("dynamic_partition.enable" = "false");
+     ALTER TABLE example_db.my_table
+     SET ("dynamic_partition.enable" = "false");
      ```
 
-     If you need to add dynamic partition attributes to a table without dynamic partition properties, you need to specify all dynamic partition properties.
+     If you need to add dynamic partition properties to a table with no dynamic partition properties configured, you need to specify all the dynamic partition properties.
 
      ```sql
-     ALTER TABLE example_db.my_table set ("dynamic_partition.enable" = "true", "dynamic_partition.time_unit" = "DAY", "dynamic_partition.end" = "3", "dynamic_partition.prefix" = "p", "dynamic_partition.buckets" = "32");
+     ALTER TABLE example_db.my_table
+     SET (
+         "dynamic_partition.enable" = "true",
+         "dynamic_partition.time_unit" = "DAY",
+         "dynamic_partition.end" = "3",
+         "dynamic_partition.prefix" = "p",
+         "dynamic_partition.buckets" = "32"
+         );
      ```
 
-15. Alter the in_memory property of the table.
+15. Alter the `in_memory` property of the table.
 
     ```sql
-    ALTER TABLE example_db.my_table set ("in_memory" = "true");
+    ALTER TABLE example_db.my_table
+    SET ("in_memory" = "true");
     ```
 
 ### Rename
 
-1. Rename table1 to table2.
+1. Rename `table1` to `table2`.
 
     ```sql
     ALTER TABLE table1 RENAME table2;
     ```
 
-2. Rename rollup index rollup1 of example_table to rollup2.
+2. Rename rollup index `rollup1` of `example_table` to `rollup2`.
 
     ```sql
     ALTER TABLE example_table RENAME ROLLUP rollup1 rollup2;
     ```
 
-3. Rename partition p1 of example_table to p2.
+3. Rename partition `p1` of `example_table` to `p2`.
 
     ```sql
     ALTER TABLE example_table RENAME PARTITION p1 p2;
@@ -650,21 +662,23 @@ SWAP WITH table_name;
 
 ### Index
 
-1. Create bitmap index for column `siteid` on table1.
+1. Create a bitmap index for column `siteid` in `table1`.
 
     ```sql
-    ALTER TABLE table1 ADD INDEX index_name (siteid) [USING BITMAP] COMMENT 'balabala';
+    ALTER TABLE table1
+    ADD INDEX index_1 (siteid) [USING BITMAP] COMMENT 'balabala';
     ```
 
-2. Drop bitmap index of siteid column on table1.
+2. Drop the bitmap index of column `siteid` in `table1`.
 
     ```sql
-    ALTER TABLE table1 DROP INDEX index_name;
+    ALTER TABLE table1
+    DROP INDEX index_1;
     ```
 
 ### Swap
 
-1. Atomic swap between table1 and table2.
+1. Atomic swap between `table1` and `table2`.
 
     ```sql
     ALTER TABLE table1 SWAP WITH table2
