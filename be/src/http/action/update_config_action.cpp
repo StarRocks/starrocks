@@ -61,9 +61,9 @@ namespace starrocks {
 
 const static std::string HEADER_JSON = "application/json";
 
-void UpdateConfigAction::handle(HttpRequest* req) {
-    LOG(INFO) << req->debug_string();
+std::atomic<UpdateConfigAction*> UpdateConfigAction::_instance(nullptr);
 
+Status UpdateConfigAction::update_config(const std::string& name, const std::string& value) {
     std::call_once(_once_flag, [&]() {
         _config_callback.emplace("scanner_thread_pool_thread_num", [&]() {
             LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;
@@ -101,6 +101,19 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         });
     });
 
+    Status s = config::set_config(name, value);
+    if (s.ok()) {
+        LOG(INFO) << "set_config " << name << "=" << value << " success";
+        if (_config_callback.count(name)) {
+            _config_callback[name]();
+        }
+    }
+    return s;
+}
+
+void UpdateConfigAction::handle(HttpRequest* req) {
+    LOG(INFO) << req->debug_string();
+
     Status s;
     std::string msg;
     if (req->params()->size() != 1) {
@@ -110,13 +123,8 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         DCHECK(req->params()->size() == 1);
         const std::string& config = req->params()->begin()->first;
         const std::string& new_value = req->params()->begin()->second;
-        s = config::set_config(config, new_value);
-        if (s.ok()) {
-            LOG(INFO) << "set_config " << config << "=" << new_value << " success";
-            if (_config_callback.count(config)) {
-                _config_callback[config]();
-            }
-        } else {
+        s = update_config(config, new_value);
+        if (!s.ok()) {
             LOG(WARNING) << "set_config " << config << "=" << new_value << " failed";
             msg = strings::Substitute("set $0=$1 failed, reason: $2", config, new_value, s.to_string());
         }
