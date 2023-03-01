@@ -69,16 +69,16 @@ bool OlapTableSinkOperator::pending_finish() const {
 
     // last chunk trigger automatic partition creation
     // we need handle it before close sink
-    if (_automatic_partition_chunk) {
+    if (!_is_cancelled && _automatic_partition_chunk) {
         if (_sink->is_full()) {
             return true;
         }
         auto st = _sink->send_chunk(_fragment_ctx->runtime_state(), _automatic_partition_chunk.get());
+        _automatic_partition_chunk.reset();
         if (!st.ok()) {
             _fragment_ctx->cancel(st);
             return false;
         }
-        _automatic_partition_chunk.reset();
     }
 
     if (!_sink->is_close_done()) {
@@ -130,6 +130,7 @@ Status OlapTableSinkOperator::reset_epoch(RuntimeState* state) {
 }
 
 Status OlapTableSinkOperator::set_cancelled(RuntimeState* state) {
+    _is_cancelled = true;
     return _sink->close(state, Status::Cancelled("Cancelled by pipeline engine"));
 }
 
@@ -169,10 +170,10 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     if (_automatic_partition_chunk) {
         // resend previous chunk before send new chunk
         auto st = _sink->send_chunk(state, _automatic_partition_chunk.get());
+        _automatic_partition_chunk.reset();
         if (!st.ok()) {
             return st;
         }
-        _automatic_partition_chunk.reset();
     }
 
     uint16_t num_rows = chunk->num_rows();
