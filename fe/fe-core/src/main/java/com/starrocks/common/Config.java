@@ -1822,35 +1822,32 @@ public class Config extends ConfigBase {
 
     // AWS S3 storage configuration
     @ConfField
-    public static String cloud_native_aws_s3_bucket = "";
+    public static String aws_s3_path = "";
     @ConfField
-    public static String cloud_native_aws_s3_region = "";
+    public static String aws_s3_region = "";
     @ConfField
-    public static String cloud_native_aws_s3_endpoint = "";
-    /**
-     * Sub path to used for the backend storage
-     */
-    @ConfField
-    public static String cloud_native_aws_s3_path = "";
+    public static String aws_s3_endpoint = "";
+
     // AWS credential configuration
-    /**
-     * AWS credential type, can be one of the following value, case-sensitive
-     * - "simple"
-     * - "instance_profile"
-     * - "assume_role"
-     */
     @ConfField
-    public static String cloud_native_aws_credential_type = "simple";
-    // Configurations for aws credential_type = "simple"
+    public static boolean aws_s3_use_aws_sdk_default_behavior = false;
     @ConfField
-    public static String cloud_native_simple_credential_access_key_id = "";
+    public static boolean aws_s3_use_instance_profile = false;
+
     @ConfField
-    public static String cloud_native_simple_credential_access_key_secret = "";
-    // Configurations for aws credential_type = "assume_role"
+    public static String aws_s3_access_key = "";
     @ConfField
-    public static String cloud_native_assume_role_credential_arn = "";
+    public static String aws_s3_secret_key = "";
+
     @ConfField
-    public static String cloud_native_assume_role_credential_external_id = "";
+    public static String aws_s3_iam_role_arn = "";
+    @ConfField
+    public static String aws_s3_external_id = "";
+
+    // Enables or disables SSL connections to AWS services. Not support for now
+    // @ConfField
+    // public static String aws_s3_enable_ssl = "true";
+    
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
