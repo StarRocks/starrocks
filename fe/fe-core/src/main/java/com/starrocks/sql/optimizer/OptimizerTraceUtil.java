@@ -597,7 +597,7 @@ public class OptimizerTraceUtil {
                     indent + "  having=" +
                     visit(node.getHaving()) + "\n" +
                     indent + "  sortClause=" +
-                    node.getSortClause() + "\n" +
+                    node.getOrderBy() + "\n" +
                     indent + "  limit=" +
                     visit(node.getLimit()) + "\n" +
                     indent + "}";
