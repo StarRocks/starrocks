@@ -262,18 +262,22 @@ public class PrivilegeStmtAnalyzerV2 {
         }
 
         private ObjectType analyzeObjectType(String objectTypeUnResolved) {
-            if (!EnumUtils.isValidEnumIgnoreCase(ObjectType.class, objectTypeUnResolved)) {
+            String o = objectTypeUnResolved.replace(" ", "_");
+
+            if (!EnumUtils.isValidEnumIgnoreCase(ObjectType.class, o)) {
                 throw new SemanticException("cannot find privilege object type " + objectTypeUnResolved);
             }
-            return ObjectType.valueOf(objectTypeUnResolved);
+            return ObjectType.valueOf(o);
         }
 
         private PrivilegeType analyzePrivType(ObjectType objectType, String privTypeString) {
-            if (!EnumUtils.isValidEnumIgnoreCase(PrivilegeType.class, privTypeString)) {
+            String p = privTypeString.replace(" ", "_");
+
+            if (!EnumUtils.isValidEnumIgnoreCase(PrivilegeType.class, p)) {
                 throw new SemanticException("cannot find privilege type " + privTypeString);
             }
 
-            PrivilegeType privilegeType = PrivilegeType.valueOf(privTypeString);
+            PrivilegeType privilegeType = PrivilegeType.valueOf(p);
             if (!privilegeManager.isAvailablePirvType(objectType, privilegeType)) {
                 throw new SemanticException("Cant grant " + privTypeString + " to object " + objectType);
             }
@@ -347,11 +351,12 @@ public class PrivilegeStmtAnalyzerV2 {
                         }
 
                     } else {
-                        // all statement
-                        // TABLES -> TABLE
-                        ObjectType objectType = privilegeManager.getObjectByPlural(stmt.getObjectTypeUnResolved());
-
-                        // TABLE -> 0/1
+                        // grant on all object
+                        ObjectType objectType = ObjectType.OBJECT_TO_PLURAL.get(stmt.getObjectTypeUnResolved());
+                        if (objectType == null) {
+                            throw new SemanticException("invalid plural privilege type " +
+                                    stmt.getObjectTypeUnResolved());
+                        }
                         stmt.setObjectType(objectType);
 
                         if (stmt.getTokens().size() == 1 && (stmt.getObjectType().equals(ObjectType.TABLE) ||
@@ -379,7 +384,8 @@ public class PrivilegeStmtAnalyzerV2 {
 
                 List<PrivilegeType> privilegeTypes = new ArrayList<>();
                 for (String privTypeUnResolved : stmt.getPrivilegeTypeUnResolved()) {
-                    if (privTypeUnResolved.equals("ALL")) {
+                    if (privTypeUnResolved.equalsIgnoreCase("all")
+                            || privTypeUnResolved.equalsIgnoreCase("all privileges")) {
                         privilegeTypes.addAll(privilegeManager.getAvailablePrivType(stmt.getObjectType()));
                     } else {
                         privilegeTypes.add(analyzePrivType(stmt.getObjectType(), privTypeUnResolved));
