@@ -389,7 +389,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import javax.validation.constraints.NotNull;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.util.stream.Collectors.toList;
@@ -6063,8 +6062,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new NodePosition(start, stop);
     }
 
+    // labelName can be null or (db.)name format
     private LabelName createLabelName(StarRocksParser.QualifiedNameContext dbCtx,
-                                      @NotNull StarRocksParser.IdentifierContext nameCtx) {
+                                      StarRocksParser.IdentifierContext nameCtx) {
+        if (dbCtx == null && nameCtx == null) {
+            return new LabelName(null, null, NodePosition.ZERO);
+        }
         Token start = nameCtx.start;
         Token stop = nameCtx.stop;
         String name = getIdentifierName(nameCtx);
