@@ -66,11 +66,6 @@ public:
     // Setup. Call before send() or close().
     virtual Status open(RuntimeState* state) = 0;
 
-    virtual void cancel() {
-        // TODO: Currently only OlapTableSink supports FastCancel,
-        //  other types of Sink need to be fully tested before adding.
-    }
-
     virtual Status send_chunk(RuntimeState* state, Chunk* chunk);
 
     // Releases all resources that were allocated in prepare()/send().
