@@ -16,8 +16,6 @@ package com.starrocks.http;
 
 import okhttp3.Request;
 import okhttp3.Response;
-import org.json.JSONArray;
-import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -25,25 +23,43 @@ import java.io.IOException;
 
 import static org.junit.Assert.assertTrue;
 
-public class TableSchemaActionTest extends StarRocksHttpTestCase {
+public class SystemActionTest extends StarRocksHttpTestCase {
 
-    private static final String QUERY_PLAN_URI = "/_schema";
+    private static final String QUERY_PLAN_URI = "/system";
 
-    @Test
-    public void testGetTableSchema() throws IOException {
+    private void sendHttp(String path) throws IOException {
         Request request = new Request.Builder()
                 .get()
                 .addHeader("Authorization", rootAuth)
-                .url(URI + QUERY_PLAN_URI)
+                .url("http://localhost:" + HTTP_PORT + QUERY_PLAN_URI + "?path=" + path)
                 .build();
         Response response = networkClient.newCall(request).execute();
         assertTrue(response.isSuccessful());
         String respStr = response.body().string();
         Assert.assertNotNull(respStr);
-        JSONObject object = new JSONObject(respStr);
-        Assert.assertEquals(200, object.getInt("status"));
-        JSONArray propArray = object.getJSONArray("properties");
-        // k1, k2
-        Assert.assertEquals(2, propArray.length());
+    }
+
+    @Test
+    public void testGetSystemInfo() throws IOException {
+        sendHttp("");
+        sendHttp("/");
+        sendHttp("//");
+        sendHttp("///");
+        sendHttp("backends");
+        sendHttp("/backends");
+        sendHttp("//backends");
+        sendHttp("///backends");
+        sendHttp("backends/aaa");
+        sendHttp("backends//aaa");
+        sendHttp("backends///aaa");
+        sendHttp("/backends/aaa");
+        sendHttp("/backends//aaa");
+        sendHttp("/backends///aaa");
+        sendHttp("//backends/aaa");
+        sendHttp("//backends//aaa");
+        sendHttp("//backends///aaa");
+        sendHttp("//backends/aaa/aaa");
+        sendHttp("//backends//aaa////");
+        sendHttp("//backends///aaa/aaa///");
     }
 }
