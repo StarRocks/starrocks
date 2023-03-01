@@ -34,6 +34,8 @@ import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.ExecuteCommandRequestPB;
+import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
@@ -887,7 +889,6 @@ public class PseudoBackend {
             return CompletableFuture.completedFuture(result);
         }
 
-
         @Override
         public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
                 PExecBatchPlanFragmentsRequest request) {
@@ -994,6 +995,11 @@ public class PseudoBackend {
         @Override
         public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request) {
             throw new org.apache.commons.lang.NotImplementedException("TODO");
+        }
+
+        @Override
+        public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
+            throw new org.apache.commons.lang3.NotImplementedException("TODO");
         }
     }
 

@@ -50,6 +50,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -1012,7 +1013,6 @@ public class StmtExecutor {
         context.getState().setOk();
     }
 
-
     private void sendMetaData(ShowResultSetMetaData metaData) throws IOException {
         // sends how many columns
         serializer.reset();
@@ -1295,6 +1295,8 @@ public class StmtExecutor {
                                     sourceType,
                                     ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
                                     authenticateParams);
+        } else if (targetTable instanceof SchemaTable) {
+            // schema table does not need txn
         } else {
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                     database.getId(),
@@ -1423,6 +1425,8 @@ public class StmtExecutor {
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
                                         + coord.getTrackingUrl()
                         );
+                    } else if (targetTable instanceof SchemaTable) {
+                        // schema table does not need txn
                     } else {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(),
@@ -1448,6 +1452,8 @@ public class StmtExecutor {
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
                             TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                } else if (targetTable instanceof SchemaTable) {
+                    // schema table does not need txn
                 } else {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(),
@@ -1471,6 +1477,9 @@ public class StmtExecutor {
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                 }
                 // TODO: wait remote txn finished
+            } else if (targetTable instanceof SchemaTable) {
+                // schema table does not need txn
+                txnStatus = TransactionStatus.VISIBLE;
             } else {
                 if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                         database,

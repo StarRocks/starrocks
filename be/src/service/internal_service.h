@@ -146,6 +146,9 @@ public:
                                            PTabletReaderScanGetNextResult* response,
                                            google::protobuf::Closure* done) override;
 
+    void execute_command(google::protobuf::RpcController* controller, const ExecuteCommandRequestPB* request,
+                         ExecuteCommandResultPB* response, google::protobuf::Closure* done) override;
+
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,

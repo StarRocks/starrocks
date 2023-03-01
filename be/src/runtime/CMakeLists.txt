@@ -84,6 +84,8 @@ set(RUNTIME_FILES
     lake_tablets_channel.cpp
     lake_snapshot_loader.cpp
     profile_report_worker.cpp
+    schema_table_sink.cpp
+    command_executor.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

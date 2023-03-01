@@ -607,4 +607,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     public List<String> getPartitionColumnNames() {
         return Lists.newArrayList();
     }
+
+    public boolean supportsUpdate() {
+        return false;
+    }
 }
