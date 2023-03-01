@@ -76,9 +76,9 @@ Common data quality errors are as follows:
 
 Check the setting of the `write_buffer_size` configuration item in the BE configuration file **be.conf** of each BE. This configuration item is used to control the maximum size per memory block on the BE. The default maximum size is 100 MB. If the maximum size is exceedingly large, Remote Procedure Call (RPC) may time out. To resolve this issue, adjust the settings of the `write_buffer_size` and `tablet_writer_rpc_timeout_sec` configuration items in the BE configuration file. For more information, see [BE configurations](../../loading/Loading_intro.md#be-configurations).
 
-## 5. What do I do if the `Value count does not match column count` error occurs?
+## 5. What do I do if the "Value count does not match column count" error occurs?
 
-After my load job failed, I used the error URL returned in the job result to retrieve the error details and found the `Value count does not match column count` error, which indicates a mismatch between the number of columns in the source data file and the number of columns in the destination StarRocks table:
+After my load job failed, I used the error URL returned in the job result to retrieve the error details and found the "Value count does not match column count" error, which indicates a mismatch between the number of columns in the source data file and the number of columns in the destination StarRocks table:
 
 ```Java
 Error: Value count does not match column count. Expect 3, but got 1. Row: 2023-01-01T18:29:00Z,cpu0,80.99
