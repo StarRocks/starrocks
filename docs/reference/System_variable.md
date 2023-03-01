@@ -72,7 +72,7 @@ SET forward_to_master = concat('tr', 'u', 'e');
 
 ### Set variables in a single query statement
 
-In some scenarios, we may need to set variables specifically for certain queries. By using `SET_VAR`, it is possible to set session variables that will only take effect within a single statement. For example:
+In some scenarios, you may need to set variables specifically for certain queries. By using the `SET_VAR` hint, you can set session variables that will take effect only within a single statement. Example:
 
 ```sql
 SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY name;
@@ -80,7 +80,23 @@ SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY na
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 ```
 
-> Note: It must start with `/*+` and can only be followed by the `SELECT` keyword.
+> **NOTE**
+>
+> * `SET_VAR` is supported only in MySQL 8.0 and later.
+> * It can only be placed after the `SELECT` keyword and enclosed in `/*+...*/`.
+
+You can also set multiple variables in a single statement. Example:
+
+```sql
+SELECT /*+ SET_VAR
+  (
+  exec_mem_limit = 515396075520,
+  query_timeout=10000000,
+  batch_size=4096,
+  parallel_fragment_exec_instance_num=32
+  )
+  */ * FROM TABLE;
+```
 
 ## Descriptions of variables
 
@@ -433,7 +449,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * enable_global_runtime_filter
 
-  Whether to enable global runtime filter (RF for short). RF filters data at runtime. Data filtering often occurs in the Join stage. During multi-table joins, optimizations such as predicate pushdown are used to filter data, in order to reduce the number of scanned rows for Join and the I/O in the Shuffle stage, thereby improving the query performance.
+  Whether to enable global runtime filter (RF for short). RF filters data at runtime. Data filtering often occurs in the Join stage. During multi-table joins, optimizations such as predicate pushdown are used to filter data, in order to reduce the number of scanned rows for Join and the I/O in the Shuffle stage, thereby speeding up the query.
 
   StarRocks offers two types of RF: Local RF and Global RF. Local RF is suitable for Broadcast Hash Join and Global RF is suitable for Shuffle Join.
 
@@ -447,3 +463,15 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   * If this feature is disabled, only Local RF works.
   * If this feature is enabled, multi-column Global RF takes effect and carries `multi-column` in the partition by clause.
+
+* runtime_filter_on_exchange_node
+
+  Whether to place GRF on Exchange Node after GRF is pushed down across the Exchange operator to a lower-level operator. The default value is `false`, which means GRF will not be placed on Exchange Node after it is pushed down across the Exchange operator to a lower-level operator. This prevents repetitive use of GRF and reduces the computation time.
+
+  However, GRF delivery is a "try-best" process. If the lower-level operator fails to receive the GRF but the GRF is not placed on Exchange Node, data cannot be filtered, which compromises filter performance. `true` means GRF will still be placed on Exchange Node even after it is pushed down across the Exchange operator to a lower-level operator.
+
+* runtime_join_filter_push_down_limit
+
+  The maximum number of rows allowed for the Hash table based on which Bloom filter Local RF is generated. Local RF will not be generated if this value is exceeded. This variable prevents the generation of an excessively long Local RF.
+
+  The value is an integer. Default value: 1024000.
