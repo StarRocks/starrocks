@@ -19,72 +19,72 @@ Since Datadog does not provide the integration kit for StarRocks yet, you need t
 
 1. Launch a terminal, navigate to a local directory to which you have both read and write access, and run the following command to create a dedicated directory for StarRocks source code.
 
-  ```sh
-  mkdir -p starrocks
-  ```
+    ```sh
+    mkdir -p starrocks
+    ```
 
 2. Download the StarRocks source code package using the following command or on [GitHub](https://github.com/StarRocks/starrocks/tags) to the directory you created.
 
-  ```sh
-  cd starrocks
-  # Replace <starrocks_ver> with the actual version of StarRocks, for example, "2.5.2".
-  wget https://github.com/StarRocks/starrocks/archive/refs/tags/<starrocks_ver>.tar.gz
-  ```
+    ```sh
+    cd starrocks
+    # Replace <starrocks_ver> with the actual version of StarRocks, for example, "2.5.2".
+    wget https://github.com/StarRocks/starrocks/archive/refs/tags/<starrocks_ver>.tar.gz
+    ```
 
 3. Extract the files in the package.
 
-  ```sh
-  # Replace <starrocks_ver> with the actual version of StarRocks, for example, "2.5.2".
-  tar -xzvf <starrocks_ver>.tar.gz --strip-components 1
-  ```
+    ```sh
+    # Replace <starrocks_ver> with the actual version of StarRocks, for example, "2.5.2".
+    tar -xzvf <starrocks_ver>.tar.gz --strip-components 1
+    ```
 
 ## Install and configure FE integration kit
 
 1. Install Datadog integration kit for FE using source code.
 
-  ```sh
-  /opt/datadog-agent/embedded/bin/pip install contrib/datadog-connector/starrocks_fe
-  ```
+    ```sh
+    /opt/datadog-agent/embedded/bin/pip install contrib/datadog-connector/starrocks_fe
+    ```
 
 2. Create the FE integration configuration file **/etc/datadog-agent/conf.d/starrocks_fe.d/conf.yaml**.
 
-  ```sh
-  sudo mkdir -p /etc/datadog-agent/conf.d/starrocks_fe.d
-  sudo cp contrib/datadog-connector/starrocks_fe/datadog_checks/starrocks_fe/data/conf.yaml.example /etc/datadog-agent/conf.d/starrocks_fe.d/conf.yaml
-  ```
+    ```sh
+    sudo mkdir -p /etc/datadog-agent/conf.d/starrocks_fe.d
+    sudo cp contrib/datadog-connector/starrocks_fe/datadog_checks/starrocks_fe/data/conf.yaml.example /etc/datadog-agent/conf.d/starrocks_fe.d/conf.yaml
+    ```
 
 3. Modify the FE integration configuration file **/etc/datadog-agent/conf.d/starrocks_fe.d/conf.yaml**.
 
-  Examples of some important configuration items:
+    Examples of some important configuration items:
 
-  | **Config** | **Example** | **Description** |
-  | -------------------------------------- | ------------ | ------------------------------------------------------------ |
-  | fe_metric_url | `http://localhost:8030/metrics` | The URL used to access the StarRocks FE metrics. |
-  | metrics | `- starrocks_fe_*` | Metrics to be monitored on FE. You can use wildcards `*` to match the configuration items. |
+    | **Config** | **Example** | **Description** |
+    | -------------------------------------- | ------------ | ------------------------------------------------------------ |
+    | fe_metric_url | `http://localhost:8030/metrics` | The URL used to access the StarRocks FE metrics. |
+    | metrics | `- starrocks_fe_*` | Metrics to be monitored on FE. You can use wildcards `*` to match the configuration items. |
 
 ## Install and configure BE integration kit
 
 1. Install Datadog integration kit for BE using source code.
 
-  ```sh
-  /opt/datadog-agent/embedded/bin/pip install contrib/datadog-connector/starrocks_be
-  ```
+    ```sh
+    /opt/datadog-agent/embedded/bin/pip install contrib/datadog-connector/starrocks_be
+    ```
 
 2. Create the BE integration configuration file **/etc/datadog-agent/conf.d/starrocks_be.d/conf.yaml**.
 
-  ```sh
-  sudo mkdir -p /etc/datadog-agent/conf.d/starrocks_be.d
-  sudo cp contrib/datadog-connector/starrocks_be/datadog_checks/starrocks_be/data/conf.yaml.example /etc/datadog-agent/conf.d/starrocks_be.d/conf.yaml
-  ```
+    ```sh
+    sudo mkdir -p /etc/datadog-agent/conf.d/starrocks_be.d
+    sudo cp contrib/datadog-connector/starrocks_be/datadog_checks/starrocks_be/data/conf.yaml.example /etc/datadog-agent/conf.d/starrocks_be.d/conf.yaml
+    ```
 
 3. Modify the BE integration configuration file **/etc/datadog-agent/conf.d/starrocks_be.d/conf.yaml**.
 
-  Examples of some important configuration items:
+    Examples of some important configuration items:
 
-  | **Config** | **Example** | **Description** |
-  | -------------------------------------- | ------------ | ------------------------------------------------------------ |
-  | be_metric_url | `http://localhost:8040/metrics` | The URL used to access the StarRocks BE metrics. |
-  | metrics | `- starrocks_be_*` | Metrics to be monitored on BE. You can use wildcards `*` to match the configuration items. |
+    | **Config** | **Example** | **Description** |
+    | -------------------------------------- | ------------ | ------------------------------------------------------------ |
+    | be_metric_url | `http://localhost:8040/metrics` | The URL used to access the StarRocks BE metrics. |
+    | metrics | `- starrocks_be_*` | Metrics to be monitored on BE. You can use wildcards `*` to match the configuration items. |
 
 ## Restart Datadog Agent
 
