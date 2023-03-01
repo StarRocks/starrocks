@@ -66,7 +66,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 }
 
                 this.rewritePlan = getFragmentPlan(query);
-                System.out.println(rewritePlan);
             } catch (Exception e) {
                 LOG.warn("test rewwrite failed:", e);
                 this.exception = e;
