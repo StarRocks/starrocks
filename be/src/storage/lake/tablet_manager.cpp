@@ -722,7 +722,7 @@ static void metadata_gc(TabletManager* tablet_mgr, const std::set<std::string>& 
     }
     while (num_running.load() > 0) {
         LOG_EVERY_N(INFO, 10) << "Waiting for GC tasks to finish...";
-        bthread_usleep(/*100ms=*/100 * 1000);
+        bthread_usleep(/*1s=*/1000 * 1000);
     }
 }
 
@@ -750,7 +750,7 @@ static void data_gc(TabletManager* tablet_mgr, const std::set<std::string>& root
     }
     while (num_running.load() > 0) {
         LOG_EVERY_N(INFO, 10) << "Waiting for GC tasks to finish...";
-        bthread_usleep(/*100ms=*/100 * 1000);
+        bthread_usleep(/*1s=*/1000 * 1000);
     }
 }
 
