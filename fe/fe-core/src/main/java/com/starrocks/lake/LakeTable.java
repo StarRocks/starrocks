@@ -70,14 +70,17 @@ public class LakeTable extends OlapTable {
         return tableProperty.getStorageInfo().getFilePathInfo();
     }
 
-    public String getStorageGroup() {
+    @Override
+    public String getStoragePath() {
         return getDefaultFilePathInfo().getFullPath();
     }
 
+    @Override
     public FilePathInfo getPartitionFilePathInfo() {
         return getDefaultFilePathInfo();
     }
 
+    @Override
     public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
         FileCacheInfo cacheInfo = null;
         StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(partitionId);
@@ -89,6 +92,7 @@ public class LakeTable extends OlapTable {
         return cacheInfo;
     }
 
+    @Override
     public void setStorageInfo(FilePathInfo pathInfo, boolean enableCache, long cacheTtlS, boolean asyncWriteBack) {
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
                 .setAsyncWriteBack(asyncWriteBack).build();
@@ -147,9 +151,9 @@ public class LakeTable extends OlapTable {
                 properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
                         String.valueOf(storageInfo.getStorageCacheTtlS()));
 
-                // allow_async_write_back
-                properties.put(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK,
-                        String.valueOf(storageInfo.isAllowAsyncWriteBack()));
+                // enable_async_write_back
+                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
+                        String.valueOf(storageInfo.isEnableAsyncWriteBack()));
             }
         }
         return properties;

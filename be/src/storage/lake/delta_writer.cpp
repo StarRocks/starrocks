@@ -201,9 +201,9 @@ inline Status DeltaWriterImpl::reset_memtable() {
         _vectorized_schema = MemTable::convert_schema(_tablet_schema.get(), _slots);
         _schema_initialized = true;
     }
-    if (_slots != nullptr) {
+    if (_slots != nullptr || !_merge_condition.empty()) {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_vectorized_schema, _slots, _mem_table_sink.get(),
-                                                _mem_tracker);
+                                                _merge_condition, _mem_tracker);
     } else {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_vectorized_schema, _mem_table_sink.get(),
                                                 _max_buffer_size, _mem_tracker);

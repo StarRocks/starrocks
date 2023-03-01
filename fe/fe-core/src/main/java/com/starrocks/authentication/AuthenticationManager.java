@@ -58,20 +58,45 @@ public class AuthenticationManager {
     // core data structure
     // user identity -> all the authentication information
     // will be manually serialized one by one
-    protected Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo = new TreeMap<>((o1, o2) -> {
-        // make sure that ip > domain > %
-        int compareHostScore = scoreUserIdentityHost(o1).compareTo(scoreUserIdentityHost(o2));
-        if (compareHostScore != 0) {
-            return compareHostScore;
+    protected Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo;
+
+    private static class UserAuthInfoTreeMap extends TreeMap<UserIdentity, UserAuthenticationInfo> {
+        public UserAuthInfoTreeMap() {
+            super((o1, o2) -> {
+                // make sure that ip > domain > %
+                int compareHostScore = scoreUserIdentityHost(o1).compareTo(scoreUserIdentityHost(o2));
+                if (compareHostScore != 0) {
+                    return compareHostScore;
+                }
+                // host type is the same, compare host
+                int compareByHost = o1.getHost().compareTo(o2.getHost());
+                if (compareByHost != 0) {
+                    return compareByHost;
+                }
+                // compare user name
+                return o1.getQualifiedUser().compareTo(o2.getQualifiedUser());
+            });
         }
-        // host type is the same, compare host
-        int compareByHost = o1.getHost().compareTo(o2.getHost());
-        if (compareByHost != 0) {
-            return compareByHost;
+
+        /**
+         * If someone log in from 10.1.1.1 with name "test_user", the matching UserIdentity
+         * can be sorted in the below order,
+         *   1. test_user@10.1.1.1
+         *   2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
+         *      If multiple hostnames match the login ip, just return one randomly.
+         *   3. test_user@%, as a fallback.
+         */
+        private static Integer scoreUserIdentityHost(UserIdentity userIdentity) {
+            // ip(1) > hostname(2) > %(3)
+            if (userIdentity.isDomain()) {
+                return 2;
+            }
+            if (userIdentity.getHost().equals(UserAuthenticationInfo.ANY_HOST)) {
+                return 3;
+            }
+            return 1;
         }
-        // compare user name
-        return o1.getQualifiedUser().compareTo(o2.getQualifiedUser());
-    });
+    }
 
     // For legacy reason, user property are set by username instead of full user identity.
     @SerializedName(value = "m")
@@ -110,6 +135,7 @@ public class AuthenticationManager {
                 LDAPAuthenticationProvider.PLUGIN_NAME, new LDAPAuthenticationProvider());
 
         // default user
+        userToAuthenticationInfo = new UserAuthInfoTreeMap();
         UserAuthenticationInfo info = new UserAuthenticationInfo();
         try {
             info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
@@ -139,24 +165,6 @@ public class AuthenticationManager {
         return DEFAULT_PLUGIN;
     }
 
-    /**
-     * If someone log in from 10.1.1.1 with name "test_user", the matching UserIdentity can be sorted in the below order
-     * 1. test_user@10.1.1.1
-     * 2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
-     * If multiple hostnames match the login ip, just return one randomly.
-     * 3. test_user@%, as a fallback.
-     */
-    private Integer scoreUserIdentityHost(UserIdentity userIdentity) {
-        // ip(1) > hostname(2) > %(3)
-        if (userIdentity.isDomain()) {
-            return 2;
-        }
-        if (userIdentity.getHost().equals(UserAuthenticationInfo.ANY_HOST)) {
-            return 3;
-        }
-        return 1;
-    }
-
     private boolean match(String remoteUser, String remoteHost, boolean isDomain, UserAuthenticationInfo info) {
         // quickly filter unmatched entries by username
         if (!info.matchUser(remoteUser)) {
@@ -179,25 +187,31 @@ public class AuthenticationManager {
         }
     }
 
+    public Map.Entry<UserIdentity, UserAuthenticationInfo> getBestMatchedUserIdentity(
+            String remoteUser, String remoteHost) {
+        return userToAuthenticationInfo.entrySet().stream()
+                .filter(entry -> match(remoteUser, remoteHost, entry.getKey().isDomain(), entry.getValue()))
+                .findFirst().orElse(null);
+    }
+
     public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        Iterator<Map.Entry<UserIdentity, UserAuthenticationInfo>> it = userToAuthenticationInfo.entrySet().iterator();
-        while (it.hasNext()) {
-            Map.Entry<UserIdentity, UserAuthenticationInfo> entry = it.next();
-            UserIdentity userIdentity = entry.getKey();
-            UserAuthenticationInfo info = entry.getValue();
-            if (match(remoteUser, remoteHost, userIdentity.isDomain(), info)) {
-                try {
-                    AuthenticationProvider provider = AuthenticationProviderFactory.create(info.getAuthPlugin());
-                    provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString, info);
-                    return userIdentity;
-                } catch (AuthenticationException e) {
-                    LOG.debug("failed to authentication, ", e);
-                }
-                return null;  // authentication failed
+        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                getBestMatchedUserIdentity(remoteUser, remoteHost);
+        if (matchedUserIdentity == null) {
+            LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
+        } else {
+            try {
+                AuthenticationProvider provider =
+                        AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
+                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
+                        matchedUserIdentity.getValue());
+                return matchedUserIdentity.getKey();
+            } catch (AuthenticationException e) {
+                LOG.debug("failed to authenticate, ", e);
             }
         }
-        LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
-        return null; // cannot find user
+
+        return null;
     }
 
     public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
@@ -485,7 +499,7 @@ public class AuthenticationManager {
             try {
                 // 1 json for myself
                 ret = (AuthenticationManager) reader.readJson(AuthenticationManager.class);
-                ret.userToAuthenticationInfo = new HashMap<>();
+                ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
                 // 1 json for num user
                 int numUser = (int) reader.readJson(int.class);
                 LOG.info("loading {} users", numUser);
