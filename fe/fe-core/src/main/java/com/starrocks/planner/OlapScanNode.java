@@ -772,7 +772,15 @@ public class OlapScanNode extends ScanNode {
             if (!olapTable.hasDelete()) {
                 msg.lake_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
+<<<<<<< HEAD
         } else {
+=======
+
+            if (!bucketExprs.isEmpty()) {
+                msg.lake_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
+            }
+        } else { // If you find yourself changing this code block, see also the above code block, i.e, if (olapTable.isLakeTable) { ... }.
+>>>>>>> d300c7ebb ([Enhancement] avoid duplicated local shuffle of lake table (#18630))
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
                     new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
