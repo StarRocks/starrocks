@@ -1021,10 +1021,6 @@ public class PrivilegeManager {
         return actions;
     }
 
-    public ObjectType getObjectByPlural(String plural) throws PrivilegeException {
-        return provider.getTypeNameByPlural(plural);
-    }
-
     public boolean isAvailablePirvType(ObjectType objectType, PrivilegeType privilegeType) {
         return provider.isAvailablePrivType(objectType, privilegeType);
     }
