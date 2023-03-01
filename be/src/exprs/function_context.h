@@ -75,6 +75,11 @@ public:
                                            const FunctionContext::TypeDesc& return_type,
                                            const std::vector<FunctionContext::TypeDesc>& arg_types);
 
+    static FunctionContext* create_context(RuntimeState* state, MemPool* pool,
+                                           const FunctionContext::TypeDesc& return_type,
+                                           const std::vector<FunctionContext::TypeDesc>& arg_types,
+                                           const std::vector<bool>& isAscOrder, const std::vector<bool>& nullsFirst);
+
     ~FunctionContext();
     FunctionContext();
 
@@ -107,6 +112,8 @@ public:
     // argument).
     int get_num_args() const;
 
+    std::vector<bool> get_is_asc_order() { return _is_asc_order; }
+    std::vector<bool> get_nulls_first() { return _nulls_first; }
     // Returns _constant_columns size
     int get_num_constant_columns() const;
 
@@ -182,6 +189,9 @@ private:
 
     // UDAF Context
     std::unique_ptr<JavaUDAFContext> _jvm_udaf_ctxs;
+
+    std::vector<bool> _is_asc_order;
+    std::vector<bool> _nulls_first;
 };
 
 } // namespace starrocks

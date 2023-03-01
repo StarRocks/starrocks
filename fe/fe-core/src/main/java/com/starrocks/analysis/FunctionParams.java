@@ -40,6 +40,7 @@ import com.starrocks.common.io.Writable;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -52,11 +53,20 @@ public class FunctionParams implements Writable {
     private List<Expr> exprs;
     private boolean isDistinct;
 
+    private final List<OrderByElement> orderByElements;
     // c'tor for non-star params
     public FunctionParams(boolean isDistinct, List<Expr> exprs) {
         isStar = false;
         this.isDistinct = isDistinct;
         this.exprs = exprs;
+        this.orderByElements = null;
+    }
+
+    public FunctionParams(boolean isDistinct, List<Expr> exprs, List<OrderByElement> orderByElements) {
+        isStar = false;
+        this.isDistinct = isDistinct;
+        this.exprs = exprs;
+        this.orderByElements = orderByElements;
     }
 
     // c'tor for non-star, non-distinct params
@@ -69,12 +79,15 @@ public class FunctionParams implements Writable {
         exprs = null;
         isStar = true;
         isDistinct = false;
+        orderByElements = null;
     }
 
     public static FunctionParams createStarParam() {
         return new FunctionParams();
     }
-
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
     public boolean isStar() {
         return isStar;
     }
@@ -132,6 +145,11 @@ public class FunctionParams implements Writable {
                 result = 31 * result + Objects.hashCode(expr);
             }
         }
+        if(orderByElements != null) {
+            for(OrderByElement order : orderByElements) {
+                result = 31 * result + Objects.hashCode(order);
+            }
+        }
         return result;
     }
 
@@ -146,6 +164,7 @@ public class FunctionParams implements Writable {
         }
 
         FunctionParams that = (FunctionParams) obj;
-        return isStar == that.isStar && isDistinct == that.isDistinct && Objects.equals(exprs, that.exprs);
+        return isStar == that.isStar && isDistinct == that.isDistinct && Objects.equals(exprs, that.exprs)
+                && Objects.equals(orderByElements, that.orderByElements);
     }
 }

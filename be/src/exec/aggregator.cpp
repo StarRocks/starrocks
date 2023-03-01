@@ -335,6 +335,15 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             VLOG_ROW << "get agg function " << func->get_name() << " serde_type " << serde_type << " return_type "
                      << return_type;
             _agg_functions[i] = func;
+            _agg_fn_types[i] = {return_type, serde_type, arg_typedescs, is_input_nullable, desc.nodes[0].is_nullable};
+            if (fn.name.function_name == "array_agg") {
+                // set order by info
+                if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
+                    !fn.aggregate_fn.is_asc_order.empty()) {
+                    _agg_fn_types[i].is_asc_order = fn.aggregate_fn.is_asc_order;
+                    _agg_fn_types[i].nulls_first = fn.aggregate_fn.nulls_first;
+                }
+            }
         }
 
         int node_idx = 0;
@@ -418,7 +427,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         _agg_fn_ctxs[i] = FunctionContext::create_context(
                 state, _mem_pool.get(), AnyValUtil::column_type_to_type_desc(_agg_fn_types[i].result_type),
-                _agg_fn_types[i].arg_typedescs);
+                _agg_fn_types[i].arg_typedescs, _agg_fn_types[i].is_asc_order, _agg_fn_types[i].nulls_first);
         state->obj_pool()->add(_agg_fn_ctxs[i]);
     }
 

@@ -37,7 +37,7 @@ void AggregateFuncResolver::register_utility() {
             "exchange_bytes", false, AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::BYTES>());
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_VARCHAR>(
             "exchange_speed", false, AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::SPEED>());
-    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_STRUCT>("array_agg", false,
+    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_ARRAY>("array_agg", false,
                                                             AggregateFactory::MakeArrayAggAggregateFunction());
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, HistogramDispatcher(), this);

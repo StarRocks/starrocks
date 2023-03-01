@@ -56,6 +56,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class FunctionCallExpr extends Expr {
     private FunctionName fnName;
@@ -144,6 +145,10 @@ public class FunctionCallExpr extends Expr {
         this.isMergeAggFn = isMergeAggFn;
         if (params.exprs() != null) {
             children.addAll(params.exprs());
+        }
+        if (params.getOrderByElements() != null) {
+            children.addAll(params.getOrderByElements().stream().map(OrderByElement::getExpr)
+                    .collect(Collectors.toList()));
         }
     }
 

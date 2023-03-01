@@ -300,6 +300,11 @@ struct TAggregateFunction {
   9: optional string remove_fn_symbol
   10: optional bool is_analytic_only_fn = false
   11: optional string symbol
+  // used for agg_func(a order by b, c) like array_agg, group_concat
+  12: optional list<bool> is_asc_order
+  // Indicates, for each expr, if nulls should be listed first or last. This is
+  // independent of is_asc_order.
+  13: optional list<bool> nulls_first
 }
 
 struct TTableFunction {

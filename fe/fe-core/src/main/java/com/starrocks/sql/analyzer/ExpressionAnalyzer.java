@@ -904,18 +904,32 @@ public class ExpressionAnalyzer {
                 // TODO: fix how we equal count distinct.
                 fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED) ||
-                    fnName.equals(FunctionSet.ARRAY_AGG)) {
+            } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 fn.setArgsType(argumentTypes); // as accepting various types
                 fn.setIsNullable(false);
-                if (fnName.equals(FunctionSet.ARRAY_AGG)) {
-                    ArrayList<Type> structTypes = new ArrayList<>(argumentTypes.length);
-                    for (Type t : argumentTypes) {
-                        structTypes.add(new ArrayType(t));
+            } else if (fnName.equals(FunctionSet.ARRAY_AGG)) {
+                // move order by expr to node child, and extract is_asc and null_first information.
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                List<OrderByElement> orderByElements = node.getParams().getOrderByElements();
+                List<Boolean> isAscOrder = new ArrayList<>();
+                List<Boolean> nullsFirst = new ArrayList<>();
+                if (orderByElements != null) {
+                    for (OrderByElement elem : orderByElements) {
+                        isAscOrder.add(elem.getIsAsc());
+                        nullsFirst.add(elem.getNullsFirstParam());
                     }
-                    fn.setRetType(new StructType(structTypes));
                 }
+                fn.setArgsType(argumentTypes); // as accepting various types
+                fn.setIsNullable(false);
+                ArrayList<Type> structTypes = new ArrayList<>(argumentTypes.length);
+                for (Type t : argumentTypes) {
+                    structTypes.add(new ArrayType(t));
+                }
+                ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
+                ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
+                ((AggregateFunction) fn).setnullsFirst(nullsFirst);
+                fn.setRetType(new ArrayType(argumentTypes[0]));
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(fnName, argumentTypes)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
                 // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always

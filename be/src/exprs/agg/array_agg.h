@@ -18,6 +18,7 @@
 #include "column/column_helper.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
+#include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
 #include "runtime/mem_pool.h"
@@ -29,7 +30,7 @@ namespace starrocks {
 struct ArrayAggAggregateState {
     void update(const Column& column, size_t index, size_t offset, size_t count) {
         if (index >= data_columns.size()) {
-            // index == data_columns.size()
+            DCHECK(index == data_columns.size());
             data_columns.push_back(column.clone_empty());
         }
         data_columns[index]->append(column, offset, count);
@@ -77,7 +78,28 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        return serialize_to_column(ctx, state, to);
+        DCHECK(to->is_array());
+        auto& state_impl = this->data(state);
+        auto elem_size = state_impl.data_columns[0]->size();
+        auto res = state_impl.data_columns[0].get();
+        auto tmp = state_impl.data_columns[0]->clone_empty();
+        if (state_impl.data_columns.size() > 1) {
+            Permutation perm;
+            Columns sort_by_columns;
+            SortDescs sort_desc(ctx->get_is_asc_order(), ctx->get_nulls_first());
+            sort_by_columns.assign(state_impl.data_columns.begin() + 1, state_impl.data_columns.end());
+            Status st = sort_and_tie_columns(false, sort_by_columns, sort_desc, &perm);
+            CHECK(st.ok());
+            materialize_column_by_permutation(tmp.get(), {state_impl.data_columns[0]}, perm);
+            res = tmp.get();
+        }
+        auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(to));
+        if (to->is_nullable()) {
+            down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
+        }
+        array_col->elements_column()->append(*res, 0, elem_size);
+        auto& offsets = array_col->offsets_column()->get_data();
+        offsets.push_back(offsets.back() + elem_size);
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
