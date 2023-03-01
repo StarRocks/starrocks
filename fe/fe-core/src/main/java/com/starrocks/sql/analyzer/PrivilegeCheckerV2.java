@@ -756,7 +756,7 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitCreateResourceStatement(CreateResourceStmt statement, ConnectContext context) {
             if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.CREATE_RESOURCE)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE_RESOURCE");
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE RESOURCE");
             }
             return null;
         }
@@ -791,7 +791,7 @@ public class PrivilegeCheckerV2 {
             if (!PrivilegeActions.checkSystemAction(
                     context, PrivilegeType.CREATE_RESOURCE_GROUP)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "CREATE_RESOURCE_GROUP");
+                        "CREATE RESOURCE GROUP");
             }
             return null;
         }
@@ -1745,7 +1745,7 @@ public class PrivilegeCheckerV2 {
                 if (!PrivilegeActions.checkSystemAction(
                         context, PrivilegeType.CREATE_GLOBAL_FUNCTION)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                            "CREATE_GLOBAL_FUNCTION");
+                            "CREATE GLOBAL FUNCTION");
                 }
             } else {
                 if (!PrivilegeActions.checkDbAction(context, name.getDb(), PrivilegeType.CREATE_FUNCTION)) {

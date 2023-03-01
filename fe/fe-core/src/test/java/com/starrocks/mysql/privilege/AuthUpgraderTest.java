@@ -15,7 +15,9 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UserDesc;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
@@ -27,8 +29,19 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.PrivilegeCheckerV2;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.GrantRevokeClause;
+import com.starrocks.sql.ast.GrantRevokePrivilegeObjects;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -40,6 +53,7 @@ import org.junit.Test;
 import java.io.DataInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -52,17 +66,35 @@ public class AuthUpgraderTest {
 
     private StarRocksAssert starRocksAssert;
 
-    private UtFrameUtils.PseudoImage executeAndUpgrade(boolean onlyUpgradeJournal, String... sqls) throws Exception {
+    private UtFrameUtils.PseudoImage executeAndUpgrade(boolean onlyUpgradeJournal, StatementBase... sqls) throws Exception {
         GlobalStateMgr.getCurrentState().initAuth(false);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         // 1. execute old grant
-        for (String sql : sqls) {
-            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+        Auth auth = GlobalStateMgr.getCurrentState().getAuth();
+        for (StatementBase sql : sqls) {
+            Analyzer.analyze(sql, ctx);
+            if (sql instanceof CreateUserStmt) {
+                auth.createUser((CreateUserStmt) sql);
+            } else if (sql instanceof CreateRoleStmt) {
+                auth.createRole((CreateRoleStmt) sql);
+            } else if (sql instanceof GrantPrivilegeStmt) {
+                auth.grant((GrantPrivilegeStmt) sql);
+            } else if (sql instanceof DropDbStmt) {
+                DDLStmtExecutor.execute(sql, ctx);
+            } else if (sql instanceof DropTableStmt) {
+                DDLStmtExecutor.execute(sql, ctx);
+            } else if (sql instanceof AlterUserStmt) {
+                DDLStmtExecutor.execute(sql, ctx);
+            } else if (sql instanceof DropUserStmt) {
+                auth.dropUser((DropUserStmt) sql);
+            }
+            //DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
         }
         Map<String, Set<String>> resolvedIPsMap = new HashMap<>();
         resolvedIPsMap.put("localhost", new HashSet<>(Arrays.asList("127.0.0.1")));
         ctx.getGlobalStateMgr().getAuth().refreshUserPrivEntriesByResolvedIPs(resolvedIPsMap);
+
         // 2. save image
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         ctx.getGlobalStateMgr().getAuth().saveAuth(image.getDataOutputStream(), -1);
@@ -71,11 +103,11 @@ public class AuthUpgraderTest {
         // 3. load image
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         DataInputStream dis = image.getDataInputStream();
-        Auth auth = Auth.read(dis);
-        auth.readAsGson(dis, -1);
+        Auth relayAuth = Auth.read(dis);
+        relayAuth.readAsGson(dis, -1);
         ctx.getGlobalStateMgr().initAuth(true);
         AuthUpgrader authUpgrader = new AuthUpgrader(
-                auth,
+                relayAuth,
                 ctx.getGlobalStateMgr().getAuthenticationManager(),
                 ctx.getGlobalStateMgr().getPrivilegeManager(),
                 ctx.getGlobalStateMgr());
@@ -168,15 +200,55 @@ public class AuthUpgraderTest {
         UtFrameUtils.tearDownForPersisTest();
     }
 
+    private CreateUserStmt createUserStmt(String user) {
+        return new CreateUserStmt(false, new UserDesc(new UserIdentity(user, "%")), Collections.emptyList());
+    }
+
+    private CreateRoleStmt createRoleStmt(String role) {
+        return new CreateRoleStmt(Lists.newArrayList(role), false);
+    }
+
+    private GrantPrivilegeStmt grantPrivilegeStmt(List<String> priv, String objectType, List<String> objects, String user) {
+        GrantRevokePrivilegeObjects g1 = new GrantRevokePrivilegeObjects();
+        if (objectType.equals("USER")) {
+            g1.setUserPrivilegeObjectList(Lists.newArrayList(new UserIdentity(objects.get(0), "%")));
+        } else {
+            g1.setPrivilegeObjectNameTokensList(Collections.singletonList(objects));
+        }
+        return new GrantPrivilegeStmt(
+                Lists.newArrayList(priv),
+                objectType,
+                new GrantRevokeClause(new UserIdentity(user, "%"), null),
+                g1, false);
+    }
+
+    private GrantPrivilegeStmt grantPrivilegeToRoleStmt(List<String> priv, String objectType, List<String> objects, String role) {
+        GrantRevokePrivilegeObjects g1 = new GrantRevokePrivilegeObjects();
+        if (objectType.equals("USER")) {
+            g1.setUserPrivilegeObjectList(Lists.newArrayList(new UserIdentity(objects.get(0), "%")));
+        } else {
+            g1.setPrivilegeObjectNameTokensList(Collections.singletonList(objects));
+        }
+        return new GrantPrivilegeStmt(
+                Lists.newArrayList(priv),
+                objectType,
+                new GrantRevokeClause(null, role),
+                g1, false);
+    }
+
     @Test
     public void testUpgradeAfterDbDropped() throws Exception {
         starRocksAssert.withDatabase("db2");
+
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user testusefordrop",
-                "GRANT select_priv on db2.* TO testusefordrop",
-                "GRANT select_priv on db1.* TO testusefordrop",
-                "drop database db2 force");
+                createUserStmt("testusefordrop"),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db2", "*"), "testusefordrop"),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "*"), "testusefordrop"),
+                new DropDbStmt(false, "db2", true));
+
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
             if (i == 1) {
@@ -209,12 +281,15 @@ public class AuthUpgraderTest {
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1)"
                 + " buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withTable(createTblStmtStr);
+
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user testusefordrop2",
-                "GRANT select_priv on db2.tbl0 TO testusefordrop2",
-                "GRANT select_priv on db1.* TO testusefordrop2",
-                "drop table db2.tbl0 force");
+                createUserStmt("testusefordrop2"),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db2", "tbl0"), "testusefordrop2"),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "*"), "testusefordrop2"),
+                new DropTableStmt(false, new TableName("db2", "tbl0"), true));
 
         checkPrivilegeAsUser(
                 UserIdentity.createAnalyzedUserIdentWithIp("testusefordrop2", "%"),
@@ -232,24 +307,37 @@ public class AuthUpgraderTest {
 
     @Test
     public void testSelect() throws Exception {
+        List<StatementBase> s = new ArrayList<>();
+        s.add(createUserStmt("globalSelect"));
+
+
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user globalSelect",
-                "GRANT select_priv on *.* TO globalSelect",
-                "create user dbSelect",
-                "GRANT select_priv on db0.* TO dbSelect",
-                "create user tblSelect",
-                "GRANT select_priv on db0.tbl0 TO tblSelect",
-                "create user viewSelect",
-                "GRANT select_priv on db0.view TO viewSelect",
-                "create role globalSelect",
-                "GRANT select_priv on *.* TO role globalSelect",
-                "create role dbSelect",
-                "GRANT select_priv on db0.* TO role dbSelect",
-                "create role tblSelect",
-                "GRANT select_priv on db0.tbl0 TO role tblSelect",
-                "create role viewSelect",
-                "GRANT select_priv on db0.view TO role viewSelect");
+                createUserStmt("globalSelect"),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "globalSelect"),
+                createUserStmt("dbSelect"),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "*"), "dbSelect"),
+                createUserStmt("tblSelect"),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "tbl0"), "tblSelect"),
+                createUserStmt("viewSelect"),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "view"), "viewSelect"),
+                createRoleStmt("globalSelect"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "globalSelect"),
+                createRoleStmt("dbSelect"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "*"), "dbSelect"),
+                createRoleStmt("tblSelect"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "tbl0"), "tblSelect"),
+                createRoleStmt("viewSelect"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "view"), "viewSelect")
+        );
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
             if (i == 1) {
@@ -266,7 +354,8 @@ public class AuthUpgraderTest {
             user = UserIdentity.createAnalyzedUserIdentWithIp("dbSelect", "%");
             checkPrivilegeAsUser(
                     user, "select * from db0.tbl0", "select * from db0.tbl1", "select * from db0.view");
-            checkBadPrivilegeAsUser(user, "select * from db1.tbl1", "SELECT command denied to user 'dbSelect'");
+            checkBadPrivilegeAsUser(user, "select * from db1.tbl1",
+                    "SELECT command denied to user 'dbSelect'");
             user = createUserByRole("dbSelect");
             checkPrivilegeAsUser(
                     user, "select * from db0.tbl0", "select * from db0.tbl1", "select * from db0.view");
@@ -274,28 +363,33 @@ public class AuthUpgraderTest {
 
             user = UserIdentity.createAnalyzedUserIdentWithIp("tblSelect", "%");
             checkPrivilegeAsUser(user, "select * from db0.tbl0");
-            checkBadPrivilegeAsUser(user, "select * from db1.tbl1", "SELECT command denied to user 'tblSelect'");
+            checkBadPrivilegeAsUser(user, "select * from db1.tbl1",
+                    "SELECT command denied to user 'tblSelect'");
             user = createUserByRole("tblSelect");
             checkPrivilegeAsUser(user, "select * from db0.tbl0");
             checkBadPrivilegeAsUser(user, "select * from db1.tbl1", "SELECT command denied to user");
 
             user = UserIdentity.createAnalyzedUserIdentWithIp("viewSelect", "%");
             checkPrivilegeAsUser(user, "select * from db0.view");
-            checkBadPrivilegeAsUser(user, "select * from db0.tbl0", "SELECT command denied to user 'viewSelect'");
+            checkBadPrivilegeAsUser(user, "select * from db0.tbl0",
+                    "SELECT command denied to user 'viewSelect'");
             user = createUserByRole("viewSelect");
             checkPrivilegeAsUser(user, "select * from db0.view");
             checkBadPrivilegeAsUser(user, "select * from db1.tbl1", "SELECT command denied to user");
         }
     }
 
+
     @Test
     public void testNoImage() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 false,
-                "create user selectUser",
-                "GRANT select_priv on db0.tbl0 TO selectUser",
-                "create role impersonateRole",
-                "GRANT impersonate on USER selectUser TO ROLE impersonateRole");
+                createUserStmt("selectUser"),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "tbl0"), "selectUser"),
+                createRoleStmt("impersonateRole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("IMPERSONATE"), "USER",
+                        Lists.newArrayList("selectUser"), "impersonateRole"));
 
         // check upgrade success
         UserIdentity selectUser = UserIdentity.createAnalyzedUserIdentWithIp("selectUser", "%");
@@ -329,11 +423,13 @@ public class AuthUpgraderTest {
     public void testImpersonate() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user harry",
-                "create user gregory",
-                "GRANT impersonate on USER gregory TO harry",
-                "create role harry",
-                "GRANT impersonate on USER gregory TO ROLE harry");
+                createUserStmt("harry"),
+                createUserStmt("gregory"),
+                grantPrivilegeStmt(Lists.newArrayList("IMPERSONATE"), "USER",
+                        Lists.newArrayList("gregory"), "harry"),
+                createRoleStmt("harry"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("IMPERSONATE"), "USER",
+                        Lists.newArrayList("gregory"), "harry"));
 
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
@@ -355,10 +451,11 @@ public class AuthUpgraderTest {
     public void testImpersonateAfterUserDropped() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user testafteruserdropped",
-                "create user gregory1",
-                "GRANT impersonate on USER gregory1 TO testafteruserdropped",
-                "drop user gregory1");
+                createUserStmt("testafteruserdropped"),
+                createUserStmt("gregory1"),
+                grantPrivilegeStmt(Lists.newArrayList("IMPERSONATE"), "USER",
+                        Lists.newArrayList("gregory1"), "testafteruserdropped"),
+                new DropUserStmt(new UserIdentity("gregory1", "%"), false));
 
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
@@ -373,10 +470,22 @@ public class AuthUpgraderTest {
 
     @Test
     public void testDomainUser() throws Exception {
+
+        GrantRevokePrivilegeObjects g1 = new GrantRevokePrivilegeObjects();
+        g1.setPrivilegeObjectNameTokensList(Collections.singletonList(Lists.newArrayList("db1", "tbl1")));
+        GrantPrivilegeStmt grantPrivilegeStmt = new GrantPrivilegeStmt(
+                Lists.newArrayList("SELECT_PRIV"),
+                "TABLE",
+                new GrantRevokeClause(new UserIdentity("domain_user", "localhost", true), null),
+                g1, false);
+
+
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user domain_user@['localhost']",
-                "GRANT select_priv on db1.tbl1 TO domain_user@['localhost']");
+                new CreateUserStmt(false, new UserDesc(new UserIdentity("domain_user",
+                        "localhost", true)), Collections.emptyList()),
+                grantPrivilegeStmt);
+
 
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
@@ -402,9 +511,13 @@ public class AuthUpgraderTest {
     public void testUserPasswordAfterUpgrade() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user testuserpass1",
-                "create user testuserpass2 identified by '123456'",
-                "alter user root identified by '123456'");
+                createUserStmt("testuserpass1"),
+                new CreateUserStmt(false, new UserDesc(new UserIdentity("testuserpass2", "%"),
+                        "123456", true), Collections.emptyList()),
+                new AlterUserStmt(
+                        new UserDesc(new UserIdentity("root", "%"), "123456", true),
+                        false
+                ));
 
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
@@ -422,18 +535,25 @@ public class AuthUpgraderTest {
     public void testResource() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user globalUsageResourceUser",
-                "GRANT usage_priv on resource * TO globalUsageResourceUser",
-                "create user globalUsageResourceUser1",
-                "GRANT usage_priv on * TO globalUsageResourceUser1",
-                "create user oneUsageResourceUser",
-                "GRANT usage_priv on resource hive0 TO oneUsageResourceUser",
-                "create role globalUsageResourceRole",
-                "GRANT usage_priv on resource * TO role globalUsageResourceRole",
-                "create role globalUsageResourceRole1",
-                "GRANT usage_priv on * TO role globalUsageResourceRole1",
-                "create role oneUsageResourceRole",
-                "GRANT usage_priv on resource hive0 TO role oneUsageResourceRole");
+                createUserStmt("globalUsageResourceUser"),
+                grantPrivilegeStmt(Lists.newArrayList("USAGE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("*"), "globalUsageResourceUser"),
+                createUserStmt("globalUsageResourceUser1"),
+                grantPrivilegeStmt(Lists.newArrayList("USAGE_PRIV"), "DATABASE",
+                        Lists.newArrayList("*"), "globalUsageResourceUser1"),
+                createUserStmt("oneUsageResourceUser"),
+                grantPrivilegeStmt(Lists.newArrayList("USAGE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("hive0"), "oneUsageResourceUser"),
+                createRoleStmt("globalUsageResourceRole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("USAGE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("*"), "globalUsageResourceRole"),
+                createRoleStmt("globalUsageResourceRole1"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("USAGE_PRIV"), "DATABASE",
+                        Lists.newArrayList("*"), "globalUsageResourceRole1"),
+                createRoleStmt("oneUsageResourceRole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("USAGE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("hive0"), "oneUsageResourceRole"));
+
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
             if (i == 1) {
@@ -459,24 +579,35 @@ public class AuthUpgraderTest {
     public void testCreate() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user userWithGlobalCreate",
-                "grant create_priv on *.* to userWithGlobalCreate",
-                "create role userWithGlobalCreate",
-                "grant create_priv on *.* to role userWithGlobalCreate",
-                "create user userWithResourceAllCreate",
-                "grant create_priv on resource * to userWithResourceAllCreate",
-                "create user userWithDbCreate",
-                "grant create_priv on db1.* to userWithDbCreate",
-                "create role userWithDbCreate",
-                "grant create_priv on db1.* to role userWithDbCreate",
-                "create user tableCreate",
-                "grant create_priv on db0.tbl0 to tableCreate",
-                "create role tableCreate",
-                "grant create_priv on db0.tbl0 to role tableCreate",
-                "create user viewCreate",
-                "grant create_priv on db0.view to viewCreate",
-                "create role viewCreate",
-                "grant create_priv on db0.view to role viewCreate");
+                createUserStmt("userWithGlobalCreate"),
+                grantPrivilegeStmt(Lists.newArrayList("CREATE_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "userWithGlobalCreate"),
+                createRoleStmt("userWithGlobalCreate"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("CREATE_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "userWithGlobalCreate"),
+                createUserStmt("userWithResourceAllCreate"),
+                grantPrivilegeStmt(Lists.newArrayList("CREATE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("*"), "userWithResourceAllCreate"),
+                createUserStmt("userWithDbCreate"),
+                grantPrivilegeStmt(Lists.newArrayList("CREATE_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "*"), "userWithDbCreate"),
+                createRoleStmt("userWithDbCreate"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("CREATE_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "*"), "userWithDbCreate"),
+
+                createUserStmt("tableCreate"),
+                grantPrivilegeStmt(Lists.newArrayList("CREATE_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "tbl0"), "tableCreate"),
+                createRoleStmt("tableCreate"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("CREATE_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "tbl0"), "tableCreate"),
+                createUserStmt("viewCreate"),
+                grantPrivilegeStmt(Lists.newArrayList("CREATE_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "view"), "viewCreate"),
+                createRoleStmt("viewCreate"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("CREATE_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "view"), "viewCreate"));
+
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
             if (i == 1) {
@@ -539,24 +670,41 @@ public class AuthUpgraderTest {
     public void testDrop() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user userWithGlobalDrop",
-                "grant drop_priv on *.* to userWithGlobalDrop",
-                "create role userWithGlobalDrop",
-                "grant drop_priv on *.* to role userWithGlobalDrop",
-                "create user userWithResourceAllDrop",
-                "grant drop_priv on resource * to userWithResourceAllDrop",
-                "create user userWithDbDrop",
-                "grant drop_priv on db1.* to userWithDbDrop",
-                "create role userWithDbDrop",
-                "grant drop_priv on db1.* to role userWithDbDrop",
-                "create user tableDrop",
-                "grant drop_priv on db0.tbl0 to tableDrop",
-                "create role tableDrop",
-                "grant drop_priv on db0.tbl0 to role tableDrop",
-                "create user viewDrop",
-                "grant drop_priv on db0.view to viewDrop",
-                "create role viewDrop",
-                "grant drop_priv on db0.view to role viewDrop");
+                createUserStmt("userWithGlobalDrop"),
+                grantPrivilegeStmt(Lists.newArrayList("DROP_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "userWithGlobalDrop"),
+                createRoleStmt("userWithGlobalDrop"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("DROP_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "userWithGlobalDrop"),
+
+                createUserStmt("userWithResourceAllDrop"),
+                grantPrivilegeStmt(Lists.newArrayList("DROP_PRIV"), "RESOURCE",
+                        Lists.newArrayList("*"), "userWithResourceAllDrop"),
+
+                createUserStmt("userWithDbDrop"),
+                grantPrivilegeStmt(Lists.newArrayList("DROP_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "*"), "userWithDbDrop"),
+
+                createRoleStmt("userWithDbDrop"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("DROP_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "*"), "userWithDbDrop"),
+
+                createUserStmt("tableDrop"),
+                grantPrivilegeStmt(Lists.newArrayList("DROP_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "tbl0"), "tableDrop"),
+
+                createRoleStmt("tableDrop"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("DROP_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "tbl0"), "tableDrop"),
+
+                createUserStmt("viewDrop"),
+                grantPrivilegeStmt(Lists.newArrayList("DROP_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "view"), "viewDrop"),
+
+                createRoleStmt("viewDrop"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("DROP_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "view"), "viewDrop"));
+
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
             if (i == 1) {
@@ -634,24 +782,39 @@ public class AuthUpgraderTest {
     public void testAlter() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user userWithGlobalAlter",
-                "grant alter_priv on *.* to userWithGlobalAlter",
-                "create role userWithGlobalAlter",
-                "grant alter_priv on *.* to role userWithGlobalAlter",
-                "create user userWithResourceAllAlter",
-                "grant alter_priv on resource * to userWithResourceAllAlter",
-                "create user userWithDbAlter",
-                "grant alter_priv on db1.* to userWithDbAlter",
-                "create role userWithDbAlter",
-                "grant alter_priv on db1.* to role userWithDbAlter",
-                "create user tableAlter",
-                "grant alter_priv on db0.tbl0 to tableAlter",
-                "create role tableAlter",
-                "grant alter_priv on db0.tbl0 to role tableAlter",
-                "create user viewAlter",
-                "grant alter_priv on db0.view to viewAlter",
-                "create role viewAlter",
-                "grant alter_priv on db0.view to role viewAlter");
+                createUserStmt("userWithGlobalAlter"),
+                grantPrivilegeStmt(Lists.newArrayList("ALTER_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "userWithGlobalAlter"),
+                createRoleStmt("userWithGlobalAlter"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("ALTER_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "userWithGlobalAlter"),
+
+                createUserStmt("userWithResourceAllAlter"),
+                grantPrivilegeStmt(Lists.newArrayList("ALTER_PRIV"), "RESOURCE",
+                        Lists.newArrayList("*"), "userWithResourceAllAlter"),
+
+                createUserStmt("userWithDbAlter"),
+                grantPrivilegeStmt(Lists.newArrayList("ALTER_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "*"), "userWithDbAlter"),
+
+                createRoleStmt("userWithDbAlter"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("ALTER_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "*"), "userWithDbAlter"),
+
+                createUserStmt("tableAlter"),
+                grantPrivilegeStmt(Lists.newArrayList("ALTER_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "tbl0"), "tableAlter"),
+
+                createRoleStmt("tableAlter"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("ALTER_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "tbl0"), "tableAlter"),
+                createUserStmt("viewAlter"),
+                grantPrivilegeStmt(Lists.newArrayList("ALTER_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "view"), "viewAlter"),
+                createRoleStmt("viewAlter"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("ALTER_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "view"), "viewAlter"));
+
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
             if (i == 1) {
@@ -730,18 +893,27 @@ public class AuthUpgraderTest {
     public void testNodeAdmin() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user nodeuser",
-                "GRANT node_priv on *.* to nodeuser",
-                "create role noderole",
-                "GRANT node_priv on *.* to role noderole",
-                "create user noderesourceuser",
-                "GRANT node_priv on resource * to noderesourceuser",
-                "create role noderesourcerole",
-                "GRANT node_priv on resource * to role noderesourcerole",
-                "create user adminuser",
-                "GRANT admin_priv on *.* to adminuser",
-                "create role adminrole",
-                "GRANT admin_priv on *.* to role adminrole");
+                createUserStmt("nodeuser"),
+                grantPrivilegeStmt(Lists.newArrayList("NODE_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "nodeuser"),
+                createRoleStmt("noderole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("NODE_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "noderole"),
+                createUserStmt("noderesourceuser"),
+                grantPrivilegeStmt(Lists.newArrayList("NODE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("*"), "noderesourceuser"),
+                createRoleStmt("noderesourcerole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("NODE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("*"), "noderesourcerole"),
+
+                createUserStmt("adminuser"),
+                grantPrivilegeStmt(Lists.newArrayList("ADMIN_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "adminuser"),
+
+                createRoleStmt("adminrole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("ADMIN_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "adminrole"));
+
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
             if (i == 1) {
@@ -796,21 +968,29 @@ public class AuthUpgraderTest {
     }
 
     // for test GRANT
-    private UtFrameUtils.PseudoImage initGrantImage(String name, String grantPattern) throws Exception {
+    private UtFrameUtils.PseudoImage initGrantImage(String name, List<String> grantPattern) throws Exception {
         String user = name + "_user";
         String role = name + "_role";
+
         return executeAndUpgrade(
                 true,
-                "create user " + user,
-                "GRANT grant_priv on " + grantPattern + " to " + user,
-                "GRANT select_priv on db0.* to " + user,
-                "GRANT select_priv on db1.tbl1 to " + user,
-                "GRANT usage_priv on resource hive0 to " + user,
-                "create role " + role,
-                "GRANT grant_priv on " + grantPattern + " to role " + role,
-                "GRANT select_priv on db0.* to role " + role,
-                "GRANT select_priv on db1.tbl1 to role " + role,
-                "GRANT usage_priv on resource hive0 to role " + role);
+                createUserStmt(user),
+                grantPrivilegeStmt(Lists.newArrayList("GRANT_PRIV"), "TABLE", grantPattern, user),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "*"), user),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "tbl1"), user),
+                grantPrivilegeStmt(Lists.newArrayList("USAGE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("hive0"), user),
+
+                createRoleStmt("" + role),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("GRANT_PRIV"), "TABLE", grantPattern, role),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "*"), role),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "tbl1"), role),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("USAGE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("hive0"), role));
     }
 
     // for test GRANT
@@ -854,7 +1034,7 @@ public class AuthUpgraderTest {
 
     @Test
     public void testGlobalGrant() throws Exception {
-        UtFrameUtils.PseudoImage image = initGrantImage("global_grant", "*.*");
+        UtFrameUtils.PseudoImage image = initGrantImage("global_grant", Lists.newArrayList("*", "*"));
         List<String> allows = Arrays.asList(
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
@@ -877,7 +1057,7 @@ public class AuthUpgraderTest {
 
     @Test
     public void testDbGrant() throws Exception {
-        UtFrameUtils.PseudoImage image = initGrantImage("db_grant", "db0.*");
+        UtFrameUtils.PseudoImage image = initGrantImage("db_grant", Lists.newArrayList("db0", "*"));
         List<String> allows = Arrays.asList(
                 "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public");
         List<String> denies = Arrays.asList(
@@ -901,7 +1081,7 @@ public class AuthUpgraderTest {
 
     @Test
     public void testTblGrant() throws Exception {
-        UtFrameUtils.PseudoImage image = initGrantImage("table_grant", "db1.tbl1");
+        UtFrameUtils.PseudoImage image = initGrantImage("table_grant", Lists.newArrayList("db1", "tbl1"));
         List<String> allows = Arrays.asList(
                 "GRANT SELECT ON db1.tbl1 TO role public");
         List<String> denies = Arrays.asList(
@@ -923,9 +1103,36 @@ public class AuthUpgraderTest {
         checkGrant(image, "table_grant", allows, denies);
     }
 
+
     @Test
     public void testResourceGrant() throws Exception {
-        UtFrameUtils.PseudoImage image = initGrantImage("resource_grant", "resource hive0");
+        String name = "resource_grant";
+        String user = name + "_user";
+        String role = name + "_role";
+
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                createUserStmt(user),
+                grantPrivilegeStmt(Lists.newArrayList("GRANT_PRIV"), "RESOURCE",
+                        Lists.newArrayList("hive0"), user),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "*"), user),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "tbl1"), user),
+                grantPrivilegeStmt(Lists.newArrayList("USAGE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("hive0"), user),
+
+                createRoleStmt("" + role),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("GRANT_PRIV"), "RESOURCE",
+                        Lists.newArrayList("hive0"), role),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "*"), role),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "tbl1"), role),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("USAGE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("hive0"), role));
+
+
         List<String> allows = Arrays.asList(
                 "GRANT USAGE ON resource 'hive0' TO role public");
         List<String> denies = Arrays.asList(
@@ -947,9 +1154,36 @@ public class AuthUpgraderTest {
         checkGrant(image, "resource_grant", allows, denies);
     }
 
+
     @Test
     public void testResourceGlobal() throws Exception {
-        UtFrameUtils.PseudoImage image = initGrantImage("resource_global_grant", "resource *");
+        String name = "resource_global_grant";
+        String user = name + "_user";
+        String role = name + "_role";
+
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                createUserStmt(user),
+                grantPrivilegeStmt(Lists.newArrayList("GRANT_PRIV"), "RESOURCE",
+                        Lists.newArrayList("*"), user),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "*"), user),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "tbl1"), user),
+                grantPrivilegeStmt(Lists.newArrayList("USAGE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("hive0"), user),
+
+                createRoleStmt("" + role),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("GRANT_PRIV"), "RESOURCE",
+                        Lists.newArrayList("*"), role),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "*"), role),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "tbl1"), role),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("USAGE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("hive0"), role));
+
+
         List<String> allows = Arrays.asList(
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
@@ -974,10 +1208,13 @@ public class AuthUpgraderTest {
     public void testPluginStmts() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user pluginUser",
-                "GRANT admin_priv on *.* TO pluginUser",
-                "create role pluginRole",
-                "GRANT admin_priv on *.* TO role pluginRole");
+                createUserStmt("pluginUser"),
+                grantPrivilegeStmt(Lists.newArrayList("ADMIN_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "pluginUser"),
+                createRoleStmt("pluginRole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("ADMIN_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "pluginRole"));
+
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
             if (i == 1) {
@@ -1001,10 +1238,13 @@ public class AuthUpgraderTest {
     public void testBlackList() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user blacklistUser",
-                "GRANT admin_priv on *.* TO blacklistUser",
-                "create role blacklistRole",
-                "GRANT admin_priv on *.* TO role blacklistRole");
+                createUserStmt("blacklistUser"),
+                grantPrivilegeStmt(Lists.newArrayList("ADMIN_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "blacklistUser"),
+                createRoleStmt("blacklistRole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("ADMIN_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "blacklistRole"));
+
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
             if (i == 1) {
@@ -1028,18 +1268,29 @@ public class AuthUpgraderTest {
     public void testShowFile() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
-                "create user fileAdminUser",
-                "GRANT admin_priv on *.* TO fileAdminUser",
-                "create role fileAdminRole",
-                "GRANT admin_priv on *.* TO role fileAdminRole",
-                "create user fileDbUser",
-                "GRANT select_priv on db1.* TO fileDbUser",
-                "create role fileDbRole",
-                "GRANT select_priv on db1.* TO role fileDbRole",
-                "create user fileTblUser",
-                "GRANT select_priv on db1.tbl1 TO fileTblUser",
-                "create role fileTblRole",
-                "GRANT select_priv on db1.tbl1 TO role fileTblRole");
+                createUserStmt("fileAdminUser"),
+                grantPrivilegeStmt(Lists.newArrayList("ADMIN_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "fileAdminUser"),
+                createRoleStmt("fileAdminRole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("ADMIN_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "fileAdminRole"),
+
+                createUserStmt("fileDbUser"),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "*"), "fileDbUser"),
+
+                createRoleStmt("fileDbRole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "*"), "fileDbRole"),
+
+                createUserStmt("fileTblUser"),
+                grantPrivilegeStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "tbl1"), "fileTblUser"),
+
+                createRoleStmt("fileTblRole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("SELECT_PRIV"), "TABLE",
+                        Lists.newArrayList("db1", "tbl1"), "fileTblRole"));
+
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
             if (i == 1) {

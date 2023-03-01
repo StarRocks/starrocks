@@ -55,6 +55,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -170,7 +171,11 @@ public class AstToStringBuilder {
                 sb.append("REVOKE ");
             }
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                List<String> privList = stmt.getPrivilegeTypes().stream().map(Enum::name).collect(toList());
+                List<String> privList = new ArrayList<>();
+                for (PrivilegeType privilegeType : stmt.getPrivilegeTypes()) {
+                    privList.add(privilegeType.name().replace("_", " "));
+                }
+
                 sb.append(Joiner.on(", ").join(privList));
                 sb.append(" ON ");
 
