@@ -37,6 +37,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static java.util.function.UnaryOperator.identity;
+
 /**
  * SPJG materialized view rewriter, based on
  * 《Optimizing Queries Using Materialized Views: A Practical, Scalable Solution》
@@ -337,7 +339,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         // If not all group by keys are column ref, need add new project to input expr.
         if (!isAllGroupByKeyColumnRefs) {
             // Push group by scalar operators into new projection node.
-            Map<ColumnRefOperator, ScalarOperator> newQueryProjection = mvOptExpr.getRowOutputInfo().getColumnRefMap();
+            Map<ColumnRefOperator, ScalarOperator> newQueryProjection = mvOptExpr.getOutputColumns().getStream()
+                    .mapToObj(id -> rewriteContext.getQueryRefFactory().getColumnRef(id))
+                    .collect(Collectors.toMap(identity(), identity()));
             for (ColumnRefOperator oldGroupByKey : originalGroupKeys) {
                 ScalarOperator newGroupByKey = queryColumnRefToScalarMap.get(oldGroupByKey);
                 if (newGroupByKey instanceof ColumnRefOperator) {
