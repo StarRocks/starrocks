@@ -668,12 +668,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         return modifiedColumns;
     }
 
-    private void inactiveRelatedMv(Set<String> modifiedColumns, OlapTable tbl) {
+    private void inactiveRelatedMv(Set<String> modifiedColumns, OlapTable table) {
         if (modifiedColumns.isEmpty()) {
             return;
         }
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        for (MvId mvId : tbl.getRelatedMaterializedViews()) {
+        for (MvId mvId : table.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
@@ -681,8 +681,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
             for (Column mvColumn : mv.getColumns()) {
                 if (modifiedColumns.contains(mvColumn.getName())) {
-                    LOG.warn("Set materialized view {} inactive because the base table's scheme has changed",
-                            mv.getName());
+                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                            "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
+                            table.getName(), mvColumn.getName());
                     mv.setActive(false);
                     return;
                 }
