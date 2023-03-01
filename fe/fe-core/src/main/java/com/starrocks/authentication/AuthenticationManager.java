@@ -58,9 +58,9 @@ public class AuthenticationManager {
     // core data structure
     // user identity -> all the authentication information
     // will be manually serialized one by one
-    protected Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo = new UserAuthInfoTreeMap();
+    protected Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo;
 
-    private class UserAuthInfoTreeMap extends TreeMap<UserIdentity, UserAuthenticationInfo> {
+    private static class UserAuthInfoTreeMap extends TreeMap<UserIdentity, UserAuthenticationInfo> {
         public UserAuthInfoTreeMap() {
             super((o1, o2) -> {
                 // make sure that ip > domain > %
@@ -76,6 +76,25 @@ public class AuthenticationManager {
                 // compare user name
                 return o1.getQualifiedUser().compareTo(o2.getQualifiedUser());
             });
+        }
+
+        /**
+         * If someone log in from 10.1.1.1 with name "test_user", the matching UserIdentity
+         * can be sorted in the below order,
+         *   1. test_user@10.1.1.1
+         *   2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
+         *      If multiple hostnames match the login ip, just return one randomly.
+         *   3. test_user@%, as a fallback.
+         */
+        private static Integer scoreUserIdentityHost(UserIdentity userIdentity) {
+            // ip(1) > hostname(2) > %(3)
+            if (userIdentity.isDomain()) {
+                return 2;
+            }
+            if (userIdentity.getHost().equals(UserAuthenticationInfo.ANY_HOST)) {
+                return 3;
+            }
+            return 1;
         }
     }
 
@@ -116,6 +135,7 @@ public class AuthenticationManager {
                 LDAPAuthenticationProvider.PLUGIN_NAME, new LDAPAuthenticationProvider());
 
         // default user
+        userToAuthenticationInfo = new UserAuthInfoTreeMap();
         UserAuthenticationInfo info = new UserAuthenticationInfo();
         try {
             info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
@@ -143,24 +163,6 @@ public class AuthenticationManager {
 
     public String getDefaultPlugin() {
         return DEFAULT_PLUGIN;
-    }
-
-    /**
-     * If someone log in from 10.1.1.1 with name "test_user", the matching UserIdentity can be sorted in the below order
-     * 1. test_user@10.1.1.1
-     * 2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
-     * If multiple hostnames match the login ip, just return one randomly.
-     * 3. test_user@%, as a fallback.
-     */
-    private Integer scoreUserIdentityHost(UserIdentity userIdentity) {
-        // ip(1) > hostname(2) > %(3)
-        if (userIdentity.isDomain()) {
-            return 2;
-        }
-        if (userIdentity.getHost().equals(UserAuthenticationInfo.ANY_HOST)) {
-            return 3;
-        }
-        return 1;
     }
 
     private boolean match(String remoteUser, String remoteHost, boolean isDomain, UserAuthenticationInfo info) {
@@ -497,7 +499,7 @@ public class AuthenticationManager {
             try {
                 // 1 json for myself
                 ret = (AuthenticationManager) reader.readJson(AuthenticationManager.class);
-                ret.userToAuthenticationInfo = new HashMap<>();
+                ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
                 // 1 json for num user
                 int numUser = (int) reader.readJson(int.class);
                 LOG.info("loading {} users", numUser);
