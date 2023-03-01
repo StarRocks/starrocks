@@ -978,6 +978,7 @@ bool OlapTableSink::is_close_done() {
     return _close_done;
 }
 
+<<<<<<< HEAD
 void OlapTableSink::cancel() {
     Status st = Status::Cancelled("cancel");
     for (auto& index_channel : _channels) {
@@ -985,6 +986,8 @@ void OlapTableSink::cancel() {
     }
 }
 
+=======
+>>>>>>> 8158d834d (Revert "[Enhancement] OlapTableSink of non-pipeline engine support fast cancel (#15398)" (#18609))
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
     if (close_status.ok()) {
         do {
