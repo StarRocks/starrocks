@@ -169,6 +169,7 @@ message PTabletWriterOpenRequest {
     // before data load, the all current partitions will be opened
     // When the data load in progress, the partition created by automatic partition needs incremental open
     optional bool is_incremental = 29 [default = false];
+    optional int32 sender_id = 30;
 };
 
 message PTabletWriterOpenResult {

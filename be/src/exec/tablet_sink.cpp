@@ -207,6 +207,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_miss_auto_increment_column(_parent->_miss_auto_increment_column);
     request.set_abort_delete(_parent->_abort_delete);
     request.set_is_incremental(incremental_open);
+    request.set_sender_id(_parent->_sender_id);
     for (auto& tablet : tablets) {
         auto ptablet = request.add_tablets();
         ptablet->CopyFrom(tablet);
@@ -243,8 +244,8 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.release_id();
     request.release_schema();
 
-    VLOG(2) << "NodeChannel[" << _load_info << "] send open request to [" << _node_info->host << ":"
-            << _node_info->brpc_port << "]";
+    VLOG(2) << "NodeChannel[" << _load_info << "] send open request [incremental: " << incremental_open << "] to ["
+            << _node_info->host << ":" << _node_info->brpc_port << "]";
 }
 
 void NodeChannel::try_incremental_open() {
@@ -1603,9 +1604,6 @@ Status OlapTableSink::try_close(RuntimeState* state) {
 }
 
 Status OlapTableSink::_fill_auto_increment_id(Chunk* chunk) {
-    if (_has_automatic_partition) {
-        return Status::OK();
-    }
     if (_auto_increment_slot_id == -1) {
         return Status::OK();
     }

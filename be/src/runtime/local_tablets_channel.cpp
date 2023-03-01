@@ -78,13 +78,14 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::sh
     _tuple_desc = _schema->tuple_desc();
     _node_id = params.node_id();
 
+    _senders = std::vector<Sender>(params.num_senders());
     if (is_incremental) {
         _num_remaining_senders.fetch_add(1, std::memory_order_release);
         _is_incremental_channel = true;
+        _senders[params.sender_id()].has_incremental_open = true;
     } else {
         _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
     }
-    _senders = std::vector<Sender>(params.num_senders());
 
     RETURN_IF_ERROR(_open_all_writers(params));
     return Status::OK();
@@ -110,6 +111,8 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
 
     delta_writer->write_segment(req);
     closure_guard.release();
+
+    _num_ref_senders.fetch_sub(1);
 }
 
 void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
@@ -302,6 +305,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
     }
 
+    _num_ref_senders.fetch_sub(1);
+
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
 
@@ -423,6 +428,9 @@ int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partiti
     // So we need to make sure that all partitions are added to _partition_ids when committing
     int n = _num_remaining_senders.fetch_sub(1);
     DCHECK_GE(n, 1);
+
+    VLOG(1) << "LocalTabletsChannel txn_id: " << _txn_id << " close " << partitions_size << " partitions remaining "
+            << n - 1 << " senders";
     return n - 1;
 }
 
@@ -521,6 +529,10 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     for (auto& tablet_id : failed_tablet_ids) {
         ss << tablet_id << ",";
     }
+    if (_is_incremental_channel) {
+        ss << " on incremental channel";
+    }
+    ss << " _num_remaining_senders: " << _num_remaining_senders;
     LOG(INFO) << ss.str();
     return Status::OK();
 }
@@ -543,6 +555,7 @@ void LocalTabletsChannel::abort() {
     LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << _key.id
               << " index_id: " << _key.index_id << " #tablet:" << _delta_writers.size()
               << " tablet_ids:" << tablet_id_list_str;
+    _num_ref_senders.fetch_sub(1);
 }
 
 void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids) {
@@ -626,7 +639,8 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
     tablet_ids.reserve(params.tablets_size());
     size_t incremental_tablet_num = 0;
     std::stringstream ss;
-    ss << "incremental open delta writer ";
+    ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id())
+       << " incremental open delta writer: ";
 
     for (const PTabletWithPartition& tablet : params.tablets()) {
         if (_delta_writers.count(tablet.tablet_id()) != 0) {
@@ -674,8 +688,6 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
     }
     _s_tablet_writer_count += incremental_tablet_num;
 
-    LOG(INFO) << ss.str();
-
     auto it = _tablet_id_to_sorted_indexes.begin();
     while (it != _tablet_id_to_sorted_indexes.end()) {
         tablet_ids.emplace_back(it->first);
@@ -687,9 +699,13 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
     }
 
-    if (_is_incremental_channel) {
+    if (_is_incremental_channel && !_senders[params.sender_id()].has_incremental_open) {
         _num_remaining_senders.fetch_add(1, std::memory_order_release);
+        _senders[params.sender_id()].has_incremental_open = true;
+        ss << " on incremental channel _num_remaining_senders: " << _num_remaining_senders;
     }
+
+    LOG(INFO) << ss.str();
 
     return Status::OK();
 }

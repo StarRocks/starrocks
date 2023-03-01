@@ -64,6 +64,10 @@ public:
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
+    void incr_num_ref_senders() { _num_ref_senders.fetch_add(1); }
+
+    int num_ref_senders() { return _num_ref_senders.load(std::memory_order_acquire); }
+
 private:
     using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
@@ -76,6 +80,7 @@ private:
         std::set<int64_t> success_sliding_window;
 
         int64_t last_sliding_packet_seq = -1;
+        bool has_incremental_open = false;
     };
 
     class WriteContext {
@@ -174,9 +179,10 @@ private:
     TupleDescriptor* _tuple_desc = nullptr;
 
     // next sequence we expect
-    std::atomic<int> _num_remaining_senders;
+    std::atomic<int> _num_remaining_senders = 0;
     std::vector<Sender> _senders;
     size_t _max_sliding_window_size = config::max_load_dop * 3;
+    std::atomic<int> _num_ref_senders = 0;
 
     mutable bthread::Mutex _partitions_ids_lock;
     std::unordered_set<int64_t> _partition_ids;
