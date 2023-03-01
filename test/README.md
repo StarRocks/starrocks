@@ -292,3 +292,30 @@ RES LINE2
 -- !result
 SQL2;
 ```
+
+
+### 5. REGULAR CHECKS FOR SQL RESULTS
+Some SQL execution results have variables (such as ID).In addition to using SKIP CHECK and UNCHECK, the framework supports regular checks.  
+Note: Before using, please make sure the SQL is not in the SKIP CHECK list.  
+Usage: Add the [REGEX] marker before the result to be verified.
+```sql
+-- name: ${case name}
+SQL1;
+-- result: 
+[REGEX]***
+-- !result
+```
+- Example:
+```sql
+-- name: test_sql_regex
+create table t0 ( c0 int ) distributed by hash(c0) buckets 2 properties("replication_num" = "3");
+insert into t0 values (1), (1), (2), (3);
+select * from t0 order by c0;
+-- result:
+[REGEX]1\n1\n2\n3
+-- !result
+explain select 1;
+-- result:
+[REGEX].*PARTITION: UNPARTITIONED.*
+-- !result
+```
