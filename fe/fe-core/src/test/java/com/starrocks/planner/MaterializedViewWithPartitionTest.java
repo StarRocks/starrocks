@@ -26,24 +26,12 @@ import org.junit.Test;
 
 public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewWithPartitionTest.class);
-    private static final String MATERIALIZED_DB_NAME = "test_mv";
 
     @BeforeClass
     public static void setUp() throws Exception {
-        Config.enable_experimental_mv = true;
+        MaterializedViewTestBase.setUp();
 
-        UtFrameUtils.createMinStarRocksCluster();
-        connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(false);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert
-                .withDatabase(MATERIALIZED_DB_NAME)
-                .useDatabase(MATERIALIZED_DB_NAME);
+        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         starRocksAssert.withTable("create table test_base_part(c1 int, c2 bigint, c3 bigint, c4 bigint)" +
                 " partition by range(c3) (" +

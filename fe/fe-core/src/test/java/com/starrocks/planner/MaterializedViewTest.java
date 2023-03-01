@@ -35,18 +35,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
-
-        connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(false);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
+        MaterializedViewTestBase.setUp();
 
         String deptsTable = "" +
                 "CREATE TABLE depts(    \n" +
@@ -95,8 +84,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
 
-        starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
-                .useDatabase(MATERIALIZED_DB_NAME)
+        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME)
                 .withTable(empsTable)
                 .withTable(locationsTable)
                 .withTable(ependentsTable)
