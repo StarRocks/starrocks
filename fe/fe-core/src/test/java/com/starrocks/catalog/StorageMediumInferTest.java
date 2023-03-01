@@ -50,7 +50,7 @@ import org.junit.Test;
 
 import java.util.List;
 
-public class StorageMediumInfoTest {
+public class StorageMediumInferTest {
     private static ConnectContext connectContext;
     private static Backend be1;
     private static Backend be2;
@@ -112,6 +112,7 @@ public class StorageMediumInfoTest {
 
         be1.setStorageMediumForAllDisks(TStorageMedium.SSD);
         be2.setStorageMediumForAllDisks(TStorageMedium.HDD);
+        Config.tablet_sched_storage_cooldown_second = 123123213L;
         createTable("create table test.tbl3(key1 int, key2 varchar(10)) \n" +
                 "distributed by hash(key1) buckets 10 properties('replication_num' = '1');");
         OlapTable tbl3 = (OlapTable) db.getTable("tbl3");
@@ -120,6 +121,16 @@ public class StorageMediumInfoTest {
                 globalStateMgr.getDataPropertyIncludeRecycleBin(tbl3.getPartitionInfo(),
                         partitionList3.get(0).getId());
         Assert.assertEquals(TStorageMedium.SSD, dataProperty3.getStorageMedium());
+
+        Config.tablet_sched_storage_cooldown_second = -1L; // default value, no storage cool down
+        createTable("create table test.tbl4(key1 int, key2 varchar(10)) \n" +
+                "distributed by hash(key1) buckets 10 properties('replication_num' = '1');");
+        OlapTable tbl4 = (OlapTable) db.getTable("tbl4");
+        List<Partition> partitionList4 = Lists.newArrayList(tbl4.getPartitions());
+        DataProperty dataProperty4 =
+                globalStateMgr.getDataPropertyIncludeRecycleBin(tbl4.getPartitionInfo(),
+                        partitionList4.get(0).getId());
+        Assert.assertEquals(TStorageMedium.HDD, dataProperty4.getStorageMedium());
     }
 
     @Test
