@@ -316,9 +316,9 @@ private:
     // Alive rowsets. Map from rowset id to the number of binlog files using it in _alive_binlog_files
     std::unordered_map<int64_t, int32_t> _alive_rowset_count_map;
     // Disk size for alive binlog files
-    atomic<int64_t> _total_alive_binlog_file_size = 0;
+    std::atomic<int64_t> _total_alive_binlog_file_size = 0;
     // Disk size for alive rowsets
-    atomic<int64_t> _total_alive_rowset_data_size = 0;
+    std::atomic<int64_t> _total_alive_rowset_data_size = 0;
 
     // the binlog file writer that can append data
     BinlogFileWriterPtr _active_binlog_writer;
@@ -328,9 +328,9 @@ private:
     std::deque<BinlogFilePtr> _wait_reader_binlog_files;
     std::unordered_map<int64_t, int32_t> _wait_reader_rowset_count_map;
     // Disk size for wait reader binlog files
-    atomic<int64_t> _total_wait_reader_binlog_file_size = 0;
+    std::atomic<int64_t> _total_wait_reader_binlog_file_size = 0;
     // Disk size for wait reader rowsets
-    atomic<int64_t> _total_wait_reader_rowset_data_size = 0;
+    std::atomic<int64_t> _total_wait_reader_rowset_data_size = 0;
 
     // ids of unused binlog files that can be deleted
     BlockingQueue<int64_t> _unused_binlog_file_ids;

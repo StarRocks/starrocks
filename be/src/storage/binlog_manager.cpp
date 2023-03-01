@@ -205,7 +205,7 @@ void BinlogManager::_check_wait_reader_binlog_files() {
 void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t binlog_ttl_second,
                                               int64_t binlog_max_size) {
     int64_t expiration_time = current_second - binlog_ttl_second;
-    int64_t active_file_id = _active_binlog_writer != nullptr ? -1 : _active_binlog_writer->file_id();
+    int64_t active_file_id = _active_binlog_writer != nullptr ? _active_binlog_writer->file_id() : -1;
     // binlog files should be deleted in the order by the file id, and if there are previous
     // binlog files waiting for readers, the latter should also wait for the readers
     bool need_wait_reader = !_wait_reader_binlog_files.empty();
