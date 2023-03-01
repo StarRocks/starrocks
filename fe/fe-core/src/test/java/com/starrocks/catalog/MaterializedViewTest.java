@@ -529,6 +529,7 @@ public class MaterializedViewTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testMvAfterBaseTablePartitionRename() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
@@ -563,6 +564,8 @@ public class MaterializedViewTest {
     }
 
     @Test
+=======
+>>>>>>> 010e8b0d6 ([Enhancement] Logging is added for all materialized view inactive (#18647))
     public void testMaterializedViewWithHint() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
