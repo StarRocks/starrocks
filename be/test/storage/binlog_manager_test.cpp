@@ -102,7 +102,10 @@ protected:
 
 protected:
     void generate_random_binlog(BinlogManager* binlog_manager, MockRowsetFetcher* rowset_fetcher,
-                                std::vector<std::shared_ptr<BinlogFileInfo>>& binlog_files);
+                                std::vector<std::shared_ptr<BinlogFileInfo>>& binlog_files, int32_t num_version,
+                                int32_t num_binlog_files);
+    void test_binlog_expired_and_overcapacity(bool expired, bool overcapacity);
+
     int64_t _next_rowset_uid;
     std::unique_ptr<TabletSchema> _tablet_schema;
     Schema _schema;
@@ -455,7 +458,8 @@ BinlogFileMetaPBPtr build_binlog_file_meta(BinlogFileInfoPtr file_info) {
 }
 
 void BinlogManagerTest::generate_random_binlog(BinlogManager* binlog_manager, MockRowsetFetcher* rowset_fetcher,
-                                               std::vector<BinlogFileInfoPtr>& binlog_file_infos) {
+                                               std::vector<BinlogFileInfoPtr>& binlog_file_infos, int32_t num_version,
+                                               int32_t num_binlog_files) {
     // mock rowsets and only use them to get data size Rowset#data_disk_size()
     std::vector<RowsetSharedPtr> mock_rowsets;
     for (int i = 1; i <= 5; i++) {
@@ -467,7 +471,7 @@ void BinlogManagerTest::generate_random_binlog(BinlogManager* binlog_manager, Mo
 
     // construct alive files
     int64_t next_file_id = 0;
-    for (int32_t version = 2; version <= 100; version++) {
+    for (int32_t version = 2; version < num_version + 2 || binlog_file_infos.size() < num_binlog_files; version++) {
         int64_t rowset_id = version;
         RowsetSharedPtr rowset = mock_rowsets[std::rand() % mock_rowsets.size()];
         rowset_fetcher->add_rowset(rowset_id, rowset);
@@ -656,7 +660,7 @@ void verify_unused_binlog_files(BinlogManager* binlog_manager, std::vector<Binlo
     }
 }
 
-TEST_F(BinlogManagerTest, test_check_alive_files) {
+void BinlogManagerTest::test_binlog_expired_and_overcapacity(bool expired, bool overcapacity) {
     int64_t max_file_size = 100 * 1024 * 1024;
     int32_t max_page_size = 1024 * 1024;
     CompressionTypePB compress_type = LZ4_FRAME;
@@ -665,20 +669,98 @@ TEST_F(BinlogManagerTest, test_check_alive_files) {
             std::rand(), _binlog_file_dir, max_file_size, max_page_size, compress_type, rowset_fetcher);
 
     std::vector<BinlogFileInfoPtr> binlog_file_infos;
-    generate_random_binlog(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos);
+    generate_random_binlog(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 100, 20);
     verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 0);
     verify_wait_reader_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 0, -1);
     verify_unused_binlog_files(binlog_manager.get(), binlog_file_infos, 0, -1);
 
     std::vector<ExpireAndCapacityParams> params;
     generate_params(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, params);
-
-    for (int i = 0; i < params.size(); i++) {
+    bool is_alive = !expired && !overcapacity;
+    for (int i = 0; i < params.size(); i += 2) {
         auto& param = params[i];
-        binlog_manager->check_expire_and_capacity(param.current_second, param.binlog_ttl_second, param.binlog_max_size);
-        verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, i + 1);
+        int64_t current_second = expired ? param.current_second : param.binlog_ttl_second;
+        int64_t max_size = overcapacity ? param.binlog_max_size : INT64_MAX;
+        binlog_manager->check_expire_and_capacity(current_second, param.binlog_ttl_second, max_size);
+        if (is_alive) {
+            verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 0);
+        } else {
+            verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, i + 1);
+        }
         verify_wait_reader_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, i, i - 1);
     }
+
+    if (is_alive) {
+        verify_unused_binlog_files(binlog_manager.get(), binlog_file_infos, 0, -1);
+    } else {
+        verify_unused_binlog_files(binlog_manager.get(), binlog_file_infos, 0, params.size() - 1);
+    }
+}
+
+TEST_F(BinlogManagerTest, test_binlog_all_alive) {
+    test_binlog_expired_and_overcapacity(false, false);
+}
+
+TEST_F(BinlogManagerTest, test_binlog_expired) {
+    test_binlog_expired_and_overcapacity(true, false);
+}
+
+TEST_F(BinlogManagerTest, test_binlog_overcapacity) {
+    test_binlog_expired_and_overcapacity(false, true);
+}
+
+TEST_F(BinlogManagerTest, test_binlog_expired_and_overcapacity) {
+    test_binlog_expired_and_overcapacity(true, true);
+}
+
+TEST_F(BinlogManagerTest, test_wait_reader) {
+    int64_t max_file_size = 100 * 1024 * 1024;
+    int32_t max_page_size = 1024 * 1024;
+    CompressionTypePB compress_type = LZ4_FRAME;
+    std::shared_ptr<MockRowsetFetcher> rowset_fetcher = std::make_shared<MockRowsetFetcher>();
+    std::shared_ptr<BinlogManager> binlog_manager = std::make_shared<BinlogManager>(
+            std::rand(), _binlog_file_dir, max_file_size, max_page_size, compress_type, rowset_fetcher);
+
+    std::vector<BinlogFileInfoPtr> binlog_file_infos;
+    generate_random_binlog(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 100, 20);
+
+    std::vector<ExpireAndCapacityParams> params;
+    generate_params(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, params);
+
+    auto& param_4 = params[4];
+    binlog_manager->check_expire_and_capacity(param_4.binlog_ttl_second, param_4.binlog_ttl_second,
+                                              param_4.binlog_max_size);
+    verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 5);
+    verify_wait_reader_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 0, -1);
+    ASSERT_EQ(5, binlog_manager->unused_binlog_file_ids().get_size());
+
+    auto& file_info_5 = binlog_file_infos[5];
+    auto st_5 = binlog_manager->find_binlog_file(file_info_5->rowsets.front().version,
+                                                 file_info_5->rowsets.front().start_seq_id);
+    ASSERT_OK(st_5.status());
+    BinlogFileReadHolderPtr read_holder_5 = st_5.value();
+    auto& param_9 = params[9];
+    binlog_manager->check_expire_and_capacity(param_9.binlog_ttl_second, param_9.binlog_ttl_second,
+                                              param_9.binlog_max_size);
+    verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 10);
+    verify_wait_reader_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 5, 9);
+    ASSERT_EQ(5, binlog_manager->unused_binlog_file_ids().get_size());
+
+    auto& param_14 = params[14];
+    binlog_manager->check_expire_and_capacity(param_14.binlog_ttl_second, param_14.binlog_ttl_second,
+                                              param_14.binlog_max_size);
+    verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 15);
+    verify_wait_reader_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 5, 14);
+    ASSERT_EQ(5, binlog_manager->unused_binlog_file_ids().get_size());
+
+    read_holder_5->release();
+    auto& param_last = params.back();
+    binlog_manager->check_expire_and_capacity(param_last.binlog_ttl_second, param_last.binlog_ttl_second,
+                                              param_last.binlog_max_size);
+    verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, params.size());
+    verify_wait_reader_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 0, -1);
+    ASSERT_EQ(params.size(), binlog_manager->unused_binlog_file_ids().get_size());
+
     verify_unused_binlog_files(binlog_manager.get(), binlog_file_infos, 0, params.size() - 1);
 }
 
