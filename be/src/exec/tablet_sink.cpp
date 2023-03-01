@@ -418,11 +418,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     for (auto& tablet : closure->result.tablet_vec()) {
         TTabletCommitInfo commit_info;
         commit_info.tabletId = tablet.tablet_id();
-        if (tablet.has_node_id()) {
-            commit_info.backendId = tablet.node_id();
-        } else {
-            commit_info.backendId = _node_id;
-        }
+        commit_info.backendId = _node_id;
 
         for (auto& col_name : tablet.invalid_dict_cache_columns()) {
             invalid_dict_cache_column_set.insert(col_name);
