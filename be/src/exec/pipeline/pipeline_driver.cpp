@@ -246,13 +246,14 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 // operator
                 StatusOr<ChunkPtr> maybe_chunk;
                 {
-                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(curr_op->mem_tracker());
+                    SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(curr_op);
                     SCOPED_TIMER(curr_op->_pull_timer);
                     QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
                     maybe_chunk = curr_op->pull_chunk(runtime_state);
                 }
                 return_status = maybe_chunk.status();
                 if (!return_status.ok() && !return_status.is_end_of_file()) {
+                    curr_op->common_metrics()->add_info_string("ErrorMsg", return_status.get_error_msg());
                     LOG(WARNING) << "pull_chunk returns not ok status " << return_status.to_string();
                     return return_status;
                 }
@@ -268,7 +269,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         size_t row_num = maybe_chunk.value()->num_rows();
                         total_rows_moved += row_num;
                         {
-                            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(next_op->mem_tracker());
+                            SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(next_op);
                             SCOPED_TIMER(next_op->_push_timer);
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
                             return_status = next_op->push_chunk(runtime_state, maybe_chunk.value());
@@ -282,6 +283,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         }
 
                         if (!return_status.ok() && !return_status.is_end_of_file()) {
+                            curr_op->common_metrics()->add_info_string("ErrorMsg", return_status.get_error_msg());
                             LOG(WARNING) << "push_chunk returns not ok status " << return_status.to_string();
                             return return_status;
                         }
@@ -522,7 +524,7 @@ Status PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* s
     VLOG_ROW << strings::Substitute("[Driver] finishing operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(op->mem_tracker());
+        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_finishing_timer);
         op_state = OperatorStage::FINISHING;
         QUERY_TRACE_SCOPED(op->get_name(), "set_finishing");
@@ -540,7 +542,7 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
     VLOG_ROW << strings::Substitute("[Driver] finished operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(op->mem_tracker());
+        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_finished_timer);
         op_state = OperatorStage::FINISHED;
         QUERY_TRACE_SCOPED(op->get_name(), "set_finished");
@@ -563,7 +565,7 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
     VLOG_ROW << strings::Substitute("[Driver] cancelled operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(op->mem_tracker());
+        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         op_state = OperatorStage::CANCELLED;
         return op->set_cancelled(state);
     }
@@ -584,7 +586,7 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
     VLOG_ROW << strings::Substitute("[Driver] close operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(op->mem_tracker());
+        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_close_timer);
         op_state = OperatorStage::CLOSED;
         QUERY_TRACE_SCOPED(op->get_name(), "close");

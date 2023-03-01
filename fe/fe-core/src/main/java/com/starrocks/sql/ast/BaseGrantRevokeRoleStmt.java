@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -24,23 +24,33 @@ import java.util.List;
 // GRANT role1 TO ROLE role2   supported on new RBAC framework
 public abstract class BaseGrantRevokeRoleStmt extends DdlStmt {
     protected List<String> granteeRole;
-    protected UserIdentity userIdent;
+    protected UserIdentity userIdentity;
     protected String role;
 
-    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, UserIdentity userIdent) {
+    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, UserIdentity userIdentity) {
+        this(granteeRole, userIdentity, NodePosition.ZERO);
+    }
+
+    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, UserIdentity userIdentity, NodePosition pos) {
+        super(pos);
         this.granteeRole = granteeRole;
-        this.userIdent = userIdent;
+        this.userIdentity = userIdentity;
         this.role = null;
     }
 
     protected BaseGrantRevokeRoleStmt(List<String> granteeRole, String role) {
-        this.granteeRole = granteeRole;
-        this.userIdent = null;
-        this.role = role;
+        this(granteeRole, role, NodePosition.ZERO);
+
     }
 
-    public UserIdentity getUserIdent() {
-        return userIdent;
+    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, String role, NodePosition pos) {
+        super(pos);
+        this.granteeRole = granteeRole;
+        this.userIdentity = null;
+        this.role = role;
+    }
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
     }
 
     public List<String> getGranteeRole() {

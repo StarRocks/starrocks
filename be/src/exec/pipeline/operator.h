@@ -130,13 +130,15 @@ public:
     // 3. operators decorated by MultilaneOperator except case 2: e.g. ProjectOperator, Chunk AccumulateOperator and etc.
     virtual Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) { return Status::OK(); }
 
+    virtual size_t output_amplification_factor() const { return 1; }
+    enum class OutputAmplificationType { ADD, MAX };
+    virtual OutputAmplificationType intra_pipeline_amplification_type() const { return OutputAmplificationType::MAX; }
+
     int32_t get_id() const { return _id; }
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
     MemTracker* mem_tracker() const { return _mem_tracker.get(); }
-
-    RuntimeProfile* get_runtime_profile() const { return _runtime_profile.get(); }
 
     virtual std::string get_name() const {
         return strings::Substitute("$0_$1_$2($3)", _name, _plan_node_id, this, is_finished() ? "X" : "O");

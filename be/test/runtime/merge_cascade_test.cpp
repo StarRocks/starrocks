@@ -148,18 +148,19 @@ TEST(MergeCascadeTest, merge_cursor_test) {
         // call get next 1
         auto merge_res = out_cursor->try_get_next();
         ASSERT_TRUE(!merge_res.first->is_empty());
+        ASSERT_EQ(chunk_size, merge_res.first->num_rows());
 
         // call get next 2
         merge_res = out_cursor->try_get_next();
+        ASSERT_TRUE(merge_res.first == nullptr);
 
         ASSERT_TRUE(l_chunk_channel.empty() && r_chunk_channel.empty());
         // both chunk has no chunk
-        ASSERT_TRUE(merge_res.first == nullptr);
 
         // notify one channel, but the other channel is not ready
         l_chunk_channel.emplace(l->clone_unique());
         merge_res = out_cursor->try_get_next();
-        ASSERT_TRUE(merge_res.first == nullptr);
+        ASSERT_TRUE(merge_res.first != nullptr);
     }
 }
 } // namespace starrocks

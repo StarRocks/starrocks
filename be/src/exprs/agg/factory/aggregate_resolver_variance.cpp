@@ -21,30 +21,30 @@
 namespace starrocks {
 
 struct StdDispatcher {
-    template <LogicalType pt>
+    template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_numeric<pt>) {
-            using VarState = DevFromAveAggregateState<RunTimeCppType<DevFromAveResultPT<pt>>>;
-            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "variance", false, AggregateFactory::MakeVarianceAggregateFunction<pt, false>());
-            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "variance_pop", false, AggregateFactory::MakeVarianceAggregateFunction<pt, false>());
-            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "var_pop", false, AggregateFactory::MakeVarianceAggregateFunction<pt, false>());
+        if constexpr (lt_is_numeric<lt>) {
+            using VarState = DevFromAveAggregateState<RunTimeCppType<DevFromAveResultLT<lt>>>;
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "variance", false, AggregateFactory::MakeVarianceAggregateFunction<lt, false>());
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "variance_pop", false, AggregateFactory::MakeVarianceAggregateFunction<lt, false>());
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "var_pop", false, AggregateFactory::MakeVarianceAggregateFunction<lt, false>());
 
-            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "variance_samp", false, AggregateFactory::MakeVarianceAggregateFunction<pt, true>());
-            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "var_samp", false, AggregateFactory::MakeVarianceAggregateFunction<pt, true>());
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "variance_samp", false, AggregateFactory::MakeVarianceAggregateFunction<lt, true>());
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "var_samp", false, AggregateFactory::MakeVarianceAggregateFunction<lt, true>());
 
-            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "stddev", false, AggregateFactory::MakeStddevAggregateFunction<pt, false>());
-            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "std", false, AggregateFactory::MakeStddevAggregateFunction<pt, false>());
-            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "stddev_pop", false, AggregateFactory::MakeStddevAggregateFunction<pt, false>());
-            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "stddev_samp", false, AggregateFactory::MakeStddevAggregateFunction<pt, true>());
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "stddev", false, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "std", false, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "stddev_pop", false, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "stddev_samp", false, AggregateFactory::MakeStddevAggregateFunction<lt, true>());
         }
     }
 };

@@ -19,7 +19,6 @@ import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedIndex;
@@ -122,7 +121,7 @@ import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
-import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
@@ -141,6 +140,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.StatsConstants;
@@ -773,10 +773,10 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowMaterializedViewStatement(ShowMaterializedViewStmt statement, ConnectContext session) {
+        public Void visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext session) {
             String db = statement.getDb();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEW",
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEWS",
                         session.getQualifiedUser(),
                         session.getRemoteIP(),
                         db);
@@ -1299,7 +1299,7 @@ public class PrivilegeChecker {
             } catch (Exception e) {
                 if (statement.getTableRefs().size() == 0) {
                     String dBName = statement.getDbName();
-                    throw new SemanticException("Database: {} is empty", dBName);
+                    throw new SemanticException("Database: %s is empty", dBName);
                 } else {
                     throw new SemanticException("BackupStatement failed");
                 }

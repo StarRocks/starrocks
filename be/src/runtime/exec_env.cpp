@@ -138,8 +138,15 @@ static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
     return std::min<int64_t>(limit, process_mem_limit * percent / 100);
 }
 
+bool ExecEnv::_is_init = false;
+
 Status ExecEnv::init(ExecEnv* env, const std::vector<StorePath>& store_paths) {
+    DeferOp op([]() { ExecEnv::_is_init = true; });
     return env->_init(store_paths);
+}
+
+bool ExecEnv::is_init() {
+    return _is_init;
 }
 
 Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
@@ -161,6 +168,13 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
     _fragment_mgr = new FragmentMgr(this);
+
+    RETURN_IF_ERROR(ThreadPoolBuilder("automatic_partition") // automatic partition pool
+                            .set_min_threads(0)
+                            .set_max_threads(8)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&_automatic_partition_pool));
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads <= 0) {
@@ -297,7 +311,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _scan_executor_with_workgroup->initialize(num_io_threads);
 
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
-    if (!store_paths.empty()) {
+    bool is_compute_node = store_paths.empty();
+    if (!is_compute_node) {
         Status status = _load_path_mgr->init();
         if (!status.ok()) {
             LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
@@ -315,14 +330,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                                        config::lake_metadata_cache_limit);
 #endif
 
-        // agent_server is not needed for cn
-        _agent_server = new AgentServer(this);
-        _agent_server->init_or_die();
-
 #if defined(USE_STAROS) && !defined(BE_TEST)
         _lake_tablet_manager->start_gc();
 #endif
     }
+
+    _agent_server = new AgentServer(this, is_compute_node);
+    _agent_server->init_or_die();
+
     _broker_mgr->init();
     _small_file_mgr->init();
 
@@ -345,7 +360,7 @@ void ExecEnv::add_rf_event(const RfTracePoint& pt) {
 
 class SetMemTrackerForColumnPool {
 public:
-    SetMemTrackerForColumnPool(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {}
+    SetMemTrackerForColumnPool(std::shared_ptr<MemTracker> mem_tracker) : _mem_tracker(std::move(mem_tracker)) {}
 
     template <typename Pool>
     void operator()() {
@@ -353,7 +368,7 @@ public:
     }
 
 private:
-    MemTracker* _mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
 };
 
 Status ExecEnv::init_mem_tracker() {
@@ -417,7 +432,7 @@ Status ExecEnv::init_mem_tracker() {
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
-    SetMemTrackerForColumnPool op(column_pool_mem_tracker());
+    SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     ForEach<ColumnPoolList>(op);
     _init_storage_page_cache();
     return Status::OK();
@@ -458,6 +473,10 @@ Status ExecEnv::_init_storage_page_cache() {
 }
 
 void ExecEnv::_destroy() {
+    if (_automatic_partition_pool) {
+        _automatic_partition_pool->shutdown();
+    }
+
     SAFE_DELETE(_agent_server);
     SAFE_DELETE(_runtime_filter_worker);
     SAFE_DELETE(_profile_report_worker);

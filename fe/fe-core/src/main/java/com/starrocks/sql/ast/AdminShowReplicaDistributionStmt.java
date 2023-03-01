@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1 PARTITION(p1, p2);
 public class AdminShowReplicaDistributionStmt extends ShowStmt {
@@ -31,6 +32,11 @@ public class AdminShowReplicaDistributionStmt extends ShowStmt {
     private final TableRef tblRef;
 
     public AdminShowReplicaDistributionStmt(TableRef tblRef) {
+        this(tblRef, NodePosition.ZERO);
+    }
+
+    public AdminShowReplicaDistributionStmt(TableRef tblRef, NodePosition pos) {
+        super(pos);
         this.tblRef = tblRef;
     }
 

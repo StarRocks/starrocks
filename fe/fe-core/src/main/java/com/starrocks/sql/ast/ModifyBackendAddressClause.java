@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.ArrayList;
 
 public class ModifyBackendAddressClause extends BackendClause {
@@ -22,7 +24,11 @@ public class ModifyBackendAddressClause extends BackendClause {
     protected String destHost;
 
     public ModifyBackendAddressClause(String srcHost, String destHost) {
-        super(new ArrayList<String>());
+        this(srcHost, destHost, NodePosition.ZERO);
+    }
+
+    public ModifyBackendAddressClause(String srcHost, String destHost, NodePosition pos) {
+        super(new ArrayList<>(), pos);
         this.srcHost = srcHost;
         this.destHost = destHost;
     }

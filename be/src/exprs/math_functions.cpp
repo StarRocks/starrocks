@@ -54,7 +54,7 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
 #define DEFINE_MATH_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                          \
     StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                \
         using VectorizedUnaryFunction = VectorizedStrictUnaryFunction<NAME##Impl>;                             \
-        if constexpr (pt_is_decimal<TYPE>) {                                                                   \
+        if constexpr (lt_is_decimal<TYPE>) {                                                                   \
             const auto& type = context->get_return_type();                                                     \
             return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0), type.precision, \
                                                                         type.scale);                           \

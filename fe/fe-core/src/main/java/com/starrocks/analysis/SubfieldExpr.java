@@ -21,11 +21,9 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
-
-import java.util.List;
-import java.util.stream.Collectors;
 
 public class SubfieldExpr extends Expr {
 
@@ -38,9 +36,18 @@ public class SubfieldExpr extends Expr {
         this(child, null, fieldNames);
     }
 
+    public SubfieldExpr(Expr child, ImmutableList<String> fieldNames, NodePosition pos) {
+        this(child, null, fieldNames, pos);
+    }
+
     // In this constructor, we can determine column's type
     // child must be an StructType
     public SubfieldExpr(Expr child, Type type, ImmutableList<String> fieldNames) {
+        this(child, type, fieldNames, NodePosition.ZERO);
+    }
+
+    public SubfieldExpr(Expr child, Type type, ImmutableList<String> fieldNames, NodePosition pos) {
+        super(pos);
         if (type != null) {
             Preconditions.checkArgument(child.getType().isStructType());
         }

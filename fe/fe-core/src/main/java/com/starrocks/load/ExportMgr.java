@@ -52,7 +52,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CancelExportStmt;
@@ -230,7 +230,7 @@ public class ExportMgr {
                         continue;
                     }
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeManager.checkAnyActionOnOrInDb(ConnectContext.get(), db.getFullName())) {
+                        if (!PrivilegeActions.checkAnyActionOnOrInDb(ConnectContext.get(), db.getFullName())) {
                             continue;
                         }
                     } else {
@@ -241,7 +241,7 @@ public class ExportMgr {
                     }
                 } else {
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeManager.checkAnyActionOnTable(ConnectContext.get(),
+                        if (!PrivilegeActions.checkAnyActionOnTable(ConnectContext.get(),
                                 tableName.getDb(),
                                 tableName.getTbl())) {
                             continue;
@@ -372,6 +372,24 @@ public class ExportMgr {
                 LOG.info("remove expired job: {}", job);
                 idToJob.remove(jobId);
             }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void replayUpdateJobInfo(ExportJob.ExportUpdateInfo info) {
+        writeLock();
+        try {
+            ExportJob job = idToJob.get(info.jobId);
+            job.updateState(info.state, true);
+            if (isJobExpired(job, System.currentTimeMillis())) {
+                LOG.info("remove expired job: {}", job);
+                idToJob.remove(info.jobId);
+            }
+            job.setSnapshotPaths(info.snapshotPaths);
+            job.setExportTempPath(info.exportTempPath);
+            job.setExportedFiles(info.exportedFiles);
+            job.setFailMsg(info.failMsg);
         } finally {
             writeUnlock();
         }

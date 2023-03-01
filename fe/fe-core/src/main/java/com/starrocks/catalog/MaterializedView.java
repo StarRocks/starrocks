@@ -14,7 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
@@ -31,7 +30,6 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -52,6 +50,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
@@ -75,8 +74,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.server.CatalogMgr.isInternalCatalog;
-
 /**
  * meta structure for materialized view
  */
@@ -89,122 +86,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         ASYNC,
         MANUAL,
         INCREMENTAL
-    }
-
-    public static class BaseTableInfo {
-        @SerializedName(value = "catalogName")
-        private final String catalogName;
-
-        @SerializedName(value = "dbId")
-        private long dbId = -1;
-
-        @SerializedName(value = "tableId")
-        private long tableId = -1;
-
-        @SerializedName(value = "dbName")
-        private String dbName;
-
-        @SerializedName(value = "tableIdentifier")
-        private String tableIdentifier;
-
-        @SerializedName(value = "tableName")
-        private String tableName;
-
-        public BaseTableInfo(long dbId, String dbName, long tableId) {
-            this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-            this.dbId = dbId;
-            this.dbName = dbName;
-            this.tableId = tableId;
-        }
-
-        public BaseTableInfo(long dbId, long tableId) {
-            this(dbId, null, tableId);
-        }
-
-        public BaseTableInfo(String catalogName, String dbName, String tableIdentifier) {
-            this.catalogName = catalogName;
-            this.dbName = dbName;
-            this.tableIdentifier = tableIdentifier;
-            this.tableName = tableIdentifier.split(":")[0];
-        }
-
-        public String getTableInfoStr() {
-            if (isInternalCatalog(catalogName)) {
-                return Joiner.on(".").join(dbId, tableId);
-            } else {
-                return Joiner.on(".").join(catalogName, dbName, tableName);
-            }
-        }
-
-        public String getDbInfoStr() {
-            if (isInternalCatalog(catalogName)) {
-                return String.valueOf(dbId);
-            } else {
-                return Joiner.on(".").join(catalogName, dbName);
-            }
-        }
-
-        public String getCatalogName() {
-            return this.catalogName;
-        }
-
-        public String getDbName() {
-            return this.dbName != null ? this.dbName : getDb().getFullName();
-        }
-
-        public String getTableName() {
-            if (this.tableName != null) {
-                return this.tableName;
-            } else {
-                Table table = getTable();
-                return table == null ? null : table.getName();
-            }
-        }
-
-        public String getTableIdentifier() {
-            return this.tableIdentifier;
-        }
-
-        public long getDbId() {
-            return this.dbId;
-        }
-
-        public long getTableId() {
-            return this.tableId;
-        }
-
-        public Table getTable() {
-            if (isInternalCatalog(catalogName)) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-                if (db == null) {
-                    return null;
-                } else {
-                    return db.getTable(tableId);
-                }
-            } else {
-                if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
-                    LOG.warn("catalog {} not exist", catalogName);
-                    return null;
-                }
-                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
-                if (table == null) {
-                    LOG.warn("table {}.{}.{} not exist", catalogName, dbName, tableName);
-                    return null;
-                }
-                if (table.getTableIdentifier().equals(tableIdentifier)) {
-                    return table;
-                }
-                return null;
-            }
-        }
-
-        public Database getDb() {
-            if (isInternalCatalog(catalogName)) {
-                return GlobalStateMgr.getCurrentState().getDb(dbId);
-            } else {
-                return GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-            }
-        }
     }
 
     public static class BasePartitionInfo {
@@ -475,8 +356,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     public Set<String> getUpdatedPartitionNamesOfTable(Table base) {
         return getUpdatedPartitionNamesOfTable(base, false);
     }
+
     public Set<String> getUpdatedPartitionNamesOfTable(Table base, boolean withMv) {
-        if (!base.isLocalTable()) {
+        if (!base.isNativeTable()) {
             // TODO(ywb): support external table refresh according to partition later
             return Sets.newHashSet();
         }
@@ -562,11 +444,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
 
-        for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
             // Do not set the active when table is null, it would be checked in MVActiveChecker
             Table table = baseTableInfo.getTable();
             if (table != null) {
-                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                if (table.isMaterializedView() && !((MaterializedView) table).isActive()) {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
                     active = false;
@@ -575,7 +457,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 MvId mvId = new MvId(db.getId(), id);
                 table.addRelatedMaterializedView(mvId);
 
-                if (!table.isLocalTable()) {
+                if (!table.isNativeTable()) {
                     GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
                             baseTableInfo.getCatalogName(), baseTableInfo.getDbName(),
                             baseTableInfo.getTableIdentifier(),
@@ -660,7 +542,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         if (tableProperty == null) {
             return true;
         }
-        List<TableName> excludedTriggerTables =  tableProperty.getExcludedTriggerTables();
+        List<TableName> excludedTriggerTables = tableProperty.getExcludedTriggerTables();
         if (excludedTriggerTables == null) {
             return true;
         }
@@ -676,6 +558,21 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
         return true;
+    }
+
+    protected void appendBaseProperties(StringBuilder sb) {
+        Preconditions.checkNotNull(sb);
+
+        // replicationNum
+        Short replicationNum = this.getDefaultReplicationNum();
+        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
+        sb.append(replicationNum).append("\"");
+
+        // storageMedium
+        String storageMedium = this.getStorageMedium();
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                .append("\" = \"");
+        sb.append(storageMedium).append("\"");
     }
 
     public String getMaterializedViewDdlStmt(boolean simple) {
@@ -717,17 +614,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         // properties
         sb.append("\nPROPERTIES (\n");
-
-        // replicationNum
-        Short replicationNum = this.getDefaultReplicationNum();
-        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
-        sb.append(replicationNum).append("\"");
-
-        // storageMedium
-        String storageMedium = this.getStorageMedium();
-        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
-                .append("\" = \"");
-        sb.append(storageMedium).append("\"");
+        appendBaseProperties(sb);
 
         // storageCooldownTime
         Map<String, String> properties = this.getTableProperty().getProperties();
@@ -787,12 +674,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     static {
         NEED_SHOW_PROPS = new ImmutableSet.Builder<String>()
-        .add(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
-        .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
-        .add(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
-        .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
-        .add(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
-        .build();
+                .add(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
+                .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
+                .add(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
+                .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
+                .add(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
+                .build();
     }
 
     public Map<String, String> getMaterializedViewPropMap() {
@@ -848,7 +735,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
                 // we can not judge whether mv based on external table is update-to-date,
                 // because we do not know that any changes in external table.
-                if (!table.isLocalTable()) {
+                if (!table.isNativeTable()) {
                     if (forceExternalTableQueryRewrite) {
                         // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
                         continue;
@@ -882,7 +769,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         boolean forceExternalTableQueryRewrite = isForceExternalTableQueryRewrite();
         for (BaseTableInfo tableInfo : baseTableInfos) {
             Table table = tableInfo.getTable();
-            if (!table.isLocalTable()) {
+            if (!table.isNativeTable()) {
                 if (forceExternalTableQueryRewrite) {
                     // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
                     continue;

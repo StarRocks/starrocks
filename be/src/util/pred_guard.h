@@ -22,21 +22,21 @@
 //
 // step#1: use DEF_PRED_GUARD produces codes as follows:
 // ```code
-// DEF_PRED_GUARD(DirectlyCopyable, is_directly_copyable, ArrowTypeId, AT, LogicalType, PT)
+// DEF_PRED_GUARD(DirectlyCopyable, is_directly_copyable, ArrowTypeId, AT, LogicalType, LT)
 // ```
 // produces codes as follows
 //
 // ```code
-// template <ArrowTypeId, AT, LogicalType, PT>
+// template <ArrowTypeId, AT, LogicalType, LT>
 // struct is_directly_copyable_struct {
 //     static constexpr bool value = false;
 // };
 //
-// template <ArrowTypeId, AT, LogicalType, PT>
-// constexpr bool is_directly_copyable = is_directly_copyable_struct<AT, PT>::value;
+// template <ArrowTypeId, AT, LogicalType, LT>
+// constexpr bool is_directly_copyable = is_directly_copyable_struct<AT, LT>::value;
 //
-// template <ArrowTypeId, AT, LogicalType, PT>
-// using DirectlyCopyableGuard = std::enable_if_t<is_directly_copyable<AT, PT>, guard::Guard>;
+// template <ArrowTypeId, AT, LogicalType, LT>
+// using DirectlyCopyableGuard = std::enable_if_t<is_directly_copyable<AT, LT>, guard::Guard>;
 // ```
 //
 // step#2: then, use DEF_PRED_CASE_CTOR define 2-ary constructor macro:
@@ -62,10 +62,10 @@
 // IS_DIRECTLY_COPYABLE(TYPE_FLOAT, ArrowTypeId::FLOAT);
 // IS_DIRECTLY_COPYABLE(TYPE_DOUBLE, ArrowTypeId::DOUBLE);
 // ```
-// then we can used if constexpr(is_directly_copyable<AT, PT>) in template to select the
+// then we can used if constexpr(is_directly_copyable<AT, LT>) in template to select the
 // the optimized branches in compile-time.
 // And we can also used to DirectlyCopyableGuard to define template specialization to
-// match (AT, PT) which satisfies is_directly_copyable predicate.
+// match (AT, LT) which satisfies is_directly_copyable predicate.
 //
 // More demos will be showed in src/exec/arrow_converter.cpp in the PR following.
 

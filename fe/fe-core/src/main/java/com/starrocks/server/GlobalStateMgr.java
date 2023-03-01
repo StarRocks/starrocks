@@ -49,12 +49,12 @@ import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.binlog.BinlogManager;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.CatalogIdGenerator;
@@ -69,6 +69,7 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
@@ -133,6 +134,7 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
@@ -202,6 +204,7 @@ import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
@@ -211,7 +214,6 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.mv.MVActiveChecker;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -253,7 +255,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
-import com.starrocks.sql.common.EngineType;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -306,6 +308,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
@@ -353,6 +356,7 @@ public class GlobalStateMgr {
     private StarRocksRepository starRocksRepository;
     private IcebergRepository icebergRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
+    private ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
 
     // set to true after finished replay all meta and ready to serve
     // set to false when globalStateMgr is not ready.
@@ -432,7 +436,6 @@ public class GlobalStateMgr {
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
 
     private MVJobExecutor mvMVJobExecutor;
-    private MVActiveChecker mvActiveChecker;
 
     private SmallFileMgr smallFileMgr;
 
@@ -564,6 +567,14 @@ public class GlobalStateMgr {
 
     // if isCkptGlobalState is true, it means that we should not collect thread pool metric
     private GlobalStateMgr(boolean isCkptGlobalState) {
+        if (!isCkptGlobalState) {
+            RunMode.detectRunMode();
+        }
+
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+            this.starOSAgent = new StarOSAgent();
+        }
+
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
@@ -607,6 +618,7 @@ public class GlobalStateMgr {
         this.starRocksRepository = new StarRocksRepository();
         this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
+        this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
 
         this.metaContext = new MetaContext();
         this.metaContext.setThreadLocalInfo();
@@ -633,7 +645,6 @@ public class GlobalStateMgr {
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
         this.mvMVJobExecutor = new MVJobExecutor();
-        this.mvActiveChecker = new MVActiveChecker();
 
         this.smallFileMgr = new SmallFileMgr();
 
@@ -645,11 +656,6 @@ public class GlobalStateMgr {
         this.pluginMgr = new PluginMgr();
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
-
-        if (Config.use_staros) {
-            this.starOSAgent = new StarOSAgent();
-        }
-
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
@@ -700,7 +706,6 @@ public class GlobalStateMgr {
         }
     }
 
-    @VisibleForTesting
     public ConcurrentHashMap<Long, Database> getIdToDb() {
         return localMetastore.getIdToDb();
     }
@@ -970,7 +975,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (Config.use_staros && !starOSAgent.init(null)) {
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable() && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -1169,7 +1174,7 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
-        if (Config.integrate_starmgr) {
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             // register service to starMgr
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
@@ -1236,7 +1241,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
         taskRunStateSynchronizer.start();
 
-        if (Config.use_staros) {
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             shardDeleter.start();
         }
     }
@@ -1249,15 +1254,16 @@ public class GlobalStateMgr {
         // ES state store
         esRepository.start();
         starRocksRepository.start();
-        // materialized view active checker
-        // mvActiveChecker.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
         }
+
+        connectorTableMetadataProcessor.start();
+
         // domain resolver
         domainResolver.start();
-        if (Config.use_staros) {
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             compactionManager.start();
         }
         configRefreshDaemon.start();
@@ -1365,6 +1371,8 @@ public class GlobalStateMgr {
             loadRBACPrivilege(dis);
             checksum = warehouseMgr.loadWarehouses(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = localMetastore.loadAutoIncrementId(dis, checksum);
+            remoteChecksum = dis.readLong();
             // ** NOTICE **: always add new code at the end
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1403,7 +1411,7 @@ public class GlobalStateMgr {
         for (String dbName : dbNames) {
             Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
             for (MaterializedView mv : db.getMaterializedViews()) {
-                for (MaterializedView.BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+                for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
                     Table table = baseTableInfo.getTable();
                     if (table == null) {
                         LOG.warn("tableName :{} do not exist. set materialized view:{} to invalid",
@@ -1419,7 +1427,7 @@ public class GlobalStateMgr {
                     }
                     MvId mvId = new MvId(db.getId(), mv.getId());
                     table.addRelatedMaterializedView(mvId);
-                    if (!table.isLocalTable()) {
+                    if (!table.isNativeTable()) {
                         connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
                                 ConnectorTableInfo.builder().setRelatedMaterializedViews(
@@ -1687,6 +1695,8 @@ public class GlobalStateMgr {
             globalFunctionMgr.saveGlobalFunctions(dos, checksum);
             saveRBACPrivilege(dos);
             checksum = warehouseMgr.saveWarehouses(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = localMetastore.saveAutoIncrementId(dos, checksum);
             dos.writeLong(checksum);
             // ** NOTICE **: always add new code at the end
         }
@@ -2147,7 +2157,7 @@ public class GlobalStateMgr {
                                   List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
         // 1. create table
         // 1.1 materialized view
-        if (table.getType() == TableType.MATERIALIZED_VIEW) {
+        if (table.isMaterializedView()) {
             MaterializedView mv = (MaterializedView) table;
             createTableStmt.add(mv.getMaterializedViewDdlStmt(true));
             return;
@@ -2218,13 +2228,10 @@ public class GlobalStateMgr {
                 }
             }
         }
-        sb.append("\n) ENGINE=");
-        if (table.isLakeTable()) {
-            sb.append(EngineType.STARROCKS.name()).append(" ");
-        } else {
-            sb.append(table.getType().name()).append(" ");
-        }
 
+        sb.append("\n) ENGINE=");
+        sb.append(table.getType() == TableType.LAKE ? "OLAP" : table.getType().name()).append(" ");
+        
         if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
 
@@ -2323,9 +2330,9 @@ public class GlobalStateMgr {
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
                         .append("\" = \"");
-                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
             } else {
                 // in memory
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
@@ -2389,6 +2396,58 @@ public class GlobalStateMgr {
                             .append("\" = \"");
                     sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
                 }
+
+                // partition live number
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
+                            .append("\" = \"");
+                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
+                }
+
+                // unique constraint
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT))) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                            .append("\" = \"");
+                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)).append("\"");
+                }
+
+                // foreign key constraint
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT))) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                            .append("\" = \"");
+                    List<ForeignKeyConstraint> constraints = olapTable.getForeignKeyConstraints();
+                    List<String> constraintStrs = Lists.newArrayList();
+                    for (ForeignKeyConstraint constraint : constraints) {
+                        BaseTableInfo parentTableInfo = constraint.getParentTableInfo();
+                        StringBuilder constraintSb = new StringBuilder();
+                        constraintSb.append("(");
+                        String baseColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+                                .stream().map(pair -> pair.first).collect(Collectors.toList()));
+                        constraintSb.append(baseColumns);
+                        constraintSb.append(")");
+                        constraintSb.append(" REFERENCES ");
+                        if (parentTableInfo.getCatalogName().equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+                            Database parentDb = GlobalStateMgr.getCurrentState().getDb(parentTableInfo.getDbId());
+                            constraintSb.append(parentDb.getFullName());
+                            constraintSb.append(".");
+                            Table parentTable = parentDb.getTable(parentTableInfo.getTableId());
+                            constraintSb.append(parentTable.getName());
+                        } else {
+                            constraintSb.append(parentTableInfo);
+                        }
+
+                        constraintSb.append("(");
+                        String parentColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+                                .stream().map(pair -> pair.second).collect(Collectors.toList()));
+                        constraintSb.append(parentColumns);
+                        constraintSb.append(")");
+                        constraintStrs.add(constraintSb.toString());
+                    }
+
+                    sb.append(Joiner.on(";").join(constraintStrs)).append("\"");
+                }
             }
 
             // compression type
@@ -2419,7 +2478,6 @@ public class GlobalStateMgr {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("table\" = \"")
                         .append(externalOlapTable.getSourceTableName()).append("\"");
             }
-
             sb.append("\n)");
         } else if (table.getType() == TableType.MYSQL) {
             MysqlTable mysqlTable = (MysqlTable) table;
@@ -2560,7 +2618,7 @@ public class GlobalStateMgr {
 
         // 2. add partition
         if (separatePartition && (table instanceof OlapTable)
-                && ((OlapTable) table).getPartitionInfo().getType() == PartitionType.RANGE
+                && ((OlapTable) table).getPartitionInfo().isRangePartition()
                 && ((OlapTable) table).getPartitions().size() > 1) {
             OlapTable olapTable = (OlapTable) table;
             RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
@@ -2725,7 +2783,7 @@ public class GlobalStateMgr {
         return journal;
     }
 
-    // Get the next available, need't lock because of nextId is atomic.
+    // Get the next available, lock-free because nextId is atomic.
     public long getNextId() {
         return idGenerator.getNextId();
     }
@@ -2854,12 +2912,12 @@ public class GlobalStateMgr {
         return this.feType;
     }
 
-    public int getLeaderRpcPort() {
-        return nodeMgr.getLeaderRpcPort();
+    public Pair<String, Integer> getLeaderIpAndRpcPort() {
+        return nodeMgr.getLeaderIpAndRpcPort();
     }
 
-    public int getLeaderHttpPort() {
-        return nodeMgr.getLeaderHttpPort();
+    public Pair<String, Integer> getLeaderIpAndHttpPort() {
+        return nodeMgr.getLeaderIpAndHttpPort();
     }
 
     public String getLeaderIp() {
@@ -3103,7 +3161,7 @@ public class GlobalStateMgr {
     }
 
     public void renameColumn(Database db, OlapTable table, ColumnRenameClause renameClause) throws DdlException {
-        throw new DdlException("not implmented");
+        throw new DdlException("not implemented");
     }
 
     public void modifyTableDynamicPartition(Database db, OlapTable table, Map<String, String> properties)
@@ -3114,6 +3172,11 @@ public class GlobalStateMgr {
     public void modifyTableReplicationNum(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         localMetastore.modifyTableReplicationNum(db, table, properties);
+    }
+
+    public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
+            throws DdlException {
+        localMetastore.alterTableProperties(db, table, properties);
     }
 
     // The caller need to hold the db write lock
@@ -3129,6 +3192,10 @@ public class GlobalStateMgr {
 
     public void modifyBinlogMeta(Database db, OlapTable table, BinlogConfig binlogConfig) {
         localMetastore.modifyBinlogMeta(db, table, binlogConfig);
+    }
+
+    public void modifyTableConstraint(Database db, String tableName, Map<String, String> properties) throws DdlException {
+        localMetastore.modifyTableConstraint(db, tableName, properties);
     }
 
     public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
@@ -3170,7 +3237,7 @@ public class GlobalStateMgr {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
         if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+                !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
         }
         ctx.setCurrentCatalog(newCatalogName);
@@ -3194,7 +3261,7 @@ public class GlobalStateMgr {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }
             if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                    !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+                    !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
             }
             ctx.setCurrentCatalog(newCatalogName);
@@ -3210,7 +3277,7 @@ public class GlobalStateMgr {
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrInDb(ctx, dbName)) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, dbName)) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                             ctx.getQualifiedUser(), dbName);
                 }
@@ -3233,6 +3300,10 @@ public class GlobalStateMgr {
 
     public void createView(CreateViewStmt stmt) throws DdlException {
         localMetastore.createView(stmt);
+    }
+
+    public void triggerNewImage() {
+        journalWriter.setForceRollJournal();
     }
 
     /**
@@ -3358,7 +3429,7 @@ public class GlobalStateMgr {
             catalogName = hmsTable.getCatalogName();
         }
 
-        metadataMgr.refreshTable(catalogName, dbName, table, partitions);
+        metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);
     }
 
     public void initDefaultCluster() {
@@ -3454,6 +3525,22 @@ public class GlobalStateMgr {
 
     public void replayReplaceTempPartition(ReplacePartitionOperationLog replaceTempPartitionLog) {
         localMetastore.replayReplaceTempPartition(replaceTempPartitionLog);
+    }
+
+    public Long allocateAutoIncrementId(Long tableId, Long rows) {
+        return localMetastore.allocateAutoIncrementId(tableId, rows);
+    }
+
+    public void removeAutoIncrementIdByTableId(Long tableId) {
+        localMetastore.removeAutoIncrementIdByTableId(tableId);
+    }
+
+    public Long getCurrentAutoIncrementIdByTableId(Long tableId) {
+        return localMetastore.getCurrentAutoIncrementIdByTableId(tableId);
+    }
+
+    public void addOrReplaceAutoIncrementIdByTableId(Long tableId, Long id) {
+        localMetastore.addOrReplaceAutoIncrementIdByTableId(tableId, id);
     }
 
     public void installPlugin(InstallPluginStmt stmt) throws UserException, IOException {
@@ -3643,6 +3730,16 @@ public class GlobalStateMgr {
             streamLoadManager.cleanOldStreamLoadTasks();
         } catch (Throwable t) {
             LOG.warn("delete handler remove old delete info failed", t);
+        }
+        try {
+            taskManager.removeExpiredTasks();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean expire tasks failed", t);
+        }
+        try {
+            taskManager.removeExpiredTaskRuns();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean expire task runs history failed", t);
         }
     }
 

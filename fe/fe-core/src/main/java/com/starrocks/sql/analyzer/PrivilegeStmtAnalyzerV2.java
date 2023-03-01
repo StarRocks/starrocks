@@ -16,12 +16,10 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
-import com.starrocks.authentication.LDAPAuthenticationProvider;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Database;
@@ -31,6 +29,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
@@ -47,20 +46,25 @@ import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.EnumUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 public class PrivilegeStmtAnalyzerV2 {
     private PrivilegeStmtAnalyzerV2() {
@@ -84,15 +88,7 @@ public class PrivilegeStmtAnalyzerV2 {
          * analyse user identity + check if user exists in UserPrivTable
          */
         private void analyseUser(UserIdentity userIdent, boolean checkExist) {
-            // analyse user identity
-            try {
-                userIdent.analyze();
-            } catch (AnalysisException e) {
-                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
-                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
-                // Remove it after all old methods migrate to the new framework
-                throw new SemanticException(e.getMessage());
-            }
+            userIdent.analyze();
 
             // check if user exists
             if (checkExist && !authenticationManager.doesUserExist(userIdent)) {
@@ -132,33 +128,39 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdent(), stmt instanceof AlterUserStmt);
-
-            String authPluginUsing;
-            if (stmt.getAuthPlugin() == null) {
-                authPluginUsing = authenticationManager.getDefaultPlugin();
-                stmt.setScramblePassword(
-                        analysePassword(stmt.getOriginalPassword(), stmt.isPasswordPlain()));
+            stmt.getUserIdentity().analyze();
+            if (stmt instanceof CreateUserStmt) {
+                CreateUserStmt createUserStmt = (CreateUserStmt) stmt;
+                if (authenticationManager.doesUserExist(createUserStmt.getUserIdentity()) && !createUserStmt.isIfNotExists()) {
+                    throw new SemanticException("Operation CREATE USER failed for " + createUserStmt.getUserIdentity()
+                            + " : user already exists");
+                }
             } else {
-                authPluginUsing = stmt.getAuthPlugin();
+                AlterUserStmt alterUserStmt = (AlterUserStmt) stmt;
+                if (!authenticationManager.doesUserExist(stmt.getUserIdentity()) && !alterUserStmt.isIfExists()) {
+                    throw new SemanticException("Operation ALTER USER failed for " + alterUserStmt.getUserIdentity()
+                            + " : user not exists");
+                }
+            }
+
+            byte[] password = MysqlPassword.EMPTY_PASSWORD;
+            String authPluginUsing;
+            if (stmt.getAuthPluginName() == null) {
+                authPluginUsing = authenticationManager.getDefaultPlugin();
+                password = analysePassword(stmt.getOriginalPassword(), stmt.isPasswordPlain());
+            } else {
+                authPluginUsing = stmt.getAuthPluginName();
                 if (authPluginUsing.equals(PlainPasswordAuthenticationProvider.PLUGIN_NAME)) {
                     // In this case, authString is the password
-                    stmt.setScramblePassword(
-                            analysePassword(stmt.getAuthString(), stmt.isPasswordPlain()));
-                } else {
-                    stmt.setScramblePassword(new byte[0]);
-                }
-
-                if (authPluginUsing.equals(LDAPAuthenticationProvider.PLUGIN_NAME)) {
-                    stmt.setUserForAuthPlugin(stmt.getAuthString());
+                    password = analysePassword(stmt.getAuthStringUnResolved(), stmt.isPasswordPlain());
                 }
             }
 
             try {
                 AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing);
-                UserIdentity userIdentity = stmt.getUserIdent();
+                UserIdentity userIdentity = stmt.getUserIdentity();
                 UserAuthenticationInfo info = provider.validAuthenticationInfo(
-                        userIdentity, stmt.getOriginalPassword(), stmt.getAuthString());
+                        userIdentity, new String(password, StandardCharsets.UTF_8), stmt.getAuthStringUnResolved());
                 info.setAuthPlugin(authPluginUsing);
                 info.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
                 stmt.setAuthenticationInfo(info);
@@ -179,52 +181,51 @@ public class PrivilegeStmtAnalyzerV2 {
         }
 
         @Override
+        public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
+            UserIdentity userIdentity = stmt.getUserIdentity();
+            userIdentity.analyze();
+            if (!authenticationManager.doesUserExist(userIdentity) && !stmt.isIfExists()) {
+                throw new SemanticException("Operation DROP USER failed for " + userIdentity + " : user not exists");
+            }
+
+            if (stmt.getUserIdentity().equals(UserIdentity.ROOT)) {
+                throw new SemanticException("Operation DROP USER failed for " + UserIdentity.ROOT +
+                        " : cannot drop user" + UserIdentity.ROOT);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdent();
+            if (user != null) {
+                analyseUser(user, true);
+            } else if (!statement.isAll()) {
+                statement.setUserIdent(context.getCurrentUserIdentity());
+            }
+            return null;
+        }
+
+        @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
-            validRoleName(stmt.getQualifiedRole(), "Can not create role", false);
-            if (session.getGlobalStateMgr().getPrivilegeManager().checkRoleExists(stmt.getQualifiedRole())) {
-                throw new SemanticException("Can not create role %s: already exists!", stmt.getQualifiedRole());
+            for (String roleName : stmt.getRoles()) {
+                FeNameFormat.checkRoleName(roleName, true, "Can not create role");
+                if (privilegeManager.checkRoleExists(roleName) && !stmt.isIfNotExists()) {
+                    throw new SemanticException("Operation CREATE ROLE failed for " + roleName + " : role already exists");
+                }
             }
             return null;
         }
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
-            validRoleName(stmt.getQualifiedRole(), "Can not drop role", true);
-            return null;
-        }
-
-        @Override
-        public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdent(), false);
-            if (stmt.getUserIdent().equals(UserIdentity.ROOT)) {
-                throw new SemanticException("cannot drop root!");
-            }
-            return null;
-        }
-
-        private FunctionName parseFunctionName(BaseGrantRevokePrivilegeStmt stmt)
-                throws PrivilegeException, AnalysisException {
-            stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
-            String[] name = stmt.getFunctionName().split("\\.");
-            FunctionName functionName;
-            if (stmt.getObjectType() == ObjectType.GLOBAL_FUNCTION) {
-                if (name.length != 1) {
-                    throw new SemanticException("global function has no database");
-                }
-                functionName = new FunctionName(name[0]);
-                functionName.setAsGlobalFunction();
-            } else {
-                if (name.length == 2) {
-                    functionName = new FunctionName(name[0], name[1]);
-                } else {
-                    String dbName = ConnectContext.get().getDatabase();
-                    if (dbName.equals("")) {
-                        throw new SemanticException("database not selected");
-                    }
-                    functionName = new FunctionName(dbName, name[0]);
+            for (String roleName : stmt.getRoles()) {
+                FeNameFormat.checkRoleName(roleName, true, "Can not create role");
+                if (!privilegeManager.checkRoleExists(roleName) && !stmt.isIfExists()) {
+                    throw new SemanticException("Operation DROP ROLE failed for " + roleName + " : role not exists");
                 }
             }
-            return functionName;
+            return null;
         }
 
         private PEntryObject parseFunctionObject(BaseGrantRevokePrivilegeStmt stmt, FunctionSearchDesc searchDesc)
@@ -234,11 +235,11 @@ public class PrivilegeStmtAnalyzerV2 {
                 Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr()
                         .getFunction(searchDesc);
                 if (function == null) {
-                    return privilegeManager.analyzeObject(
+                    return privilegeManager.generateObject(
                             analyzeObjectType(stmt.getObjectTypeUnResolved()),
                             Collections.singletonList(GlobalFunctionPEntryObject.FUNC_NOT_FOUND));
                 } else {
-                    return privilegeManager.analyzeObject(
+                    return privilegeManager.generateObject(
                             analyzeObjectType(stmt.getObjectTypeUnResolved()),
                             Collections.singletonList(function.signatureString())
                     );
@@ -248,12 +249,12 @@ public class PrivilegeStmtAnalyzerV2 {
             Database db = GlobalStateMgr.getCurrentState().getDb(name.getDb());
             Function function = db.getFunction(searchDesc);
             if (null == function) {
-                return privilegeManager.analyzeObject(
+                return privilegeManager.generateObject(
                         analyzeObjectType(stmt.getObjectTypeUnResolved()),
                         Arrays.asList(db.getFullName(), FunctionPEntryObject.FUNC_NOT_FOUND)
                 );
             } else {
-                return privilegeManager.analyzeObject(
+                return privilegeManager.generateObject(
                         analyzeObjectType(stmt.getObjectTypeUnResolved()),
                         Arrays.asList(function.dbName(), function.signatureString())
                 );
@@ -296,7 +297,7 @@ public class PrivilegeStmtAnalyzerV2 {
                         stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
                         for (UserIdentity userIdentity : stmt.getUserPrivilegeObjectList()) {
                             analyseUser(userIdentity, true);
-                            objectList.add(privilegeManager.analyzeUserObject(stmt.getObjectType(), userIdentity));
+                            objectList.add(privilegeManager.generateUserObject(stmt.getObjectType(), userIdentity));
                         }
                     } else if (stmt.getPrivilegeObjectNameTokensList() != null) {
                         // normal objects
@@ -317,21 +318,34 @@ public class PrivilegeStmtAnalyzerV2 {
                                 }
 
                                 tokensWithDatabase.add(tokens.get(0));
-                                objectList.add(privilegeManager.analyzeObject(stmt.getObjectType(),
+                                objectList.add(privilegeManager.generateObject(stmt.getObjectType(),
                                         tokensWithDatabase));
                             } else {
-                                objectList.add(privilegeManager.analyzeObject(stmt.getObjectType(), tokens));
+                                objectList.add(privilegeManager.generateObject(stmt.getObjectType(), tokens));
                             }
                         }
-                    } else if (stmt.getFunctionArgsDef() != null) {
-                        FunctionName functionName = parseFunctionName(stmt);
-                        FunctionArgsDef argsDef = stmt.getFunctionArgsDef();
-                        argsDef.analyze();
-                        FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
-                                argsDef.getArgTypes(),
-                                argsDef.isVariadic());
-                        PEntryObject object = parseFunctionObject(stmt, searchDesc);
-                        objectList.add(object);
+                    } else if (stmt.getFunctions() != null) {
+                        stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
+
+                        for (Pair<FunctionName, FunctionArgsDef> f : stmt.getFunctions()) {
+                            FunctionName functionName = f.first;
+                            if (functionName.getDb() == null) {
+                                String dbName = ConnectContext.get().getDatabase();
+                                if (dbName.equals("")) {
+                                    throw new SemanticException("database not selected");
+                                }
+                                functionName.setDb(dbName);
+                            }
+
+                            FunctionArgsDef argsDef = f.second;
+                            argsDef.analyze();
+                            FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
+                                    argsDef.getArgTypes(),
+                                    argsDef.isVariadic());
+                            PEntryObject object = parseFunctionObject(stmt, searchDesc);
+                            objectList.add(object);
+                        }
+
                     } else {
                         // all statement
                         // TABLES -> TABLE
@@ -351,10 +365,10 @@ public class PrivilegeStmtAnalyzerV2 {
                             if (stmt.getTokens().size() != 1) {
                                 throw new SemanticException("invalid ALL statement for user! only support ON ALL USERS");
                             } else {
-                                objectList.add(privilegeManager.analyzeUserObject(objectType, null));
+                                objectList.add(privilegeManager.generateUserObject(objectType, null));
                             }
                         } else {
-                            objectList.add(privilegeManager.analyzeObject(objectType, stmt.getTokens()));
+                            objectList.add(privilegeManager.generateObject(objectType, stmt.getTokens()));
                         }
                     }
                     stmt.setObjectList(objectList);
@@ -393,10 +407,22 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdentifier(), true);
-            for (String roleName : stmt.getRoles()) {
-                validRoleName(roleName, "Cannot set role", true);
+            analyseUser(stmt.getUserIdentity(), true);
+            try {
+                for (String roleName : stmt.getRoles()) {
+                    validRoleName(roleName, "Cannot set role", true);
+
+                    Long roleId = privilegeManager.getRoleIdByNameAllowNull(roleName);
+                    Set<Long> roleIdsForUser = privilegeManager.getRoleIdsByUser(stmt.getUserIdentity());
+                    if (roleId == null || !roleIdsForUser.contains(roleId)) {
+                        throw new SemanticException("Role " + roleName + " is not granted to " +
+                                stmt.getUserIdentity().toString());
+                    }
+                }
+            } catch (PrivilegeException e) {
+                throw new SemanticException(e.getMessage());
             }
+
             return null;
         }
 
@@ -408,8 +434,8 @@ public class PrivilegeStmtAnalyzerV2 {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            if (stmt.getUserIdent() != null) {
-                analyseUser(stmt.getUserIdent(), true);
+            if (stmt.getUserIdentity() != null) {
+                analyseUser(stmt.getUserIdentity(), true);
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to user", true));
             } else {

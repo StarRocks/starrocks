@@ -27,7 +27,7 @@ namespace starrocks {
 template <LogicalType TYPE, template <typename T> class Gen1, template <typename T> class Gen2,
           template <typename T> class Gen3, int TEST_SIZE>
 void test_simd_select_if() {
-    static_assert(isArithmeticPT<TYPE>, "Now Select IF only support Arithmetic TYPE");
+    static_assert(isArithmeticLT<TYPE>, "Now Select IF only support Arithmetic TYPE");
 
     using SelectorContainer = typename BooleanColumn::Container;
     using RuntimeContainer = typename RunTimeColumnType<TYPE>::Container;

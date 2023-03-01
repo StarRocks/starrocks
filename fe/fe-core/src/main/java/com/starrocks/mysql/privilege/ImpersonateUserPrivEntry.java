@@ -15,11 +15,14 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.GrantRevokeClause;
+import com.starrocks.sql.ast.GrantRevokePrivilegeObjects;
+import com.starrocks.sql.ast.UserIdentity;
 
 public class ImpersonateUserPrivEntry extends PrivEntry {
     @SerializedName(value = "securedUserIdentity")
@@ -71,8 +74,12 @@ public class ImpersonateUserPrivEntry extends PrivEntry {
 
     @Override
     public String toGrantSQL() {
-        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "USER", getUserIdent());
-        stmt.setUserPrivilegeObject(securedUserIdentity);
+        GrantRevokePrivilegeObjects grantRevokePrivilegeObjects = new GrantRevokePrivilegeObjects();
+        grantRevokePrivilegeObjects.setUserPrivilegeObjectList(Lists.newArrayList(securedUserIdentity));
+        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(
+                Lists.newArrayList("IMPERSONATE"), "USER",
+                new GrantRevokeClause(getUserIdent(), null),
+                grantRevokePrivilegeObjects, false);
         stmt.setPrivBitSet(PrivBitSet.of(Privilege.IMPERSONATE_PRIV));
         return AstToStringBuilder.toString(stmt);
     }

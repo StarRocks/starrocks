@@ -117,9 +117,9 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
     }
 
     @Override
-    public void revoke(ObjectType type, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects, boolean isGrant)
+    public void revoke(ObjectType type, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects)
             throws PrivilegeException {
         assertMutable();
-        super.revoke(type, privilegeTypes, objects, isGrant);
+        super.revoke(type, privilegeTypes, objects);
     }
 }

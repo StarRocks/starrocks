@@ -23,10 +23,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.StatsConstants;
 
@@ -35,8 +36,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class ShowAnalyzeJobStmt extends ShowStmt {
+
     public ShowAnalyzeJobStmt(Predicate predicate) {
-        setPredicate(predicate);
+        this(predicate, NodePosition.ZERO);
+    }
+
+    public ShowAnalyzeJobStmt(Predicate predicate, NodePosition pos) {
+        super(pos);
+        this.predicate = predicate;
     }
 
     private static final ShowResultSetMetaData META_DATA =
@@ -83,7 +90,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
                 // for jobs on entire instance or entire db, we just show it directly because there isn't a specified
                 // table to check privilege on.
                 if (context.getGlobalStateMgr().isUsingNewPrivilege() &&
-                        !PrivilegeManager.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
+                        !PrivilegeActions.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
                     return null;
                 }
 

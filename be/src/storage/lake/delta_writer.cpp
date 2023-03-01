@@ -17,10 +17,10 @@
 #include <bthread/bthread.h>
 
 #include <memory>
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/column.h"
-#include "gutil/strings/util.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -79,6 +79,18 @@ public:
               _slots(slots),
               _schema_initialized(false) {}
 
+    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                             const std::vector<SlotDescriptor*>* slots, std::string merge_condition,
+                             MemTracker* mem_tracker)
+            : _tablet_manager(tablet_manager),
+              _tablet_id(tablet_id),
+              _txn_id(txn_id),
+              _partition_id(partition_id),
+              _mem_tracker(mem_tracker),
+              _slots(slots),
+              _schema_initialized(false),
+              _merge_condition(std::move(merge_condition)) {}
+
     explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t max_buffer_size,
                              MemTracker* mem_tracker)
             : _tablet_manager(tablet_manager),
@@ -98,7 +110,7 @@ public:
 
     [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
-    [[nodiscard]] Status finish();
+    [[nodiscard]] Status finish(DeltaWriter::FinishMode mode);
 
     void close();
 
@@ -153,11 +165,14 @@ private:
     // for partial update
     std::shared_ptr<const TabletSchema> _partial_update_tablet_schema;
     std::vector<int32_t> _referenced_column_ids;
+
+    // for condition update
+    std::string _merge_condition;
 };
 
 void DeltaWriterImpl::TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
                                               const std::vector<int32_t>& referenced_column_ids) {
-    _partial_update_tablet_schema = tschema;
+    _partial_update_tablet_schema = std::move(tschema);
     _referenced_column_ids = referenced_column_ids;
     build_schema_and_writer();
     // recover _tablet_schema with partial update schema
@@ -186,9 +201,9 @@ inline Status DeltaWriterImpl::reset_memtable() {
         _vectorized_schema = MemTable::convert_schema(_tablet_schema.get(), _slots);
         _schema_initialized = true;
     }
-    if (_slots != nullptr) {
+    if (_slots != nullptr || !_merge_condition.empty()) {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_vectorized_schema, _slots, _mem_table_sink.get(),
-                                                _mem_tracker);
+                                                _merge_condition, _mem_tracker);
     } else {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_vectorized_schema, _mem_table_sink.get(),
                                                 _max_buffer_size, _mem_tracker);
@@ -275,25 +290,29 @@ Status DeltaWriterImpl::handle_partial_update() {
     return Status::OK();
 }
 
-Status DeltaWriterImpl::finish() {
+Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(build_schema_and_writer());
-
-    // TODO: move file type checking to a common place
-    auto is_seg_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".dat"); };
-    auto is_del_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".del"); };
-
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
+
+    if (mode == DeltaWriter::kDontWriteTxnLog) {
+        return Status::OK();
+    }
+
+    if (UNLIKELY(_txn_id < 0)) {
+        return Status::InvalidArgument(fmt::format("negative txn id: {}", _txn_id));
+    }
+
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
     auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_tablet_id);
     txn_log->set_txn_id(_txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (auto& f : _tablet_writer->files()) {
-        if (is_seg_file(f)) {
+        if (is_segment(f)) {
             op_write->mutable_rowset()->add_segments(std::move(f));
-        } else if (is_del_file(f)) {
+        } else if (is_del(f)) {
             op_write->add_dels(std::move(f));
         } else {
             return Status::InternalError(fmt::format("unknown file {}", f));
@@ -302,18 +321,28 @@ Status DeltaWriterImpl::finish() {
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
+    // not support handle partial update and condition update at the same time
+    if (_partial_update_tablet_schema != nullptr && _merge_condition != "") {
+        return Status::NotSupported("partial update and condition update at the same time");
+    }
     // handle partial update
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
-    if (rowset_txn_meta != nullptr && _partial_update_tablet_schema != nullptr) {
-        op_write->mutable_txn_meta()->CopyFrom(*rowset_txn_meta);
-        for (auto i = 0; i < _partial_update_tablet_schema->columns().size(); ++i) {
-            const auto& tablet_column = _partial_update_tablet_schema->column(i);
-            op_write->mutable_txn_meta()->add_partial_update_column_ids(_referenced_column_ids[i]);
-            op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
+    if (rowset_txn_meta != nullptr) {
+        if (_partial_update_tablet_schema != nullptr) {
+            op_write->mutable_txn_meta()->CopyFrom(*rowset_txn_meta);
+            for (auto i = 0; i < _partial_update_tablet_schema->columns().size(); ++i) {
+                const auto& tablet_column = _partial_update_tablet_schema->column(i);
+                op_write->mutable_txn_meta()->add_partial_update_column_ids(_referenced_column_ids[i]);
+                op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
+            }
+            // generate rewrite segment names to avoid gc in rewrite operation
+            for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
+                op_write->add_rewrite_segments(random_segment_filename());
+            }
         }
-        // generate rewrite segment names to avoid gc in rewrite operation
-        for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-            op_write->add_rewrite_segments(random_segment_filename());
+        // handle condition update
+        if (_merge_condition != "") {
+            op_write->mutable_txn_meta()->set_merge_condition(_merge_condition);
         }
     }
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
@@ -337,6 +366,7 @@ void DeltaWriterImpl::close() {
     _flush_token.reset();
     _tablet_schema.reset();
     _partial_update_tablet_schema.reset();
+    _merge_condition.clear();
 }
 
 std::vector<std::string> DeltaWriterImpl::files() const {
@@ -366,9 +396,9 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     return _impl->write(chunk, indexes, indexes_size);
 }
 
-Status DeltaWriter::finish() {
+Status DeltaWriter::finish(FinishMode mode) {
     DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::finish() in a bthread";
-    return _impl->finish();
+    return _impl->finish(mode);
 }
 
 void DeltaWriter::close() {
@@ -416,7 +446,7 @@ int64_t DeltaWriter::num_rows() const {
 
 void DeltaWriter::TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
                                           const std::vector<int32_t>& referenced_column_ids) {
-    _impl->TEST_set_partial_update(tschema, referenced_column_ids);
+    _impl->TEST_set_partial_update(std::move(tschema), referenced_column_ids);
 }
 
 std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
@@ -424,6 +454,13 @@ std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, 
                                                  MemTracker* mem_tracker) {
     return std::make_unique<DeltaWriter>(
             new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker));
+}
+
+std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
+                                                 int64_t partition_id, const std::vector<SlotDescriptor*>* slots,
+                                                 const std::string& merge_condition, MemTracker* mem_tracker) {
+    return std::make_unique<DeltaWriter>(
+            new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition, mem_tracker));
 }
 
 std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,

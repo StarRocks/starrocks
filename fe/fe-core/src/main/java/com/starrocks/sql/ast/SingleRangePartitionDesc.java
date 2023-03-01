@@ -27,6 +27,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TTabletType;
 
 import java.util.Map;
@@ -49,8 +50,13 @@ public class SingleRangePartitionDesc extends PartitionDesc {
 
     public SingleRangePartitionDesc(boolean ifNotExists, String partName, PartitionKeyDesc partitionKeyDesc,
                                     Map<String, String> properties) {
-        this.ifNotExists = ifNotExists;
+        this(ifNotExists, partName, partitionKeyDesc, properties, NodePosition.ZERO);
+    }
 
+    public SingleRangePartitionDesc(boolean ifNotExists, String partName, PartitionKeyDesc partitionKeyDesc,
+                                    Map<String, String> properties, NodePosition pos) {
+        super(pos);
+        this.ifNotExists = ifNotExists;
         this.isAnalyzed = false;
 
         this.partName = partName;
@@ -151,8 +157,8 @@ public class SingleRangePartitionDesc extends PartitionDesc {
                 properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, true);
         long storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(
                 properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, Config.lake_default_storage_cache_ttl_seconds);
-        boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
-                properties, PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, false);
+        boolean enableAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
+                properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
 
         if (storageCacheTtlS < -1) {
             throw new AnalysisException("Storage cache ttl should not be less than -1");
@@ -163,10 +169,10 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         if (enableStorageCache && storageCacheTtlS == 0) {
             throw new AnalysisException("Storage cache ttl should not be 0 when cache is enabled");
         }
-        if (!enableStorageCache && allowAsyncWriteBack) {
-            throw new AnalysisException("storage allow_async_write_back can't be enabled when cache is disabled");
+        if (!enableStorageCache && enableAsyncWriteBack) {
+            throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
         }
-        storageCacheInfo = new StorageCacheInfo(enableStorageCache, storageCacheTtlS, allowAsyncWriteBack);
+        storageCacheInfo = new StorageCacheInfo(enableStorageCache, storageCacheTtlS, enableAsyncWriteBack);
 
         if (otherProperties == null) {
             // check unknown properties

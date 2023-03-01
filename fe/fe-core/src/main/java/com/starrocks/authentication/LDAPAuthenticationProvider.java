@@ -13,10 +13,10 @@
 // limitations under the License.
 package com.starrocks.authentication;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.mysql.security.LdapSecurity;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.parquet.Strings;
 
 import static com.starrocks.mysql.privilege.AuthPlugin.AUTHENTICATION_LDAP_SIMPLE;
@@ -25,8 +25,7 @@ public class LDAPAuthenticationProvider implements AuthenticationProvider {
     public static final String PLUGIN_NAME = AUTHENTICATION_LDAP_SIMPLE.name();
 
     @Override
-    public UserAuthenticationInfo validAuthenticationInfo(UserIdentity userIdentity, String password, String textForAuthPlugin)
-            throws AuthenticationException {
+    public UserAuthenticationInfo validAuthenticationInfo(UserIdentity userIdentity, String password, String textForAuthPlugin) {
         UserAuthenticationInfo info = new UserAuthenticationInfo();
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         info.setTextForAuthPlugin(textForAuthPlugin);

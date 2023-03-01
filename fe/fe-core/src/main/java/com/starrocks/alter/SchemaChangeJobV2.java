@@ -94,6 +94,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -574,7 +575,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
 
-            Set<String> modifiedColumns = getModifiedColumns(tbl);
+            // Before schema change, collect modified columns for related mvs.
+            Set<String> modifiedColumns = collectModifiedColumnsForRelatedMVs(tbl);
 
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 Partition partition = tbl.getPartition(partitionId);
@@ -634,16 +636,33 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.span.end();
     }
 
-    private Set<String> getModifiedColumns(OlapTable tbl) {
+    private Set<String> collectModifiedColumnsForRelatedMVs(OlapTable tbl) {
         if (tbl.getRelatedMaterializedViews().isEmpty()) {
             return Sets.newHashSet();
         }
         Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+
         for (Entry<Long, List<Column>> entry : indexSchemaMap.entrySet()) {
-            for (Column col : entry.getValue()) {
-                if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
-                    modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
+            Long shadowIdxId = entry.getKey();
+            long originIndexId = indexIdMap.get(shadowIdxId);
+            List<Column> shadowSchema = entry.getValue();
+            List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
+            if (shadowSchema.size() == originSchema.size()) {
+                // modify column
+                for (Column col : shadowSchema) {
+                    if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
+                        modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
+                    }
                 }
+            } else if (shadowSchema.size() < originSchema.size()) {
+                // drop column
+                List<Column> differences = originSchema.stream().filter(element ->
+                        !shadowSchema.contains(element)).collect(Collectors.toList());
+                // can just drop one column one time, so just one element in differences
+                Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
+                modifiedColumns.add(originSchema.get(dropIdx).getName());
+            } else {
+                // add column should not affect old mv, just ignore.
             }
         }
         return modifiedColumns;
@@ -662,7 +681,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
             for (Column mvColumn : mv.getColumns()) {
                 if (modifiedColumns.contains(mvColumn.getName())) {
+                    LOG.warn("Set materialized view {} inactive because the base table's scheme has changed",
+                            mv.getName());
                     mv.setActive(false);
+                    return;
                 }
             }
         }
@@ -1175,4 +1197,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
     }
 
+    @Override
+    public Optional<Long> getTransactionId() {
+        return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
+    }
 }

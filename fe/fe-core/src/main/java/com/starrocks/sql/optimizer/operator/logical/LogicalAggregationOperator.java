@@ -43,7 +43,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
     private final AggType type;
     // The flag for this aggregate operator has split to
     // two stage aggregate or three stage aggregate
-    private boolean isSplit = false;
+    private boolean isSplit;
     /**
      * aggregation key is output variable of aggregate function
      */
@@ -84,7 +84,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
         this.groupingKeys = ImmutableList.copyOf(groupingKeys);
         this.partitionByColumns = partitionByColumns;
         this.aggregations = ImmutableMap.copyOf(aggregations);
-        this.isSplit = isSplit;
+        this.isSplit = !type.isGlobal() || isSplit;
         this.singleDistinctFunctionPos = singleDistinctFunctionPos;
     }
 
@@ -94,7 +94,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
         this.groupingKeys = builder.groupingKeys;
         this.partitionByColumns = builder.partitionByColumns;
         this.aggregations = builder.aggregations;
-        this.isSplit = builder.isSplit;
+        this.isSplit = !builder.type.isGlobal() || builder.isSplit;
         this.singleDistinctFunctionPos = builder.singleDistinctFunctionPos;
     }
 
@@ -114,8 +114,8 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return isSplit;
     }
 
-    public void setSplit() {
-        isSplit = true;
+    public void setOnlyLocalAggregate() {
+        isSplit = false;
     }
 
     public int getSingleDistinctFunctionPos() {
@@ -149,7 +149,8 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
-        Map<ColumnRefOperator, ScalarOperator> keyMap = groupingKeys.stream().collect(Collectors.toMap(identity(), identity()));
+        Map<ColumnRefOperator, ScalarOperator> keyMap =
+                groupingKeys.stream().collect(Collectors.toMap(identity(), identity()));
         columnRefMap.putAll(keyMap);
         columnRefMap.putAll(aggregations);
         return columnRefMap;
@@ -190,15 +191,17 @@ public class LogicalAggregationOperator extends LogicalOperator {
         if (!super.equals(o)) {
             return false;
         }
-
         LogicalAggregationOperator that = (LogicalAggregationOperator) o;
-        return type == that.type && Objects.equals(aggregations, that.aggregations) &&
-                Objects.equals(groupingKeys, that.groupingKeys);
+        return isSplit == that.isSplit && singleDistinctFunctionPos == that.singleDistinctFunctionPos &&
+                type == that.type && Objects.equals(aggregations, that.aggregations) &&
+                Objects.equals(groupingKeys, that.groupingKeys) &&
+                Objects.equals(partitionByColumns, that.partitionByColumns);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type, aggregations, groupingKeys);
+        return Objects.hash(super.hashCode(), type, isSplit, aggregations, groupingKeys, partitionByColumns,
+                singleDistinctFunctionPos);
     }
 
     public static Builder builder() {

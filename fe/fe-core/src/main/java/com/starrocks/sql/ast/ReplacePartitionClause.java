@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -48,7 +49,12 @@ public class ReplacePartitionClause extends AlterTableClause {
 
     public ReplacePartitionClause(PartitionNames partitionNames, PartitionNames tempPartitionNames,
                                   Map<String, String> properties) {
-        super(AlterOpType.REPLACE_PARTITION);
+        this(partitionNames, tempPartitionNames, properties, NodePosition.ZERO);
+    }
+
+    public ReplacePartitionClause(PartitionNames partitionNames, PartitionNames tempPartitionNames,
+                                  Map<String, String> properties, NodePosition pos) {
+        super(AlterOpType.REPLACE_PARTITION, pos);
         this.partitionNames = partitionNames;
         this.tempPartitionNames = tempPartitionNames;
         this.needTableStable = false;

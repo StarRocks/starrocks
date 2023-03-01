@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.plugin.DynamicPluginLoader;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
@@ -26,6 +27,11 @@ public class InstallPluginStmt extends DdlStmt {
     private final Map<String, String> properties;
 
     public InstallPluginStmt(String pluginPath, Map<String, String> properties) {
+        this(pluginPath, properties, NodePosition.ZERO);
+    }
+
+    public InstallPluginStmt(String pluginPath, Map<String, String> properties, NodePosition pos) {
+        super(pos);
         this.pluginPath = pluginPath;
         this.properties = properties;
     }

@@ -781,7 +781,9 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testDistinctPushDown() throws Exception {
         String sql = "select distinct k1 from (select distinct k1 from test.pushdown_test) t where k1 > 1";
-        starRocksAssert.query(sql).explainContains("  RESULT SINK\n" +
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        assertContains(plan, "RESULT SINK\n" +
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 1: k1\n" +
@@ -1102,7 +1104,7 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setSqlMode(0);
         String sql = "select v1, v2 from t0 group by v1";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+        Assert.assertTrue(plan, plan.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:1: v1 | 4: any_value\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
@@ -1472,6 +1474,7 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testMultiDistinctAggregate() throws Exception {
         String sql = "select count(distinct t1b), count(distinct t1b, t1c) from test_all_type";
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
         String plan = getFragmentPlan(sql);
         assertContains(plan, "MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
@@ -2113,5 +2116,78 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 14> : 'b'");
         assertContains(plan, "  2:EXCHANGE\n" +
                 "     limit: 1");
+    }
+
+    @Test
+    public void testPruneGroupByKeysRule2() throws Exception {
+        String sql = "select 1 from test_all_type group by NULL " +
+                "having (NOT (((DROUND(0.09733420538671422) ) IS NOT NULL)))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 12> : 1\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 11: expr\n" +
+                "  |  having: dround(0.09733420538671422) IS NULL\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 11> : NULL");
+    }
+
+    @Test
+    public void testPruneGroupByKeysRule3() throws Exception {
+        String sql = "select count(*), sum(t1b) from test_all_type group by NULL " +
+                "having (NOT (((DROUND(0.09733420538671422) ) IS NOT NULL)))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 12> : 12: count\n" +
+                "  |  <slot 13> : 13: sum\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*), sum(2: t1b)\n" +
+                "  |  group by: 11: expr\n" +
+                "  |  having: dround(0.09733420538671422) IS NULL");
+    }
+
+    @Test
+    public void testDistinctRewrite() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select count(distinct t1a), sum(t1c) from test_all_type group by t1b";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "sum[([13: sum, BIGINT, true]); args: BIGINT; result: BIGINT; args nullable: true;");
+
+        sql = "select multi_distinct_count(t1a), max(t1c) from test_all_type group by t1b, t1c";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "max[([13: max, INT, true]); args: INT;");
+
+        sql = "select sum(distinct v1), hll_union(hll_hash(v3)) from test_object group by v2";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "hll_union[([16: hll_union, HLL, true]); args: HLL; result: HLL; args nullable: true;");
+
+        sql = "select count(distinct v1), BITMAP_UNION(b1) from test_object group by v2, v3";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "bitmap_union[([15: bitmap_union, BITMAP, true]); args: BITMAP; result: BITMAP; " +
+                "args nullable: true;");
+
+        sql = "select count(distinct t1a), PERCENTILE_UNION(PERCENTILE_HASH(t1f)) from test_all_type group by t1c";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "percentile_union[([14: percentile_union, PERCENTILE, true]); args: PERCENTILE; " +
+                "result: PERCENTILE; args nullable: true;");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testMultiCountDistinctWithMoreGroupBy() throws Exception {
+        String sql = "select count(distinct t1c), count(distinct t1d), count(distinct t1e)" +
+                "from test_all_type group by t1a, t1b";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "multi_distinct_count");
+
+        sql = "select count(distinct t1c), count(distinct t1d), count(distinct t1e)" +
+                "from test_all_type group by t1a";
+
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "multi_distinct_count");
     }
 }

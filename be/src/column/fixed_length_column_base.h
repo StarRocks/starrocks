@@ -148,6 +148,8 @@ public:
 
     void fill_default(const Filter& filter) override;
 
+    Status fill_range(const Buffer<T>& ids, const std::vector<uint8_t>& filter);
+
     Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     // The `_data` support one size(> 2^32), but some interface such as update_rows() will use uint32_t to
@@ -206,7 +208,7 @@ public:
     std::string debug_string() const override;
 
     size_t container_memory_usage() const override { return _data.capacity() * sizeof(ValueType); }
-    size_t element_memory_usage(size_t from, size_t size) const override { return sizeof(ValueType) * size; }
+    size_t reference_memory_usage(size_t from, size_t size) const override { return 0; }
 
     void swap_column(Column& rhs) override {
         auto& r = down_cast<FixedLengthColumnBase&>(rhs);

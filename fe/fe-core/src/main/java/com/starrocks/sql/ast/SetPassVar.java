@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 
 public class SetPassVar extends SetListItem {
     private UserIdentity userIdent;
@@ -23,6 +23,11 @@ public class SetPassVar extends SetListItem {
 
     // The password in parameter is a hashed password.
     public SetPassVar(UserIdentity userIdent, String passwd) {
+        this(userIdent, passwd, NodePosition.ZERO);
+    }
+
+    public SetPassVar(UserIdentity userIdent, String passwd, NodePosition pos) {
+        super(pos);
         this.userIdent = userIdent;
         this.passwdParam = passwd;
     }

@@ -238,8 +238,10 @@ public:
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }
+
+        bool is_cache_hit = (*file_st)->is_cache_hit();
         auto istream = std::make_shared<StarletInputStream>(std::move(*file_st));
-        return std::make_unique<RandomAccessFile>(std::move(istream), path);
+        return std::make_unique<RandomAccessFile>(std::move(istream), path, is_cache_hit);
     }
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
@@ -401,7 +403,17 @@ public:
     }
 
     Status path_exists(const std::string& path) override {
-        return Status::NotSupported("StarletFileSystem::path_exists");
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+
+        auto exists_or = (*fs_st)->exists(pair.first);
+        if (!exists_or.ok()) {
+            return to_status(exists_or.status());
+        }
+        return *exists_or ? Status::OK() : Status::NotFound(path);
     }
 
     Status get_children(const std::string& dir, std::vector<std::string>* file) override {

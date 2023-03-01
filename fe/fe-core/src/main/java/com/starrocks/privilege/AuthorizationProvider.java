@@ -14,8 +14,8 @@
 
 package com.starrocks.privilege;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.List;
 import java.util.Set;
@@ -39,8 +39,6 @@ public interface AuthorizationProvider {
      * analyze plural type name -> type name
      */
     ObjectType getTypeNameByPlural(String plural) throws PrivilegeException;
-
-    String getPlural(ObjectType objectType) throws PrivilegeException;
 
     /**
      * generate PEntryObject by tokenlist

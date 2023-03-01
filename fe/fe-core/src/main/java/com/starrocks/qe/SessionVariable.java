@@ -35,13 +35,11 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileLevel;
@@ -130,7 +128,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CODEGEN_LEVEL = "codegen_level";
     public static final String BATCH_SIZE = "batch_size";
     public static final String CHUNK_SIZE = "chunk_size";
-    public static final String DISABLE_STREAMING_PREAGGREGATIONS = "disable_streaming_preaggregations";
     public static final String STREAMING_PREAGGREGATION_MODE = "streaming_preaggregation_mode";
     public static final String DISABLE_COLOCATE_JOIN = "disable_colocate_join";
     public static final String DISABLE_BUCKET_JOIN = "disable_bucket_join";
@@ -162,7 +159,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE = "enable_pipeline";
 
     public static final String ENABLE_RUNTIME_ADAPTIVE_DOP = "enable_runtime_adaptive_dop";
-    public static final String ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ = "runtime_adaptive_dop_max_block_rows_per_driver_seq";
+    public static final String ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ =
+            "runtime_adaptive_dop_max_block_rows_per_driver_seq";
+    public static final String ADAPTIVE_DOP_MAX_OUTPUT_AMPLIFICATION_FACTOR =
+            "runtime_adaptive_dop_max_output_amplification_factor";
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
     public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
@@ -250,6 +250,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
+    public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
@@ -280,6 +281,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
+    public static final String DEFAULT_TABLE_COMPRESSION = "default_table_compression";
+
     // In most cases, the partition statistics obtained from the hive metastore are empty.
     // Because we get partition statistics asynchronously for the first query of a table or partition,
     // if the gc of any service is caused, you can set the value to 100 for testing.
@@ -306,6 +309,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
+
+    public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
@@ -345,6 +350,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
 
+    public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
+
+    // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
+    // in full sort.
+    public static final String FULL_SORT_MAX_BUFFERED_ROWS = "full_sort_max_buffered_rows";
+
+    public static final String FULL_SORT_MAX_BUFFERED_BYTES = "full_sort_max_buffered_bytes";
+
+    // Used by full sort inorder to permute only order-by columns in cascading merging phase, after
+    // that, non-order-by output columns are permuted according to the ordinal column.
+    public static final String FULL_SORT_LATE_MATERIALIZATION = "full_sort_late_materialization";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -377,6 +394,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, flag = VariableMgr.INVISIBLE)
     private long adaptiveDopMaxBlockRowsPerDriverSeq = 4096L * 4;
+
+    // Effective when it is positive.
+    @VariableMgr.VarAttr(name = ADAPTIVE_DOP_MAX_OUTPUT_AMPLIFICATION_FACTOR, flag = VariableMgr.INVISIBLE)
+    private long adaptiveDopMaxOutputAmplificationFactor = 0;
 
     @VarAttr(name = ENABLE_MV_PLANNER)
     private boolean enableMVPlanner = false;
@@ -431,7 +452,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // max memory used on every backend.
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
-    @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
+    @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT, flag = VariableMgr.INVISIBLE)
     public long maxExecMemByte = DEFAULT_EXEC_MEM_LIMIT;
 
     @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
@@ -545,9 +566,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int chunkSize = 4096;
 
     public static final int PIPELINE_BATCH_SIZE = 4096;
-
-    @VariableMgr.VarAttr(name = DISABLE_STREAMING_PREAGGREGATIONS)
-    private boolean disableStreamPreaggregations = false;
 
     @VariableMgr.VarAttr(name = STREAMING_PREAGGREGATION_MODE)
     private String streamingPreaggregationMode = "auto"; // auto, force_streaming, force_preaggregation
@@ -737,6 +755,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HIVE_PARTITION_STATS_SAMPLE_SIZE)
     private int hivePartitionStatsSampleSize = 3000;
 
+    @VarAttr(name = DEFAULT_TABLE_COMPRESSION)
+    private String defaultTableCompressionAlgorithm = "lz4_frame";
+
     @VariableMgr.VarAttr(name = ENABLE_ADAPTIVE_SINK_DOP)
     private boolean enableAdaptiveSinkDop = false;
 
@@ -766,17 +787,29 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             show = CBO_PUSH_DOWN_AGGREGATE_MODE, flag = VariableMgr.INVISIBLE)
     private int cboPushDownAggregateMode = -1;
 
+    // auto, global, local
+    @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE, flag = VariableMgr.INVISIBLE)
+    private String cboPushDownAggregate = "global";
+
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
 
     @VarAttr(name = ENABLE_SORT_AGGREGATE)
     private boolean enableSortAggregate = false;
 
+    // 1: sort based, 2: hash based
+    @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
+    private int windowPartitionMode = 1;
+
     @VarAttr(name = ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE)
     private boolean enableRewriteSumByAssociativeRule = true;
 
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;
+    }
+
+    public int getWindowPartitionMode() {
+        return windowPartitionMode;
     }
 
     public void setEnableSortAggregate(boolean enableSortAggregate) {
@@ -862,6 +895,42 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ACTIVATE_ALL_ROLES_ON_LOGIN)
     private String activateAllRolesOnLogin = "OFF";
+
+    @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
+    private long groupConcatMaxLen = 65535;
+
+    @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_ROWS, flag = VariableMgr.INVISIBLE)
+    private long fullSortMaxBufferedRows = 1024000;
+
+    @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_BYTES, flag = VariableMgr.INVISIBLE)
+    private long fullSortMaxBufferedBytes = 16L * 1024 * 1024;
+
+    @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION)
+    private boolean fullSortLateMaterialization = false;
+
+    public void setFullSortMaxBufferedRows(long v) {
+        fullSortMaxBufferedRows = v;
+    }
+
+    public void setFullSortMaxBufferedBytes(long v) {
+        fullSortMaxBufferedBytes = v;
+    }
+
+    public long getFullSortMaxBufferedRows() {
+        return fullSortMaxBufferedRows;
+    }
+
+    public long getFullSortMaxBufferedBytes() {
+        return fullSortMaxBufferedBytes;
+    }
+
+    public void setFullSortLateMaterialization(boolean v) {
+        fullSortLateMaterialization = v;
+    }
+
+    public boolean isFullSortLateMaterialization() {
+        return fullSortLateMaterialization;
+    }
 
     public boolean isActivateAllRolesOnLogin() {
         if (activateAllRolesOnLogin.equals("ON")) {
@@ -1277,6 +1346,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return adaptiveDopMaxBlockRowsPerDriverSeq;
     }
 
+    public long getAdaptiveDopMaxOutputAmplificationFactor() {
+        return adaptiveDopMaxOutputAmplificationFactor;
+    }
+
     public void setEnablePipelineEngine(boolean enablePipelineEngine) {
         this.enablePipelineEngine = enablePipelineEngine;
     }
@@ -1434,6 +1507,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPushDownAggregateMode(int cboPushDownAggregateMode) {
         this.cboPushDownAggregateMode = cboPushDownAggregateMode;
+    }
+
+    public String getCboPushDownAggregate() {
+        return cboPushDownAggregate;
+    }
+
+    public void setCboPushDownAggregate(String cboPushDownAggregate) {
+        this.cboPushDownAggregate = cboPushDownAggregate;
     }
 
     public boolean isEnableSQLDigest() {
@@ -1648,6 +1729,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePruneComplexTypes = enablePruneComplexTypes;
     }
 
+    public String getDefaultTableCompression() {
+        return defaultTableCompressionAlgorithm;
+    }
+
+    public void setDefaultTableCompression(String compression) {
+        this.defaultTableCompressionAlgorithm = compression;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -1657,17 +1746,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setQuery_mem_limit(queryMemLimit);
         }
 
-        tResult.setMin_reservation(0);
-        tResult.setMax_reservation(maxExecMemByte);
-        tResult.setInitial_reservation_total_claims(maxExecMemByte);
-        tResult.setBuffer_pool_limit(maxExecMemByte);
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
         tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         tResult.setEnable_profile(enableProfile);
-        tResult.setCodegen_level(0);
         tResult.setBatch_size(chunkSize);
-        tResult.setDisable_stream_preaggregations(disableStreamPreaggregations);
         tResult.setLoad_mem_limit(loadMemLimit);
 
         if (maxScanKeyNum > -1) {
@@ -1758,55 +1841,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_67) {
-            int codegenLevel = in.readInt();
-            netBufferLength = in.readInt();
-            sqlSafeUpdates = in.readInt();
-            timeZone = Text.readString(in);
-            netReadTimeout = in.readInt();
-            netWriteTimeout = in.readInt();
-            waitTimeout = in.readInt();
-            interactiveTimeout = in.readInt();
-            queryCacheType = in.readInt();
-            autoIncrementIncrement = in.readInt();
-            maxAllowedPacket = in.readInt();
-            sqlSelectLimit = in.readLong();
-            sqlAutoIsNull = in.readBoolean();
-            collationDatabase = Text.readString(in);
-            collationConnection = Text.readString(in);
-            charsetServer = Text.readString(in);
-            charsetResults = Text.readString(in);
-            charsetConnection = Text.readString(in);
-            charsetClient = Text.readString(in);
-            txIsolation = Text.readString(in);
-            autoCommit = in.readBoolean();
-            // Deprecated variable, keep it just for compatibility
-            // resourceGroup = Text.readString(in);
-            Text.readString(in);
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_65) {
-                sqlMode = in.readLong();
-            } else {
-                // read old version SQL mode
-                Text.readString(in);
-                sqlMode = 0L;
-            }
-            enableProfile = in.readBoolean();
-            queryTimeoutS = in.readInt();
-            maxExecMemByte = in.readLong();
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_37) {
-                collationServer = Text.readString(in);
-            }
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_38) {
-                int batchSize = in.readInt();
-                disableStreamPreaggregations = in.readBoolean();
-                parallelExecInstanceNum = in.readInt();
-            }
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_62) {
-                exchangeInstanceParallel = in.readInt();
-            }
-        } else {
-            readFromJson(in);
-        }
+        readFromJson(in);
     }
 
     private void readFromJson(DataInput in) throws IOException {

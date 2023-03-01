@@ -25,7 +25,9 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -58,14 +60,18 @@ public class CompressionUtils {
         if (compressionType == null) {
             return null;
         } else if (compressionType == TCompressionType.LZ4
-                   || compressionType == TCompressionType.LZ4_FRAME
-                   || compressionType == TCompressionType.ZLIB
-                   || compressionType == TCompressionType.ZSTD
-                   || compressionType == TCompressionType.SNAPPY) {
+                || compressionType == TCompressionType.LZ4_FRAME
+                || compressionType == TCompressionType.ZLIB
+                || compressionType == TCompressionType.ZSTD
+                || compressionType == TCompressionType.SNAPPY) {
             return compressionType;
         } else {
             return null;
         }
+    }
+
+    public static List<String> getSupportedCompressionNames() {
+        return new ArrayList<>(T_COMPRESSION_BY_NAME.keySet());
     }
 
     /**

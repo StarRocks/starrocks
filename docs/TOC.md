@@ -41,18 +41,18 @@
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
     + [Default catalog](./data_source/catalog/default_catalog.md)
-    + [Delta Lake catalog](./data_source/catalog/deltalake_catalog.md)
     + [Hive catalog](./data_source/catalog/hive_catalog.md)
     + [Iceberg catalog](./data_source/catalog/iceberg_catalog.md)
     + [Hudi catalog](./data_source/catalog/hudi_catalog.md)
+    + [Delta Lake catalog](./data_source/catalog/deltalake_catalog.md)
     + [Query external data](./data_source/catalog/query_external_data.md)
   + [External tables](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
   + [Local Cache](./data_source/Block_cache.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
-  + [Multi-table asynchronous refresh materialized view](./using_starrocks/Materialized_view.md)
-  + [Single-table Materialized View](./using_starrocks/Materialized_view-single_table.md)
+  + [Materialized view](./using_starrocks/Materialized_view.md)
+  + [Single-table materialized view](./using_starrocks/Materialized_view-single_table.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Query Cache](./using_starrocks/query_cache.md)
@@ -62,6 +62,9 @@
   + Computing the Number of Distinct Values
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
++ Integration
+  + [Integrate with StarRocks](./integrations/intro.md)
+  + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
@@ -319,6 +322,9 @@
       + [bitnot](./sql-reference/sql-functions/bit-functions/bitnot.md)
       + [bitor](./sql-reference/sql-functions/bit-functions/bitor.md)
       + [bitxor](./sql-reference/sql-functions/bit-functions/bitxor.md)
+      + [bit_shift_left](./sql-reference/sql-functions/bit-functions/bit_shift_left.md)
+      + [bit_shift_right](./sql-reference/sql-functions/bit-functions/bit_shift_right.md)
+      + [bit_shift_right_logical](./sql-reference/sql-functions/bit-functions/bit_shift_right_logical.md)
     + Bitmap Functions
       + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
@@ -531,6 +537,7 @@
       + [null_or_empty](./sql-reference/sql-functions/string-functions/null_or_empty.md)
       + [parse_url](./sql-reference/sql-functions/string-functions/parse_url.md)
       + [repeat](./sql-reference/sql-functions/string-functions/repeat.md)
+      + [replace](./sql-reference/sql-functions/string-functions/replace.md)
       + [reverse](./sql-reference/sql-functions/string-functions/reverse.md)
       + [right](./sql-reference/sql-functions/string-functions/right.md)
       + [rpad](./sql-reference/sql-functions/string-functions/rpad.md)
@@ -575,7 +582,6 @@
   + [User-defined variables](./reference/user_defined_variables.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
-+ [Integrate with StarRocks](./integrations/intro.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
@@ -596,6 +602,9 @@
   + [TPC-H Benchmark](./benchmarking/TPC-H_Benchmarking.md)
 + Developers
   + [Contribute to StarRocks](./developers/How_to_Contribute.md)
+  + Code Style Guides
+    + [protobuf style guides](./developers/code-style-guides/protobuf-guides.md)
+    + [thrift style guides](./developers/code-style-guides/thrift-guides.md)
   + [Use the debuginfo file for debugging](./developers/debuginfo.md)
   + Development Environment
     + [IDE Setup](./developers/development-environment/ide-setup.md)

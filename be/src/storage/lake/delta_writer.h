@@ -39,10 +39,21 @@ class DeltaWriter {
 public:
     using Ptr = std::unique_ptr<DeltaWriter>;
 
+    enum FinishMode {
+        kWriteTxnLog,
+        kDontWriteTxnLog,
+    };
+
     // for load
     // Does NOT take the ownership of |tablet_manager|、|slots| and |mem_tracker|
     static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                       const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
+
+    // for condition update
+    // Does NOT take the ownership of |tablet_manager|、|slots| and |mem_tracker|
+    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                      const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                      MemTracker* mem_tracker);
 
     // for schema change
     // Does NOT take the ownership of |tablet_manager| and |mem_tracker|
@@ -62,7 +73,7 @@ public:
     [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status finish();
+    [[nodiscard]] Status finish(FinishMode mode = kWriteTxnLog);
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.

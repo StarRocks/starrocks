@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
@@ -72,7 +73,6 @@ public class SetPassVarTest {
         MockedAuth.mockedAuth(auth);
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
         UserIdentity currentUser = new UserIdentity("root", "192.168.1.1");
-        currentUser.setIsAnalyzed();
         ctx.setCurrentUserIdentity(currentUser);
     }
 
@@ -151,7 +151,7 @@ public class SetPassVarTest {
         AuthenticationManager authenticationManager =
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
         authenticationManager.createUser(createUserStmt);
-        testUser = createUserStmt.getUserIdent();
+        testUser = createUserStmt.getUserIdentity();
     }
     @Test
     public void testSetPasswordInNewPrivilege() throws Exception {

@@ -31,10 +31,13 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -55,12 +58,16 @@ public class CreateLakeTableTest {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
 
-        Config.use_staros = true;
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
     }
 
     @AfterClass
     public static void afterClass() {
-        Config.use_staros = false;
     }
 
     private static void createTable(String sql) throws Exception {
@@ -106,7 +113,7 @@ public class CreateLakeTableTest {
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
@@ -122,13 +129,13 @@ public class CreateLakeTableTest {
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
-                        "engine = starrocks distributed by hash(key1) buckets 3\n" +
+                        "distributed by hash(key1) buckets 3\n" +
                         "properties('replication_num' = '1');"));
         checkLakeTable("lake_test", "single_partition_duplicate_key");
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.multi_partition_aggregate_key (key1 date, key2 varchar(10), v bigint sum)\n" +
-                        "engine = starrocks partition by range(key1)\n" +
+                        "partition by range(key1)\n" +
                         "(partition p1 values less than (\"2022-03-01\"),\n" +
                         " partition p2 values less than (\"2022-04-01\"))\n" +
                         "distributed by hash(key2) buckets 2\n" +
@@ -137,7 +144,7 @@ public class CreateLakeTableTest {
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.multi_partition_unique_key (key1 int, key2 varchar(10), v bigint)\n" +
-                        "engine = starrocks unique key (key1, key2)\n" +
+                        "unique key (key1, key2)\n" +
                         "partition by range(key1)\n" +
                         "(partition p1 values less than (\"10\"),\n" +
                         " partition p2 values less than (\"20\"))\n" +
@@ -171,7 +178,7 @@ public class CreateLakeTableTest {
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
@@ -187,7 +194,7 @@ public class CreateLakeTableTest {
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.single_partition_duplicate_key_cache (key1 int, key2 varchar(10))\n" +
-                        "engine = starrocks distributed by hash(key1) buckets 3\n" +
+                        "distributed by hash(key1) buckets 3\n" +
                         "properties('enable_storage_cache' = 'true', 'storage_cache_ttl' = '3600');"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "single_partition_duplicate_key_cache");
@@ -200,18 +207,18 @@ public class CreateLakeTableTest {
             StorageCacheInfo partitionStorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partitionId);
             Assert.assertTrue(partitionStorageCacheInfo.isEnableStorageCache());
             Assert.assertEquals(3600, partitionStorageCacheInfo.getStorageCacheTtlS());
-            Assert.assertEquals(false, partitionStorageCacheInfo.isAllowAsyncWriteBack());
+            Assert.assertEquals(false, partitionStorageCacheInfo.isEnableAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.multi_partition_aggregate_key_cache \n" +
                         "(key1 date, key2 varchar(10), v bigint sum)\n" +
-                        "engine = starrocks partition by range(key1)\n" +
+                        "partition by range(key1)\n" +
                         "(partition p1 values less than (\"2022-03-01\"),\n" +
                         " partition p2 values less than (\"2022-04-01\"))\n" +
                         "distributed by hash(key2) buckets 2\n" +
                         "properties('enable_storage_cache' = 'true', 'storage_cache_ttl' = '7200'," +
-                        "'allow_async_write_back' = 'true');"));
+                        "'enable_async_write_back' = 'true');"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "multi_partition_aggregate_key_cache");
             // check table property
@@ -227,12 +234,12 @@ public class CreateLakeTableTest {
             StorageCacheInfo partition2StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
             Assert.assertTrue(partition2StorageCacheInfo.isEnableStorageCache());
             Assert.assertEquals(7200, partition2StorageCacheInfo.getStorageCacheTtlS());
-            Assert.assertEquals(true, partition2StorageCacheInfo.isAllowAsyncWriteBack());
+            Assert.assertEquals(true, partition2StorageCacheInfo.isEnableAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.multi_partition_unique_key_cache (key1 int, key2 varchar(10), v bigint)\n" +
-                        "engine = starrocks unique key (key1, key2)\n" +
+                        "unique key (key1, key2)\n" +
                         "partition by range(key1)\n" +
                         "(partition p1 values less than (\"10\"),\n" +
                         " partition p2 values less than (\"20\") ('enable_storage_cache' = 'false'))\n" +
@@ -261,13 +268,13 @@ public class CreateLakeTableTest {
     @Test
     public void testCreateLakeTableException() {
 
-        // storage_cache disabled but allow_async_write_back = true
+        // storage_cache disabled but enable_async_write_back = true
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "storage allow_async_write_back can't be enabled when cache is disabled",
+                "enable_async_write_back can't be turned on when cache is disabled",
                 () -> createTable(
                         "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
-                        "engine = starrocks distributed by hash(key1) buckets 3\n" +
+                        "distributed by hash(key1) buckets 3\n" +
                         " properties('enable_storage_cache' = 'false', 'storage_cache_ttl' = '0'," +
-                        "'allow_async_write_back' = 'true');"));
+                        "'enable_async_write_back' = 'true');"));
     }
 }

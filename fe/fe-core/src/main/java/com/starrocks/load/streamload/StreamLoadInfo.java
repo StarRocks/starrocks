@@ -387,6 +387,9 @@ public class StreamLoadInfo {
         if (routineLoadJob.getFormat().equals("json")) {
             fileFormatType = TFileFormatType.FORMAT_JSON;
         }
+        if (routineLoadJob.getFormat().equals("avro")) {
+            fileFormatType = TFileFormatType.FORMAT_AVRO;
+        }
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(dummyId, -1L /* dummy txn id */,
                 TFileType.FILE_STREAM, fileFormatType);
         streamLoadInfo.setOptionalFromRoutineLoadJob(routineLoadJob);
@@ -424,6 +427,9 @@ public class StreamLoadInfo {
             compressionType = CompressionUtils.findTCompressionByName(
                     routineLoadJob.getSessionVariables().get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
         }
+        trimSpace = routineLoadJob.isTrimspace();
+        enclose = routineLoadJob.getEnclose();
+        escape = routineLoadJob.getEscape();
     }
 
     // used for stream load

@@ -15,13 +15,24 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.UserDesc;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Collections;
 
 public class AlterUserStmt extends BaseCreateAlterUserStmt {
+    private final boolean ifExists;
 
-    public AlterUserStmt(UserDesc userDesc) {
-        super(userDesc, null, Collections.emptyList());
+    public AlterUserStmt(UserDesc userDesc, boolean ifExists) {
+        this(userDesc, ifExists, NodePosition.ZERO);
+    }
+
+    public AlterUserStmt(UserDesc userDesc, boolean ifExists, NodePosition pos) {
+        super(userDesc, null, Collections.emptyList(), pos);
+        this.ifExists = ifExists;
+    }
+
+    public boolean isIfExists() {
+        return ifExists;
     }
 
     @Override

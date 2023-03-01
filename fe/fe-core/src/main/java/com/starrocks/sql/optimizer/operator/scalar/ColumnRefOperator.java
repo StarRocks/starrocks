@@ -96,6 +96,10 @@ public final class ColumnRefOperator extends ScalarOperator {
         return new ColumnRefSet(id);
     }
 
+    public boolean isVirtualColumnRef() {
+        return this.opType.equals(OperatorType.LAMBDA_ARGUMENT);
+    }
+
     @Override
     public String toString() {
         return id + ": " + name;

@@ -205,7 +205,11 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
         LOG(WARNING) << "create table failed. status: " << create_status.to_string()
                      << ", signature: " << agent_task_req->signature;
         status_code = TStatusCode::RUNTIME_ERROR;
-        error_msgs.emplace_back("create tablet " + create_status.get_error_msg());
+        if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+            error_msgs.emplace_back("create tablet failed");
+        } else {
+            error_msgs.emplace_back("create tablet " + create_status.get_error_msg());
+        }
     } else if (create_tablet_req.tablet_type != TTabletType::TABLET_TYPE_LAKE) {
         g_report_version.fetch_add(1, std::memory_order_relaxed);
         // get path hash of the created tablet
@@ -727,6 +731,25 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
 
     LOG(INFO) << "finish update tablet meta task. signature:" << agent_task_req->signature;
 
+    unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
+}
+
+AgentStatus drop_auto_increment_map(TTableId table_id) {
+    // always success
+    StorageEngine::instance()->remove_increment_map_by_table_id(table_id);
+    return STARROCKS_SUCCESS;
+}
+
+void run_drop_auto_increment_map_task(const std::shared_ptr<DropAutoIncrementMapAgentTaskRequest>& agent_task_req,
+                                      ExecEnv* exec_env) {
+    const TDropAutoIncrementMapReq& drop_auto_increment_map_req = agent_task_req->task_req;
+    LOG(INFO) << "drop auto increment map task tableid=" << drop_auto_increment_map_req.table_id;
+
+    TStatusCode::type status_code = TStatusCode::OK;
+    std::vector<std::string> error_msgs;
+
+    drop_auto_increment_map(drop_auto_increment_map_req.table_id);
+    LOG(INFO) << "drop auto increment map task success, tableid=" << drop_auto_increment_map_req.table_id;
     unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
 }
 

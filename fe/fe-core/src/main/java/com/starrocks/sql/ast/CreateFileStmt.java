@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 import java.util.Optional;
@@ -46,6 +47,11 @@ public class CreateFileStmt extends DdlStmt {
     private boolean saveContent = true;
 
     public CreateFileStmt(String fileName, String dbName, Map<String, String> properties) {
+        this(fileName, dbName, properties, NodePosition.ZERO);
+    }
+
+    public CreateFileStmt(String fileName, String dbName, Map<String, String> properties, NodePosition pos) {
+        super(pos);
         this.fileName = fileName;
         this.dbName = dbName;
         this.properties = properties;

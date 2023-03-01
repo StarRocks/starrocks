@@ -55,6 +55,7 @@ import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropInfo;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -97,6 +98,9 @@ public class Database extends MetaObject implements Writable {
     public static final long TRY_LOCK_TIMEOUT_MS = 100L;
 
     private long id;
+
+    // catalogName is set if the database comes from an external catalog
+    private String catalogName;
     private String fullQualifiedName;
     private QueryableReentrantReadWriteLock rwLock;
 
@@ -146,37 +150,34 @@ public class Database extends MetaObject implements Writable {
         return sb.toString();
     }
 
-    private void logSlowLockEventIfNeeded(long startMs, String type, Thread formerOwner) {
+    private void logSlowLockEventIfNeeded(long startMs, String type, String threadDump) {
         long endMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         if (endMs - startMs > Config.slow_lock_threshold_ms &&
                 endMs > lastSlowLockLogTime + Config.slow_lock_log_every_ms) {
             lastSlowLockLogTime = endMs;
             LOG.warn("slow db lock. type: {}, db id: {}, db name: {}, wait time: {}ms, " +
                             "former {}, current stack trace: ", type, id, fullQualifiedName, endMs - startMs,
-                    getOwnerInfo(formerOwner), new Exception());
+                    threadDump, new Exception());
         }
     }
 
-    private void logTryLockFailureEvent(String type) {
-        Thread owner = rwLock.getOwner();
-        if (owner != null) {
-            LOG.warn("try db lock failed. type: {}, current {}", type, getOwnerInfo(owner));
-        }
+    private void logTryLockFailureEvent(String type, String threadDump) {
+        LOG.warn("try db lock failed. type: {}, current {}", type, threadDump);
     }
 
     public void readLock() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-        Thread formerOwner = rwLock.getOwner();
+        String threadDump = getOwnerInfo(rwLock.getOwner());
         this.rwLock.readLock().lock();
-        logSlowLockEventIfNeeded(startMs, "readLock", formerOwner);
+        logSlowLockEventIfNeeded(startMs, "readLock", threadDump);
     }
 
     // this function make sure lock can only be obtained if the db has not been dropped
     public boolean readLockAndCheckExist() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-        Thread formerOwner = rwLock.getOwner();
+        String threadDump = getOwnerInfo(rwLock.getOwner());
         this.rwLock.readLock().lock();
-        logSlowLockEventIfNeeded(startMs, "readLock", formerOwner);
+        logSlowLockEventIfNeeded(startMs, "readLock", threadDump);
         if (exist) {
             return true;
         } else {
@@ -188,12 +189,12 @@ public class Database extends MetaObject implements Writable {
     public boolean tryReadLock(long timeout, TimeUnit unit) {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-            Thread formerOwner = rwLock.getOwner();
+            String threadDump = getOwnerInfo(rwLock.getOwner());
             if (!this.rwLock.readLock().tryLock(timeout, unit)) {
-                logTryLockFailureEvent("readLock");
+                logTryLockFailureEvent("readLock", threadDump);
                 return false;
             }
-            logSlowLockEventIfNeeded(startMs, "tryReadLock", formerOwner);
+            logSlowLockEventIfNeeded(startMs, "tryReadLock", threadDump);
             return true;
         } catch (InterruptedException e) {
             LOG.warn("failed to try read lock at db[" + id + "]", e);
@@ -205,12 +206,12 @@ public class Database extends MetaObject implements Writable {
     public boolean tryReadLockAndCheckExist(long timeout, TimeUnit unit) {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-            Thread formerOwner = rwLock.getOwner();
+            String threadDump = getOwnerInfo(rwLock.getOwner());
             if (!this.rwLock.readLock().tryLock(timeout, unit)) {
-                logTryLockFailureEvent("readLock");
+                logTryLockFailureEvent("readLock", threadDump);
                 return false;
             }
-            logSlowLockEventIfNeeded(startMs, "tryReadLock", formerOwner);
+            logSlowLockEventIfNeeded(startMs, "tryReadLock", threadDump);
             if (exist) {
                 return true;
             } else {
@@ -230,17 +231,17 @@ public class Database extends MetaObject implements Writable {
 
     public void writeLock() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-        Thread formerOwner = rwLock.getOwner();
+        String threadDump = getOwnerInfo(rwLock.getOwner());
         this.rwLock.writeLock().lock();
-        logSlowLockEventIfNeeded(startMs, "writeLock", formerOwner);
+        logSlowLockEventIfNeeded(startMs, "writeLock", threadDump);
     }
 
     // this function make sure lock can only be obtained if the db has not been dropped
     public boolean writeLockAndCheckExist() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-        Thread formerOwner = rwLock.getOwner();
+        String threadDump = getOwnerInfo(rwLock.getOwner());
         this.rwLock.writeLock().lock();
-        logSlowLockEventIfNeeded(startMs, "writeLock", formerOwner);
+        logSlowLockEventIfNeeded(startMs, "writeLock", threadDump);
         if (exist) {
             return true;
         } else {
@@ -252,12 +253,12 @@ public class Database extends MetaObject implements Writable {
     public boolean tryWriteLock(long timeout, TimeUnit unit) {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-            Thread formerOwner = rwLock.getOwner();
+            String threadDump = getOwnerInfo(rwLock.getOwner());
             if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
-                logTryLockFailureEvent("writeLock");
+                logTryLockFailureEvent("writeLock", threadDump);
                 return false;
             }
-            logSlowLockEventIfNeeded(startMs, "tryWriteLock", formerOwner);
+            logSlowLockEventIfNeeded(startMs, "tryWriteLock", threadDump);
             return true;
         } catch (InterruptedException e) {
             LOG.warn("failed to try write lock at db[" + id + "]", e);
@@ -269,12 +270,12 @@ public class Database extends MetaObject implements Writable {
     public boolean tryWriteLockAndCheckExist(long timeout, TimeUnit unit) {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-            Thread formerOwner = rwLock.getOwner();
+            String threadDump = getOwnerInfo(rwLock.getOwner());
             if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
-                logTryLockFailureEvent("tryWriteLock");
+                logTryLockFailureEvent("tryWriteLock", threadDump);
                 return false;
             }
-            logSlowLockEventIfNeeded(startMs, "tryWriteLock", formerOwner);
+            logSlowLockEventIfNeeded(startMs, "tryWriteLock", threadDump);
             if (exist) {
                 return true;
             } else {
@@ -308,6 +309,9 @@ public class Database extends MetaObject implements Writable {
      * @return unique id of database in string format
      */
     public String getUUID() {
+        if (CatalogMgr.isExternalCatalog(catalogName)) {
+            return catalogName + "." + fullQualifiedName;
+        }
         return Long.toString(id);
     }
 
@@ -509,6 +513,11 @@ public class Database extends MetaObject implements Writable {
             return null;
         }
 
+        if (table instanceof OlapTable && table.hasAutoIncrementColumn()) {
+            GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId);
+            ((OlapTable) table).sendDropAutoIncrementMapTask();
+        }
+
         table.onDrop(this, isForceDrop, isReplay);
 
         dropTable(table.getName());
@@ -585,7 +594,7 @@ public class Database extends MetaObject implements Writable {
     public List<MaterializedView> getMaterializedViews() {
         List<MaterializedView> materializedViews = new ArrayList<>();
         for (Table table : idToTable.values()) {
-            if (TableType.MATERIALIZED_VIEW == table.getType()) {
+            if (table.isMaterializedView()) {
                 materializedViews.add((MaterializedView) table);
             }
         }
@@ -753,6 +762,14 @@ public class Database extends MetaObject implements Writable {
 
     public void setName(String name) {
         this.fullQualifiedName = name;
+    }
+
+    public void setCatalogName(String name) {
+        this.catalogName = name;
+    }
+
+    public String getCatalogName() {
+        return catalogName;
     }
 
     public synchronized void addFunction(Function function) throws UserException {

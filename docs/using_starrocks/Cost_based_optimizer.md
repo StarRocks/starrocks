@@ -85,7 +85,8 @@ The following table describes the default settings. If you need to modify them, 
 | enable_collect_full_statistic         | BOOLEAN  | TRUE              | Whether to enable automatic full collection. This switch is turned on by default. |
 | statistic_collect_interval_sec        | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
-| statistics_max_full_collect_data_size | INT      | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_max_full_collect_data_size | INT      | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_collect_max_row_count_per_query | INT  | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
 | statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 | statistic_auto_analyze_end_time | STRING      | 23:59:59  | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 
@@ -229,6 +230,7 @@ Parameter description:
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If the statistics health is below this threshold, automatic collection is triggered. |
 | statistics_max_full_collect_data_size | INT      | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_sample_collect_rows         | INT      | 200000            | The minimum number of rows to collect.If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
+| statistic_exclude_pattern             | String   | null              | The name of the database or table that needs to be excluded in the job. You can specify the database and table that do not collect statistics in the job. Note that this is a regular expression pattern, and the match content is `database.table`. |
 
 Examples
 
@@ -246,6 +248,11 @@ CREATE ANALYZE FULL DATABASE db_name;
 
 -- Automatically collect full stats of specified columns in a table.
 CREATE ANALYZE TABLE tbl_name(c1, c2, c3); 
+
+-- Automatically collect stats of all databases, excluding specified database 'db_name'.
+CREATE ANALYZE ALL PROPERTIES (
+   "statistic_exclude_pattern" = "db_name\."
+);
 ```
 
 Automatic sampled collection
@@ -254,11 +261,17 @@ Automatic sampled collection
 -- Automatically collect stats of all tables in a database with default settings.
 CREATE ANALYZE SAMPLE DATABASE db_name;
 
+-- Automatically collect stats of all tables in a database, excluding specified table 'db_name.tbl_name'.
+CREATE ANALYZE SAMPLE DATABASE db_name PROPERTIES (
+   "statistic_exclude_pattern" = "db_name\.tbl_name"
+);
+
 -- Automatically collect stats of specified columns in a table, with statistics health and the number of rows to collect specified.
-CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES(
+CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES (
    "statistic_auto_collect_ratio" = "0.5",
    "statistic_sample_collect_rows" = "1000000"
 );
+
 ```
 
 #### View custom collection tasks
@@ -402,7 +415,8 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 | enable_statistic_collect             | BOOLEAN  | TRUE              | Whether to collect statistics. This parameter is turned on by default. |
 | enable_collect_full_statistic        | BOOLEAN  | TRUE              | Whether to enable automatic full statistics collection. This parameter is turned on by default. |
 | statistic_auto_collect_ratio         | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
-| statistic_max_full_collect_data_size | LONG     | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_max_full_collect_data_size | LONG     | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_collect_max_row_count_per_query | INT | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
 | statistic_collect_interval_sec       | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 | statistic_auto_analyze_end_time | STRING      | 23:59:59   | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |

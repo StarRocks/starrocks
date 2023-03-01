@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -27,7 +27,20 @@ public class RevokeRoleStmt extends BaseGrantRevokeRoleStmt {
         super(granteeRole, userIdent);
     }
 
+    public RevokeRoleStmt(List<String> granteeRole, UserIdentity userIdent, NodePosition pos) {
+        super(granteeRole, userIdent, pos);
+    }
+
     public RevokeRoleStmt(List<String> granteeRole, String role) {
         super(granteeRole, role);
+    }
+
+    public RevokeRoleStmt(List<String> granteeRole, String role, NodePosition pos) {
+        super(granteeRole, role, pos);
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitRevokeRoleStatement(this, context);
     }
 }

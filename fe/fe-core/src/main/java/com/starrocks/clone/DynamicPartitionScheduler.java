@@ -42,6 +42,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -64,6 +65,7 @@ import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -168,13 +170,11 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
 
         int idx;
         int start = dynamicPartitionProperty.getStart();
+        int historyPartitionNum = dynamicPartitionProperty.getHistoryPartitionNum();
 
-        /// If specify start, create history partitions automatically
-        if (start != DynamicPartitionProperty.MIN_START_OFFSET) {
-            idx = start;
-        } else {
-            idx = 0;
-        }
+        // start < 0 , historyPartitionNum >= 0
+        idx = Math.max(start, -historyPartitionNum);
+
         for (; idx <= dynamicPartitionProperty.getEnd(); idx++) {
             String prevBorder =
                     DynamicPartitionUtil.getPartitionRangeString(dynamicPartitionProperty, now, idx, partitionFormat);
@@ -522,6 +522,10 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         for (Long dbId : GlobalStateMgr.getCurrentState().getDbIds()) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
+                continue;
+            }
+            String dbName = db.getFullName();
+            if (dbName.equals(InfoSchemaDb.DATABASE_NAME) || dbName.equals(StatsConstants.STATISTICS_DB_NAME)) {
                 continue;
             }
             db.readLock();

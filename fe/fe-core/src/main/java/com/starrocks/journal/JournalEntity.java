@@ -37,7 +37,6 @@ package com.starrocks.journal;
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
@@ -73,6 +72,7 @@ import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.AlterWhClusterOplog;
 import com.starrocks.persist.AlterWhPropertyOplog;
 import com.starrocks.persist.AuthUpgradeInfo;
+import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDropInfo;
@@ -129,6 +129,7 @@ import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -223,6 +224,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ALTER_WH_MOD_PROP: {
                 data = AlterWhPropertyOplog.read(in);
+            }
+            case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
+            case OperationType.OP_DELETE_AUTO_INCREMENT_ID: {
+                data = new AutoIncrementInfo(null);
+                ((AutoIncrementInfo) data).read(in);
                 isRead = true;
                 break;
             }
@@ -362,6 +368,10 @@ public class JournalEntity implements Writable {
             case OperationType.OP_EXPORT_UPDATE_STATE:
                 data = new ExportJob.StateTransfer();
                 ((ExportJob.StateTransfer) data).readFields(in);
+                isRead = true;
+                break;
+            case OperationType.OP_EXPORT_UPDATE_INFO:
+                data = ExportJob.ExportUpdateInfo.read(in);
                 isRead = true;
                 break;
             case OperationType.OP_FINISH_DELETE:
@@ -641,7 +651,9 @@ public class JournalEntity implements Writable {
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
-            case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
+            case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
+            case OperationType.OP_ALTER_TABLE_PROPERTIES:
+            case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
                 data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;
                 break;

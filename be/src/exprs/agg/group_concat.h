@@ -22,8 +22,8 @@
 #include "gutil/casts.h"
 
 namespace starrocks {
-template <LogicalType PT, typename = guard::Guard>
-inline constexpr LogicalType GroupConcatResultPT = TYPE_VARCHAR;
+template <LogicalType LT, typename = guard::Guard>
+inline constexpr LogicalType GroupConcatResultLT = TYPE_VARCHAR;
 
 struct GroupConcatAggregateState {
     // intermediate_string.
@@ -33,13 +33,13 @@ struct GroupConcatAggregateState {
     bool initial{};
 };
 
-template <LogicalType PT, typename T = RunTimeCppType<PT>, LogicalType ResultPT = GroupConcatResultPT<PT>,
-          typename TResult = RunTimeCppType<ResultPT>>
+template <LogicalType LT, typename T = RunTimeCppType<LT>, LogicalType ResultLT = GroupConcatResultLT<LT>,
+          typename TResult = RunTimeCppType<ResultLT>>
 class GroupConcatAggregateFunction
         : public AggregateFunctionBatchHelper<GroupConcatAggregateState,
-                                              GroupConcatAggregateFunction<PT, T, ResultPT, TResult>> {
+                                              GroupConcatAggregateFunction<LT, T, ResultLT, TResult>> {
 public:
-    using InputColumnType = RunTimeColumnType<ResultPT>;
+    using InputColumnType = RunTimeColumnType<ResultLT>;
     using ResultColumnType = InputColumnType;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {

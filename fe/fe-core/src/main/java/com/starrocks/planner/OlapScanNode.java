@@ -218,6 +218,10 @@ public class OlapScanNode extends ScanNode {
         this.bucketColumns = bucketColumns;
     }
 
+    public List<Expr> getBucketExprs() {
+        return bucketExprs;
+    }
+
     public void setBucketExprs(List<Expr> bucketExprs) {
         this.bucketExprs = bucketExprs;
     }
@@ -454,7 +458,7 @@ public class OlapScanNode extends ScanNode {
                 LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
                         tabletId, visibleVersion, replicaInfos);
                 if (LOG.isDebugEnabled()) {
-                    if (olapTable.isLakeTable()) {
+                    if (olapTable.isCloudNativeTable()) {
                         LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
                                 tablet.getBackendIds());
                     } else {
@@ -517,7 +521,7 @@ public class OlapScanNode extends ScanNode {
         // Step1: compute partition ids
         PartitionNames partitionNames = desc.getRef().getPartitionNames();
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        if (partitionInfo.getType() == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             selectedPartitionIds = partitionPrune((RangePartitionInfo) partitionInfo, partitionNames);
         } else {
             selectedPartitionIds = null;
@@ -747,7 +751,7 @@ public class OlapScanNode extends ScanNode {
             }
         }
 
-        if (olapTable.isLakeTable()) {
+        if (olapTable.isCloudNativeTable()) {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
                     new TLakeScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
@@ -768,7 +772,7 @@ public class OlapScanNode extends ScanNode {
             if (!olapTable.hasDelete()) {
                 msg.lake_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
-        } else {
+        } else { // If you find yourself changing this code block, see also the above code block, i.e, if (olapTable.isLakeTable) { ... }.
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
                     new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
@@ -855,7 +859,7 @@ public class OlapScanNode extends ScanNode {
     @Override
     public boolean canDoReplicatedJoin() {
         // TODO(wyb): necessary to support?
-        if (olapTable.isLakeTable()) {
+        if (olapTable.isCloudNativeTable()) {
             return false;
         }
         ConnectContext ctx = ConnectContext.get();
@@ -1004,7 +1008,7 @@ public class OlapScanNode extends ScanNode {
         //  At present, we support predicates' decomposition on RangePartition with single-column partition key.
         //  in the future, predicates' decomposition on RangePartition with multi-column partition key will be
         //  supported.
-        if (partitionInfo.getType() == PartitionType.RANGE &&
+        if (partitionInfo.isRangePartition() &&
                 ((RangePartitionInfo) partitionInfo).getPartitionColumns().size() == 1) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             conjuncts = decomposeRangePredicates(normalizer, planNode, rangePartitionInfo, conjuncts);

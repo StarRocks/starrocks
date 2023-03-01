@@ -92,6 +92,7 @@ public class OperationType {
     // load job for only hadoop load
     public static final short OP_EXPORT_CREATE = 36;
     public static final short OP_EXPORT_UPDATE_STATE = 37;
+    public static final short OP_EXPORT_UPDATE_INFO = 38;
 
     @Deprecated
     public static final short OP_FINISH_SYNC_DELETE = 40;
@@ -158,6 +159,8 @@ public class OperationType {
     @Deprecated
     public static final short OP_FINISHING_SCHEMA_CHANGE = 103;
     public static final short OP_SAVE_TRANSACTION_ID = 104;
+    public static final short OP_SAVE_AUTO_INCREMENT_ID = 105;
+    public static final short OP_DELETE_AUTO_INCREMENT_ID = 106;
 
     // routine load 110~120
     public static final short OP_ROUTINE_LOAD_JOB = 110;
@@ -304,6 +307,7 @@ public class OperationType {
 
     // alter load
     public static final short OP_ALTER_LOAD_JOB = 11100;
+    public static final short OP_ALTER_TABLE_PROPERTIES = 11101;
 
     // warehouse
     public static final short OP_CREATE_WH = 11110;
@@ -313,4 +317,7 @@ public class OperationType {
     public static final short OP_ALTER_WH_MOD_PROP = 11114;
     public static final short OP_SUSPEND_WH = 11115;
     public static final short OP_RESUME_WH = 11116;
+
+    // constraint properties
+    public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
 }

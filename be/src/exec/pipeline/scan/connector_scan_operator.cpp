@@ -179,7 +179,6 @@ ConnectorChunkSource::~ConnectorChunkSource() {
 Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
-    _ck_acc.set_max_size(state->chunk_size());
     if (config::connector_min_max_predicate_from_runtime_filter_enable) {
         _data_source->parse_runtime_filters(state);
     }
@@ -192,18 +191,31 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     _data_source->close(state);
 }
 
-Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    if (!_opened) {
-        RETURN_IF_ERROR(_data_source->open(state));
-        _opened = true;
+Status ConnectorChunkSource::_open_data_source(RuntimeState* state) {
+    if (_opened) {
+        return Status::OK();
     }
+
+    RETURN_IF_ERROR(_data_source->open(state));
+    if (_data_source->skip_predicate() && _limit != -1 && _limit < state->chunk_size()) {
+        _ck_acc.set_max_size(_limit);
+    } else {
+        _ck_acc.set_max_size(state->chunk_size());
+    }
+    _opened = true;
+
+    return Status::OK();
+}
+
+Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
+    RETURN_IF_ERROR(_open_data_source(state));
 
     if (state->is_cancelled()) {
         return Status::Cancelled("canceled state");
     }
 
     // Improve for select * from table limit x, x is small
-    if (_limit != -1 && _rows_read >= _limit) {
+    if (_reach_eof()) {
         return Status::EndOfFile("limit reach");
     }
 

@@ -50,6 +50,7 @@ import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
@@ -118,6 +119,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
      */
     private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
 
+    /*
+     * the default storage volume of this table.
+     * DEFAULT: depends on FE's config 'run_mode'
+     * run_mode == "shared_nothing": "local"
+     * run_mode == "shared_data": "default"
+     *
+     * This property should be set when creating the table, and can not be changed.
+     */
+    private String storageVolume;
+
     // the default compression type of this table.
     private TCompressionType compressionType = TCompressionType.LZ4_FRAME;
 
@@ -143,6 +154,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private Map<Long, Long> binlogAvailabeVersions = new HashMap<>();
 
     private BinlogConfig binlogConfig;
+
+    // unique constraints for mv rewrite
+    // a table may have multi unique constraints
+    private List<UniqueConstraint> uniqueConstraints;
+
+    // foreign key constraint for mv rewrite
+    private List<ForeignKeyConstraint> foreignKeyConstraints;
 
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
@@ -185,6 +203,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 buildBinlogAvailableVersion();
+                break;
+            case OperationType.OP_ALTER_TABLE_PROPERTIES:
+                buildPartitionLiveNumber();
+                break;
+            case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
+                buildConstraint();
                 break;
             default:
                 break;
@@ -253,6 +277,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildPartitionLiveNumber() {
+        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
+                String.valueOf(INVALID)));
+        return this;
+    }
+
     public TableProperty buildAutoRefreshPartitionsLimit() {
         autoRefreshPartitionsLimit =
                 Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT,
@@ -301,6 +331,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildStorageVolume() {
+        storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
+            RunMode.getCurrentRunMode().isAllowCreateLakeTable() ? "default" : "local");
+        return this;
+    }
+
     public TableProperty buildCompressionType() {
         compressionType = TCompressionType.valueOf(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPRESSION,
                 TCompressionType.LZ4_FRAME.name()));
@@ -323,6 +359,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
+        return this;
+    }
+
+    public TableProperty buildConstraint() {
+        uniqueConstraints = UniqueConstraint.parse(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+
+        foreignKeyConstraints = ForeignKeyConstraint.parse(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
         return this;
     }
 
@@ -406,6 +451,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return storageFormat;
     }
 
+    public String getStorageVolume() {
+        return storageVolume;
+    }
+
     public TCompressionType getCompressionType() {
         return compressionType;
     }
@@ -438,6 +487,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return binlogConfig;
     }
 
+    public List<UniqueConstraint> getUniqueConstraints() {
+        return uniqueConstraints;
+    }
+
+    public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
+        this.uniqueConstraints = uniqueConstraints;
+    }
+
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        return foreignKeyConstraints;
+    }
+
+    public void setForeignKeyConstraints(List<ForeignKeyConstraint> foreignKeyConstraints) {
+        this.foreignKeyConstraints = foreignKeyConstraints;
+    }
+
     public Map<Long, Long> getBinlogAvailaberVersions() {
         return binlogAvailabeVersions;
     }
@@ -467,10 +532,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildReplicationNum();
         buildInMemory();
         buildStorageFormat();
+        buildStorageVolume();
         buildEnablePersistentIndex();
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionTTL();
+        buildPartitionLiveNumber();
         buildAutoRefreshPartitionsLimit();
         buildPartitionRefreshNumber();
         buildExcludedTriggerTables();
@@ -478,5 +545,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildForceExternalTableQueryRewrite();
         buildBinlogConfig();
         buildBinlogAvailableVersion();
+        buildConstraint();
     }
 }

@@ -131,8 +131,9 @@ public class StreamLoadPlanner {
         }
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
         List<Column> destColumns;
+        List<Boolean> missAutoIncrementColumn = Lists.newArrayList();
         if (streamLoadInfo.isPartialUpdate()) {
-            destColumns = Load.getPartialUpateColumns(destTable, streamLoadInfo.getColumnExprDescs());
+            destColumns = Load.getPartialUpateColumns(destTable, streamLoadInfo.getColumnExprDescs(), missAutoIncrementColumn);
         } else {
             destColumns = destTable.getFullSchema();
         }
@@ -174,9 +175,12 @@ public class StreamLoadPlanner {
 
         List<Long> partitionIds = getAllPartitionIds();
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
-                destTable.enableReplicatedStorage());
+                destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement());
+        if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
+            olapTableSink.setMissAutoIncrementColumn();
+        }
         olapTableSink.init(loadId, streamLoadInfo.getTxnId(), db.getId(), streamLoadInfo.getTimeout());
-        Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable);
+        Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, olapTableSink.missAutoIncrementColumn());
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 
         // for stream load, we only need one fragment, ScanNode -> DataSink.
@@ -224,7 +228,7 @@ public class StreamLoadPlanner {
 
         // Disable load_dop for LakeTable temporary, because BE's `LakeTabletsChannel` does not support
         // parallel send from a single sender.
-        if (streamLoadInfo.getLoadParallelRequestNum() != 0 && !destTable.isLakeTable()) {
+        if (streamLoadInfo.getLoadParallelRequestNum() != 0 && !destTable.isCloudNativeTable()) {
             // only dup_keys can use parallel write since other table's the order of write is important
             if (destTable.getKeysType() == KeysType.DUP_KEYS) {
                 queryOptions.setLoad_dop(streamLoadInfo.getLoadParallelRequestNum());

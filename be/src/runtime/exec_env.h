@@ -42,6 +42,7 @@
 #include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "storage/options.h"
+#include "util/threadpool.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
 // Unnecssary includes will cause compilatio very slow.
 // So please consider use forward declaraion as much as possible.
@@ -105,6 +106,7 @@ class ExecEnv {
 public:
     // Initial exec environment. must call this to init all
     static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths);
+    static bool is_init();
     static void destroy(ExecEnv* exec_env);
 
     /// Returns the first created exec env instance. In a normal starrocks, this is
@@ -197,6 +199,8 @@ public:
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
 
+    ThreadPool* automatic_partition_pool() { return _automatic_partition_pool.get(); }
+
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
     Status init_mem_tracker();
 
@@ -237,6 +241,7 @@ private:
     Status _init_storage_page_cache();
 
 private:
+    static bool _is_init;
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
@@ -331,6 +336,8 @@ private:
     RoutineLoadTaskExecutor* _routine_load_task_executor = nullptr;
     SmallFileMgr* _small_file_mgr = nullptr;
     HeartbeatFlags* _heartbeat_flags = nullptr;
+
+    std::unique_ptr<ThreadPool> _automatic_partition_pool;
 
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;

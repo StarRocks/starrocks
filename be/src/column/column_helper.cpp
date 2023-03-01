@@ -16,6 +16,7 @@
 
 #include <runtime/types.h>
 
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/json_column.h"
@@ -262,9 +263,9 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
 }
 
 struct ColumnBuilder {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     ColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
-        switch (ptype) {
+        switch (ltype) {
         case TYPE_UNKNOWN:
         case TYPE_NULL:
         case TYPE_BINARY:
@@ -272,7 +273,7 @@ struct ColumnBuilder {
         case TYPE_STRUCT:
         case TYPE_ARRAY:
         case TYPE_MAP:
-            LOG(FATAL) << "Unsupported column type" << ptype;
+            LOG(FATAL) << "Unsupported column type" << ltype;
         case TYPE_DECIMAL32:
             return Decimal32Column::create(type_desc.precision, type_desc.scale, size);
         case TYPE_DECIMAL64:
@@ -280,17 +281,22 @@ struct ColumnBuilder {
         case TYPE_DECIMAL128:
             return Decimal128Column::create(type_desc.precision, type_desc.scale, size);
         default:
-            return RunTimeColumnType<ptype>::create(size);
+            return RunTimeColumnType<ltype>::create(size);
         }
     }
 };
 
-ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size) {
+ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
+                                      bool use_adaptive_nullable_column) {
     auto type = type_desc.type;
     if (is_const && (nullable || type == TYPE_NULL)) {
         return ColumnHelper::create_const_null_column(size);
     } else if (type == TYPE_NULL) {
-        return NullableColumn::create(BooleanColumn::create(size), NullColumn::create(size, DATUM_NULL));
+        if (use_adaptive_nullable_column) {
+            return AdaptiveNullableColumn::create(BooleanColumn::create(size), NullColumn::create(size, DATUM_NULL));
+        } else {
+            return NullableColumn::create(BooleanColumn::create(size), NullColumn::create(size, DATUM_NULL));
+        }
     }
 
     ColumnPtr p;
@@ -330,8 +336,11 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         return ConstColumn::create(p, size);
     }
     if (nullable) {
-        // Default value is null
-        return NullableColumn::create(p, NullColumn::create(size, DATUM_NULL));
+        if (use_adaptive_nullable_column) {
+            return AdaptiveNullableColumn::create(p, NullColumn::create(size, DATUM_NULL));
+        } else {
+            return NullableColumn::create(p, NullColumn::create(size, DATUM_NULL));
+        }
     }
     return p;
 }
@@ -416,19 +425,23 @@ ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& 
     return res;
 }
 
-bool ChunkSlice::empty() const {
+template <class Ptr>
+bool ChunkSliceTemplate<Ptr>::empty() const {
     return !chunk || offset == chunk->num_rows();
 }
 
-size_t ChunkSlice::rows() const {
+template <class Ptr>
+size_t ChunkSliceTemplate<Ptr>::rows() const {
     return chunk->num_rows() - offset;
 }
 
-void ChunkSlice::reset(ChunkUniquePtr input) {
+template <class Ptr>
+void ChunkSliceTemplate<Ptr>::reset(Ptr input) {
     chunk = std::move(input);
 }
 
-size_t ChunkSlice::skip(size_t skip_rows) {
+template <class Ptr>
+size_t ChunkSliceTemplate<Ptr>::skip(size_t skip_rows) {
     size_t real_skipped = std::min(rows(), skip_rows);
     offset += real_skipped;
     if (empty()) {
@@ -440,7 +453,8 @@ size_t ChunkSlice::skip(size_t skip_rows) {
 }
 
 // Cutoff required rows from this chunk
-ChunkPtr ChunkSlice::cutoff(size_t required_rows) {
+template <class Ptr>
+Ptr ChunkSliceTemplate<Ptr>::cutoff(size_t required_rows) {
     DCHECK(!empty());
     size_t cut_rows = std::min(rows(), required_rows);
     auto res = chunk->clone_empty(cut_rows);
@@ -452,4 +466,8 @@ ChunkPtr ChunkSlice::cutoff(size_t required_rows) {
     }
     return res;
 }
+
+template struct ChunkSliceTemplate<ChunkPtr>;
+template struct ChunkSliceTemplate<ChunkUniquePtr>;
+
 } // namespace starrocks

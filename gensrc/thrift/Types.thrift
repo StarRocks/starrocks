@@ -198,6 +198,7 @@ enum TTaskType {
     INSTALL_PLUGIN,
     UNINSTALL_PLUGIN,
     // this use for calculate enum count
+    DROP_AUTO_INCREMENT_MAP,
     NUM_TASK_TYPE
 }
 

@@ -70,6 +70,20 @@ Status OlapSchemaScanContext::_prepare_params(RuntimeState* state) {
         _param->without_db_table = true;
         _param->limit = _tnode.limit;
     }
+
+    if (_tnode.schema_scan_node.__isset.table_id) {
+        _param->table_id = _tnode.schema_scan_node.table_id;
+    }
+    if (_tnode.schema_scan_node.__isset.partition_id) {
+        _param->partition_id = _tnode.schema_scan_node.partition_id;
+    }
+    if (_tnode.schema_scan_node.__isset.tablet_id) {
+        _param->tablet_id = _tnode.schema_scan_node.tablet_id;
+    }
+    if (_tnode.schema_scan_node.__isset.txn_id) {
+        _param->txn_id = _tnode.schema_scan_node.txn_id;
+    }
+
     return Status::OK();
 }
 

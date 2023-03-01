@@ -238,7 +238,7 @@ public class IcebergScanNode extends ScanNode {
         Map<StructLike, Long> partitionMap = Maps.newHashMap();
 
         for (CombinedScanTask combinedScanTask : IcebergUtil.getTableScan(
-                srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate).planTasks()) {
+                srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate, false).planTasks()) {
             for (FileScanTask task : combinedScanTask.files()) {
                 DataFile file = task.file();
                 LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
@@ -323,16 +323,6 @@ public class IcebergScanNode extends ScanNode {
         if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
             output.append(prefix).append("MIN/MAX PREDICATES: ").append(
                     getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
-        }
-
-        if (srIcebergTable.isCatalogTbl()) {
-            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    srIcebergTable.getCatalog(), srIcebergTable.getDb(), srIcebergTable.getTable());
-
-            output.append(prefix).append(
-                    String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
-                            partitionNames.size() == 0 ? 1 : partitionNames.size()));
-            output.append("\n");
         }
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));

@@ -84,7 +84,6 @@ StatusOr<DriverState> StreamPipelineDriver::process(RuntimeState* runtime_state,
                 // operator
                 StatusOr<ChunkPtr> maybe_chunk;
                 {
-                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(curr_op->mem_tracker());
                     SCOPED_TIMER(curr_op->_pull_timer);
                     QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
                     maybe_chunk = curr_op->pull_chunk(runtime_state);
@@ -105,7 +104,6 @@ StatusOr<DriverState> StreamPipelineDriver::process(RuntimeState* runtime_state,
                         size_t row_num = chunk_value->num_rows();
                         total_rows_moved += row_num;
                         {
-                            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(next_op->mem_tracker());
                             SCOPED_TIMER(next_op->_push_timer);
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
                             return_status = next_op->push_chunk(runtime_state, chunk_value);
@@ -225,7 +223,6 @@ StatusOr<DriverState> StreamPipelineDriver::_handle_finish_operators(RuntimeStat
             // operator
             StatusOr<ChunkPtr> maybe_chunk;
             {
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(curr_op->mem_tracker());
                 SCOPED_TIMER(curr_op->_pull_timer);
                 QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
                 maybe_chunk = curr_op->pull_chunk(runtime_state);
@@ -246,7 +243,6 @@ StatusOr<DriverState> StreamPipelineDriver::_handle_finish_operators(RuntimeStat
                     size_t row_num = chunk_value->num_rows();
                     total_rows_moved += row_num;
                     {
-                        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(next_op->mem_tracker());
                         SCOPED_TIMER(next_op->_push_timer);
                         QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
                         return_status = next_op->push_chunk(runtime_state, chunk_value);

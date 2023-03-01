@@ -1,5 +1,33 @@
 # StarRocks version 2.5
 
+## 2.5.2
+
+Release date: February 21, 2023
+
+### New Features
+
+- Supports using the Instance Profile and Assumed Role-based credential methods to access AWS S3 and AWS Glue. [#15958](https://github.com/StarRocks/starrocks/pull/15958)
+- Supports the following bit functions: bit_shift_left, bit_shift_right, and bit_shift_right_logical. [#14151](https://github.com/StarRocks/starrocks/pull/14151)
+
+### Improvements
+
+- Optimized the memory release logic, which significantly reduces peak memory usage when a query contains a large number of aggregate queries. [#16913](https://github.com/StarRocks/starrocks/pull/16913)
+- Reduced the memory usage of sorting. The memory consumption is halved when a query involves window functions or sorting. [#16937](https://github.com/StarRocks/starrocks/pull/16937) [#17362](https://github.com/StarRocks/starrocks/pull/17362) [#17408](https://github.com/StarRocks/starrocks/pull/17408)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Apache Hive external tables that contain MAP and ARRAY data cannot be refreshed. [#17548](https://github.com/StarRocks/starrocks/pull/17548)
+- Superset cannot identify column types of materialized views. [#17686](https://github.com/StarRocks/starrocks/pull/17686)
+- BI connectivity fails because SET GLOBAL/SESSION TRANSACTION cannot be parsed. [#17295](https://github.com/StarRocks/starrocks/pull/17295)
+- The bucket number of dynamic partitioned tables in a Colocate Group cannot be modified and an error message is returned. [#17418](https://github.com/StarRocks/starrocks/pull/17418/)
+- Potential issues caused by a failure in the Prepare stage. [#17323](https://github.com/StarRocks/starrocks/pull/17323)
+
+### Behavior Change
+
+- Added CHARACTER to the reserved keyword list. [#17488](https://github.com/StarRocks/starrocks/pull/17488)
+
 ## 2.5.1
 
 Release date: February 5, 2023
@@ -61,7 +89,7 @@ Release date: January 22, 2023
 - StarRocks automatically sets an appropriate number of tablets when you create a table, eliminating the need for manual operations. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). [#10614](https://github.com/StarRocks/starrocks/pull/10614)
 - Optimized the following aspects of data loading:
   - Optimized loading performance in multi-replica scenarios by supporting the "single leader replication" mode. Data loading gains a one-fold performance lift. For more information about "single leader replication", see `replicated_storage` in [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). [#10138](https://github.com/StarRocks/starrocks/pull/10138)
-  - Broker Load and Spark Load no longer need to depend on brokers for data loading when only one HDFS system or Kerberos is configured. For more information, see [Load data from HDFS or cloud storage](../loading/BrokerLoad.md) and [Bulk load using Apache Spark™](../loading/SparkLoad.md). [#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
+  - Broker Load and Spark Load no longer need to depend on brokers for data loading when only one HDFS cluster or one Kerberos user is configured. However, if you have multiple HDFS clusters or multiple Kerberos users, you still need to deploy a broker. For more information, see [Load data from HDFS or cloud storage](../loading/BrokerLoad.md) and [Bulk load using Apache Spark™](../loading/SparkLoad.md). [#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
   - Optimized the performance of Broker Load when a large number of small ORC files are loaded. [#11380](https://github.com/StarRocks/starrocks/pull/11380)
   - Reduced the memory usage when you load data into tables of the Primary Key Model.
 - Optimized the `information_schema` database and the `tables` and `columns` tables within. Adds a new table `table_config`. For more information, see [Information Schema](../administration/information_schema.md). [#10033](https://github.com/StarRocks/starrocks/pull/10033)

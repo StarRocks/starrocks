@@ -18,6 +18,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowFunctionsStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
@@ -38,6 +39,12 @@ public class ShowFunctionsStmt extends ShowStmt {
 
     public ShowFunctionsStmt(String dbName, boolean isBuiltin, boolean isGlobal, boolean isVerbose, String wild,
                              Expr expr) {
+        this(dbName, isBuiltin, isGlobal, isVerbose, wild, expr, NodePosition.ZERO);
+    }
+
+    public ShowFunctionsStmt(String dbName, boolean isBuiltin, boolean isGlobal, boolean isVerbose, String wild,
+                             Expr expr, NodePosition pos) {
+        super(pos);
         this.dbName = dbName;
         this.isBuiltin = isBuiltin;
         this.isGlobal = isGlobal;

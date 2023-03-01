@@ -28,8 +28,8 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
@@ -73,10 +73,6 @@ public class CreateTableAnalyzer {
     private static String analyzeEngineName(String engineName) {
         if (Strings.isNullOrEmpty(engineName)) {
             return EngineType.defaultEngine().name();
-        }
-
-        if (engineName.equalsIgnoreCase(EngineType.STARROCKS.name()) && !Config.use_staros) {
-            throw new SemanticException("Engine %s needs 'use_staros = true' config in fe.conf", engineName);
         }
 
         try {
@@ -124,9 +120,22 @@ public class CreateTableAnalyzer {
             }
         }
         List<ColumnDef> columnDefs = statement.getColumnDefs();
+        int autoIncrementColumnCount = 0;
+        for (ColumnDef colDef : columnDefs) {
+            if (colDef.isAutoIncrement()) {
+                autoIncrementColumnCount++;
+                if (colDef.getType() != Type.BIGINT) {
+                    throw new IllegalArgumentException("The AUTO_INCREMENT column must be BIGINT");
+                }
+            }
+
+            if (autoIncrementColumnCount > 1) {
+                throw new IllegalArgumentException("More than one AUTO_INCREMENT column defined in CREATE TABLE Statement");
+            }
+        }
         PartitionDesc partitionDesc = statement.getPartitionDesc();
         // analyze key desc
-        if (statement.isOlapOrLakeEngine()) {
+        if (statement.isOlapEngine()) {
             // olap table or lake table
             if (keysDesc == null) {
                 List<String> keysColumnNames = Lists.newArrayList();
@@ -201,11 +210,11 @@ public class CreateTableAnalyzer {
             }
 
             for (ColumnDef columnDef : columnDefs) {
-                if (engineName.equals("mysql") && columnDef.getType().isComplexType()) {
+                if (engineName.equalsIgnoreCase("mysql") && columnDef.getType().isComplexType()) {
                     throw new SemanticException("%s external table don't support complex type", engineName);
                 }
 
-                if (!engineName.equals("hive")) {
+                if (!engineName.equalsIgnoreCase("hive")) {
                     columnDef.setIsKey(true);
                 }
             }
@@ -222,7 +231,7 @@ public class CreateTableAnalyzer {
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             try {
-                columnDef.analyze(statement.isOlapOrLakeEngine());
+                columnDef.analyze(statement.isOlapEngine());
             } catch (AnalysisException e) {
                 LOGGER.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());
@@ -254,7 +263,7 @@ public class CreateTableAnalyzer {
         }
 
         DistributionDesc distributionDesc = statement.getDistributionDesc();
-        if (statement.isOlapOrLakeEngine()) {
+        if (statement.isOlapEngine()) {
             // analyze partition
             Map<String, String> properties = statement.getProperties();
             if (partitionDesc != null) {
@@ -264,7 +273,7 @@ public class CreateTableAnalyzer {
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
-                } else if (partitionDesc instanceof ExpressionPartitionDesc && Config.enable_expression_partition) {
+                } else if (partitionDesc instanceof ExpressionPartitionDesc) {
                     ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
                     try {
                         expressionPartitionDesc.analyze(columnDefs, properties);
@@ -293,7 +302,7 @@ public class CreateTableAnalyzer {
             statement.setDistributionDesc(distributionDesc);
             statement.setProperties(properties);
         } else {
-            if (engineName.equals(ELASTICSEARCH)) {
+            if (engineName.equalsIgnoreCase(ELASTICSEARCH)) {
                 EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
             } else {
                 if (partitionDesc != null || distributionDesc != null) {
@@ -322,7 +331,7 @@ public class CreateTableAnalyzer {
 
             for (IndexDef indexDef : indexDefs) {
                 indexDef.analyze();
-                if (!statement.isOlapOrLakeEngine()) {
+                if (!statement.isOlapEngine()) {
                     throw new SemanticException("index only support in olap engine at current version.");
                 }
                 for (String indexColName : indexDef.getColumns()) {

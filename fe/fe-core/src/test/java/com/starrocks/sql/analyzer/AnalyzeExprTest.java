@@ -172,6 +172,7 @@ public class AnalyzeExprTest {
         analyzeFail("select array_filter([],[],[])");
         analyzeFail("select array_filter([2],1)");
     }
+
     @Test
     public void testLambdaFunctionMapApply() {
         analyzeSuccess("select map_apply((k,v)->(k+1,length(v)), col_map) from " +

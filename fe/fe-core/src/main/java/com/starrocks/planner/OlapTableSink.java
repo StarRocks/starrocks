@@ -121,13 +121,19 @@ public class OlapTableSink extends DataSink {
     private final TWriteQuorumType writeQuorum;
     private final boolean enableReplicatedStorage;
 
+    private boolean nullExprInAutoIncrement;
+    private boolean missAutoIncrementColumn;
+    private boolean abortDelete;
+    private int autoIncrementSlotId;
+
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-            TWriteQuorumType writeQuorum, boolean enableReplicatedStorage) {
-        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum, enableReplicatedStorage);
+            TWriteQuorumType writeQuorum, boolean enableReplicatedStorage, boolean nullExprInAutoIncrement) {
+        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum, enableReplicatedStorage, nullExprInAutoIncrement);
     }
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-            boolean enablePipelineLoad, TWriteQuorumType writeQuorum, boolean enableReplicatedStorage) {
+            boolean enablePipelineLoad, TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
+            boolean nullExprInAutoIncrement) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
         Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
@@ -136,6 +142,20 @@ public class OlapTableSink extends DataSink {
         this.enablePipelineLoad = enablePipelineLoad;
         this.writeQuorum = writeQuorum;
         this.enableReplicatedStorage = enableReplicatedStorage;
+        this.nullExprInAutoIncrement = nullExprInAutoIncrement;
+        this.missAutoIncrementColumn = false;
+        this.abortDelete = dstTable.isAbortDelete();
+
+        this.autoIncrementSlotId = -1;
+        if (tupleDescriptor != null) {
+            for (int i = 0; i < this.tupleDescriptor.getSlots().size(); ++i) {
+                SlotDescriptor slot = this.tupleDescriptor.getSlots().get(i);
+                if (slot.getColumn().isAutoIncrement()) {
+                    this.autoIncrementSlotId = i;
+                    break;
+                }
+            }
+        }
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS)
@@ -143,6 +163,10 @@ public class OlapTableSink extends DataSink {
         TOlapTableSink tSink = new TOlapTableSink();
         tSink.setLoad_id(loadId);
         tSink.setTxn_id(txnId);
+        tSink.setNull_expr_in_auto_increment(nullExprInAutoIncrement);
+        tSink.setMiss_auto_increment_column(missAutoIncrementColumn);
+        tSink.setAbort_delete(abortDelete);
+        tSink.setAuto_increment_slot_id(autoIncrementSlotId);
         TransactionState txnState =
                 GlobalStateMgr.getCurrentGlobalTransactionMgr()
                         .getTransactionState(dbId, txnId);
@@ -151,7 +175,7 @@ public class OlapTableSink extends DataSink {
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
-        tSink.setIs_lake_table(dstTable.isLakeTable());
+        tSink.setIs_lake_table(dstTable.isCloudNativeTable());
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tSink.setWrite_quorum_type(writeQuorum);
         tSink.setEnable_replicated_storage(enableReplicatedStorage);
@@ -165,6 +189,10 @@ public class OlapTableSink extends DataSink {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_PARTITION, partitionId, dstTable.getName());
             }
         }
+    }
+
+    public void setMissAutoIncrementColumn() {
+        this.missAutoIncrementColumn = true;
     }
 
     public void updateLoadId(TUniqueId newLoadId) {
@@ -271,6 +299,7 @@ public class OlapTableSink extends DataSink {
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
         partitionParam.setVersion(0);
+        partitionParam.setEnable_automatic_partition(table.supportedAutomaticPartition());
 
         PartitionType partType = table.getPartitionInfo().getType();
         switch (partType) {
@@ -428,7 +457,7 @@ public class OlapTableSink extends DataSink {
             int quorum = table.getPartitionInfo().getQuorumNum(partition.getId(), table.writeQuorum());
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
-                    if (table.isLakeTable()) {
+                    if (table.isCloudNativeTable()) {
                         locationParam.addToTablets(new TTabletLocation(
                                 tablet.getId(), Lists.newArrayList(((LakeTablet) tablet).getPrimaryBackendId())));
                     } else {
@@ -539,6 +568,10 @@ public class OlapTableSink extends DataSink {
 
     public boolean isEnableReplicatedStorage() {
         return enableReplicatedStorage;
+    }
+
+    public boolean missAutoIncrementColumn() {
+        return this.missAutoIncrementColumn;
     }
 }
 

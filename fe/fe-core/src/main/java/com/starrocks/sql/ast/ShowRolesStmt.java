@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowRolesStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA;
@@ -44,6 +45,14 @@ public class ShowRolesStmt extends ShowStmt {
         builder.addColumn(new Column("Name", ScalarType.createVarchar(100)));
 
         META_DATA_V2 = builder.build();
+    }
+
+    public ShowRolesStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowRolesStmt(NodePosition pos) {
+        super(pos);
     }
 
     @Override

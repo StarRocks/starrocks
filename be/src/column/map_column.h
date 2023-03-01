@@ -149,7 +149,7 @@ public:
         return _keys->container_memory_usage() + _values->container_memory_usage() + _offsets->container_memory_usage();
     }
 
-    size_t element_memory_usage(size_t from, size_t size) const override;
+    size_t reference_memory_usage(size_t from, size_t size) const override;
 
     void swap_column(Column& rhs) override;
 

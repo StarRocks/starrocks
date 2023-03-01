@@ -114,6 +114,7 @@ public:
     void insert_column(size_t idx, ColumnPtr column, const FieldPtr& field);
 
     void update_column(ColumnPtr column, SlotId slot_id);
+    void update_column_by_index(ColumnPtr column, size_t idx);
 
     void append_tuple_column(const ColumnPtr& column, TupleId tuple_id);
 
@@ -231,9 +232,9 @@ public:
     // Column container memory usage
     size_t container_memory_usage() const;
     // Element memory usage that is not in the container, such as memory referenced by pointer.
-    size_t element_memory_usage() const { return element_memory_usage(0, num_rows()); }
+    size_t reference_memory_usage() const { return reference_memory_usage(0, num_rows()); }
     // Element memory usage of |size| rows from |from| in chunk
-    size_t element_memory_usage(size_t from, size_t size) const;
+    size_t reference_memory_usage(size_t from, size_t size) const;
 
     // Chunk bytes usage, used for memtable data size statistic.
     // Including element data size only.
@@ -244,6 +245,12 @@ public:
     size_t bytes_usage(size_t from, size_t size) const;
 
     bool has_const_column() const;
+
+    void materialized_nullable() {
+        for (ColumnPtr& c : _columns) {
+            c->materialized_nullable();
+        }
+    }
 
 #ifndef NDEBUG
     // check whether the internal state is consistent, abort the program if check failed.

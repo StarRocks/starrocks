@@ -402,6 +402,7 @@ Status TabletManager::put_txn_log(TxnLogPtr log) {
     }
     auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     auto txn_log_path = txn_log_location(log->tablet_id(), log->txn_id());
+    VLOG(5) << "Writing " << txn_log_path;
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(options, txn_log_path));
     RETURN_IF_ERROR(wf->append(log->SerializeAsString()));
     RETURN_IF_ERROR(wf->close());
@@ -506,7 +507,20 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
     auto new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
     auto log_applier = new_txn_log_applier(*tablet, new_metadata, new_version);
 
-    RETURN_IF_ERROR(log_applier->init());
+    auto init_st = log_applier->init();
+    if (!init_st.ok()) {
+        if (init_st.is_already_exist()) {
+            auto target_metadata_or = tablet->get_metadata(new_version);
+            if (target_metadata_or.ok()) {
+                // try to publish already finished txn
+                return compaction_score(**target_metadata_or);
+            } else {
+                return target_metadata_or.status();
+            }
+        } else {
+            return init_st;
+        }
+    }
 
     // Apply txn logs
     int64_t alter_version = -1;
@@ -640,7 +654,15 @@ Status TabletManager::publish_log_version(int64_t tablet_id, int64_t txn_id, int
     // TODO: use rename() API if supported by the underlying filesystem.
     auto st = fs::copy_file(txn_log_path, txn_vlog_path);
     if (st.is_not_found()) {
-        return fs::path_exist(txn_vlog_path) ? Status::OK() : st;
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
+        auto check_st = fs->path_exists(txn_vlog_path);
+        if (check_st.ok()) {
+            return Status::OK();
+        } else {
+            LOG_IF(WARNING, !check_st.is_not_found())
+                    << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
+            return st;
+        }
     } else if (!st.ok()) {
         return st;
     } else {

@@ -93,6 +93,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.backup.LakeTableSnapshotInfo;
@@ -101,6 +102,7 @@ import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
+import com.starrocks.persist.SinglePartitionPersistInfo;
 import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.FunctionPEntryObject;
@@ -218,7 +220,8 @@ public class GsonUtils {
     private static final RuntimeTypeAdapterFactory<PartitionPersistInfoV2> PARTITION_PERSIST_INFO_V_2_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(PartitionPersistInfoV2.class, "clazz")
             .registerSubtype(ListPartitionPersistInfo.class, ListPartitionPersistInfo.class.getSimpleName())
-            .registerSubtype(RangePartitionPersistInfo.class, RangePartitionPersistInfo.class.getSimpleName());
+            .registerSubtype(RangePartitionPersistInfo.class, RangePartitionPersistInfo.class.getSimpleName())
+            .registerSubtype(SinglePartitionPersistInfo.class, SinglePartitionPersistInfo.class.getSimpleName());
 
     private static final RuntimeTypeAdapterFactory<CatalogRecycleBin.RecyclePartitionInfoV2>
             RECYCLE_PARTITION_INFO_V_2_ADAPTER_FACTORY
@@ -228,7 +231,8 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Table> TABLE_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(com.starrocks.catalog.Table.class, "clazz")
-            .registerSubtype(LakeTable.class, LakeTable.class.getSimpleName());
+            .registerSubtype(LakeTable.class, LakeTable.class.getSimpleName())
+            .registerSubtype(LakeMaterializedView.class, LakeMaterializedView.class.getSimpleName());
 
     private static final RuntimeTypeAdapterFactory<SnapshotInfo> SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(SnapshotInfo.class, "clazz")

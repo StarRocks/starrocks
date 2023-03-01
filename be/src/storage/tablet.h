@@ -67,6 +67,7 @@ class TabletUpdates;
 class CompactionTask;
 class CompactionCandidate;
 class CompactionContext;
+class TabletBasicInfo;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
@@ -283,11 +284,15 @@ public:
         return _tablet_meta->set_enable_persistent_index(enable_persistent_index);
     }
 
+    Status support_binlog();
+
     void set_binlog_config(TBinlogConfig binlog_config) { _tablet_meta->set_binlog_config(binlog_config); }
 
     BinlogManager* binlog_manager() { return _binlog_manager == nullptr ? nullptr : _binlog_manager.get(); }
 
     Status contains_version(const Version& version);
+
+    void get_basic_info(TabletBasicInfo& info);
 
 protected:
     void on_shutdown() override;

@@ -45,7 +45,11 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
             return new GlobalFunctionPEntryObject(ALL_GLOBAL_FUNCTION_SIGS);
         } else {
             String funcSig = tokens.get(0);
-            return new GlobalFunctionPEntryObject(funcSig);
+            GlobalFunctionPEntryObject pEntryObject = new GlobalFunctionPEntryObject(funcSig);
+            if (!pEntryObject.validate(mgr)) {
+                throw new PrivObjNotFoundException("cannot find function: " + funcSig);
+            }
+            return pEntryObject;
         }
     }
 
@@ -118,5 +122,14 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
     @Override
     public PEntryObject clone() {
         return new GlobalFunctionPEntryObject(functionSig);
+    }
+
+    @Override
+    public String toString() {
+        if (getFunctionSig().equals(GlobalFunctionPEntryObject.ALL_GLOBAL_FUNCTION_SIGS)) {
+            return "ALL GLOBAL_FUNCTIONS";
+        } else {
+            return getFunctionSig();
+        }
     }
 }
