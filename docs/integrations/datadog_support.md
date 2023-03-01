@@ -95,9 +95,9 @@ sudo systemctl stop datadog-agent
 sudo systemctl start datadog-agent
 ```
 
-## Verification
+## Verify integration
 
-Look [Datadog Application](https://docs.datadoghq.com/getting_started/application/)
+For instructions to verify the integration, see [Datadog Application](https://docs.datadoghq.com/getting_started/application/).
 
 ## Uninstall integration kits
 
