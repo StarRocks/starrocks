@@ -549,7 +549,7 @@ void DeltaWriter::abort(bool with_log) {
     }
 
     VLOG(1) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id() << " txn_id: " << _opt.txn_id
-            << " load_id: " << print_id(_opt.load_id);
+            << " load_id: " << print_id(_opt.load_id) << " partition_id: " << partition_id();
 }
 
 int64_t DeltaWriter::partition_id() const {
