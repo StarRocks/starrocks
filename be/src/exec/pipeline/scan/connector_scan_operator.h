@@ -45,6 +45,7 @@ public:
     ActiveInputSet& get_active_inputs() { return _active_inputs; }
 
     TPartitionType::type partition_type() const override { return TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED; }
+    const std::vector<ExprContext*>& partition_exprs() const override;
 
 private:
     // TODO: refactor the OlapScanContext, move them into the context

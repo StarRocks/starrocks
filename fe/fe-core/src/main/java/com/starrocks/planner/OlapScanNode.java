@@ -772,6 +772,10 @@ public class OlapScanNode extends ScanNode {
             if (!olapTable.hasDelete()) {
                 msg.lake_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
+
+            if (!bucketExprs.isEmpty()) {
+                msg.lake_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
+            }
         } else { // If you find yourself changing this code block, see also the above code block, i.e, if (olapTable.isLakeTable) { ... }.
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =

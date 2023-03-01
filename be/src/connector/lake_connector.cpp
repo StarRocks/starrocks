@@ -153,6 +153,8 @@ public:
 
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
+    Status init(ObjectPool* pool, RuntimeState* state) override;
+
 protected:
     ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;
@@ -611,6 +613,17 @@ LakeDataSourceProvider::LakeDataSourceProvider(ConnectorScanNode* scan_node, con
 
 DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<LakeDataSource>(this, scan_range);
+}
+
+Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
+    if (_t_lake_scan_node.__isset.bucket_exprs) {
+        const auto& bucket_exprs = _t_lake_scan_node.bucket_exprs;
+        _partition_exprs.resize(bucket_exprs.size());
+        for (int i = 0; i < bucket_exprs.size(); ++i) {
+            RETURN_IF_ERROR(Expr::create_expr_tree(pool, bucket_exprs[i], &_partition_exprs[i], state));
+        }
+    }
+    return Status::OK();
 }
 
 // ================================
