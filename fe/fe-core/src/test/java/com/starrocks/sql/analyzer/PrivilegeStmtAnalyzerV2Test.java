@@ -146,10 +146,10 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "grant select,insert,delete on table db1.tbl1 to test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke create_table on database db1 from test_user";
+        sql = "revoke create table on database db1 from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke create_table,drop on database db1 from test_user";
+        sql = "revoke create table,drop on database db1 from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
         sql = "grant ALL on table db1.tbl0, db1.tbl1 to test_user";
@@ -163,7 +163,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("cannot find privilege object type TTTABLE"));
+            Assert.assertTrue(e.getMessage().contains("syntax"));
         }
 
         sql = "revoke select on database db1 from test_user";
@@ -448,22 +448,22 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "revoke select on ALL tables in database db1 from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "grant create_table on ALL databases to test_user";
+        sql = "grant create table on ALL databases to test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
-        sql = "revoke create_table on ALL databases from test_user";
+        sql = "revoke create table on ALL databases from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
         sql = "grant impersonate on ALL users to test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "grant create_table on ALL database to test_user";
+        sql = "grant create table on ALL database to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid plural privilege type DATABASE"));
+            Assert.assertTrue(e.getMessage().contains("syntax"));
         }
 
-        sql = "grant create_table on ALL tables to test_user";
+        sql = "grant create table on ALL tables to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
@@ -487,7 +487,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.assertTrue(e.getMessage().contains("You have an error in your SQL syntax"));
         }
 
-        sql = "grant create_table on ALL databases in database db1 to test_user";
+        sql = "grant create table on ALL databases in database db1 to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
@@ -705,12 +705,12 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "revoke NODE on system from role root";
         analyzeFail(sql, "Operation not permitted, 'NODE' cannot be granted to user or role directly");
 
-        sql = "grant CREATE_RESOURCE on system to user test_user";
+        sql = "grant CREATE RESOURCE on system to user test_user";
         grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
-        Assert.assertEquals("GRANT CREATE_RESOURCE ON SYSTEM TO USER 'test_user'@'%'",
+        Assert.assertEquals("GRANT CREATE RESOURCE ON SYSTEM TO USER 'test_user'@'%'",
                 AstToSQLBuilder.toSQL(grantPrivilegeStmt));
 
-        sql = "grant NODE, CREATE_RESOURCE on system to user test_user";
+        sql = "grant NODE, CREATE RESOURCE on system to user test_user";
         analyzeFail(sql, "Operation not permitted, 'NODE' cannot be granted to user or role directly");
 
         sql = "grant IMPERSONATE on user test_user to user test_user";
@@ -760,7 +760,7 @@ public class PrivilegeStmtAnalyzerV2Test {
 
     @Test
     public void testGrantFunction() {
-        String sql = "GRANT usage ON GLOBAL_FUNCTION xxx to user test_user";
+        String sql = "GRANT usage ON GLOBAL FUNCTION xxx to user test_user";
         analyzeFail(sql, "cannot find function: xxx");
 
         sql = "GRANT usage ON FUNCTION db1.xxx to user test_user";
