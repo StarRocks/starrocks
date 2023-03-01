@@ -306,6 +306,7 @@ public class OlapTable extends Table {
     public void setBinlogTxnId(long binlogTxnId) {
         this.binlogTxnId = binlogTxnId;
     }
+
     public void setTableProperty(TableProperty tableProperty) {
         this.tableProperty = tableProperty;
     }
@@ -780,11 +781,12 @@ public class OlapTable extends Table {
             }
         }
 
-        AgentBatchTask batchTask = new AgentBatchTask();;
+        AgentBatchTask batchTask = new AgentBatchTask();
+        ;
 
         for (long backendId : fullBackendId) {
             DropAutoIncrementMapTask dropAutoIncrementMapTask = new DropAutoIncrementMapTask(backendId, this.id,
-                                                                GlobalStateMgr.getCurrentState().getNextId());
+                    GlobalStateMgr.getCurrentState().getNextId());
             batchTask.addTask(dropAutoIncrementMapTask);
         }
 
@@ -1657,7 +1659,7 @@ public class OlapTable extends Table {
                     + "Do not allow create materialized view");
         }
         // check if all tablets are healthy, and no tablet is in tablet scheduler
-        long unhealthyTabletId  = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
+        long unhealthyTabletId = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                 GlobalStateMgr.getCurrentState().getTabletScheduler());
         if (unhealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
             throw new DdlException("Table [" + name + "] is not stable. "
@@ -1991,7 +1993,6 @@ public class OlapTable extends Table {
             }
         }
 
-
         // begin to replace
         // 1. drop old partitions
         for (String partitionName : partitionNames) {
@@ -2113,7 +2114,7 @@ public class OlapTable extends Table {
 
     public Map<String, String> buildBinlogAvailableVersion() {
         Map<String, String> result = new HashMap<>();
-        Collection<Partition> partitions =  getPartitions();
+        Collection<Partition> partitions = getPartitions();
         for (Partition partition : partitions) {
             result.put(TableProperty.BINLOG_PARTITION + partition.getId(),
                     String.valueOf(partition.getVisibleVersion()));
@@ -2321,6 +2322,11 @@ public class OlapTable extends Table {
                     tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
         }
         return properties;
+    }
+
+    @Override
+    public boolean supportsUpdate() {
+        return getKeysType() == KeysType.PRIMARY_KEYS;
     }
 
     // ------ for lake table and lake materialized view start ------
