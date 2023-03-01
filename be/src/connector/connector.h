@@ -110,6 +110,13 @@ public:
     virtual bool accept_empty_scan_ranges() const { return true; }
 
     virtual bool stream_data_source() const { return false; }
+
+    virtual Status init(ObjectPool* pool, RuntimeState* state) { return Status::OK(); }
+
+    const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
+
+protected:
+    std::vector<ExprContext*> _partition_exprs;
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
