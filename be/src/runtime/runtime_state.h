@@ -285,13 +285,20 @@ public:
 
     int num_per_fragment_instances() const { return _num_per_fragment_instances; }
 
-    int64_t min_reservation() const { return _query_options.min_reservation; }
+    TSpillMode::type spill_mode() const {
+        DCHECK(_query_options.__isset.spill_mode);
+        return _query_options.spill_mode;
+    }
 
-    int64_t max_reservation() const { return _query_options.max_reservation; }
+    bool enable_spill() const { return _query_options.enable_spill; }
 
-    bool disable_stream_preaggregations() const { return _query_options.disable_stream_preaggregations; }
+    int32_t spill_mem_table_size() const { return _query_options.spill_mem_table_size; }
 
-    bool enable_spill() const { return _query_options.enable_spilling; }
+    int32_t spill_mem_table_num() const { return _query_options.spill_mem_table_num; }
+
+    double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
+
+    int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
