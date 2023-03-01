@@ -22,6 +22,7 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
+#include "exprs/agg/array_agg.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/bitmap_intersect.h"
 #include "exprs/agg/bitmap_union.h"
@@ -102,6 +103,10 @@ public:
     template <AggExchangePerfType PerfType>
     static AggregateFunctionPtr MakeExchangePerfAggregateFunction() {
         return std::make_shared<ExchangePerfAggregateFunction<PerfType>>();
+    }
+
+    static AggregateFunctionPtr MakeArrayAggAggregateFunction() {
+        return std::make_shared<ArrayAggAggregateFunction>();
     }
 
     template <LogicalType LT>

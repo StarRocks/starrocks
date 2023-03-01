@@ -511,6 +511,7 @@ public class FunctionSet {
                     .add(FunctionSet.HLL_EMPTY)
                     .add(FunctionSet.EXCHANGE_BYTES)
                     .add(FunctionSet.EXCHANGE_SPEED)
+                    .add(FunctionSet.ARRAY_AGG)
                     .build();
 
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =
@@ -756,6 +757,10 @@ public class FunctionSet {
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.BIGINT, true,
                 true, false, true));
 
+        addBuiltin(AggregateFunction.createBuiltin(ARRAY_AGG,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.ANY_ARRAY, Type.ANY_STRUCT, true,
+                true, false, true));
+
         for (Type t : Type.getSupportedTypes()) {
             if (t.isFunctionType()) {
                 continue;
@@ -852,8 +857,6 @@ public class FunctionSet {
         // Percentile
         registerBuiltinPercentileAggFunction();
 
-        // ArrayAgg
-        registerBuiltinArrayAggFunction();
 
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin(HLL_UNION_AGG,
@@ -1104,14 +1107,6 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
                 Lists.newArrayList(Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
                 false, false, false));
-    }
-
-    private void registerBuiltinArrayAggFunction() {
-        for (Map.Entry<Type, Type> entry : ARRAY_AGG_TYPES.entrySet()) {
-            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                    Lists.newArrayList(entry.getKey()), entry.getValue(), entry.getValue(),
-                    false, false, false));
-        }
     }
 
     public List<Function> getBuiltinFunctions() {

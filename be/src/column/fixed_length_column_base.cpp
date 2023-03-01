@@ -319,7 +319,7 @@ std::string FixedLengthColumnBase<T>::debug_string() const {
     std::stringstream ss;
     ss << "[";
     size_t size = this->size();
-    for (size_t i = 0; i < size - 1; ++i) {
+    for (ssize_t i = 0; i < (ssize_t)(size - 1); ++i) {
         ss << debug_item(i) << ", ";
     }
     if (size > 0) {
