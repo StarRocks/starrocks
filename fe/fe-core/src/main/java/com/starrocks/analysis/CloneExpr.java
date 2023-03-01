@@ -25,6 +25,12 @@ public class CloneExpr extends Expr {
     }
 
     @Override
+    public void setType(Type type) {
+        super.setType(type);
+        getChild(0).setType(type);
+    }
+
+    @Override
     protected String toSqlImpl() {
         return "clone(" + getChild(0).toSqlImpl() + ")";
     }

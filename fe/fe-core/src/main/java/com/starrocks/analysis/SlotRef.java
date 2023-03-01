@@ -151,6 +151,14 @@ public class SlotRef extends Expr {
     }
 
     @Override
+    public void setType(Type type) {
+        super.setType(type);
+        if (desc != null) {
+            desc.setType(type);
+        }
+    }
+
+    @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
         desc = analyzer.registerColumnRef(tblName, col);
         type = desc.getType();

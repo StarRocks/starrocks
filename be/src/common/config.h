@@ -791,4 +791,6 @@ CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 
 CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache=128M}");
 
+CONF_mInt64(txn_info_history_size, "20000");
+
 } // namespace starrocks::config
