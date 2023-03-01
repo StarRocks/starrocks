@@ -352,12 +352,42 @@ void PlanFragmentExecutor::update_status(const Status& new_status) {
 void PlanFragmentExecutor::cancel() {
     LOG(INFO) << "cancel(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
     DCHECK(_prepared);
+<<<<<<< HEAD
     _runtime_state->set_is_cancelled(true);
 
     if (_sink != nullptr) {
         _sink->cancel();
     }
 
+=======
+    {
+        std::lock_guard<std::mutex> l(_status_lock);
+        if (_runtime_state->is_cancelled()) {
+            return;
+        }
+        _runtime_state->set_is_cancelled(true);
+    }
+
+    const TQueryOptions& query_options = _runtime_state->query_options();
+    if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
+        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                _runtime_state->fragment_instance_id());
+    }
+    if (_stream_load_contexts.size() > 0) {
+        for (const auto& stream_load_context : _stream_load_contexts) {
+            if (stream_load_context->body_sink) {
+                Status st;
+                stream_load_context->body_sink->cancel(st);
+            }
+            if (_channel_stream_load) {
+                _exec_env->stream_context_mgr()->remove_channel_context(stream_load_context);
+            }
+        }
+        _stream_load_contexts.resize(0);
+    }
+>>>>>>> 8158d834d (Revert "[Enhancement] OlapTableSink of non-pipeline engine support fast cancel (#15398)" (#18609))
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
     _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
 
