@@ -46,6 +46,7 @@ namespace starrocks {
 
 class Tablet;
 class DataDir;
+class TabletBasicInfo;
 
 enum TabletDropFlag {
     kMoveFilesToTrash = 0,
@@ -150,6 +151,9 @@ public:
 
     // return map<TabletId, vector<pair<rowsetid, segment file num>>>
     std::unordered_map<TTabletId, std::vector<std::pair<uint32_t, uint32_t>>> get_tablets_need_repair_compaction();
+
+    void get_tablets_basic_infos(int64_t table_id, int64_t partition_id, int64_t tablet_id,
+                                 std::vector<TabletBasicInfo>& tablet_infos);
 
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
