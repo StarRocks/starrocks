@@ -42,6 +42,10 @@ public:
             pipeline::PipelineBuilderContext* context) override;
 
 private:
+    template <class ContextFactory, class SinkFactory, class SourceFactory>
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> _decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context, bool is_partition, bool is_merging);
+
     Status _consume_chunks(RuntimeState* state, ExecNode* child);
     const TPlanNode& _tnode;
 

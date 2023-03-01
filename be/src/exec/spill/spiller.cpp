@@ -25,6 +25,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/sort_exec_exprs.h"
@@ -103,8 +104,9 @@ StatusOr<ChunkUniquePtr> ColumnSpillFormater::restore_from_fmt(SpillFormatContex
 }
 
 Status ColumnSpillFormater::flush(std::unique_ptr<WritableFile>& writable) const {
-    // TODO: test flush async and sync
-    RETURN_IF_ERROR(writable->flush(WritableFile::FLUSH_ASYNC));
+    if (!config::experimental_spill_skip_sync) {
+        RETURN_IF_ERROR(writable->flush(WritableFile::FLUSH_ASYNC));
+    }
     return Status::OK();
 }
 

@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/spill/common.h"
@@ -73,7 +74,11 @@ private:
 
 template <>
 inline StatusOr<std::unique_ptr<WritableFile>> SpillFile::as<WritableFile>() {
-    return _fs->new_writable_file(_file_path);
+    WritableFileOptions options;
+    if (config::experimental_spill_skip_sync) {
+        options.sync_on_close = false;
+    }
+    return _fs->new_writable_file(options, _file_path);
 }
 
 template <>

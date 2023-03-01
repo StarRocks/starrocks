@@ -22,6 +22,7 @@
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
 #include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sort/local_merge_sort_source_operator.h"
 #include "exec/pipeline/sort/local_partition_topn_context.h"
@@ -29,6 +30,10 @@
 #include "exec/pipeline/sort/local_partition_topn_source.h"
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
 #include "exec/pipeline/sort/sort_context.h"
+#include "exec/pipeline/sort/spillable_partition_sort_sink_operator.h"
+#include "exec/pipeline/source_operator.h"
+#include "exec/pipeline/spill_process_channel.h"
+#include "exec/pipeline/spill_process_operator.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 
@@ -252,13 +257,14 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
     return Status::OK();
 }
 
-pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+template <class ContextFactory, class SinkFactory, class SourceFactory>
+std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context, bool is_partition, bool is_merging) {
     using namespace pipeline;
+
     OpFactories ops_sink_with_sort = _children[0]->decompose_to_pipeline(context);
-    bool is_partition = _tnode.sort_node.__isset.partition_exprs && !_tnode.sort_node.partition_exprs.empty();
-    bool is_rank_topn_type = _tnode.sort_node.__isset.topn_type && _tnode.sort_node.topn_type != TTopNType::ROW_NUMBER;
-    bool is_merging = _analytic_partition_exprs.empty();
-    int64_t partition_limit = -1;
+    int64_t partition_limit = _limit;
+
     if (is_partition) {
         partition_limit = _tnode.sort_node.partition_limit;
     }
@@ -272,56 +278,60 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     // define a runtime filter holder
     context->fragment_context()->runtime_filter_hub()->add_holder(_id);
 
-    std::any context_factory;
-    if (is_partition) {
-        context_factory = std::make_shared<LocalPartitionTopnContextFactory>(
-                _tnode.sort_node.partition_exprs, _sort_exec_exprs.lhs_ordering_expr_ctxs(), _is_asc_order,
-                _is_null_first, _sort_keys, _offset, partition_limit, _tnode.sort_node.topn_type, _order_by_types,
-                _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
-    } else {
-        context_factory = std::make_shared<SortContextFactory>(
-                runtime_state(), _tnode.sort_node.topn_type, is_merging, _offset, _limit,
-                _sort_exec_exprs.lhs_ordering_expr_ctxs(), _is_asc_order, _is_null_first, _build_runtime_filters);
+    auto degree_of_parallelism = context->source_operator(ops_sink_with_sort)->degree_of_parallelism();
+
+    // spill components
+    // TODO: avoid create spill channel when when disable spill
+
+    auto executor = std::make_shared<IOTaskExecutor>(ExecEnv::GetInstance()->pipeline_sink_io_pool());
+    auto spill_channel_factory =
+            std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
+
+    // spill process operator
+    if (runtime_state()->enable_spill() && _limit < 0) {
+        OpFactories spill_process_operators;
+
+        auto spill_process_factory = std::make_shared<SpillProcessOperatorFactory>(
+                context->next_operator_id(), "spill-process", id(), spill_channel_factory);
+        spill_process_factory->set_degree_of_parallelism(degree_of_parallelism);
+        spill_process_operators.emplace_back(std::move(spill_process_factory));
+
+        auto noop_sink_factory = std::make_shared<NoopSinkOperatorFactory>(context->next_operator_id(), id());
+        spill_process_operators.emplace_back(std::move(noop_sink_factory));
+        context->add_pipeline(std::move(spill_process_operators));
     }
+
+    // create context factory
+    auto context_factory = std::make_shared<ContextFactory>(
+            runtime_state(), _tnode.sort_node.topn_type, is_merging, _sort_exec_exprs.lhs_ordering_expr_ctxs(),
+            _is_asc_order, _is_null_first, _tnode.sort_node.partition_exprs, _offset, partition_limit, _sort_keys,
+            _order_by_types, _build_runtime_filters);
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
+
     OperatorFactoryPtr sink_operator;
-    if (is_partition) {
-        const auto& local_partition_topn_context_factory =
-                std::any_cast<std::shared_ptr<LocalPartitionTopnContextFactory>>(context_factory);
-        sink_operator = std::make_shared<LocalPartitionTopnSinkOperatorFactory>(context->next_operator_id(), id(),
-                                                                                local_partition_topn_context_factory);
-    } else {
-        int64_t max_buffered_rows = 1024000;
-        int64_t max_buffered_bytes = 16 * 1024 * 1024;
-        if (_tnode.sort_node.__isset.max_buffered_bytes) {
-            max_buffered_rows = _tnode.sort_node.max_buffered_rows;
-            max_buffered_bytes = _tnode.sort_node.max_buffered_bytes;
-        }
-        const auto& sort_context_factory = std::any_cast<std::shared_ptr<SortContextFactory>>(context_factory);
-        sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
-                context->next_operator_id(), id(), sort_context_factory, _sort_exec_exprs, _is_asc_order,
-                _is_null_first, _sort_keys, _offset, _limit, max_buffered_rows, max_buffered_bytes,
-                _tnode.sort_node.topn_type, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(),
-                _row_descriptor, _analytic_partition_exprs, _early_materialized_slots);
+
+    int64_t max_buffered_rows = 1024000;
+    int64_t max_buffered_bytes = 16 * 1024 * 1024;
+    if (_tnode.sort_node.__isset.max_buffered_bytes) {
+        max_buffered_rows = _tnode.sort_node.max_buffered_rows;
+        max_buffered_bytes = _tnode.sort_node.max_buffered_bytes;
     }
+
+    sink_operator = std::make_shared<SinkFactory>(
+            context->next_operator_id(), id(), context_factory, _sort_exec_exprs, _is_asc_order, _is_null_first,
+            _sort_keys, _offset, _limit, _tnode.sort_node.topn_type, _order_by_types, _materialized_tuple_desc,
+            child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs, max_buffered_rows, max_buffered_bytes,
+            _early_materialized_slots, spill_channel_factory);
+
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
 
     OpFactories operators_source_with_sort;
     SourceOperatorFactoryPtr source_operator;
-    if (is_partition) {
-        const auto& local_partition_topn_context_factory =
-                std::any_cast<std::shared_ptr<LocalPartitionTopnContextFactory>>(context_factory);
-        source_operator = std::make_shared<LocalPartitionTopnSourceOperatorFactory>(
-                context->next_operator_id(), id(), local_partition_topn_context_factory);
-    } else {
-        const auto& sort_context_factory = std::any_cast<std::shared_ptr<SortContextFactory>>(context_factory);
-        source_operator = std::make_shared<LocalMergeSortSourceOperatorFactory>(context->next_operator_id(), id(),
-                                                                                sort_context_factory);
-    }
-    this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
+
+    source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), context_factory);
 
     ops_sink_with_sort.emplace_back(std::move(sink_operator));
     context->add_pipeline(ops_sink_with_sort);
@@ -334,6 +344,34 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
         source_operator->set_could_local_shuffle(true);
     }
     operators_source_with_sort.emplace_back(std::move(source_operator));
+
+    return operators_source_with_sort;
+}
+
+pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+
+    bool is_partition = _tnode.sort_node.__isset.partition_exprs && !_tnode.sort_node.partition_exprs.empty();
+    bool is_rank_topn_type = _tnode.sort_node.__isset.topn_type && _tnode.sort_node.topn_type != TTopNType::ROW_NUMBER;
+    bool is_merging = _analytic_partition_exprs.empty();
+
+    OpFactories operators_source_with_sort;
+
+    if (is_partition) {
+        operators_source_with_sort =
+                _decompose_to_pipeline<LocalPartitionTopnContextFactory, LocalPartitionTopnSinkOperatorFactory,
+                                       LocalPartitionTopnSourceOperatorFactory>(context, is_partition, is_merging);
+    } else {
+        if (runtime_state()->enable_spill() && _limit < 0) {
+            operators_source_with_sort =
+                    _decompose_to_pipeline<SortContextFactory, SpillablePartitionSortSinkOperatorFactory,
+                                           LocalMergeSortSourceOperatorFactory>(context, is_partition, is_merging);
+        } else {
+            operators_source_with_sort =
+                    _decompose_to_pipeline<SortContextFactory, PartitionSortSinkOperatorFactory,
+                                           LocalMergeSortSourceOperatorFactory>(context, is_partition, is_merging);
+        }
+    }
 
     // Do not add LimitOperator if topn has partition columns or its type is not ROW_NUMBER
     if (!is_partition && !is_rank_topn_type && limit() != -1) {

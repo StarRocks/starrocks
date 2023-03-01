@@ -98,6 +98,11 @@ enum TPipelineProfileLevel {
   DETAIL
 }
 
+enum TSpillMode {
+  AUTO,
+  FORCE
+}
+
 enum TTabletInternalParallelMode {
   AUTO,
   FORCE_SPLIT
@@ -124,8 +129,8 @@ struct TQueryOptions {
   // see BE config `max_pushdown_conditions_per_column` for details
   // if set, this will overwrite the BE config.
   30: optional i32 max_pushdown_conditions_per_column
-  // whether enable spilling to disk
-  31: optional bool enable_spilling = false;
+  // whether enable spill to disk
+  31: optional bool enable_spill = false;
 
   50: optional Types.TCompressionType transmission_compression_type;
 
@@ -167,6 +172,13 @@ struct TQueryOptions {
   70: optional bool allow_throw_exception = 0;
 
   71: optional bool hudi_mor_force_jni_reader;
+
+  72: optional i32 spill_mem_table_size;
+  73: optional i32 spill_mem_table_num;
+  74: optional double spill_mem_limit_threshold;
+  75: optional i64 spill_operator_min_bytes;
+  76: optional TSpillMode spill_mode;
+
 }
 
 
