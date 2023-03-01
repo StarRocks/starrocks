@@ -181,7 +181,6 @@ public class CallOperator extends ScalarOperator {
                 Objects.equals(arguments, other.arguments);
     }
 
-
     @Override
     public ScalarOperator clone() {
         CallOperator operator = (CallOperator) super.clone();

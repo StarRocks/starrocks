@@ -239,7 +239,12 @@ public class CostModel {
                     0);
         }
 
-        // compute a magic value to select best plan
+        // Compute penalty factor for GroupByCountDistinctDataSkewEliminateRule
+        // Reward good cases(give a penaltyFactor=0.5) while punish bad cases(give a penaltyFactor=1.5)
+        // Good cases as follows:
+        // 1. distinct cardinality of group-by column is less than 100
+        // 2. distinct cardinality of group-by column is less than 10000 and avgDistValuesPerGroup > 100
+        // Bad cases as follows: this Rule is conservative, the cases except good cases are all bad cases.
         private double computeDataSkewPenaltyOfGroupByCountDistinct(PhysicalHashAggregateOperator node,
                                                             Statistics inputStatistics) {
             DataSkewInfo skewInfo = node.getDistinctColumnDataSkew();

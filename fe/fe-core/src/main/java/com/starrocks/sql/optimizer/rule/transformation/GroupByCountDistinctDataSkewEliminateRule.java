@@ -64,6 +64,8 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         return INSTANCE;
     }
 
+    // compute the type of bucket column, since bucket column introduce extra cost, so we
+    // choose just wide enough type to keep bucket number.
     private Type pickBucketType(int bucketNum) {
         Preconditions.checkArgument(0 < bucketNum && bucketNum <= 65536);
         return (bucketNum <= 256) ? Type.TINYINT : Type.SMALLINT;
