@@ -156,7 +156,7 @@ public interface ParserErrorMsg {
     @BaseMessage("The arguments of GROUPING must be expressions referenced by GROUP BY")
     String argsCanOnlyFromGroupBy();
 
-    @BaseMessage("Session's db ''{0}'' not equals lable's db ''{1}''")
+    @BaseMessage("Session's db ''{0}'' not equals label's db ''{1}''")
     String dbNameNotMatch(String a0, String a1);
 
     @BaseMessage("{0} host or port is wrong. {1}")
