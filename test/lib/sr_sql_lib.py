@@ -343,7 +343,6 @@ class StarrocksSQLApiLib(unittest.TestCase):
         else:
             self.res_log.append("%s" % shell_res[1])
 
-        # self.res_log.append("%s" % shell_res[1])
         self.res_log.append(RESULT_END_FLAT)
 
     def record_function_res(self, function, func_res):
