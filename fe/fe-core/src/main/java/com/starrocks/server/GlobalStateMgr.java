@@ -2116,7 +2116,7 @@ public class GlobalStateMgr {
     }
 
     public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
-        localMetastore.createTableLike(stmt);
+        localMetastore.createTable(stmt.getCreateTableStmt());
     }
 
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
