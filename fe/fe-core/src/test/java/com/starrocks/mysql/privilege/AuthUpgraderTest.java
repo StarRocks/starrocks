@@ -730,6 +730,7 @@ public class AuthUpgraderTest {
     public void testNodeAdmin() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
+<<<<<<< HEAD
                 "create user nodeuser",
                 "GRANT node_priv on *.* to nodeuser",
                 "create role noderole",
@@ -742,6 +743,31 @@ public class AuthUpgraderTest {
                 "GRANT admin_priv on *.* to adminuser",
                 "create role adminrole",
                 "GRANT admin_priv on *.* to role adminrole");
+=======
+                createUserStmt("nodeuser"),
+                grantPrivilegeStmt(Lists.newArrayList("NODE_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "nodeuser"),
+                createRoleStmt("noderole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("NODE_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "noderole"),
+                createUserStmt("noderesourceuser"),
+                grantPrivilegeStmt(Lists.newArrayList("NODE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("*"), "noderesourceuser"),
+                createRoleStmt("noderesourcerole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("NODE_PRIV"), "RESOURCE",
+                        Lists.newArrayList("*"), "noderesourcerole"),
+
+                createUserStmt("adminuser"),
+                grantPrivilegeStmt(Lists.newArrayList("ADMIN_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "adminuser"),
+
+                createRoleStmt("adminrole"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("ADMIN_PRIV", "NODE_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "adminrole")
+
+        );
+
+>>>>>>> c9b760317 (Fix the BUG that did not check the resource permission when CreateTable (#18581))
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
             if (i == 1) {
