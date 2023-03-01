@@ -468,6 +468,7 @@ struct TLakeScanNode {
   // which columns only be used to filter data in the stage of scan data
   10: optional list<string> unused_output_column_name
   11: optional list<string> sort_key_column_names
+  12: optional list<Exprs.TExpr> bucket_exprs
 }
 
 struct TEqJoinCondition {
