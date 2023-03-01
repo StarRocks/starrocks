@@ -282,6 +282,17 @@ StatusOr<ColumnPtr> TimeFunctions::utc_timestamp(FunctionContext* context, const
     }
 }
 
+StatusOr<ColumnPtr> TimeFunctions::utc_time(FunctionContext* context, const Columns& columns) {
+    starrocks::RuntimeState* state = context->state();
+    DateTimeValue dtv;
+    if (dtv.from_unixtime(state->timestamp_ms() / 1000, "+00:00")) {
+        double seconds = dtv.hour() * 3600 + dtv.minute() * 60 + dtv.second();
+        return ColumnHelper::create_const_column<TYPE_TIME>(seconds, 1);
+    } else {
+        return ColumnHelper::create_const_null_column(1);
+    }
+}
+
 StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Columns& columns) {
     return columns[0];
 }
