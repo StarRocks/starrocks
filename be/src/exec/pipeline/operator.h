@@ -221,10 +221,12 @@ public:
     // Called when the new Epoch starts at first to reset operator's internal state.
     virtual Status reset_epoch(RuntimeState* state) { return Status::OK(); }
 
+    // it means this operator need spill
     virtual void mark_need_spill() { _marked_need_spill = true; }
     bool need_mark_spill() { return _marked_need_spill; }
+    // the memory that can be freed by the current operator
     size_t revocable_mem_bytes() { return _revocable_mem_bytes; }
-    void _set_revocable_mem_bytes(size_t bytes) { _revocable_mem_bytes = bytes; }
+    void set_revocable_mem_bytes(size_t bytes) { _revocable_mem_bytes = bytes; }
 
 protected:
     OperatorFactory* _factory;
