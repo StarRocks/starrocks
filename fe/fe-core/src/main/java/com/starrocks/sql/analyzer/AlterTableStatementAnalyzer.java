@@ -235,7 +235,7 @@ public class AlterTableStatementAnalyzer {
                 clause.setNeedTableStable(false);
                 clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown table property: " + properties.keySet());
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
             }
             return null;
         }
@@ -436,7 +436,7 @@ public class AlterTableStatementAnalyzer {
                     clause.getProperties(), PropertyAnalyzer.PROPERTIES_USE_TEMP_PARTITION_NAME, false));
 
             if (clause.getProperties() != null && !clause.getProperties().isEmpty()) {
-                throw new SemanticException("Unknown properties: " + clause.getProperties().keySet());
+                throw new SemanticException("Unknown properties: " + clause.getProperties());
             }
             return null;
         }
