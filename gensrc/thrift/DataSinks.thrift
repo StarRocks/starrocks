@@ -199,7 +199,7 @@ struct TOlapTableSink {
 }
 
 struct TSchemaTableSink {
-    1: required string table
+    1: optional string table
     2: optional Descriptors.TNodesInfo nodes_info
 }
 
