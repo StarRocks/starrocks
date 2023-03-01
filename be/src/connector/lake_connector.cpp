@@ -618,9 +618,9 @@ DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_
 Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
     if (_t_lake_scan_node.__isset.bucket_exprs) {
         const auto& bucket_exprs = _t_lake_scan_node.bucket_exprs;
-        _bucket_exprs.resize(bucket_exprs.size());
+        _partition_exprs.resize(bucket_exprs.size());
         for (int i = 0; i < bucket_exprs.size(); ++i) {
-            RETURN_IF_ERROR(Expr::create_expr_tree(pool, bucket_exprs[i], &_bucket_exprs[i], state));
+            RETURN_IF_ERROR(Expr::create_expr_tree(pool, bucket_exprs[i], &_partition_exprs[i], state));
         }
     }
     return Status::OK();

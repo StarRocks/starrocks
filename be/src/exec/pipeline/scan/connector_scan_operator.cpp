@@ -51,7 +51,7 @@ OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_
 const std::vector<ExprContext*>& ConnectorScanOperatorFactory::partition_exprs() const {
     auto* connector_scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* provider = connector_scan_node->data_source_provider();
-    return provider->bucket_exprs();
+    return provider->partition_exprs();
 }
 
 // ==================== ConnectorScanOperator ====================
