@@ -911,8 +911,10 @@ public class AuthUpgraderTest {
                         Lists.newArrayList("*", "*"), "adminuser"),
 
                 createRoleStmt("adminrole"),
-                grantPrivilegeToRoleStmt(Lists.newArrayList("ADMIN_PRIV"), "TABLE",
-                        Lists.newArrayList("*", "*"), "adminrole"));
+                grantPrivilegeToRoleStmt(Lists.newArrayList("ADMIN_PRIV", "NODE_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "adminrole")
+
+        );
 
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {

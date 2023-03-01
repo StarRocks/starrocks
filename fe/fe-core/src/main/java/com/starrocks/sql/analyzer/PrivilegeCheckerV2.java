@@ -24,6 +24,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -364,7 +365,7 @@ public class PrivilegeCheckerV2 {
     }
 
     static void checkStmtNodePrivilege(ConnectContext context) {
-        if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.OPERATE)) {
+        if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.NODE)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "NODE");
         }
     }
@@ -1218,6 +1219,7 @@ public class PrivilegeCheckerV2 {
         }
 
         // ---------------------------------------- Show Transaction Statement ---------------------------
+
         @Override
         public Void visitShowTransactionStatement(ShowTransactionStmt statement, ConnectContext context) {
             // No authorization required
@@ -1244,6 +1246,33 @@ public class PrivilegeCheckerV2 {
             }
             String dbName = tableName.getDb() == null ? context.getDatabase() : tableName.getDb();
             checkDbAction(context, catalog, dbName, PrivilegeType.CREATE_TABLE);
+
+
+            if (statement.getProperties() != null && statement.getProperties().containsKey("resource")) {
+                String resourceProp = statement.getProperties().get("resource");
+                Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceProp);
+                if (resource != null) {
+                    if (!PrivilegeActions.checkResourceAction(context, resource.getName(), PrivilegeType.USAGE)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_RESOURCE_DENIED,
+                                PrivilegeType.USAGE, context.getQualifiedUser(), context.getRemoteIP(), resource.getName());
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        @Override
+        public Void visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, ConnectContext context) {
+            visitCreateTableStatement(statement.getCreateTableStmt(), context);
+            visitQueryStatement(statement.getQueryStatement(), context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateTableLikeStatement(CreateTableLikeStmt statement, ConnectContext context) {
+            visitCreateTableStatement(statement.getCreateTableStmt(), context);
+            checkTableAction(context, statement.getExistedDbTbl(), PrivilegeType.SELECT);
             return null;
         }
 
@@ -1260,26 +1289,6 @@ public class PrivilegeCheckerV2 {
             } else {
                 checkTableAction(context, statement.getTbl(), PrivilegeType.DROP);
             }
-            return null;
-        }
-
-        @Override
-        public Void visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, ConnectContext context) {
-            visitCreateTableStatement(statement.getCreateTableStmt(), context);
-            visitQueryStatement(statement.getQueryStatement(), context);
-            return null;
-        }
-
-        @Override
-        public Void visitCreateTableLikeStatement(CreateTableLikeStmt statement, ConnectContext context) {
-            TableName tableName = statement.getDbTbl();
-            TableName existedTableName = statement.getExistedDbTbl();
-            String catalog = tableName.getCatalog();
-            if (catalog == null) {
-                catalog = context.getCurrentCatalog();
-            }
-            checkDbAction(context, catalog, tableName.getDb(), PrivilegeType.CREATE_TABLE);
-            checkTableAction(context, existedTableName, PrivilegeType.SELECT);
             return null;
         }
 
