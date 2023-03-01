@@ -117,15 +117,15 @@ public:
 private:
     Status _tablet_multi_get(int64_t tablet_id, int64_t version, Chunk& keys,
                              const std::vector<std::string>& value_columns, std::vector<bool>& found, Chunk& values,
-                             std::unique_ptr<serde::ProtobufChunkMeta>& chunk_meta);
+                             SchemaPtr& value_schema);
 
     Status _tablet_multi_get_remote(int64_t tablet_id, int64_t version, Chunk& keys,
                                     const std::vector<std::string>& value_columns, std::vector<bool>& found,
-                                    Chunk& values, std::unique_ptr<serde::ProtobufChunkMeta>& chunk_meta);
+                                    Chunk& values, SchemaPtr& value_schema);
 
     Status _tablet_multi_get_rpc(doris::PBackendService_Stub* stub, int64_t tablet_id, int64_t version, Chunk& keys,
                                  const std::vector<std::string>& value_columns, std::vector<bool>& found, Chunk& values,
-                                 std::unique_ptr<serde::ProtobufChunkMeta>& chunk_meta);
+                                 SchemaPtr& value_schema);
     // fields for local tablet reader
     std::unique_ptr<LocalTableReaderParams> _local_params;
     std::unique_ptr<LocalTabletReader> _local_tablet_reader;

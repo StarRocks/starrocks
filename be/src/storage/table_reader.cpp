@@ -157,12 +157,12 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
     }
     // TODO: parallel get
     // a cache var to init chunk_meta only once
-    std::unique_ptr<serde::ProtobufChunkMeta> chunk_meta;
+    SchemaPtr& value_schema = values.schema();
     for (auto multi_get : multi_gets) {
         multi_get->values = values.clone_empty();
         vector<bool> found;
         RETURN_IF_ERROR(_tablet_multi_get(multi_get->tablet_id, multi_get->version, *multi_get->keys, value_columns,
-                                          found, *multi_get->values, chunk_meta));
+                                          found, *multi_get->values, value_schema));
         multi_get->found_idxs.clear();
         DCHECK(multi_get->keys->num_rows() == found.size());
         for (size_t i = 0; i < found.size(); ++i) {
@@ -193,7 +193,7 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
 
 Status TableReader::_tablet_multi_get(int64_t tablet_id, int64_t version, Chunk& keys,
                                       const std::vector<std::string>& value_columns, std::vector<bool>& found,
-                                      Chunk& values, std::unique_ptr<serde::ProtobufChunkMeta>& chunk_meta) {
+                                      Chunk& values, SchemaPtr& value_schema) {
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     // get from local tablet
     // TODO: if local tablet's version is missing, switch to remote replica
@@ -203,12 +203,12 @@ Status TableReader::_tablet_multi_get(int64_t tablet_id, int64_t version, Chunk&
         RETURN_IF_ERROR(local_tablet_reader->multi_get(keys, value_columns, found, values));
         return Status::OK();
     }
-    return _tablet_multi_get_remote(tablet_id, version, keys, value_columns, found, values, chunk_meta);
+    return _tablet_multi_get_remote(tablet_id, version, keys, value_columns, found, values, value_schema);
 }
 
 Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version, Chunk& keys,
                                              const std::vector<std::string>& value_columns, std::vector<bool>& found,
-                                             Chunk& values, std::unique_ptr<serde::ProtobufChunkMeta>& chunk_meta) {
+                                             Chunk& values, SchemaPtr& value_schema) {
     auto location = _location_param->find_tablet(tablet_id);
     if (location == nullptr) {
         return Status::InternalError(strings::Substitute("tablet $0 not found in OlapTableLocationParam", tablet_id));
@@ -229,7 +229,7 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
                 LOG(WARNING) << msg;
                 st = Status::InternalError(msg);
             } else {
-                st = _tablet_multi_get_rpc(stub, tablet_id, version, keys, value_columns, found, values, chunk_meta);
+                st = _tablet_multi_get_rpc(stub, tablet_id, version, keys, value_columns, found, values, value_schema);
                 if (st.ok()) {
                     break;
                 }
@@ -241,8 +241,7 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
 
 Status TableReader::_tablet_multi_get_rpc(doris::PBackendService_Stub* stub, int64_t tablet_id, int64_t version,
                                           Chunk& keys, const std::vector<std::string>& value_columns,
-                                          std::vector<bool>& found, Chunk& values,
-                                          std::unique_ptr<serde::ProtobufChunkMeta>& chunk_meta) {
+                                          std::vector<bool>& found, Chunk& values, SchemaPtr& value_schema) {
     PTabletReaderMultiGetRequest request;
     request.set_tablet_id(tablet_id);
     request.set_version(version);
@@ -279,14 +278,8 @@ Status TableReader::_tablet_multi_get_rpc(doris::PBackendService_Stub* stub, int
         found[i] = result.found(i);
     }
     auto& values_pb = result.values();
-    if (!chunk_meta) {
-        StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(*_row_desc, values_pb);
-        if (!res.ok()) return res.status();
-        chunk_meta.reset(new serde::ProtobufChunkMeta(std::move(res).value()));
-    }
     TRY_CATCH_BAD_ALLOC({
-        serde::ProtobufChunkDeserializer des(*chunk_meta);
-        StatusOr<Chunk> res = des.deserialize(values_pb.data());
+        StatusOr<Chunk> res = serde::deserialize_chunk_pb_with_schema(*value_schema, values_pb.data());
         if (!res.ok()) return res.status();
         values.columns().swap(res.value().columns());
     });
