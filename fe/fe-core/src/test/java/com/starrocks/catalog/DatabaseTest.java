@@ -228,4 +228,19 @@ public class DatabaseTest {
         dis.close();
         file.delete();
     }
+
+    @Test
+    public void testGetUUID() {
+        // Internal database
+        Database db1 = new Database();
+        Assert.assertEquals("0", db1.getUUID());
+
+        Database db2 = new Database(101, "db2");
+        Assert.assertEquals("101", db2.getUUID());
+
+        // External database
+        Database db3 = new Database(101, "db3");
+        db3.setCatalogName("hive");
+        Assert.assertEquals("hive.db3", db3.getUUID());
+    }
 }
