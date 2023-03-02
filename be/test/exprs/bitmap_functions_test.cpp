@@ -2506,6 +2506,7 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_limit) {
         columns.emplace_back(limit);
 
         auto column = BitmapFunctions::bitmap_subset_limit(ctx, columns).value();
+        auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
         ASSERT_EQ("5,64,128,256,512", res->get_object(0)->to_string());
     }
 }
