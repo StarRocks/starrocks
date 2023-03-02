@@ -3244,20 +3244,20 @@ public class GlobalStateMgr {
     }
 
     // Change current catalog and database of this session.
-    // We can support 'USE CATALOG.DB'
+    // We can support 'USE [CATALOG.]DB'
     public void changeCatalogDb(ConnectContext ctx, String identifier) throws DdlException {
-        String dbName = ctx.getDatabase();
+        String dbName;
 
-        String[] parts = identifier.split("\\.");
+        String[] parts = identifier.split("\\.", 2); // at most 2 parts
         if (parts.length != 1 && parts.length != 2) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
-        } else if (parts.length == 1) {
+        }
+
+        if (parts.length == 1) { // use database
             dbName = identifier;
-        } else {
+        } else { // use catalog.database
             String newCatalogName = parts[0];
-            if (catalogMgr.catalogExists(newCatalogName)) {
-                dbName = parts[1];
-            } else {
+            if (!catalogMgr.catalogExists(newCatalogName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }
             if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
@@ -3265,10 +3265,11 @@ public class GlobalStateMgr {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
             }
             ctx.setCurrentCatalog(newCatalogName);
+            dbName = parts[1]; // may be an empty string, if invoked by handleUseCatalogStmt
         }
 
-        if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
-            LOG.debug("Unknown catalog '%s' and db '%s'", ctx.getCurrentCatalog(), dbName);
+        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
+            LOG.debug("Unknown catalog {} and db {}", ctx.getCurrentCatalog(), dbName);
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
