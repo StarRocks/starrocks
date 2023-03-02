@@ -301,7 +301,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_STAROS=${USE_STAROS} \
                     -DWITH_BENCH=${WITH_BENCH} \
                     -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
-                    -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
                     -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
                     -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
