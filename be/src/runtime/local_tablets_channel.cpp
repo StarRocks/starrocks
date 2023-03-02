@@ -426,8 +426,7 @@ int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partiti
     for (int i = 0; i < partitions_size; i++) {
         _partition_ids.insert(partitions[i]);
     }
-<<<<<<< HEAD
-=======
+
     // when replicated storage is true, the partitions of each sender will be different
     // So we need to make sure that all partitions are added to _partition_ids when committing
     int n = _num_remaining_senders.fetch_sub(1);
@@ -435,7 +434,6 @@ int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partiti
 
     VLOG(1) << "LocalTabletsChannel txn_id: " << _txn_id << " close " << partitions_size << " partitions remaining "
             << n - 1 << " senders";
->>>>>>> 441df961a ([BugFix] Fix automatic partition creation crash when olap table sink write fail (#18712))
     return n - 1;
 }
 
