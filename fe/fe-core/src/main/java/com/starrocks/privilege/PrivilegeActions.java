@@ -244,8 +244,10 @@ public class PrivilegeActions {
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:
+            case LAKE:
                 return checkAnyActionOnTable(currentUser, roleIds, dbName, tbl.getName());
             case MATERIALIZED_VIEW:
+            case LAKE_MATERIALIZED_VIEW:
                 return checkAnyActionOnMaterializedView(currentUser, roleIds, dbName, tbl.getName());
             case VIEW:
                 return checkAnyActionOnView(currentUser, roleIds, dbName, tbl.getName());
