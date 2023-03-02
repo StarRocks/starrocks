@@ -494,7 +494,7 @@ TEST_F(LakeTabletsChannelTest, test_write_concurrently) {
     }
 }
 
-TEST_F(LakeTabletsChannelTest, test_cancel) {
+TEST_F(LakeTabletsChannelTest, test_abort) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
@@ -503,15 +503,16 @@ TEST_F(LakeTabletsChannelTest, test_cancel) {
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
     auto chunk = generate_data(kChunkSize);
-    std::atomic<bool> started{false};
+    std::atomic<int> write_count{0};
+    std::atomic<bool> stopped{false};
     auto t0 = std::thread([&]() {
-        PTabletWriterAddChunkRequest add_chunk_request;
-        PTabletWriterAddBatchResult add_chunk_response;
-        add_chunk_request.set_index_id(kIndexId);
-        add_chunk_request.set_sender_id(0);
-        add_chunk_request.set_eos(false);
         int64_t packet_seq = 0;
         while (true) {
+            PTabletWriterAddChunkRequest add_chunk_request;
+            PTabletWriterAddBatchResult add_chunk_response;
+            add_chunk_request.set_index_id(kIndexId);
+            add_chunk_request.set_sender_id(0);
+            add_chunk_request.set_eos(false);
             add_chunk_request.set_packet_seq(packet_seq++);
 
             for (int i = 0; i < kChunkSize; i++) {
@@ -527,16 +528,27 @@ TEST_F(LakeTabletsChannelTest, test_cancel) {
             if (add_chunk_response.status().status_code() != TStatusCode::OK) {
                 break;
             }
-            started = true;
+            write_count.fetch_add(1);
         }
+        PTabletWriterAddChunkRequest finish_request;
+        PTabletWriterAddBatchResult finish_response;
+        finish_request.set_index_id(kIndexId);
+        finish_request.set_sender_id(0);
+        finish_request.set_eos(true);
+        finish_request.set_packet_seq(packet_seq++);
+        finish_request.add_partition_ids(10);
+        finish_request.add_partition_ids(11);
+        _tablets_channel->add_chunk(nullptr, finish_request, &finish_response);
+        ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
+        stopped.store(true);
     });
 
-    while (!started) {
+    while (write_count.load() < 5 && !stopped.load()) {
         std::this_thread::yield();
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-    _tablets_channel->cancel();
+    ASSERT_FALSE(stopped.load());
+    ASSERT_GT(write_count.load(), 0);
+    _tablets_channel->abort();
 
     t0.join();
 
@@ -690,6 +702,61 @@ TEST_F(LakeTabletsChannelTest, test_finish_failed) {
 
     _tablets_channel->add_chunk(nullptr, finish_request, &finish_response);
     ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
+}
+
+TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(2);
+
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+
+    {
+        constexpr int kChunkSize = 128;
+        constexpr int kChunkSizePerTablet = kChunkSize / 4;
+        auto chunk = generate_data(kChunkSize);
+
+        PTabletWriterAddChunkRequest add_chunk_request;
+        PTabletWriterAddBatchResult add_chunk_response;
+        add_chunk_request.set_index_id(kIndexId);
+        add_chunk_request.set_sender_id(0);
+        add_chunk_request.set_eos(true);
+        add_chunk_request.set_packet_seq(0);
+
+        for (int i = 0; i < kChunkSize; i++) {
+            int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+            add_chunk_request.add_tablet_ids(tablet_id);
+            add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+        }
+
+        ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+        add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
+        ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
+
+        _tablets_channel->abort();
+
+        _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response);
+        ASSERT_EQ(TStatusCode::DUPLICATE_RPC_INVOCATION, add_chunk_response.status().status_code());
+    }
+    {
+        PTabletWriterAddChunkRequest finish_request;
+        PTabletWriterAddBatchResult finish_response;
+        finish_request.set_index_id(kIndexId);
+        finish_request.set_sender_id(1);
+        finish_request.set_eos(true);
+        finish_request.set_packet_seq(0);
+
+        _tablets_channel->add_chunk(nullptr, finish_request, &finish_response);
+        ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
+        ASSERT_GE(finish_response.status().error_msgs_size(), 1);
+        const auto& message = finish_response.status().error_msgs(0);
+        ASSERT_TRUE(message.find("AsyncDeltaWriter has been closed") != std::string::npos) << message;
+
+        PTabletWriterAddBatchResult finish_response2;
+        _tablets_channel->add_chunk(nullptr, finish_request, &finish_response2);
+        ASSERT_EQ(TStatusCode::DUPLICATE_RPC_INVOCATION, finish_response2.status().status_code());
+    }
 }
 
 } // namespace starrocks
