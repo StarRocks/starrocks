@@ -25,15 +25,10 @@ namespace spill {
 
 class Dir {
 public:
-    Dir(const std::string& dir, std::shared_ptr<FileSystem> fs):
-        _dir(dir), _fs(fs) {}
+    Dir(const std::string& dir, std::shared_ptr<FileSystem> fs) : _dir(dir), _fs(fs) {}
 
-    FileSystem* fs() {
-        return _fs.get();
-    }
-    std::string dir() {
-        return _dir;
-    }
+    FileSystem* fs() { return _fs.get(); }
+    std::string dir() { return _dir; }
 
 private:
     std::string _dir;
@@ -59,5 +54,5 @@ private:
     std::vector<DirPtr> _dirs;
 };
 
-}
-}
+} // namespace spill
+} // namespace starrocks

@@ -13,8 +13,8 @@
 // limitations under the License.
 
 #include "exec/spill/formatter.h"
-#include "exec/spill/spiller.h"
 
+#include "exec/spill/spiller.h"
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
@@ -22,10 +22,10 @@
 namespace starrocks {
 namespace spill {
 
-class ColumnarFormatter: public Formatter {
+class ColumnarFormatter : public Formatter {
 public:
-    ColumnarFormatter(ChunkBuilder chunk_builder, const BlockCompressionCodec* compress_codec):
-        _chunk_builder(std::move(chunk_builder)), _compress_codec(compress_codec) {}
+    ColumnarFormatter(ChunkBuilder chunk_builder, const BlockCompressionCodec* compress_codec)
+            : _chunk_builder(std::move(chunk_builder)), _compress_codec(compress_codec) {}
     ~ColumnarFormatter() = default;
 
     Status serialize(FormatterContext& ctx, const ChunkPtr& chunk, BlockPtr block) override;
@@ -82,8 +82,8 @@ Status ColumnarFormatter::serialize(FormatterContext& ctx, const ChunkPtr& chunk
     data.emplace_back(Slice(meta_buf, sizeof(size_t) * 2));
     data.emplace_back(compress_slice);
     RETURN_IF_ERROR(block->append(data));
-    TRACE_SPILL_LOG << "serialize chunk to block: " << block->debug_string()
-        << ", compressed size: " << compressed_size << ", uncompressed size: " << uncompressed_size;
+    TRACE_SPILL_LOG << "serialize chunk to block: " << block->debug_string() << ", compressed size: " << compressed_size
+                    << ", uncompressed size: " << uncompressed_size;
     return Status::OK();
 }
 
@@ -92,7 +92,7 @@ StatusOr<ChunkUniquePtr> ColumnarFormatter::deserialize(FormatterContext& ctx, c
     RETURN_IF_ERROR(block->read_fully(&compressed_size, sizeof(size_t)));
     RETURN_IF_ERROR(block->read_fully(&uncompressed_size, sizeof(size_t)));
     TRACE_SPILL_LOG << "deserialize chunk from block: " << block->debug_string()
-        << ", compressed size: " << compressed_size << ", uncompressed size: " << uncompressed_size;
+                    << ", compressed size: " << compressed_size << ", uncompressed size: " << uncompressed_size;
 
     auto& compress_buffer = ctx.compress_buffer;
     auto& serialize_buffer = ctx.serialize_buffer;
@@ -109,7 +109,7 @@ StatusOr<ChunkUniquePtr> ColumnarFormatter::deserialize(FormatterContext& ctx, c
     // deserialize
     auto chunk = _chunk_builder();
     const uint8_t* read_cursor = reinterpret_cast<uint8_t*>(serialize_buffer.data());
-    for (const auto& column: chunk->columns()) {
+    for (const auto& column : chunk->columns()) {
         read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, column.get());
     }
     return chunk;
@@ -121,5 +121,5 @@ StatusOr<FormatterPtr> create_formatter(SpilledOptions* options) {
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &codec));
     return std::make_shared<ColumnarFormatter>(options->chunk_builder, codec);
 }
-}
-}
+} // namespace spill
+} // namespace starrocks

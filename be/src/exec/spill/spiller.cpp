@@ -28,12 +28,12 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/spill/mem_table.h"
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
-#include "exec/pipeline/query_context.h"
 
 namespace starrocks {
 
@@ -82,7 +82,7 @@ Status Spiller::_run_flush_task(RuntimeState* state, const MemTablePtr& mem_tabl
 
     spill::FormatterContext ctx;
     size_t num_rows_flushed = 0;
-    RETURN_IF_ERROR(mem_table->flush([&] (const auto& chunk) {
+    RETURN_IF_ERROR(mem_table->flush([&](const auto& chunk) {
         num_rows_flushed += chunk->num_rows();
         RETURN_IF_ERROR(_formatter->serialize(ctx, chunk, block));
         return Status::OK();

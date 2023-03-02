@@ -22,8 +22,8 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/stream_epoch_manager.h"
-#include "exec/spill/query_spill_manager.h"
 #include "exec/spill/block_manager.h"
+#include "exec/spill/query_spill_manager.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "gen_cpp/internal_service.pb.h"
@@ -169,9 +169,7 @@ public:
 
     QuerySpillManager* spill_manager() { return _spill_manager.get(); }
 
-    spill::BlockManager* spill_block_manager() {
-        return _spill_block_manager.get();
-    }
+    spill::BlockManager* spill_block_manager() { return _spill_block_manager.get(); }
 
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;

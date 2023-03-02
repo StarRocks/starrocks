@@ -18,22 +18,23 @@
 #include <mutex>
 #include <unordered_map>
 
-#include "fs/fs.h"
-#include "storage/options.h"
 #include "common/config.h"
-#include "io/input_stream.h"
-#include "util/uid_util.h"
-#include "runtime/exec_env.h"
 #include "exec/spill/common.h"
 #include "fmt/format.h"
+#include "fs/fs.h"
+#include "io/input_stream.h"
+#include "runtime/exec_env.h"
+#include "storage/options.h"
+#include "util/uid_util.h"
 
 namespace starrocks {
 namespace spill {
 
 class LogBlockContainer {
 public:
-    LogBlockContainer(Dir* dir, TUniqueId query_id, int32_t plan_node_id, const std::string& plan_node_name, uint64_t id):
-        _dir(dir), _query_id(query_id), _plan_node_id(plan_node_id), _plan_node_name(plan_node_name),_id(id) {}
+    LogBlockContainer(Dir* dir, TUniqueId query_id, int32_t plan_node_id, const std::string& plan_node_name,
+                      uint64_t id)
+            : _dir(dir), _query_id(query_id), _plan_node_id(plan_node_id), _plan_node_name(plan_node_name), _id(id) {}
 
     ~LogBlockContainer() {
         TRACE_SPILL_LOG << "delete spill container file: " << path();
@@ -44,28 +45,21 @@ public:
 
     Status close();
 
-    Dir* dir() const {
-        return _dir;
-    }
-    int32_t plan_node_id() const {
-        return _plan_node_id;
-    }
-    std::string plan_node_name() const {
-        return _plan_node_name;
-    }
+    Dir* dir() const { return _dir; }
+    int32_t plan_node_id() const { return _plan_node_id; }
+    std::string plan_node_name() const { return _plan_node_name; }
 
     size_t size() const {
-        DCHECK(_writable_file!= nullptr);
+        DCHECK(_writable_file != nullptr);
         return _writable_file->size();
     }
     std::string path() const {
         std::ostringstream oss;
-        oss << _dir->dir() << "/" << print_id(_query_id) << "/" << _plan_node_name << "-" << _plan_node_id << "-" << _id;
+        oss << _dir->dir() << "/" << print_id(_query_id) << "/" << _plan_node_name << "-" << _plan_node_id << "-"
+            << _id;
         return oss.str();
     }
-    uint64_t id() const {
-        return _id;
-    }
+    uint64_t id() const { return _id; }
 
     Status ensure_preallocate(size_t length);
 
@@ -75,7 +69,8 @@ public:
 
     StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable_file();
 
-    static StatusOr<LogBlockContainerPtr> create(Dir* dir, TUniqueId query_id, int32_t plan_node_id, const std::string& plan_node_name, uint64_t id);
+    static StatusOr<LogBlockContainerPtr> create(Dir* dir, TUniqueId query_id, int32_t plan_node_id,
+                                                 const std::string& plan_node_name, uint64_t id);
 
 private:
     Dir* _dir;
@@ -123,17 +118,16 @@ StatusOr<std::unique_ptr<io::InputStreamWrapper>> LogBlockContainer::get_readabl
     return std::make_unique<io::InputStreamWrapper>(std::move(f));
 }
 
-StatusOr<LogBlockContainerPtr> LogBlockContainer::create(Dir* dir, TUniqueId query_id, int32_t plan_node_id, const std::string& plan_node_name, uint64_t id) {
+StatusOr<LogBlockContainerPtr> LogBlockContainer::create(Dir* dir, TUniqueId query_id, int32_t plan_node_id,
+                                                         const std::string& plan_node_name, uint64_t id) {
     auto container = std::make_shared<LogBlockContainer>(dir, query_id, plan_node_id, plan_node_name, id);
     RETURN_IF_ERROR(container->open());
     return container;
 }
 
-class LogBlock: public Block {
-public: 
-    LogBlock(LogBlockContainerPtr container, size_t offset):
-        _container(container), _offset(offset) {
-        }
+class LogBlock : public Block {
+public:
+    LogBlock(LogBlockContainerPtr container, size_t offset) : _container(container), _offset(offset) {}
 
     virtual ~LogBlock() {
         if (_readable != nullptr) {
@@ -141,31 +135,21 @@ public:
         }
     }
 
-    size_t offset() const {
-        return _offset;
-    }
-    size_t length() const {
-        return _length;
-    }
+    size_t offset() const { return _offset; }
+    size_t length() const { return _length; }
 
-    LogBlockContainerPtr container() const {
-        return _container;
-    }
+    LogBlockContainerPtr container() const { return _container; }
 
     Status append(const std::vector<Slice>& data) override {
         size_t total_size = 0;
-        std::for_each(data.begin(), data.end(), [&] (const Slice& slice) {
-            total_size += slice.size;
-        });
+        std::for_each(data.begin(), data.end(), [&](const Slice& slice) { total_size += slice.size; });
         RETURN_IF_ERROR(_container->ensure_preallocate(total_size));
         RETURN_IF_ERROR(_container->append_data(data));
         _length += total_size;
         return Status::OK();
     }
 
-    Status flush() override {
-        return _container->flush();
-    }
+    Status flush() override { return _container->flush(); }
 
     Status read_fully(void* data, int64_t count) override {
         if (_readable == nullptr) {
@@ -175,7 +159,9 @@ public:
         }
         ASSIGN_OR_RETURN(auto read_len, _readable->read(data, count));
         RETURN_IF(read_len == 0, Status::EndOfFile("no more data in this block"));
-        RETURN_IF(read_len != count, Status::InternalError(fmt::format("block's length is mismatched, expected: {}, actual: {}", count, read_len)));
+        RETURN_IF(read_len != count,
+                  Status::InternalError(
+                          fmt::format("block's length is mismatched, expected: {}, actual: {}", count, read_len)));
         return Status::OK();
     }
 
@@ -190,24 +176,24 @@ private:
     std::unique_ptr<io::InputStreamWrapper> _readable;
 };
 
-LogBlockManager::~LogBlockManager () {
-    for (auto& container: _full_containers) {
+LogBlockManager::~LogBlockManager() {
+    for (auto& container : _full_containers) {
         container.reset();
     }
     for (auto& [dir, container_map] : _available_containers) {
-        for (auto& [_, containers]: *container_map) {
+        for (auto& [_, containers] : *container_map) {
             containers.reset();
         }
         std::string container_dir = dir->dir() + "/" + print_id(_query_id);
-        WARN_IF_ERROR(dir->fs()->delete_dir(container_dir), fmt::format("cannot delete spill container dir: {}", container_dir));
+        WARN_IF_ERROR(dir->fs()->delete_dir(container_dir),
+                      fmt::format("cannot delete spill container dir: {}", container_dir));
     }
 }
 
 Status LogBlockManager::open() {
     return Status::OK();
 }
-void LogBlockManager::close() {
-}
+void LogBlockManager::close() {}
 
 StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opts) {
     AcquireDirOptions acquire_dir_opts;
@@ -244,9 +230,10 @@ Status LogBlockManager::release_block(const BlockPtr& block) {
     return Status::OK();
 }
 
-StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(
-    Dir *dir, int32_t plan_node_id, const std::string& plan_node_name) {
-    TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir() << ", plan node:" << plan_node_id << ", " << plan_node_name;
+StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(Dir* dir, int32_t plan_node_id,
+                                                                        const std::string& plan_node_name) {
+    TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir() << ", plan node:" << plan_node_id << ", "
+                    << plan_node_name;
 
     std::lock_guard<std::mutex> l(_mutex);
     auto iter = _available_containers.find(dir);
@@ -269,10 +256,10 @@ StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(
     uint64_t id = _next_container_id++;
     std::string container_dir = dir->dir() + "/" + print_id(_query_id);
     RETURN_IF_ERROR(dir->fs()->create_dir_if_missing(container_dir));
-    ASSIGN_OR_RETURN(auto block_container, LogBlockContainer::create(dir,_query_id, plan_node_id, plan_node_name, id));
+    ASSIGN_OR_RETURN(auto block_container, LogBlockContainer::create(dir, _query_id, plan_node_id, plan_node_name, id));
     RETURN_IF_ERROR(block_container->open());
     return block_container;
 }
 
-}
-}
+} // namespace spill
+} // namespace starrocks

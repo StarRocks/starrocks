@@ -23,17 +23,17 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
+#include "exec/spill/formatter.h"
+#include "exec/spill/input_stream.h"
 #include "exec/spill/mem_table.h"
 #include "exec/spill/spiller_factory.h"
-#include "exec/spill/input_stream.h"
-#include "exec/spill/block_manager.h"
-#include "exec/spill/formatter.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/blocking_queue.hpp"
-#include "util/runtime_profile.h"
 #include "util/compression/block_compression.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 enum class SpillFormaterType { NONE, SPILL_BY_COLUMN };
@@ -179,9 +179,7 @@ public:
     }
 
     // bool has_output_data() { return _current_stream && _current_stream->is_ready(); }
-    bool has_output_data() {
-        return _input_stream && _input_stream->is_ready();
-    }
+    bool has_output_data() { return _input_stream && _input_stream->is_ready(); }
     size_t spilled_append_rows() { return _spilled_append_rows; }
 
     size_t restore_read_rows() { return _restore_read_rows; }
@@ -260,7 +258,7 @@ private:
     // SpillFormatContext _spill_read_ctx;
 
     // const BlockCompressionCodec* _compress_codec = nullptr;
-    std::shared_ptr<spill::Formatter> _formatter;// @TODO make unique
+    std::shared_ptr<spill::Formatter> _formatter; // @TODO make unique
     // std::shared_ptr<spill::BlockManager> _block_manager;
     spill::BlockManager* _block_manager = nullptr;
     std::shared_ptr<spill::BlockGroup> _block_group;

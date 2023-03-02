@@ -20,28 +20,19 @@
 namespace starrocks {
 namespace spill {
 
-class BufferedInputStream: public InputStream {
+class BufferedInputStream : public InputStream {
 public:
-    BufferedInputStream(int capacity, InputStreamPtr stream):
-        _capacity(capacity), _input_stream(stream) {}
+    BufferedInputStream(int capacity, InputStreamPtr stream) : _capacity(capacity), _input_stream(stream) {}
     ~BufferedInputStream() override = default;
 
-    bool is_buffer_full() {
-        return _chunk_buffer.get_size() == _capacity || eof();
-    }
-    bool has_chunk() {
-        return !_chunk_buffer.empty() || eof();
-    }
+    bool is_buffer_full() { return _chunk_buffer.get_size() == _capacity || eof(); }
+    bool has_chunk() { return !_chunk_buffer.empty() || eof(); }
 
     StatusOr<ChunkUniquePtr> get_next() override;
-    bool is_ready() override {
-        return has_chunk();
-    }
+    bool is_ready() override { return has_chunk(); }
     void close() override {}
-    
-    bool enable_prefetch() const override {
-        return true;
-    }
+
+    bool enable_prefetch() const override { return true; }
 
     Status prefetch() override;
 
@@ -86,21 +77,20 @@ Status BufferedInputStream::prefetch() {
     return res.status();
 }
 
-class UnorderedInputStream: public InputStream {
+class UnorderedInputStream : public InputStream {
 public:
-    UnorderedInputStream(const std::vector<BlockPtr>& input_blocks, Formatter* formatter):
-        InputStream(input_blocks), _formatter(formatter) {}
+    UnorderedInputStream(const std::vector<BlockPtr>& input_blocks, Formatter* formatter)
+            : InputStream(input_blocks), _formatter(formatter) {}
 
     ~UnorderedInputStream() = default;
 
     StatusOr<ChunkUniquePtr> get_next() override;
 
     // @TODO need this?
-    bool is_ready() override {
-        return false;
-    }
+    bool is_ready() override { return false; }
 
     void close() override;
+
 private:
     size_t _current_idx = 0;
     Formatter* _formatter;
@@ -132,25 +122,20 @@ void UnorderedInputStream::close() {
 }
 
 // @TODO should be buffered stream?
-class OrderedInputStream: public InputStream {
+class OrderedInputStream : public InputStream {
 public:
-    OrderedInputStream(const std::vector<BlockPtr>& blocks, RuntimeState* state):
-        InputStream(blocks), _merger(state) {
-        }
+    OrderedInputStream(const std::vector<BlockPtr>& blocks, RuntimeState* state)
+            : InputStream(blocks), _merger(state) {}
 
     ~OrderedInputStream() = default;
 
     Status init(Formatter* formatter, const SortExecExprs* sort_exprs, const SortDescs* descs);
 
     StatusOr<ChunkUniquePtr> get_next() override;
-    bool is_ready() override {
-        return _merger.is_data_ready();
-    }
+    bool is_ready() override { return _merger.is_data_ready(); }
     void close() override {}
 
-    bool enable_prefetch() const override {
-        return true;
-    }
+    bool enable_prefetch() const override { return true; }
 
     Status prefetch() override;
 
@@ -164,12 +149,13 @@ private:
 Status OrderedInputStream::init(Formatter* formatter, const SortExecExprs* sort_exprs, const SortDescs* descs) {
     // @TODO chunk provider
     std::vector<starrocks::ChunkProvider> chunk_providers;
-    for (auto& block: _input_blocks) {
+    for (auto& block : _input_blocks) {
         std::vector<BlockPtr> blocks{block};
-        auto stream = std::make_shared<BufferedInputStream>(1, std::make_shared<UnorderedInputStream>(blocks, formatter));
+        auto stream =
+                std::make_shared<BufferedInputStream>(1, std::make_shared<UnorderedInputStream>(blocks, formatter));
         _input_streams.emplace_back(std::move(stream));
         auto input_stream = _input_streams.back();
-        auto chunk_provider = [input_stream, this] (ChunkUniquePtr* output, bool* eos) {
+        auto chunk_provider = [input_stream, this](ChunkUniquePtr* output, bool* eos) {
             if (output == nullptr || eos == nullptr) {
                 // @TODO
                 return input_stream->is_ready();
@@ -224,16 +210,16 @@ Status OrderedInputStream::prefetch() {
     return Status::OK();
 }
 
-
 StatusOr<InputStreamPtr> BlockGroup::as_unordered_stream() {
     return std::make_shared<UnorderedInputStream>(_blocks, _formatter);
 }
 
-StatusOr<InputStreamPtr> BlockGroup::as_ordered_stream(RuntimeState* state, const SortExecExprs* sort_exprs, const SortDescs* sort_descs) {
+StatusOr<InputStreamPtr> BlockGroup::as_ordered_stream(RuntimeState* state, const SortExecExprs* sort_exprs,
+                                                       const SortDescs* sort_descs) {
     auto stream = std::make_shared<OrderedInputStream>(_blocks, state);
     RETURN_IF_ERROR(stream->init(_formatter, sort_exprs, sort_descs));
     return stream;
 }
 
-}
-}
+} // namespace spill
+} // namespace starrocks

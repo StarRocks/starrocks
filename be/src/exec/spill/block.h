@@ -45,5 +45,5 @@ public:
 };
 
 using BlockPtr = std::shared_ptr<Block>;
-}
-}
+} // namespace spill
+} // namespace starrocks

@@ -106,12 +106,12 @@ Status Spiller::trigger_restore(RuntimeState* state, TaskExecutor&& executor, Me
 
     // if all is well and input stream enable prefetch and not eof
     if (_input_stream->enable_prefetch() && !_input_stream->eof()) {
-        auto restore_task = [this, state, guard] () {
+        auto restore_task = [this, state, guard]() {
             _running_restore_tasks++;
             guard.scoped_begin();
             auto res = _input_stream->prefetch();
 
-            _update_spilled_task_status(res.is_end_of_file() ? Status::OK(): res);
+            _update_spilled_task_status(res.is_end_of_file() ? Status::OK() : res);
             guard.scoped_end();
             _running_restore_tasks--;
             if (!res.ok()) {

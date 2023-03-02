@@ -13,8 +13,9 @@
 // limitations under the License.
 
 #include "exec/spill/dir_manager.h"
-#include "storage/options.h"
+
 #include "common/config.h"
+#include "storage/options.h"
 
 namespace starrocks {
 namespace spill {
@@ -30,7 +31,7 @@ Status DirManager::init() {
         std::string spill_dir_path = path.path + "/" + config::spill_local_storage_dir;
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(spill_dir_path));
         RETURN_IF_ERROR(fs->create_dir_if_missing(spill_dir_path));
-        RETURN_IF_ERROR(fs->iterate_dir(spill_dir_path, [fs, &spill_dir_path] (std::string_view sub_dir) {
+        RETURN_IF_ERROR(fs->iterate_dir(spill_dir_path, [fs, &spill_dir_path](std::string_view sub_dir) {
             std::string dir = spill_dir_path + "/" + std::string(sub_dir.begin(), sub_dir.end());
             fs->delete_dir_recursive(dir);
             return true;
@@ -45,5 +46,5 @@ StatusOr<Dir*> DirManager::acquire_writable_dir(const AcquireDirOptions& opts) {
     return _dirs[0].get();
 }
 
-}
-}
+} // namespace spill
+} // namespace starrocks

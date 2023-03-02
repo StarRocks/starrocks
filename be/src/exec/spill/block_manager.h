@@ -41,5 +41,5 @@ public:
     virtual StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) = 0;
     virtual Status release_block(const BlockPtr& block) = 0;
 };
-}
-}
+} // namespace spill
+} // namespace starrocks

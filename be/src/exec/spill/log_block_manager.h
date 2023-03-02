@@ -14,15 +14,15 @@
 
 #pragma once
 
-#include "exec/spill/block.h"
-#include "exec/spill/block_manager.h"
-#include "exec/spill/dir_manager.h"
-
 #include <atomic>
 #include <memory>
 #include <mutex>
 #include <queue>
 #include <unordered_map>
+
+#include "exec/spill/block.h"
+#include "exec/spill/block_manager.h"
+#include "exec/spill/dir_manager.h"
 
 namespace starrocks {
 namespace spill {
@@ -30,10 +30,9 @@ namespace spill {
 class LogBlockContainer;
 using LogBlockContainerPtr = std::shared_ptr<LogBlockContainer>;
 
-class LogBlockManager: public BlockManager {
+class LogBlockManager : public BlockManager {
 public:
-    LogBlockManager(TUniqueId query_id):
-        _query_id(query_id) {}
+    LogBlockManager(TUniqueId query_id) : _query_id(query_id) {}
     ~LogBlockManager();
 
     virtual Status open() override;
@@ -43,7 +42,8 @@ public:
     virtual Status release_block(const BlockPtr& block) override;
 
 private:
-    StatusOr<LogBlockContainerPtr> get_or_create_container(Dir* dir, int32_t plan_node_id, const std::string& plan_node_name);
+    StatusOr<LogBlockContainerPtr> get_or_create_container(Dir* dir, int32_t plan_node_id,
+                                                           const std::string& plan_node_name);
 
 private:
     typedef std::unordered_map<uint64_t, LogBlockContainerPtr> ContainerMap;
@@ -63,5 +63,5 @@ private:
 
     std::vector<LogBlockContainerPtr> _full_containers;
 };
-}
-}
+} // namespace spill
+} // namespace starrocks

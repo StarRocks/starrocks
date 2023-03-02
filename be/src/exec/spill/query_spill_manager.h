@@ -27,7 +27,7 @@ namespace starrocks {
 
 class QuerySpillManager {
 public:
-    QuerySpillManager(const TUniqueId& uid): _uid(uid) {} 
+    QuerySpillManager(const TUniqueId& uid) : _uid(uid) {}
     size_t pending_spilled_bytes() { return _spilled_bytes; }
     void update_spilled_bytes(size_t spilled_bytes) { _spilled_bytes += spilled_bytes; }
 

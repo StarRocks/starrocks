@@ -29,8 +29,7 @@ namespace spill {
 class InputStream {
 public:
     InputStream() {}
-    InputStream(const std::vector<BlockPtr>& input_blocks):
-        _input_blocks(input_blocks) {}
+    InputStream(const std::vector<BlockPtr>& input_blocks) : _input_blocks(input_blocks) {}
 
     virtual ~InputStream() = default;
     // @TODO pass context?
@@ -38,20 +37,12 @@ public:
     virtual bool is_ready() = 0;
     virtual void close() = 0;
 
-    virtual bool enable_prefetch() const {
-        return false;
-    }
-    virtual Status prefetch() {
-        return Status::NotSupported("input stream doesn't support prefetch");
-    }
+    virtual bool enable_prefetch() const { return false; }
+    virtual Status prefetch() { return Status::NotSupported("input stream doesn't support prefetch"); }
 
-    void mark_is_eof() {
-        _eof = true;
-    }
+    void mark_is_eof() { _eof = true; }
 
-    bool eof() {
-        return _eof;
-    }
+    bool eof() { return _eof; }
 
 protected:
     std::atomic_bool _eof = false;
@@ -62,21 +53,19 @@ typedef std::shared_ptr<InputStream> InputStreamPtr;
 
 class BlockGroup {
 public:
-    BlockGroup(Formatter* formatter):
-        _formatter(formatter) {}
+    BlockGroup(Formatter* formatter) : _formatter(formatter) {}
 
-    void append(BlockPtr block) {
-        _blocks.emplace_back(std::move(block));
-    }
+    void append(BlockPtr block) { _blocks.emplace_back(std::move(block)); }
 
     StatusOr<InputStreamPtr> as_unordered_stream();
 
-    StatusOr<InputStreamPtr> as_ordered_stream(RuntimeState* state, const SortExecExprs* sort_exprs, const SortDescs* sort_descs);
+    StatusOr<InputStreamPtr> as_ordered_stream(RuntimeState* state, const SortExecExprs* sort_exprs,
+                                               const SortDescs* sort_descs);
 
 private:
     Formatter* _formatter;
     std::vector<BlockPtr> _blocks;
 };
 
-}
-}
+} // namespace spill
+} // namespace starrocks

@@ -234,8 +234,8 @@ public:
     int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
-    
-    spill::DirManager* spill_dir_mgr() const {return _spill_dir_mgr.get();}
+
+    spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);

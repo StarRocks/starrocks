@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "column/vectorized_fwd.h"
 #include "exec/spill/block.h"
 #include "util/raw_container.h"
 
@@ -43,5 +43,5 @@ public:
 using FormatterPtr = std::shared_ptr<Formatter>;
 
 StatusOr<FormatterPtr> create_formatter(SpilledOptions* options);
-}
-}
+} // namespace spill
+} // namespace starrocks
