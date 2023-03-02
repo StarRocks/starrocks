@@ -35,14 +35,14 @@ class AsyncDeltaWriterImpl {
 public:
     using Callback = AsyncDeltaWriter::Callback;
 
-    // Undocemented rule of bthread that -1(0xFFFFFFFFFFFFFFFF) is an invalid ExecutionQueueId
+    // Undocumented rule of bthread that -1(0xFFFFFFFFFFFFFFFF) is an invalid ExecutionQueueId
     constexpr static uint64_t kInvalidQueueId = (uint64_t)-1;
 
     AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                          const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker)
             : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker)),
               _queue_id{kInvalidQueueId},
-              _open_mtx(),
+              _mtx(),
               _status(),
               _opened(false),
               _closed(false) {}
@@ -53,7 +53,7 @@ public:
             : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
                                           mem_tracker)),
               _queue_id{kInvalidQueueId},
-              _open_mtx(),
+              _mtx(),
               _status(),
               _opened(false),
               _closed(false) {}
@@ -89,17 +89,24 @@ private:
     static int execute(void* meta, bthread::TaskIterator<AsyncDeltaWriterImpl::Task>& iter);
 
     Status do_open();
+    bool closed();
 
     DeltaWriter::Ptr _writer;
     bthread::ExecutionQueueId<Task> _queue_id;
-    bthread::Mutex _open_mtx;
+    bthread::Mutex _mtx;
+    // _status、_opened and _closed are protected by _mtx
     Status _status;
-    std::atomic<bool> _opened;
-    std::atomic<bool> _closed;
+    bool _opened;
+    bool _closed;
 };
 
 AsyncDeltaWriterImpl::~AsyncDeltaWriterImpl() {
     close();
+}
+
+inline bool AsyncDeltaWriterImpl::closed() {
+    std::lock_guard l(_mtx);
+    return _closed;
 }
 
 inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<AsyncDeltaWriterImpl::Task>& iter) {
@@ -111,8 +118,8 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     }
     auto st = Status{};
     for (; iter; ++iter) {
-        // It's safe to run without checking `_closed` but doing so can make the task quit earlier on cancel/error.
-        if (async_writer->_closed.load(std::memory_order_acquire)) {
+        // It's safe to run without checking `closed()` but doing so can make the task quit earlier on cancel/error.
+        if (async_writer->closed()) {
             iter->cb(Status::InternalError("AsyncDeltaWriter has been closed"));
             continue;
         }
@@ -132,15 +139,15 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
 }
 
 inline Status AsyncDeltaWriterImpl::open() {
-    if (_opened.load(std::memory_order_acquire)) {
-        return _status;
+    std::lock_guard l(_mtx);
+    if (_closed) {
+        return Status::InternalError("AsyncDeltaWriter has been closed");
     }
-    std::lock_guard l(_open_mtx);
-    if (_opened.load(std::memory_order_acquire)) {
+    if (_opened) {
         return _status;
     }
     _status = do_open();
-    _opened.store(true, std::memory_order_release);
+    _opened = true;
     return _status;
 }
 
@@ -186,9 +193,8 @@ inline void AsyncDeltaWriterImpl::finish(Callback cb) {
 }
 
 inline void AsyncDeltaWriterImpl::close() {
-    bool expect = _closed.load(std::memory_order_acquire);
-    if (expect || !_opened.load(std::memory_order_acquire)) return;
-    if (_closed.compare_exchange_strong(expect, true, std::memory_order_acq_rel)) {
+    std::lock_guard l(_mtx);
+    if (_opened && !_closed) {
         // After the execution_queue been `stop()`ed all incoming `write()` and `finish()` requests
         // will fail immediately.
         int r = bthread::execution_queue_stop(_queue_id);
@@ -198,11 +204,9 @@ inline void AsyncDeltaWriterImpl::close() {
         r = bthread::execution_queue_join(_queue_id);
         PLOG_IF(WARNING, r != 0) << "Fail to join execution queue";
 
-        // Destroy TabletWriter. Since the execution_queue has been stopped and all
-        // running tasks have finished, no further execution will call `_writer` anymore, it's
-        // safe to destroy it.
-        _writer.reset();
+        _queue_id.value = kInvalidQueueId;
     }
+    _closed = true;
 }
 
 AsyncDeltaWriter::~AsyncDeltaWriter() {
