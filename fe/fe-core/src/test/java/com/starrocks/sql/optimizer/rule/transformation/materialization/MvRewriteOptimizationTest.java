@@ -24,6 +24,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
@@ -1830,6 +1831,20 @@ public class MvRewriteOptimizationTest {
         starRocksAssert.dropTable("ttl_base_table_2");
     }
 
+    @Test
+    public void testCardinality() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            createAndRefreshMv("test", "emp_lowcard_sum", "CREATE MATERIALIZED VIEW emp_lowcard_sum" +
+                    " DISTRIBUTED BY HASH(empid) AS SELECT empid, name, sum(salary) as sum_sal from emps group by " +
+                    "empid, name;");
+            String sql = "select name from emp_lowcard_sum group by name";
+            String plan = getFragmentPlan(sql);
+            Assert.assertTrue(plan.contains("Decode"));
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
+    }
     @Test
     public void testPkFk() throws SQLException {
         cluster.runSql("test", "CREATE TABLE test.parent_table1(\n" +
