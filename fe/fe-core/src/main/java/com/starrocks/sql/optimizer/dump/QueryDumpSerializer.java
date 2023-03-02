@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.dump;
 
 import com.google.common.collect.Lists;
@@ -129,7 +128,10 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         dumpJson.add("column_statistics", tableColumnStatistics);
         // BE number
         ConnectContext ctx = ConnectContext.get();
-        long beNum = ctx.getAliveBackendNumber();
+        long beNum = -1;
+        if (ctx != null) {
+            beNum = ctx.getAliveBackendNumber();
+        }
         dumpJson.addProperty("be_number", beNum);
         // backend core stat
         JsonObject backendCoreStat = new JsonObject();
