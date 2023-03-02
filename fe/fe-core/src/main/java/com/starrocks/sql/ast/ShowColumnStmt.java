@@ -81,6 +81,10 @@ public class ShowColumnStmt extends ShowStmt {
         return tableName;
     }
 
+    public String getCatalog() {
+        return tableName.getCatalog();
+    }
+
     public void init() {
         if (!Strings.isNullOrEmpty(db)) {
             tableName.setDb(db);
