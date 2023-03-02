@@ -130,13 +130,12 @@ public class InformationSchemaDataSource {
                         tableConfigInfo.setTable_schema(dbName);
                         tableConfigInfo.setTable_name(table.getName());
 
-                        if (table.isOlapOrLakeTable() ||
-                                table.getType() == TableType.OLAP_EXTERNAL ||
-                                table.getType() == TableType.MATERIALIZED_VIEW) {
+                        if (table.isNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
                             // OLAP (done)
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
                             // LAKE (done)
+                            // LAKE_MATERIALIZED_VIEW (done)
                             genNormalTableConfigInfo(table, tableConfigInfo);
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
@@ -152,7 +151,7 @@ public class InformationSchemaDataSource {
     }
 
     private static Map<String, String> genProps(Table table) {
-        if (table.getType() == TableType.MATERIALIZED_VIEW) {
+        if (table.isMaterializedView()) {
             MaterializedView mv = (MaterializedView) table;
             return mv.getMaterializedViewPropMap();
         }
@@ -310,13 +309,12 @@ public class InformationSchemaDataSource {
                         info.setChecksum(DEFAULT_EMPTY_NUM);
                         info.setTable_comment(table.getComment());
 
-                        if (table.isOlapOrLakeTable() ||
-                                table.getType() == TableType.OLAP_EXTERNAL ||
-                                table.getType() == TableType.MATERIALIZED_VIEW) {
+                        if (table.isNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
                             // OLAP (done)
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
                             // LAKE (done)
+                            // LAKE_MATERIALIZED_VIEW (done)
                             genNormalTableInfo(table, info);
                         } else {
                             // SCHEMA (use default)

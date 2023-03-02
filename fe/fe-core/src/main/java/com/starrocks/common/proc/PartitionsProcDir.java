@@ -99,7 +99,7 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     private void createTitleNames() {
-        if (table.isLakeTable()) {
+        if (table.isCloudNativeTable()) {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
                     .add("PartitionId")
                     .add("PartitionName")
@@ -263,13 +263,13 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     private List<List<Comparable>> getPartitionInfos() {
-        return table.isLakeTable() ? getLakePartitionInfos() : getOlapPartitionInfos();
+        return table.isCloudNativeTable() ? getLakePartitionInfos() : getOlapPartitionInfos();
     }
 
     private List<List<Comparable>> getOlapPartitionInfos() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
-        Preconditions.checkState(table.isNativeTable());
+        Preconditions.checkState(table.isLocalTable());
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
@@ -308,7 +308,7 @@ public class PartitionsProcDir implements ProcDirInterface {
     private List<List<Comparable>> getLakePartitionInfos() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
-        Preconditions.checkState(table.isNativeTable());
+        Preconditions.checkState(table.isCloudNativeTable());
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();

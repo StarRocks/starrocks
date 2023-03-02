@@ -394,7 +394,7 @@ public class AuthUpgrader {
                         Table.TableType tableType = tableObj.getType();
                         if (tableType.equals(Table.TableType.VIEW)) {
                             upgradeViewPrivileges(dbName, tableName, privilege, collection, grantPatterns);
-                        } else if (tableType.equals(Table.TableType.MATERIALIZED_VIEW)) {
+                        } else if (tableObj.isMaterializedView()) {
                             upgradeMaterializedViewPrivileges(dbName, tableName, privilege, collection, grantPatterns);
                         } else {
                             upgradeTablePrivileges(dbName, tableName, privilege, collection, grantPatterns);
@@ -574,7 +574,7 @@ public class AuthUpgrader {
                             Table.TableType tableType = tableObj.getType();
                             if (tableType.equals(Table.TableType.VIEW)) {
                                 upgradeViewPrivileges(db, table, privilege, collection, grantPatterns);
-                            } else if (tableType.equals(Table.TableType.MATERIALIZED_VIEW)) {
+                            } else if (tableObj.isMaterializedView()) {
                                 upgradeMaterializedViewPrivileges(db, table, privilege, collection, grantPatterns);
                             } else {
                                 upgradeTablePrivileges(db, table, privilege, collection, grantPatterns);
@@ -614,7 +614,7 @@ public class AuthUpgrader {
                             Table.TableType tableType = tableObj.getType();
                             if (tableType.equals(Table.TableType.VIEW)) {
                                 upgradeViewPrivileges(db, table, privilege, collection, grantPatterns);
-                            } else if (tableType.equals(Table.TableType.MATERIALIZED_VIEW)) {
+                            } else if (tableObj.isMaterializedView()) {
                                 upgradeMaterializedViewPrivileges(db, table, privilege, collection, grantPatterns);
                             } else {
                                 upgradeTablePrivileges(db, table, privilege, collection, grantPatterns);

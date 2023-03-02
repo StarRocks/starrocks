@@ -489,7 +489,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         db.readLock();
         try {
             for (Table table : db.getTables()) {
-                if (Table.TableType.MATERIALIZED_VIEW == table.getType()) {
+                if (table.isMaterializedView()) {
                     MaterializedView mvTable = (MaterializedView) table;
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                         if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, dbName, mvTable)) {

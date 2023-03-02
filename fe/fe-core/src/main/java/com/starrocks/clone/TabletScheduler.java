@@ -601,7 +601,7 @@ public class TabletScheduler extends LeaderDaemon {
             if (tbl == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
-            if (tbl.isLakeTable()) {
+            if (tbl.isCloudNativeTable()) {
                 throw new SchedException(Status.UNRECOVERABLE, "tablet is managed externally");
             }
 

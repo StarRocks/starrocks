@@ -48,7 +48,7 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
                 tblUUID = ALL_TABLES_UUID;
             } else {
                 Table table = database.getTable(tokens.get(1));
-                if (table == null || !table.getType().equals(Table.TableType.MATERIALIZED_VIEW)) {
+                if (table == null || !table.isMaterializedView()) {
                     throw new PrivObjNotFoundException(
                             "cannot find materialized view " + tokens.get(1) + " in db " + tokens.get(0));
                 }

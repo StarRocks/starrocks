@@ -118,7 +118,7 @@ public class StatisticUtils {
             if (table == null) {
                 return false;
             }
-            if (table.isLakeTable()) {
+            if (table.isCloudNativeTable()) {
                 continue;
             }
 

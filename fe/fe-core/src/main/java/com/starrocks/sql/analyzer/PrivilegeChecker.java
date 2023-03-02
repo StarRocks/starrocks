@@ -1137,7 +1137,7 @@ public class PrivilegeChecker {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                     }
 
-                    if (!table.isLocalTable()) {
+                    if (!table.isNativeTable()) {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
                     }
 
