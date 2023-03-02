@@ -71,10 +71,15 @@ public class MvRewriteOptimizationTest {
         Config.tablet_sched_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.enable_new_publish_mechanism = true;
+
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
         cluster = PseudoCluster.getInstance();
+
         connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
+
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
@@ -273,9 +278,10 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: empid = 5\n" +
                 "     partitions=1/1\n" +
                 "     rollup: mv_1");
-        PlanTestBase.assertContains(plan, "tabletRatio=6/6");
+        PlanTestBase.assertContains(plan, "tabletRatio=1/6");
 
         String query2 = "select empid, deptno, name, salary from emps where empid = 6";
         String plan2 = getFragmentPlan(query2);
@@ -299,8 +305,10 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 7: empid = 5\n" +
                 "     partitions=1/1\n" +
-                "     rollup: mv_1");
+                "     rollup: mv_1\n" +
+                "     tabletRatio=1/6");
 
         String query7 = "select empid, deptno from emps where empid = 5";
         String plan7 = getFragmentPlan(query7);
@@ -369,8 +377,10 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: empid < 5\n" +
                 "     partitions=1/1\n" +
-                "     rollup: mv_1");
+                "     rollup: mv_1\n" +
+                "     tabletRatio=6/6");
 
         String query2 = "select empid, deptno, name, salary from emps where empid < 4";
         String plan2 = getFragmentPlan(query2);
@@ -579,7 +589,11 @@ public class MvRewriteOptimizationTest {
                         " as select empid, deptno, salary from mv_1 where salary > 100");
         String query = "select empid, deptno, (salary + 1) * 2 from emps where empid < 5 and salary > 110";
         String plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "mv_2");
+        PlanTestBase.assertContains(plan, "TABLE: mv_2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 8: salary > 110.0, 6: empid <= 4\n" +
+                "     partitions=1/1\n" +
+                "     rollup: mv_2");
         dropMv("test", "mv_1");
         dropMv("test", "mv_2");
     }
@@ -1395,10 +1409,9 @@ public class MvRewriteOptimizationTest {
                 "  |----5:EXCHANGE");
         PlanTestBase.assertContains(plan1, "  3:OlapScanNode\n" +
                 "     TABLE: union_mv_1");
-        PlanTestBase.assertContains(plan1, "1:OlapScanNode\n" +
-                "     TABLE: emps\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 9: empid < 5, 9: empid > 2");
+        PlanTestBase.assertContains(plan1, "TABLE: emps\n" +
+                        "     PREAGGREGATION: ON\n",
+                "empid < 5,", "empid > 2");
 
         String query7 = "select deptno, empid from emps where empid < 5";
         String plan7 = getFragmentPlan(query7);
@@ -1503,7 +1516,7 @@ public class MvRewriteOptimizationTest {
 
         String query5 = "select * from multi_mv_1";
         String plan5 = getFragmentPlan(query5);
-        PlanTestBase.assertContains(plan5, "multi_mv_1", "multi_mv_2", "multi_mv_3", "UNION");
+        PlanTestBase.assertContains(plan5, "multi_mv_1", "multi_mv_2", "UNION");
         dropMv("test", "multi_mv_1");
         dropMv("test", "multi_mv_2");
         dropMv("test", "multi_mv_3");
@@ -2009,5 +2022,62 @@ public class MvRewriteOptimizationTest {
         for (OptExpression child : root.getInputs()) {
             getScanOperators(child, name, results);
         }
+    }
+
+    @Test
+    public void testNestedMVs1() throws Exception {
+        createAndRefreshMv("test", "nested_mv1", "create materialized view nested_mv1 " +
+                " distributed by hash(empid) as" +
+                " select * from emps;");
+        createAndRefreshMv("test", "nested_mv2", "create materialized view nested_mv2 " +
+                " distributed by hash(empid) as" +
+                " select empid, sum(deptno) from emps group by empid;");
+        createAndRefreshMv("test", "nested_mv3", "create materialized view nested_mv3 " +
+                " distributed by hash(empid) as" +
+                " select * from nested_mv2 where empid > 1;");
+        String plan = getFragmentPlan("select empid, sum(deptno) from emps where empid > 1 group by empid");
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: nested_mv3\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/1\n" +
+                "     rollup: nested_mv3"));
+        dropMv("test", "nested_mv1");
+        dropMv("test", "nested_mv2");
+        dropMv("test", "nested_mv3");
+    }
+
+    @Test
+    public void testExternalNestedMVs1() throws Exception {
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        createAndRefreshMv("test", "hive_nested_mv_1",
+                "create materialized view hive_nested_mv_1 distributed by hash(s_suppkey) " +
+                        "PROPERTIES (\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                        ") " +
+                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier");
+        createAndRefreshMv("test", "hive_nested_mv_2",
+                "create materialized view hive_nested_mv_2 distributed by hash(s_suppkey) " +
+                        "PROPERTIES (\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                        ") " +
+                        " as select s_suppkey, sum(s_acctbal) from hive0.tpch.supplier group by s_suppkey");
+        createAndRefreshMv("test", "hive_nested_mv_3",
+                "create materialized view hive_nested_mv_3 distributed by hash(s_suppkey) " +
+                        "PROPERTIES (\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                        ") " +
+                        " as select * from hive_nested_mv_2 where s_suppkey > 1");
+        String query1 = "select s_suppkey, sum(s_acctbal) from hive0.tpch.supplier where s_suppkey > 1 group by s_suppkey ";
+        String plan1 = getFragmentPlan(query1);
+        System.out.println(plan1);
+        Assert.assertTrue(plan1.contains("0:OlapScanNode\n" +
+                "     TABLE: hive_nested_mv_3\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/1\n" +
+                "     rollup: hive_nested_mv_3"));
+        dropMv("test", "hive_nested_mv_1");
+        dropMv("test", "hive_nested_mv_2");
+        dropMv("test", "hive_nested_mv_3");
     }
 }

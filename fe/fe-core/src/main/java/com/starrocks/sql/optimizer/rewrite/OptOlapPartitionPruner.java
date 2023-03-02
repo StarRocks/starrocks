@@ -30,6 +30,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.PartitionColumnFilter;
+import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -268,7 +269,7 @@ public class OptOlapPartitionPruner {
         }
 
         List<ScalarOperator> scalarOperatorList = Utils.extractConjuncts(operator.getPredicate());
-        com.starrocks.planner.PartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
+        PartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
                 columnToNullPartitions, scalarOperatorList, specifyPartitionIds);
         try {
             List<Long> prune = partitionPruner.prune();
@@ -298,7 +299,7 @@ public class OptOlapPartitionPruner {
         } else {
             keyRangeById = partitionInfo.getIdToRange(false);
         }
-        com.starrocks.planner.PartitionPruner partitionPruner = new RangePartitionPruner(keyRangeById,
+        PartitionPruner partitionPruner = new RangePartitionPruner(keyRangeById,
                 partitionInfo.getPartitionColumns(), operator.getColumnFilters());
         try {
             return partitionPruner.prune();
