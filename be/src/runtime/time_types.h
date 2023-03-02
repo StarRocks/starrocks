@@ -71,6 +71,7 @@ static const int64_t USECS_PER_MINUTE = 60000000;
 static const int64_t USECS_PER_SEC = 1000000;
 
 static const int64_t NANOSECS_PER_USEC = 1000;
+static const int64_t NANOSECS_PER_SEC = 1000000000;
 
 // Corresponding to TimeUnit
 static constexpr int64_t USECS_PER_UNIT[] = {

@@ -77,6 +77,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (_hive_table == nullptr) {
         return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi/delta lake/file table are supported");
     }
+    RETURN_IF_ERROR(_check_all_slots_nullable());
 
     _use_block_cache = config::block_cache_enable;
     if (state->query_options().__isset.use_scan_block_cache) {
