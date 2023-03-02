@@ -43,7 +43,6 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
@@ -536,7 +535,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             }
 
             return new PhysicalTopNOperator(newOrderSpec, operator.getLimit(), operator.getOffset(), partitionByColumns,
-                    Operator.DEFAULT_LIMIT, operator.getSortPhase(), operator.getTopNType(), operator.isSplit(),
+                    operator.getPartitionLimit(), operator.getSortPhase(), operator.getTopNType(), operator.isSplit(),
                     operator.isEnforced(), predicate, operator.getProjection());
         }
 
