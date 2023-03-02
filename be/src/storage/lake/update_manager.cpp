@@ -540,6 +540,17 @@ int32_t UpdateManager::_get_condition_column(const TxnLogPB_OpWrite& op_write, c
     return -1;
 }
 
+bool UpdateManager::TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
+        if (index_entry->get_ref() != ref_cnt + 1) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace lake
 
 } // namespace starrocks
