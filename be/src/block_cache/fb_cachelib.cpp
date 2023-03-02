@@ -95,11 +95,6 @@ std::unordered_map<std::string, double> FbCacheLib::cache_stats() {
 Status FbCacheLib::shutdown() {
     if (_cache) {
         _dump_cache_stats();
-        auto res = _cache->shutDown();
-        if (res != Cache::ShutDownStatus::kSuccess) {
-            LOG(WARNING) << "block cache shutdown failed";
-            return Status::InternalError("block cache shutdown failed");
-        }
     }
     return Status::OK();
 }
