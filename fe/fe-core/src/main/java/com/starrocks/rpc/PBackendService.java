@@ -58,10 +58,10 @@ public interface PBackendService {
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 10000)
     Future<PCollectQueryStatisticsResult> collectQueryStatistics(PCollectQueryStatisticsRequest request);
 
-    @ProtobufRPC(serviceName = "PBackendService", methodName = "get_info", onceTalkTimeout = 10000)
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "get_info", onceTalkTimeout = 600000)
     Future<PProxyResult> getInfo(PProxyRequest request);
 
-    @ProtobufRPC(serviceName = "PBackendService", methodName = "get_pulsar_info", onceTalkTimeout = 10000)
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "get_pulsar_info", onceTalkTimeout = 600000)
     Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request);
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "submit_mv_maintenance_task", onceTalkTimeout = 60000,
