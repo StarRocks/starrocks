@@ -5074,9 +5074,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             // Note: val is positive, because we do not recognize minus character in 'IntegerLiteral'
             // -2^63 will be recognized as large int(__int128)
             if (intLiteral.compareTo(LONG_MAX) <= 0) {
-                return new IntLiteral(intLiteral.longValue());
+                return new IntLiteral(intLiteral.longValue(), pos);
             } else if (intLiteral.compareTo(LARGEINT_MAX_ABS) <= 0) {
-                return new LargeIntLiteral(intLiteral.toString());
+                return new LargeIntLiteral(intLiteral.toString(), pos);
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.numOverflow(context.getText()), pos);
             }
