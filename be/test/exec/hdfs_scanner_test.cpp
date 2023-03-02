@@ -2107,6 +2107,7 @@ TEST_F(HdfsScannerTest, TestParquetTimestampToDatetime) {
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/timestamp_to_datetime.parquet";
 
+    _create_runtime_state("Asia/Shanghai");
     auto scanner = std::make_shared<HdfsParquetScanner>();
     auto* range = _create_scan_range(parquet_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
