@@ -376,10 +376,10 @@ if (${WITH_BLOCK_CACHE} STREQUAL "ON")
 endif()
 
 if ("${USE_STAROS}" STREQUAL "ON")
-     find_package(protobuf CONFIG REQUIRED)
-     message(STATUS "Using protobuf ${protobuf_VERSION}")
-     message(STATUS "protobuf include path: ${protobuf_INCLUDE_DIRS}")
-     message(STATUS "protobuf libs: ${protobuf_LIBS}")
+     # starrocks project has its imported libprotobuf.a and libre2.a
+     # add following ALIAS so grpc can find the correct dependent libraries
+     add_library(protobuf::libprotobuf ALIAS protobuf)
+     add_library(re2::re2 ALIAS re2)
 
      find_package(gRPC CONFIG REQUIRED)
      message(STATUS "Using gRPC ${gRPC_VERSION}")
