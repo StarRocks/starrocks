@@ -16,7 +16,7 @@ Stream Load 不支持识别文本中首行的列名，首行对 Stream Load 来�
 
 StarRocks 支持在导入过程中进行数据转换，具体请参见[导入过程中完成数据转换](/loading/Etl_in_loading.md)。
 
-假设待导入数据文件 `TEST` 为 CSV 格式，并且包含 `NO`、`DATE`、`VERSION`、`PRICE` 四列，但是其中 `DATE` 列是不规范的 202106.00 格式。如果在 StarRocks 中需使用的分区列为 `DATE`，那么首先需要在 StarRocks 中创建一张表，这里假设 StarRocks 表包含 `NO`、`VERSION`、`PRICE`、`DATE` 四列。您需要指定 `DATE` 列的数据类型为 DATE、DATETIME 或 INT。然后，在 Stream Load 执行命令或者语句中，通过指定如下设置来实现列之间的转换：
+假设源数据文件 `TEST` 为 CSV 格式，并且包含 `NO`、`DATE`、`VERSION`、`PRICE` 四列，但是其中 `DATE` 列是不规范的 202106.00 格式。如果在 StarRocks 中需使用的分区列为 `DATE`，那么首先需要在 StarRocks 中创建一张表，这里假设 StarRocks 表包含 `NO`、`VERSION`、`PRICE`、`DATE` 四列。您需要指定 `DATE` 列的数据类型为 DATE、DATETIME 或 INT。然后，在 Stream Load 执行命令或者语句中，通过指定如下设置来实现列之间的转换：
 
 ```Plain
 -H "columns: NO,DATE_1, VERSION, PRICE, DATE=LEFT(DATE_1,6)"
@@ -26,7 +26,7 @@ StarRocks 支持在导入过程中进行数据转换，具体请参见[导入过
 
 ## 3. 导入出错 "body exceed max size: 10737418240, limit: 10737418240" 应该如何解决？
 
-待导入数据文件大小超过 10 GB, 超过 Stream Load 所能支持的文件大小上限。有两种解决方法：
+源数据文件大小超过 10 GB, 超过 Stream Load 所能支持的文件大小上限。有两种解决方法：
 
 - 通过 `seq -w 0 n` 拆分数据文件。
 - 通过 `curl -XPOST http:///be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` 调整 [BE 配置项](../../administration/Configuration.md#配置-be-动态参数) `streaming_load_max_mb` 的取值来扩大文件大小上限。
