@@ -44,26 +44,26 @@ public class FunctionAnalyzer {
         if (fnName.getFunction().equals(FunctionSet.DATE_TRUNC)) {
             if (!(functionCallExpr.getChild(0) instanceof StringLiteral)) {
                 throw new SemanticException("date_trunc requires first parameter must be a string constant",
-                        functionCallExpr.getPos());
+                        functionCallExpr.getChild(0).getPos());
             }
 
             // The uppercase parameters stored in the metadata are converted to lowercase parameters,
             // because BE does not support uppercase parameters
             final String lowerParam = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
-            functionCallExpr.setChild(0, new StringLiteral(lowerParam));
+            functionCallExpr.setChild(0, new StringLiteral(lowerParam, functionCallExpr.getChild(0).getPos()));
 
             if (functionCallExpr.getChild(1).getType().isDatetime()) {
 
                 if (!Lists.newArrayList("year", "quarter", "month", "week", "day", "hour", "minute", "second")
                         .contains(lowerParam)) {
                     throw new SemanticException("date_trunc function can't support argument other than " +
-                            "year|quarter|month|week|day|hour|minute|second", functionCallExpr.getPos());
+                            "year|quarter|month|week|day|hour|minute|second", functionCallExpr.getChild(0).getPos());
                 }
             } else if (functionCallExpr.getChild(1).getType().isDate()) {
                 if (!Lists.newArrayList("year", "quarter", "month", "week", "day")
                         .contains(lowerParam)) {
                     throw new SemanticException("date_trunc function can't support argument other than " +
-                            "year|quarter|month|week|day", functionCallExpr.getPos());
+                            "year|quarter|month|week|day", functionCallExpr.getChild(1).getPos());
                 }
             }
         }
@@ -75,7 +75,7 @@ public class FunctionAnalyzer {
                 ArrayType arrayType = (ArrayType) functionCallExpr.getChild(0).getType();
                 if (!arrayType.hasNumericItem() && !arrayType.isBooleanType() && !arrayType.isNullTypeItem()) {
                     throw new SemanticException("array_difference function only support numeric array types",
-                            functionCallExpr.getPos());
+                            functionCallExpr.getChild(0).getPos());
                 }
             }
         }
@@ -133,7 +133,7 @@ public class FunctionAnalyzer {
             if (!arg0.getType().isStringType() && !arg0.getType().isNull()) {
                 throw new SemanticException(
                         "group_concat requires first parameter to be of getType() STRING: " + functionCallExpr.toSql(),
-                        functionCallExpr.getPos());
+                        arg0.getPos());
             }
 
             if (functionCallExpr.getChildren().size() == 2) {
@@ -141,7 +141,7 @@ public class FunctionAnalyzer {
                 if (!arg1.getType().isStringType() && !arg1.getType().isNull()) {
                     throw new SemanticException(
                             "group_concat requires second parameter to be of getType() STRING: " +
-                                    functionCallExpr.toSql(), functionCallExpr.getPos());
+                                    functionCallExpr.toSql(), arg1.getPos());
                 }
             }
             return;
@@ -156,7 +156,7 @@ public class FunctionAnalyzer {
                     if (!functionCallExpr.getChild(2).isConstant()) {
                         throw new SemanticException(
                                 "The default parameter (parameter 3) of LAG must be a constant: "
-                                        + functionCallExpr.toSql(), functionCallExpr.getPos());
+                                        + functionCallExpr.toSql(), functionCallExpr.getChild(2).getPos());
                     }
                 }
                 return;
@@ -204,11 +204,11 @@ public class FunctionAnalyzer {
 
         if (fnName.getFunction().equals(FunctionSet.RETENTION)) {
             if (!arg.getType().isArrayType()) {
-                throw new SemanticException("retention only support Array<BOOLEAN>", functionCallExpr.getPos());
+                throw new SemanticException("retention only support Array<BOOLEAN>", arg.getPos());
             }
             ArrayType type = (ArrayType) arg.getType();
             if (!type.getItemType().isNull() && !type.getItemType().isBoolean()) {
-                throw new SemanticException("retention only support Array<BOOLEAN>", functionCallExpr.getPos());
+                throw new SemanticException("retention only support Array<BOOLEAN>", arg.getPos());
             }
             // For Array<BOOLEAN> that have different size, we just extend result array to Compatible with it
         }
@@ -219,10 +219,10 @@ public class FunctionAnalyzer {
                 IntLiteral modeIntLiteral = (IntLiteral) modeArg;
                 long modeValue = modeIntLiteral.getValue();
                 if (modeValue < 0 || modeValue > 7) {
-                    throw new SemanticException("mode argument's range must be [0-7]", functionCallExpr.getPos());
+                    throw new SemanticException("mode argument's range must be [0-7]", modeArg.getPos());
                 }
             } else {
-                throw new SemanticException("mode argument must be numerical type", functionCallExpr.getPos());
+                throw new SemanticException("mode argument must be numerical type", modeArg.getPos());
             }
 
             Expr windowArg = functionCallExpr.getChild(0);
@@ -230,10 +230,10 @@ public class FunctionAnalyzer {
                 IntLiteral windowIntLiteral = (IntLiteral) windowArg;
                 long windowValue = windowIntLiteral.getValue();
                 if (windowValue < 0) {
-                    throw new SemanticException("window argument must >= 0", functionCallExpr.getPos());
+                    throw new SemanticException("window argument must >= 0", windowArg.getPos());
                 }
             } else {
-                throw new SemanticException("window argument must be numerical type", functionCallExpr.getPos());
+                throw new SemanticException("window argument must be numerical type", windowArg.getPos());
             }
         }
 
@@ -292,18 +292,18 @@ public class FunctionAnalyzer {
             if (!inputType.isBitmapType()) {
                 throw new SemanticException(
                         "intersect_count function first argument should be of BITMAP getType(), but was " + inputType,
-                        functionCallExpr.getPos());
+                        functionCallExpr.getChild(0).getPos());
             }
 
             if (functionCallExpr.getChild(1).isConstant()) {
                 throw new SemanticException("intersect_count function filter_values arg must be column",
-                        functionCallExpr.getPos());
+                        functionCallExpr.getChild(1).getPos());
             }
 
             for (int i = 2; i < functionCallExpr.getChildren().size(); i++) {
                 if (!functionCallExpr.getChild(i).isConstant()) {
                     throw new SemanticException("intersect_count function filter_values arg must be constant",
-                            functionCallExpr.getPos());
+                            functionCallExpr.getChild(i).getPos());
                 }
             }
             return;
@@ -320,7 +320,7 @@ public class FunctionAnalyzer {
             if (!inputType.isBitmapType()) {
                 throw new SemanticException(
                         fnName + " function's argument should be of BITMAP getType(), but was " + inputType,
-                        functionCallExpr.getPos());
+                        functionCallExpr.getChild(0).getPos());
             }
             return;
         }
@@ -348,12 +348,12 @@ public class FunctionAnalyzer {
             }
             if (!functionCallExpr.getChild(1).isConstant()) {
                 throw new SemanticException("percentile_approx requires second parameter must be a constant : "
-                        + functionCallExpr.toSql(), functionCallExpr.getPos());
+                        + functionCallExpr.toSql(), functionCallExpr.getChild(1).getPos());
             }
             if (functionCallExpr.getChildren().size() == 3) {
                 if (!functionCallExpr.getChild(2).isConstant()) {
                     throw new SemanticException("percentile_approx requires the third parameter must be a constant : "
-                            + functionCallExpr.toSql(), functionCallExpr.getPos());
+                            + functionCallExpr.toSql(), functionCallExpr.getChild(2).getPos());
                 }
             }
         }
