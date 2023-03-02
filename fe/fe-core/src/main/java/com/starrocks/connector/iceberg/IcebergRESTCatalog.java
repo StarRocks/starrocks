@@ -56,7 +56,7 @@ public class IcebergRESTCatalog extends RESTCatalog implements IcebergCatalog {
 
     @Override
     public Table loadTable(IcebergTable table) throws StarRocksIcebergException {
-        return super.loadTable(TableIdentifier.of(table.getDb(), table.getTable()));
+        return super.loadTable(TableIdentifier.of(table.getRemoteDbName(), table.getRemoteTableName()));
     }
 
     @Override

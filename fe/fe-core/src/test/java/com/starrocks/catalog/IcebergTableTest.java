@@ -108,8 +108,8 @@ public class IcebergTableTest {
 
         properties.put("resource", resourceName);
         IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
-        Assert.assertEquals(tableName, table.getTable());
-        Assert.assertEquals(db, table.getDb());
+        Assert.assertEquals(tableName, table.getRemoteTableName());
+        Assert.assertEquals(db, table.getRemoteDbName());
     }
 
     @Test
@@ -158,16 +158,16 @@ public class IcebergTableTest {
 
         properties.put("resource", resourceName);
         IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
-        Assert.assertEquals(tableName, table.getTable());
-        Assert.assertEquals(db, table.getDb());
+        Assert.assertEquals(tableName, table.getRemoteTableName());
+        Assert.assertEquals(db, table.getRemoteDbName());
     }
 
     @Test
     public void testWithGlueMetaStore() throws DdlException {
         this.properties.put("iceberg.catalog.type", IcebergCatalogType.GLUE_CATALOG.name());
         IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
-        Assert.assertEquals(tableName, table.getTable());
-        Assert.assertEquals(db, table.getDb());
+        Assert.assertEquals(tableName, table.getRemoteTableName());
+        Assert.assertEquals(db, table.getRemoteDbName());
     }
 
     @Test(expected = DdlException.class)

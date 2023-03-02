@@ -108,7 +108,7 @@ public class IcebergScanNode extends ScanNode {
     }
 
     private void setupCloudCredential() {
-        String catalogName = srIcebergTable.getCatalog();
+        String catalogName = srIcebergTable.getCatalogName();
         if (catalogName == null) {
             return;
         }
@@ -231,7 +231,7 @@ public class IcebergScanNode extends ScanNode {
         Optional<Snapshot> snapshot = IcebergUtil.getCurrentTableSnapshot(
                 srIcebergTable.getIcebergTable());
         if (!snapshot.isPresent()) {
-            LOG.info(String.format("Table %s has no snapshot!", srIcebergTable.getTable()));
+            LOG.info(String.format("Table %s has no snapshot!", srIcebergTable.getIcebergTable()));
             return;
         }
         // partition -> partitionId
@@ -311,7 +311,7 @@ public class IcebergScanNode extends ScanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
-        output.append(prefix).append("TABLE: ").append(srIcebergTable.getTable()).append("\n");
+        output.append(prefix).append("TABLE: ").append(srIcebergTable.getIcebergTable()).append("\n");
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
@@ -389,7 +389,7 @@ public class IcebergScanNode extends ScanNode {
         }
 
         if (srIcebergTable != null) {
-            msg.hdfs_scan_node.setTable_name(srIcebergTable.getTable());
+            msg.hdfs_scan_node.setTable_name(srIcebergTable.getRemoteTableName());
         }
 
         if (cloudConfiguration != null) {
