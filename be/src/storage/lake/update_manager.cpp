@@ -488,6 +488,7 @@ Status UpdateManager::check_meta_version(const Tablet& tablet, int64_t base_vers
         auto& index = index_entry->value();
         if (index.data_version() > base_version) {
             // return error, and ignore this publish later
+            _index_cache.release(index_entry);
             LOG(INFO) << "Primary index version is greater than the base version. tablet_id: " << tablet.id()
                       << " index_version: " << index.data_version() << " base_version: " << base_version;
             return Status::AlreadyExist("lake primary publish txn already finish");
