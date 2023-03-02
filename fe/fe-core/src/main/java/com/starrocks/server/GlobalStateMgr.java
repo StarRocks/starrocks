@@ -3544,8 +3544,8 @@ public class GlobalStateMgr {
         return localMetastore.allocateAutoIncrementId(tableId, rows);
     }
 
-    public void removeAutoIncrementIdByTableId(Long tableId) {
-        localMetastore.removeAutoIncrementIdByTableId(tableId);
+    public void removeAutoIncrementIdByTableId(Long tableId, boolean isReplay) {
+        localMetastore.removeAutoIncrementIdByTableId(tableId, isReplay);
     }
 
     public Long getCurrentAutoIncrementIdByTableId(Long tableId) {

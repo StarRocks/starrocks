@@ -5206,11 +5206,13 @@ public class LocalMetastore implements ConnectorMetadata {
         return oldId;
     }
 
-    public void removeAutoIncrementIdByTableId(Long tableId) {
-        ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
-        deltaMap.put(tableId, 0L);
-        AutoIncrementInfo info = new AutoIncrementInfo(deltaMap);
-        GlobalStateMgr.getCurrentState().getEditLog().logSaveDeleteAutoIncrementId(info);
+    public void removeAutoIncrementIdByTableId(Long tableId, boolean isReplay) {
+        if (!isReplay) {
+            ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
+            deltaMap.put(tableId, 0L);
+            AutoIncrementInfo info = new AutoIncrementInfo(deltaMap);
+            GlobalStateMgr.getCurrentState().getEditLog().logSaveDeleteAutoIncrementId(info);
+        }
 
         tableIdToIncrementId.remove(tableId);
     }
