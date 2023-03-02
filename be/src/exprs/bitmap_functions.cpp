@@ -500,15 +500,7 @@ StatusOr<ColumnPtr> BitmapFunctions::sub_bitmap(FunctionContext* context, const 
 
     ColumnViewer<TYPE_OBJECT> bitmap_viewer(columns[0]);
     ColumnViewer<TYPE_BIGINT> offset_viewer(columns[1]);
-
-    ColumnPtr len_column = nullptr;
-    if (columns.size() > 2) {
-        len_column = columns[2];
-    } else {
-        len_column = ColumnHelper::create_const_column<TYPE_BIGINT>(INT32_MAX, bitmap_viewer.size());
-    }
-
-    ColumnViewer<TYPE_BIGINT> len_viewer(len_column);
+    ColumnViewer<TYPE_BIGINT> len_viewer(columns[2]);
 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
@@ -575,15 +567,7 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_subset_limit(FunctionContext* contex
 
     ColumnViewer<TYPE_OBJECT> bitmap_viewer(columns[0]);
     ColumnViewer<TYPE_BIGINT> range_start_viewer(columns[1]);
-
-    ColumnPtr limit_column = nullptr;
-    if (columns.size() > 2) {
-        limit_column = columns[2];
-    } else {
-        limit_column = ColumnHelper::create_const_column<TYPE_BIGINT>(INT32_MAX, bitmap_viewer.size());
-    }
-
-    ColumnViewer<TYPE_BIGINT> limit_viewer(limit_column);
+    ColumnViewer<TYPE_BIGINT> limit_viewer(columns[2]);
 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
