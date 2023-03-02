@@ -860,7 +860,7 @@ CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
 CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
 CONF_Int64(block_cache_block_size, "1048576");  // 1MB
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
-CONF_Bool(block_cache_checksum_enable, "true");
+CONF_Bool(block_cache_checksum_enable, "false");
 // Maximum number of concurrent inserts we allow globally for block cache.
 // 0 means unlimited.
 CONF_Int64(block_cache_max_concurrent_inserts, "1000000");
