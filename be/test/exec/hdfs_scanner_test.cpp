@@ -309,7 +309,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
 #define READ_SCANNER_RETURN_ROWS(scanner, records)                                        \
     do {                                                                                  \
         _debug_row_output = "";                                                           \
-        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                              \
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                          \
         for (;;) {                                                                        \
             chunk->reset();                                                               \
             status = scanner->get_next(_runtime_state, &chunk);                           \
