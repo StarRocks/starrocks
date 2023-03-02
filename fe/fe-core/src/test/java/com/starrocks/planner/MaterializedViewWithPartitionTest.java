@@ -14,37 +14,19 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewWithPartitionTest.class);
-    private static final String MATERIALIZED_DB_NAME = "test_mv";
 
     @BeforeClass
     public static void setUp() throws Exception {
-        Config.enable_experimental_mv = true;
+        MaterializedViewTestBase.setUp();
 
-        UtFrameUtils.createMinStarRocksCluster();
-        connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(false);
-        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert
-                .withDatabase(MATERIALIZED_DB_NAME)
-                .useDatabase(MATERIALIZED_DB_NAME);
+        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         starRocksAssert.withTable("create table test_base_part(c1 int, c2 bigint, c3 bigint, c4 bigint)" +
                 " partition by range(c3) (" +
@@ -65,15 +47,6 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                 " PARTITION p5 values less than (\"3000\"))" +
                 " distributed by hash(c1)" +
                 " properties (\"replication_num\"=\"1\");");
-    }
-
-    @AfterClass
-    public static void afterClass() {
-        try {
-            starRocksAssert.dropDatabase(MATERIALIZED_DB_NAME);
-        } catch (Exception e) {
-            LOG.warn("drop database failed:", e);
-        }
     }
 
     // MV's partition columns is the same with the base table, and mv has partition filter predicates.

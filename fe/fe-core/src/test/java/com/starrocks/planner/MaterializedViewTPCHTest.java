@@ -15,11 +15,7 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -30,20 +26,8 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void setUp() throws Exception {
         PlanTestBase.beforeClass();
-
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
-
-        connectContext= UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(true);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
-        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
-        FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
+        MaterializedViewTestBase.setUp();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
-
         // create tpch relative mv
         createMaterializedViews("sql/materialized-view/tpch/", Lists.newArrayList("customer_order_mv",
                 "customer_mv", "lineitem_mv", "v_partsupp_mv"));

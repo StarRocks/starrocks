@@ -15,13 +15,8 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -35,19 +30,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
+        MaterializedViewTestBase.setUp();
 
-        connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(false);
-        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         String deptsTable = "" +
                 "CREATE TABLE depts(    \n" +
@@ -98,8 +83,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
 
-        starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
-                .useDatabase(MATERIALIZED_DB_NAME)
+        starRocksAssert
                 .withTable(deptsTable)
                 .withTable(empsTable)
                 .withTable(locationsTable)
@@ -324,15 +308,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"foreign_key_constraints\" = \"(c2) REFERENCES t2(c5);(c3) REFERENCES t2(c5)\",\n" +
                 "    \"storage_format\" = \"DEFAULT\"\n" +
                 ")");
-    }
-
-    @AfterClass
-    public static void afterClass() {
-        try {
-            starRocksAssert.dropDatabase(MATERIALIZED_DB_NAME);
-        } catch (Exception e) {
-            LOG.warn("drop database failed:", e);
-        }
     }
 
     @Test
