@@ -48,6 +48,12 @@ OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_
     return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, dop, _scan_node);
 }
 
+const std::vector<ExprContext*>& ConnectorScanOperatorFactory::partition_exprs() const {
+    auto* connector_scan_node = down_cast<ConnectorScanNode*>(_scan_node);
+    auto* provider = connector_scan_node->data_source_provider();
+    return provider->partition_exprs();
+}
+
 // ==================== ConnectorScanOperator ====================
 
 ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
