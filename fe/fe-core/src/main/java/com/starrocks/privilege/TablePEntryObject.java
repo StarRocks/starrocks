@@ -169,7 +169,7 @@ public class TablePEntryObject implements PEntryObject {
                 return false;
             }
             String dbName = ExternalCatalog.getDbNameFromUUID(databaseUUID);
-            String tblName = ExternalCatalog.getDbNameFromUUID(tableUUID);
+            String tblName = ExternalCatalog.getTableNameFromUUID(tableUUID);
             db = globalStateMgr.getMetadataMgr().getDb(catalog.get().getName(), dbName);
             if (db == null) {
                 return false;
