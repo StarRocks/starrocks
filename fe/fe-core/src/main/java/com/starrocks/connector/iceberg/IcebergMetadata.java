@@ -15,23 +15,32 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import org.apache.iceberg.CombinedScanTask;
+import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -39,6 +48,7 @@ import org.apache.thrift.TException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG_TYPE;
@@ -58,6 +68,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final String catalogName;
     private IcebergCatalog icebergCatalog;
     private Map<String, String> customProperties;
+    private final Map<IcebergFilter, List<FileScanTask>> tasks = new ConcurrentHashMap<>();
 
     public IcebergMetadata(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
@@ -156,7 +167,36 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
                                                    long snapshotId, ScalarOperator predicate) {
-        return Lists.newArrayList();
+        return getRemoteFileInfos((IcebergTable) table, snapshotId, predicate);
+    }
+
+    private List<RemoteFileInfo> getRemoteFileInfos(IcebergTable table, long snapshotId, ScalarOperator predicate) {
+        RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
+        IcebergFilter key = IcebergFilter.of(table.getRemoteDbName(), table.getRemoteTableName(), snapshotId, predicate);
+
+        if (!tasks.containsKey(key)) {
+            List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
+            org.apache.iceberg.Table nativeTbl = table.getIcebergTable();
+            Types.StructType schema = nativeTbl.schema().asStruct();
+            ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
+            Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+
+            ImmutableList.Builder<FileScanTask> builder = ImmutableList.builder();
+            org.apache.iceberg.Table nativeTable = table.getIcebergTable();
+            TableScan scan = nativeTable.newScan().useSnapshot(snapshotId).filter(icebergPredicate);
+
+            for (CombinedScanTask combinedScanTask : scan.planTasks()) {
+                for (FileScanTask fileScanTask : combinedScanTask.files()) {
+                    builder.add(fileScanTask);
+                }
+            }
+            tasks.put(key, builder.build());
+        }
+
+        List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(new RemoteFileDesc(tasks.get(key)));
+        remoteFileInfo.setFiles(remoteFileDescs);
+
+        return Lists.newArrayList(remoteFileInfo);
     }
 
     @Override

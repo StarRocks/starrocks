@@ -186,7 +186,7 @@ public class PartitionUtil {
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
             partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    icebergTable.getCatalog(), icebergTable.getDb(), icebergTable.getTable());
+                    icebergTable.getCatalogName(), icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
             partitionColumns = icebergTable.getPartitionColumns();
         } else {
             Preconditions.checkState(false, "Do not support get partition names and columns for" +
