@@ -76,7 +76,7 @@
     + [通过源码编译](/administration/Build_in_docker.md)
     + [部署 FE 高可用集群](/administration/Deployment.md)
     + [手动部署 CN](/administration/deploy_cn.md)
-    + [通过 StarRocks Operator 在 Kubernetes 部署和管理 CN](/administration/k8s_operator_cn.md)
+    + [使用 StarRocks Operator 部署和管理 StarRocks 集群](/administration/k8s_operator.md)
   + 运维集群
     + [扩容缩容](/administration/Scale_up_down.md)
     + [备份恢复](/administration/Backup_and_restore.md)
