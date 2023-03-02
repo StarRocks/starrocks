@@ -568,7 +568,6 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _add_batch_counter.add_batch_num++;
     }
 
-
     std::unordered_set<std::string> invalid_dict_cache_column_set;
     std::unordered_set<std::string> valid_dict_cache_column_set;
     for (auto& tablet : closure->result.tablet_vec()) {
