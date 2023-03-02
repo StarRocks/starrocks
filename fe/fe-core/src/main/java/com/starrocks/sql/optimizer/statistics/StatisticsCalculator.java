@@ -378,8 +378,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
             String catalogName = ((HiveMetaStoreTable) table).getCatalogName();
             Statistics statistics = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, Lists.newArrayList(colRefToColumnMetaMap.keySet()),
-                    partitionKeys);
+                    optimizerContext, catalogName, table, colRefToColumnMetaMap, partitionKeys, null);
             context.setStatistics(statistics);
 
             if (node.isLogical()) {
