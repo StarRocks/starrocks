@@ -18,6 +18,7 @@ package com.starrocks.connector.hive;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
@@ -33,6 +34,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
@@ -107,7 +109,8 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
+                                                   long snapshotId, ScalarOperator predicate) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 
@@ -133,12 +136,14 @@ public class HiveMetadata implements ConnectorMetadata {
     @Override
     public Statistics getTableStatistics(OptimizerContext session,
                                          Table table,
-                                         List<ColumnRefOperator> columns,
-                                         List<PartitionKey> partitionKeys) {
+                                         Map<ColumnRefOperator, Column> columns,
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate) {
         Statistics statistics = null;
+        List<ColumnRefOperator> columnRefOperators = Lists.newArrayList(columns.keySet());
         try {
             if (session.getSessionVariable().enableHiveColumnStats()) {
-                statistics = statisticsProvider.getTableStatistics(session, table, columns, partitionKeys);
+                statistics = statisticsProvider.getTableStatistics(session, table, columnRefOperators, partitionKeys);
             } else {
                 statistics = Statistics.builder().build();
                 LOG.warn("Session variable {} is false when getting table statistics on table {}",
@@ -151,12 +156,12 @@ public class HiveMetadata implements ConnectorMetadata {
             Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
             if (columnStatistics.isEmpty()) {
                 double outputRowNums = statistics.getOutputRowCount();
-                statistics = statisticsProvider.createUnknownStatistics(table, columns, partitionKeys, outputRowNums);
+                statistics = statisticsProvider.createUnknownStatistics(table, columnRefOperators, partitionKeys, outputRowNums);
             }
         }
 
-        Preconditions.checkState(columns.size() == statistics.getColumnStatistics().size());
-        for (ColumnRefOperator column : columns) {
+        Preconditions.checkState(columnRefOperators.size() == statistics.getColumnStatistics().size());
+        for (ColumnRefOperator column : columnRefOperators) {
             session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
         }
 

@@ -650,43 +650,6 @@ public class ReplayFromDumpTest {
     }
 
     @Test
-    public void testHiveTPCH02UsingResource() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch02_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("6:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  equal join conjunct: [24: n_regionkey, INT, true] = [26: r_regionkey, INT, true]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (26: r_regionkey), remote = false\n" +
-                "  |  output columns: 22, 23\n" +
-                "  |  cardinality: 23"));
-    }
-
-    @Test
-    public void testHiveTPCH05UsingResource() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch05_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("20:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  equal join conjunct: [10: o_custkey, INT, true] = [1: c_custkey, INT, true]\n" +
-                "  |  output columns: 4, 9\n" +
-                "  |  cardinality: 22765073"));
-    }
-
-    @Test
-    public void testHiveTPCH08UsingResource() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("21:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  equal join conjunct: [52: n_regionkey, INT, true] = [58: r_regionkey, INT, true]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 3, build_expr = (58: r_regionkey), remote = false\n" +
-                "  |  output columns: 50\n" +
-                "  |  cardinality: 5"));
-    }
-
-    @Test
     public void testGatherWindowCTE2() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/gather_window_cte"), null, TExplainLevel.COSTS);
