@@ -1826,13 +1826,13 @@ TEST_F(FileReaderTest, TestReadArrayMap) {
     // --------------init context---------------
     auto ctx = _create_scan_context();
 
-    TypeDescriptor type_string = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_string = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
 
-    TypeDescriptor type_map(LogicalType::TYPE_MAP);
-    type_map.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
-    type_map.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    TypeDescriptor type_map(PrimitiveType::TYPE_MAP);
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
 
-    TypeDescriptor type_array_map(LogicalType::TYPE_ARRAY);
+    TypeDescriptor type_array_map(PrimitiveType::TYPE_ARRAY);
     type_array_map.children.emplace_back(type_map);
 
     SlotDesc slot_descs[] = {
@@ -1851,9 +1851,9 @@ TEST_F(FileReaderTest, TestReadArrayMap) {
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
 
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_array_map, true), chunk->num_columns());
+    auto chunk = std::make_shared<vectorized::Chunk>();
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_string, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_array_map, true), chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
