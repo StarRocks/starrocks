@@ -142,8 +142,8 @@ public class StatisticExecutor {
 
         Database db = MetaUtils.getDatabase(dbId);
         Table table = MetaUtils.getTable(dbId, tableId);
-        if (!table.isOlapOrLakeTable()) {
-            throw new SemanticException("Table '%s' is not a OLAP table or LAKE table", table.getName());
+        if (!(table.isOlapOrLakeTable() || table.isMaterializedView())) {
+            throw new SemanticException("Table '%s' is not a OLAP table or LAKE table or Materialize View", table.getName());
         }
 
         OlapTable olapTable = (OlapTable) table;

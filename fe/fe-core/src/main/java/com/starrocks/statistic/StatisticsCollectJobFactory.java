@@ -101,7 +101,7 @@ public class StatisticsCollectJobFactory {
 
     private static void createJob(List<StatisticsCollectJob> allTableJobMap, AnalyzeJob job,
                                   Database db, Table table, List<String> columns) {
-        if (table == null || !table.isOlapOrLakeTable()) {
+        if (table == null || !(table.isOlapOrLakeTable() || table.isMaterializedView())) {
             return;
         }
 
