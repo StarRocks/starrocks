@@ -45,5 +45,18 @@ public class HiveRemoteFileIOTest {
         Assert.assertEquals(2, blockDesc.getReplicaHostIds().length);
     }
 
+    @Test
+    public void testPathContainsEmptySpace() {
+        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        HiveRemoteFileIO fileIO = new HiveRemoteFileIO(new Configuration());
+        fileIO.setFileSystem(fs);
+        FeConstants.runningUnitTest = true;
+        String tableLocation = "hdfs://127.0.0.1:10000/hive.db / hive_tbl";
+        RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
+        Map<RemotePathKey, List<RemoteFileDesc>> remoteFileInfos = fileIO.getRemoteFiles(pathKey);
+        List<RemoteFileDesc> fileDescs = remoteFileInfos.get(pathKey);
+        Assert.assertNotNull(fileDescs);
+        Assert.assertEquals(1, fileDescs.size());
+    }
 
 }
