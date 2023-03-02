@@ -98,7 +98,11 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
+<<<<<<< HEAD
 import com.starrocks.lake.LakeTable;
+=======
+import com.starrocks.common.util.TimeUtils;
+>>>>>>> afa7e5d41 ([Feature] Support show lake materialized view (#18764))
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -431,6 +435,7 @@ public class ShowExecutor {
                 matcher = PatternMatcher.createMysqlPattern(showMaterializedViewStmt.getPattern(),
                         CaseSensibility.TABLE.getCaseSensibility());
             }
+<<<<<<< HEAD
             for (MaterializedView mvTable : db.getMaterializedViews()) {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                     AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
@@ -450,6 +455,35 @@ public class ShowExecutor {
                     if (!PrivilegeActions.checkAnyActionOnMaterializedView(connectContext, db.getFullName(),
                             mvTable.getName())) {
                         continue;
+=======
+
+            for (Table table : db.getTables()) {
+                if (table.isMaterializedView()) {
+                    MaterializedView mvTable = (MaterializedView) table;
+                    if (matcher != null && !matcher.match(mvTable.getName())) {
+                        continue;
+                    }
+
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
+                        mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
+                            Table baseTable = baseTableInfo.getTable();
+                            // TODO: external table should check table action after PrivilegeManager support it.
+                            if (baseTable != null && baseTable.isNativeTable() && !PrivilegeActions.
+                                    checkTableAction(connectContext, baseTableInfo.getDbName(),
+                                            baseTableInfo.getTableName(),
+                                            PrivilegeType.SELECT)) {
+                                baseTableHasPrivilege.set(false);
+                            }
+                        });
+                        if (!baseTableHasPrivilege.get()) {
+                            continue;
+                        }
+                        if (!PrivilegeActions.checkAnyActionOnMaterializedView(connectContext, db.getFullName(),
+                                mvTable.getName())) {
+                            continue;
+                        }
+>>>>>>> afa7e5d41 ([Feature] Support show lake materialized view (#18764))
                     }
                 }
                 if (matcher != null && !matcher.match(mvTable.getName())) {
@@ -1486,7 +1520,7 @@ public class ShowExecutor {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                 }
 
-                if (!table.isLocalTable()) {
+                if (!table.isNativeTable()) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
                 }
 
@@ -1609,7 +1643,7 @@ public class ShowExecutor {
                     }
                     indexName = olapTable.getIndexNameById(indexId);
 
-                    if (table.isLakeTable()) {
+                    if (table.isCloudNativeTable()) {
                         break;
                     }
 
@@ -1698,8 +1732,8 @@ public class ShowExecutor {
                         if (indexId > -1 && index.getId() != indexId) {
                             continue;
                         }
-                        if (olapTable.isLakeTable()) {
-                            LakeTabletsProcNode procNode = new LakeTabletsProcNode(db, (LakeTable) olapTable, index);
+                        if (olapTable.isCloudNativeTable()) {
+                            LakeTabletsProcNode procNode = new LakeTabletsProcNode(db, olapTable, index);
                             tabletInfos.addAll(procNode.fetchComparableResult());
                         } else {
                             LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);

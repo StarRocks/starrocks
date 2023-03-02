@@ -465,7 +465,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
             }
             for (Table table : db.getTables()) {
+<<<<<<< HEAD
                 if (table.getType() == Table.TableType.OLAP) {
+=======
+                if (table.isMaterializedView()) {
+                    MaterializedView mvTable = (MaterializedView) table;
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, dbName, mvTable)) {
+                            continue;
+                        }
+                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
+                            mvTable.getName(), PrivPredicate.SHOW)) {
+                        continue;
+                    }
+                    if (matcher != null && !matcher.match(mvTable.getName())) {
+                        continue;
+                    }
+
+                    materializedViews.add(mvTable);
+                } else if (table.getType() == Table.TableType.OLAP) {
+>>>>>>> afa7e5d41 ([Feature] Support show lake materialized view (#18764))
                     OlapTable olapTable = (OlapTable) table;
                     List<MaterializedIndex> visibleMaterializedViews = olapTable.getVisibleIndex();
                     long baseIdx = olapTable.getBaseIndexId();
