@@ -52,7 +52,6 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.Config;
-import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
@@ -68,12 +67,14 @@ import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.io.PositionOutputStream;
 import org.apache.iceberg.io.SeekableInputStream;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
-import org.apache.iceberg.util.PropertyUtil;
+import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -85,9 +86,15 @@ import java.util.function.Function;
  */
 public class IcebergCachingFileIO implements FileIO {
     private static final Logger LOG = LogManager.getLogger(IcebergCachingFileIO.class);
-    protected static final int BUFFER_CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
+    private static final int BUFFER_CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
+    private static final long CACHE_MAX_ENTRY_SIZE = Config.iceberg_metadata_cache_max_entry_size;
+    private static final long MEMORY_CACHE_CAPACITY = Config.iceberg_metadata_memory_cache_capacity;
+    private static final long MEMORY_CACHE_EXPIRATION_SECONDS = Config.iceberg_metadata_memory_cache_expiration_seconds;
+    private static final boolean ENABLE_DISK_CACHE = Config.enable_iceberg_metadata_disk_cache;
+    @Deprecated
     public static final String FILEIO_CACHE_MAX_TOTAL_BYTES = "fileIO.cache.max-total-bytes";
     public static final String METADATA_CACHE_DISK_PATH = Config.iceberg_metadata_cache_disk_path;
+    public static final long DISK_CACHE_CAPACITY = Config.iceberg_metadata_disk_cache_capacity;
 
     private ContentCache fileContentCache;
     private final FileIO wrappedIO;
@@ -98,36 +105,11 @@ public class IcebergCachingFileIO implements FileIO {
 
     @Override
     public void initialize(Map<String, String> properties) {
-        long maxTotalBytes = PropertyUtil.propertyAsLong(properties, FILEIO_CACHE_MAX_TOTAL_BYTES,
-                Config.iceberg_metadata_cache_capacity);
-        this.fileContentCache = new ContentCache(Config.iceberg_metadata_cache_max_entry_size, maxTotalBytes);
-        loadMetadataDiskCache();
-    }
-
-    public void loadMetadataDiskCache() {
-        //loadMetadataDiskCache asynchronous
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        FileSystem fs = Util.getFs(IOUtil.getLocalDiskDirPath(METADATA_CACHE_DISK_PATH), new Configuration());
-        executor.submit(() -> {
-            try {
-                RemoteIterator<LocatedFileStatus> it = fs.listFiles(IOUtil.getLocalDiskDirPath(METADATA_CACHE_DISK_PATH), true);
-                while (it.hasNext()) {
-                    LocatedFileStatus locatedFileStatus = it.next();
-                    if (locatedFileStatus.isDirectory()) {
-                        continue;
-                    }
-                    Path localPath = locatedFileStatus.getPath();
-                    OutputFile localOutputFile = IOUtil.getOutputFile(localPath);
-                    String s3aKey = IOUtil.localFileToS3a(localPath, METADATA_CACHE_DISK_PATH).toString();
-                    LOG.info("load iceberg disk metadata to cache: {} from {}", s3aKey, localPath.toString());
-                    fileContentCache.put(s3aKey,
-                            new CacheEntry(locatedFileStatus.getLen(), localOutputFile.toInputFile()));
-                }
-            } catch (Exception e) {
-                // Ignore
-            }
-        });
-        executor.shutdown();
+        if (ENABLE_DISK_CACHE) {
+            this.fileContentCache = TwoLevelCacheHolder.INSTANCE;
+        } else {
+            this.fileContentCache = MemoryCacheHolder.INSTANCE;
+        }
     }
 
     @Override
@@ -147,11 +129,21 @@ public class IcebergCachingFileIO implements FileIO {
         fileContentCache.invalidate(path);
     }
 
-    protected static class CacheEntry {
+    private static class CacheEntry {
+        private final long length;
+        private final List<ByteBuffer> buffers;
+
+        private CacheEntry(long length, List<ByteBuffer> buffers) {
+            this.length = length;
+            this.buffers = buffers;
+        }
+    }
+
+    private static class DiskCacheEntry {
         private final long length;
         private final InputFile inputFile;
 
-        protected CacheEntry(long length, InputFile inputFile) {
+        private DiskCacheEntry(long length, InputFile inputFile) {
             this.length = length;
             this.inputFile = inputFile;
         }
@@ -165,56 +157,224 @@ public class IcebergCachingFileIO implements FileIO {
         }
     }
 
-    public static class ContentCache {
+    public abstract static class ContentCache {
         private final long maxContentLength;
-        private final Cache<String, CacheEntry> cache;
 
-        private ContentCache(long maxContentLength, long maxTotalBytes) {
-            this.maxContentLength = maxContentLength;
-
-            Caffeine<Object, Object> builder = Caffeine.newBuilder();
-            this.cache = builder.maximumWeight(maxTotalBytes)
-                    .expireAfterAccess(Config.iceberg_metadata_cache_expiration_seconds, TimeUnit.SECONDS)
-                    .weigher((Weigher<String, CacheEntry>) (key, value) -> (int) Math.min(value.length, Integer.MAX_VALUE))
-                    .recordStats()
-                    .removalListener(((key, value, cause) -> {
-                        // COLLECTED: The entry was removed automatically because its key or value was garbage-collected.
-                        // EXPIRED: The entry's expiration timestamp has passed.
-                        // EXPLICIT: The entry was manually removed by the user.
-                        // REPLACED: The entry itself was not actually removed, but its value was replaced by the user.
-                        // SIZE: The entry was evicted due to size constraints.
-                        LOG.info(key + " to be eliminated, reason: " + cause);
-                        // delete local file
-                        HadoopOutputFile hadoopOutputFile = (HadoopOutputFile) IOUtil.getOutputFile(
-                                METADATA_CACHE_DISK_PATH,
-                                key);
-                        try {
-                            hadoopOutputFile.getFileSystem().delete(hadoopOutputFile.getPath());
-                        } catch (Exception e) {
-                            LOG.warn("evict iceberg local disk file: {} failed: {}", key, e.getMessage());
-                        }
-                    }))
-                    .build();
+        private ContentCache() {
+            this.maxContentLength = CACHE_MAX_ENTRY_SIZE;
         }
 
         public long maxContentLength() {
             return maxContentLength;
         }
 
+        public abstract CacheEntry get(String key, Function<String, CacheEntry> mappingFunction);
+
+        public abstract void invalidate(String key);
+
+        public abstract long getLength(String key);
+
+        public abstract boolean exists(String key);
+
+        public boolean isExistOnDisk(String key) {
+            return false;
+        }
+
+        public InputFile getDiskInputFile(String key) {
+            return null;
+        }
+    }
+
+    private static class MemoryCacheHolder {
+        static final ContentCache INSTANCE = new MemoryContentCache();
+    }
+    public static class MemoryContentCache extends ContentCache {
+        private final Cache<String, CacheEntry> cache;
+
+        private MemoryContentCache() {
+            super();
+
+            Caffeine<Object, Object> builder = Caffeine.newBuilder();
+            this.cache = builder.maximumWeight(MEMORY_CACHE_CAPACITY)
+                    .expireAfterAccess(MEMORY_CACHE_EXPIRATION_SECONDS, TimeUnit.SECONDS)
+                    .weigher((Weigher<String, CacheEntry>) (key, value) -> (int) Math.min(value.length, Integer.MAX_VALUE))
+                    .recordStats()
+                    .removalListener(((key, value, cause) -> {
+                        LOG.debug(key + " to be eliminated, reason: " + cause);
+                    })).build();
+        }
+
+        @Override
         public CacheEntry get(String key, Function<String, CacheEntry> mappingFunction) {
             return cache.get(key, mappingFunction);
         }
 
-        public void put(String key, CacheEntry cacheEntry) {
-            cache.put(key, cacheEntry);
-        }
-
-        public CacheEntry getIfPresent(String location) {
-            return cache.getIfPresent(location);
-        }
-
+        @Override
         public void invalidate(String key) {
             cache.invalidate(key);
+        }
+
+        @Override
+        public long getLength(String key) {
+            CacheEntry buf = cache.getIfPresent(key);
+            if (buf != null) {
+                return buf.length;
+            } else {
+                return -1;
+            }
+        }
+
+        @Override
+        public boolean exists(String key) {
+            CacheEntry buf = cache.getIfPresent(key);
+            return buf != null;
+        }
+
+        @Override
+        public boolean isExistOnDisk(String key) {
+            return false;
+        }
+    }
+
+    private static class TwoLevelCacheHolder {
+        static final ContentCache INSTANCE = new TwoLevelContentCache();
+    }
+    public static class TwoLevelContentCache extends ContentCache {
+        private final Cache<String, CacheEntry> memCache;
+        private final Cache<String, DiskCacheEntry> diskCache;
+
+        private TwoLevelContentCache() {
+            super();
+
+            Caffeine<Object, Object> diskCacheBuilder = Caffeine.newBuilder();
+            this.diskCache = diskCacheBuilder.maximumWeight(DISK_CACHE_CAPACITY)
+                    .weigher((Weigher<String, DiskCacheEntry>) (key, value) -> (int) Math.min(value.length, Integer.MAX_VALUE))
+                    .recordStats()
+                    .removalListener(((key, value, cause) -> {
+                        LOG.debug(key + " to be eliminated from disk, reason: " + cause);
+                        HadoopOutputFile hadoopOutputFile = (HadoopOutputFile) IOUtil.getOutputFile(
+                                METADATA_CACHE_DISK_PATH, key);
+                        try {
+                            hadoopOutputFile.getFileSystem().delete(hadoopOutputFile.getPath(), false);
+                        } catch (Exception e) {
+                            LOG.warn("failed on deleting file :" + hadoopOutputFile.getPath());
+                        }
+                    })).build();
+
+            Caffeine<Object, Object> builder = Caffeine.newBuilder();
+            this.memCache = builder.maximumWeight(MEMORY_CACHE_CAPACITY)
+                    .expireAfterAccess(MEMORY_CACHE_EXPIRATION_SECONDS, TimeUnit.SECONDS)
+                    .weigher((Weigher<String, CacheEntry>) (key, value) -> (int) Math.min(value.length, Integer.MAX_VALUE))
+                    .recordStats()
+                    .removalListener(((key, value, cause) -> {
+                        LOG.debug(key + " to be eliminated to disk, reason: " + cause);
+                        if (isExistOnDisk(key)) {
+                            LOG.debug(key + " has cached on disk");
+                            return;
+                        }
+                        HadoopOutputFile tmpOutputFile = (HadoopOutputFile) IOUtil.getTmpOutputFile(
+                                METADATA_CACHE_DISK_PATH, key);
+                        PositionOutputStream outputStream = tmpOutputFile.createOrOverwrite();
+                        Path localFilePath = new Path(IOUtil.remoteToLocalFilePath(METADATA_CACHE_DISK_PATH, key));
+                        try {
+                            for (ByteBuffer buffer : value.buffers) {
+                                outputStream.write(buffer.array());
+                            }
+                            outputStream.close();
+                            if (!tmpOutputFile.getFileSystem().rename(tmpOutputFile.getPath(), localFilePath)) {
+                                LOG.warn("failed on rename: {} to {}", tmpOutputFile.getPath().toString(),
+                                        localFilePath.toString());
+                                tmpOutputFile.getFileSystem().delete(tmpOutputFile.getPath(), false);
+                            } else {
+                                diskCache.put(key, new DiskCacheEntry(value.length,
+                                        IOUtil.getOutputFile(localFilePath).toInputFile()));
+                            }
+                        } catch (IOException e) {
+                            LOG.warn("failed on writing file to disk" + e.getMessage());
+                            try {
+                                if (outputStream != null) {
+                                    outputStream.close();
+                                }
+                                tmpOutputFile.getFileSystem().delete(tmpOutputFile.getPath(), false);
+                            } catch (IOException ioException) {
+                                LOG.warn("failed on deleting file :" + tmpOutputFile.getPath());
+                            }
+                        }
+                    })).build();
+
+            loadMetadataDiskCache();
+        }
+
+        private void loadMetadataDiskCache() {
+            ExecutorService executor = Executors.newSingleThreadExecutor();
+            FileSystem fs = Util.getFs(IOUtil.getLocalDiskDirPath(METADATA_CACHE_DISK_PATH), new Configuration());
+            executor.submit(() -> {
+                try {
+                    RemoteIterator<LocatedFileStatus>
+                            it = fs.listFiles(IOUtil.getLocalDiskDirPath(METADATA_CACHE_DISK_PATH), true);
+                    while (it.hasNext()) {
+                        LocatedFileStatus locatedFileStatus = it.next();
+                        if (locatedFileStatus.isDirectory()) {
+                            continue;
+                        }
+                        Path localPath = locatedFileStatus.getPath();
+                        OutputFile localOutputFile = IOUtil.getOutputFile(localPath);
+                        String key = IOUtil.localFileToRemote(localPath, METADATA_CACHE_DISK_PATH).toString();
+                        diskCache.put(key, new DiskCacheEntry(locatedFileStatus.getLen(), localOutputFile.toInputFile()));
+                        LOG.debug("load metadata to disk cache: {} from {}", key, localPath.toString());
+                    }
+                } catch (Exception e) {
+                    // Ignore, exception would not have affection on Diskcache
+                    LOG.warn("Encountered exception when loading disk metadata " + e.getMessage());
+                }
+            });
+            executor.shutdown();
+        }
+
+        @Override
+        public CacheEntry get(String key, Function<String, CacheEntry> mappingFunction) {
+            return memCache.get(key, mappingFunction);
+        }
+
+        @Override
+        public long getLength(String key) {
+            CacheEntry buf = memCache.getIfPresent(key);
+            if (buf != null) {
+                return buf.length;
+            } else {
+                DiskCacheEntry entry = diskCache.getIfPresent(key);
+                if (entry != null) {
+                    return entry.length;
+                }
+                return -1;
+            }
+        }
+
+        @Override
+        public boolean exists(String key) {
+            CacheEntry buf = memCache.getIfPresent(key);
+            return buf != null || isExistOnDisk(key);
+        }
+
+        @Override
+        public void invalidate(String key) {
+            memCache.invalidate(key);
+            diskCache.invalidate(key);
+        }
+
+        @Override
+        public boolean isExistOnDisk(String key) {
+            DiskCacheEntry entry = diskCache.getIfPresent(key);
+            return entry != null && entry.isExistOnDisk();
+        }
+
+        @Override
+        public InputFile getDiskInputFile(String key) {
+            if (diskCache.getIfPresent(key) != null) {
+                return diskCache.getIfPresent(key).inputFile;
+            } else {
+                return null;
+            }
         }
     }
 
@@ -229,8 +389,8 @@ public class IcebergCachingFileIO implements FileIO {
 
         @Override
         public long getLength() {
-            CacheEntry buf = contentCache.getIfPresent(location());
-            return (buf != null) ? buf.length : wrappedInputFile.getLength();
+            return contentCache.getLength(location()) == -1 ?
+                    wrappedInputFile.getLength() : contentCache.getLength(location());
         }
 
         @Override
@@ -240,8 +400,7 @@ public class IcebergCachingFileIO implements FileIO {
                 if (getLength() <= contentCache.maxContentLength()) {
                     return cachedStream();
                 }
-                LOG.info("iceberg matadata file {} size {} large than max content length, skip cache",
-                        location(), getLength());
+
                 // fallback to non-caching input stream.
                 return wrappedInputFile.newStream();
             } catch (FileNotFoundException e) {
@@ -258,23 +417,28 @@ public class IcebergCachingFileIO implements FileIO {
 
         @Override
         public boolean exists() {
-            CacheEntry buf = contentCache.getIfPresent(location());
-            return buf != null || wrappedInputFile.exists();
+            return contentCache.exists(location()) || wrappedInputFile.exists();
         }
 
         private CacheEntry newCacheEntry() {
-            LOG.debug("iceberg metadata cache hit rate: {}", contentCache.cache.stats().hitRate());
-            long fileLength = getLength();
-            long totalBytesToRead = fileLength;
-            OutputFile tmpOutputFile = IOUtil.getTmpOutputFile(METADATA_CACHE_DISK_PATH, location());
-            HadoopOutputFile hadoopOutputFile = (HadoopOutputFile) tmpOutputFile;
             try {
-                OutputFile localOutputFile = IOUtil.getOutputFile(METADATA_CACHE_DISK_PATH, location());
-                if (localOutputFile.toInputFile().exists()) {
-                    return new CacheEntry(fileLength, localOutputFile.toInputFile());
+                long fileLength = getLength();
+                long totalBytesToRead = fileLength;
+                SeekableInputStream stream;
+                if (contentCache.isExistOnDisk(location())) {
+                    LOG.debug(location() + " hit on disk cache");
+                    InputFile diskFile = contentCache.getDiskInputFile(location());
+                    if (diskFile != null) {
+                        stream = diskFile.newStream();
+                    } else {
+                        LOG.debug(location() + " load from remote");
+                        stream = wrappedInputFile.newStream();
+                    }
+                } else {
+                    LOG.debug(location() + " load from remote");
+                    stream = wrappedInputFile.newStream();
                 }
-                SeekableInputStream stream = wrappedInputFile.newStream();
-                PositionOutputStream positionOutputStream =  tmpOutputFile.createOrOverwrite();
+                List<ByteBuffer> buffers = Lists.newArrayList();
 
                 while (totalBytesToRead > 0) {
                     // read the stream in 4MB chunk
@@ -286,26 +450,16 @@ public class IcebergCachingFileIO implements FileIO {
                     if (bytesRead < bytesToRead) {
                         // Read less than it should be, possibly hitting EOF.
                         // Set smaller ByteBuffer limit and break out of the loop.
-                        positionOutputStream.write(buf, 0, bytesRead);
+                        buffers.add(ByteBuffer.wrap(buf, 0, bytesRead));
                         break;
                     } else {
-                        positionOutputStream.write(buf);
+                        buffers.add(ByteBuffer.wrap(buf));
                     }
                 }
+
                 stream.close();
-                positionOutputStream.close();
-                hadoopOutputFile.getFileSystem().rename(
-                        hadoopOutputFile.getPath(),
-                        IOUtil.s3aToLocalFilePath(METADATA_CACHE_DISK_PATH, location()));
-                LOG.debug("load iceberg metadata {}:{} to cache", location(), FileUtils.byteCountToDisplaySize(fileLength));
-                return new CacheEntry(fileLength - totalBytesToRead, localOutputFile.toInputFile());
+                return new CacheEntry(fileLength - totalBytesToRead, buffers);
             } catch (IOException ex) {
-                // remove local tmp file
-                try {
-                    hadoopOutputFile.getFileSystem().deleteOnExit(hadoopOutputFile.getPath());
-                } catch (Exception e) {
-                    // Ignore
-                }
                 throw new RuntimeIOException(ex);
             }
         }
@@ -314,14 +468,7 @@ public class IcebergCachingFileIO implements FileIO {
             try {
                 CacheEntry entry = contentCache.get(location(), k -> newCacheEntry());
                 Preconditions.checkNotNull(entry, "CacheEntry should not be null when there is no RuntimeException occurs");
-                // someone have deleted local files, but still in cache
-                if (!entry.isExistOnDisk()) {
-                    LOG.info("local file {} has been deleted, but still in cache, reload it", location());
-                    contentCache.invalidate(location());
-                    entry = contentCache.get(location(), k -> newCacheEntry());
-                }
-                Preconditions.checkNotNull(entry, "CacheEntry should not be null when there is no RuntimeException occurs");
-                return entry.toSeekableInputStream();
+                return ByteBufferInputStream.wrap(entry.buffers);
             } catch (RuntimeIOException ex) {
                 throw ex.getCause();
             } catch (RuntimeException ex) {
