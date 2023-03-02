@@ -397,7 +397,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testMultiOuterJoinQueryComplete() {
-        for (String joinType: outerJoinTypes) {
+        for (String joinType : outerJoinTypes) {
             String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
                     "" + joinType + " join locations on emps.locationid = locations.locationid";
             testRewriteOK(mv, "select count(*) from " +
@@ -416,9 +416,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "and locations.locationid > 10");
         }
     }
+
     @Test
     public void testMultiOuterJoinQueryDelta() {
-        for (String joinType: outerJoinTypes) {
+        for (String joinType : outerJoinTypes) {
             String mv = "select deptno as col1, empid as col2, locations.locationid as col3 from emps " +
                     "" + joinType + " join locations on emps.locationid = locations.locationid";
             testRewriteOK(mv, "select count(*)  from emps " +
