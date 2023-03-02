@@ -28,6 +28,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.iceberg.cost.IcebergStatisticsProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -68,6 +69,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final String catalogName;
     private IcebergCatalog icebergCatalog;
     private Map<String, String> customProperties;
+    private final IcebergStatisticsProvider statisticProvider = new IcebergStatisticsProvider();
     private final Map<IcebergFilter, List<FileScanTask>> tasks = new ConcurrentHashMap<>();
 
     public IcebergMetadata(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
@@ -200,11 +202,12 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Statistics getTableStatistics(OptimizerContext session,
-                                         Table table,
-                                         Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate) {
-        return Statistics.builder().build();
+    public Statistics getTableStatistics(
+            OptimizerContext session,
+            Table table,
+            Map<ColumnRefOperator, Column> columns,
+            List<PartitionKey> partitionKeys,
+            ScalarOperator predicate) {
+        return statisticProvider.getTableStatistics((IcebergTable) table, predicate, columns);
     }
 }

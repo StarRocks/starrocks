@@ -30,6 +30,7 @@ import io.delta.standalone.types.DataType;
 import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
+import org.apache.iceberg.types.Types;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -367,6 +368,95 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
         return ScalarType.createType(primitiveType);
+    }
+
+    public static Type fromIcebergType(org.apache.iceberg.types.Type icebergType) {
+        if (icebergType == null) {
+            return Type.NULL;
+        }
+
+        PrimitiveType primitiveType;
+
+        switch (icebergType.typeId()) {
+            case BOOLEAN:
+                primitiveType = PrimitiveType.BOOLEAN;
+                break;
+            case INTEGER:
+                primitiveType = PrimitiveType.INT;
+                break;
+            case LONG:
+                primitiveType = PrimitiveType.BIGINT;
+                break;
+            case FLOAT:
+                primitiveType = PrimitiveType.FLOAT;
+                break;
+            case DOUBLE:
+                primitiveType = PrimitiveType.DOUBLE;
+                break;
+            case DATE:
+                primitiveType = PrimitiveType.DATE;
+                break;
+            case TIMESTAMP:
+                primitiveType = PrimitiveType.DATETIME;
+                break;
+            case STRING:
+            case UUID:
+                return ScalarType.createDefaultExternalTableString();
+            case DECIMAL:
+                int precision = ((Types.DecimalType) icebergType).precision();
+                int scale = ((Types.DecimalType) icebergType).scale();
+                return ScalarType.createUnifiedDecimalType(precision, scale);
+            case LIST:
+                Type type = convertToArrayTypeForIceberg(icebergType);
+                if (type.isArrayType()) {
+                    return type;
+                } else {
+                    return Type.UNKNOWN_TYPE;
+                }
+            case MAP:
+                Type mapType = convertToMapTypeForIceberg(icebergType);
+                if (mapType.isMapType()) {
+                    return mapType;
+                } else {
+                    return Type.UNKNOWN_TYPE;
+                }
+            case STRUCT:
+                List<Types.NestedField> fields = icebergType.asStructType().fields();
+                Preconditions.checkArgument(fields.size() > 0);
+                ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+                for (Types.NestedField field : fields) {
+                    String fieldName = field.name();
+                    Type fieldType = fromIcebergType(field.type());
+                    if (fieldType.isUnknown()) {
+                        return Type.UNKNOWN_TYPE;
+                    }
+                    structFields.add(new StructField(fieldName, fieldType));
+                }
+                return new StructType(structFields);
+            case TIME:
+            case FIXED:
+            case BINARY:
+            default:
+                primitiveType = PrimitiveType.UNKNOWN_TYPE;
+        }
+        return ScalarType.createType(primitiveType);
+    }
+
+    private static ArrayType convertToArrayTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
+        return new ArrayType(fromIcebergType(icebergType.asNestedType().asListType().elementType()));
+    }
+
+    private static Type convertToMapTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
+        Type keyType = fromIcebergType(icebergType.asMapType().keyType());
+        // iceberg support complex type as key type, but sr is not supported now
+        if (keyType.isComplexType() || keyType.isUnknown()) {
+            return Type.UNKNOWN_TYPE;
+        }
+        Type valueType = fromIcebergType(icebergType.asMapType().valueType());
+        if (valueType.isUnknown()) {
+            return Type.UNKNOWN_TYPE;
+        }
+        return new MapType(keyType, valueType);
     }
 
     private static ArrayType convertToArrayType(io.delta.standalone.types.ArrayType arrayType) {

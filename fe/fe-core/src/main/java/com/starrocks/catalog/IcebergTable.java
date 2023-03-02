@@ -52,6 +52,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
+
 public class IcebergTable extends Table {
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
 
@@ -123,7 +125,7 @@ public class IcebergTable extends Table {
     }
 
     public String getCatalogName() {
-        return catalogName;
+        return catalogName == null ? getResourceMappingCatalogName(resourceName, "iceberg") : catalogName;
     }
 
     public String getRemoteDbName() {
