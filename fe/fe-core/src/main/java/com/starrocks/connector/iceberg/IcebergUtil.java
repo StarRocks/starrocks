@@ -63,7 +63,7 @@ public class IcebergUtil {
      * Get Iceberg table identifier by table property
      */
     public static TableIdentifier getIcebergTableIdentifier(IcebergTable table) {
-        return TableIdentifier.of(table.getDb(), table.getTable());
+        return TableIdentifier.of(table.getRemoteDbName(), table.getRemoteTableName());
     }
 
     /**

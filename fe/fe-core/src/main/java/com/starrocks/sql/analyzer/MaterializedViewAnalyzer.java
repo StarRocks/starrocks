@@ -134,7 +134,7 @@ public class MaterializedViewAnalyzer {
                 return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
             } else if (table instanceof IcebergTable) {
                 IcebergTable icebergTable = (IcebergTable) table;
-                String catalogName = icebergTable.getCatalog();
+                String catalogName = icebergTable.getCatalogName();
                 return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
             } else {
                 return true;
