@@ -2,13 +2,13 @@
 
 ## Description
 
-HLL enables the development of programmes based on the HyperLogLog algorithm. It is used to store intermediate results of the HyperLogLog calculation process. It can only be used as the value column type of the table. It reduces the amount of data through aggregation so as to speed up the query process. There may be around 1% deviation in the estimated results.
+HLL enables the development of programmes based on the HyperLogLog algorithm. It is used to store intermediate results of the HyperLogLog calculation process. It can only be used as the value column type of the table. HLL reduces the amount of data through aggregation to speed up the query process. There may be a 1% deviation in the estimated results.
 
-HLL column is generated through imported data or data from other columns. When data is imported, hll_hash function will specify which column should be generated into hll column which is often used to replace count_distinct and calculate uv quickly with rollup.
+HLL column is generated based on the imported data or data from other columns. When data is imported, the hll_hash() function specifies which column will be used to generated the HLL column. HLL is often used to replace COUNT DISTINCT and quickly calculate unique views (UVs) with rollup.
 
-The correlation function:
+Related functions:
 
-HLL_UNION_AGG(hll): This function is an aggregate function used to estimate the cardinality of all data that meet the coditions. This can also be used to analyze functions. It only supports default window and does not support window clause.
+HLL_UNION_AGG(hll): This function is an aggregate function used to estimate the cardinality of all data that meet the conditions. This can also be used to analyze functions. It only supports default window and does not support window clause.
 
 HLL_RAW_AGG(hll): This function is an aggregate function used to aggregate fields of hll type and returns with hll type.
 
