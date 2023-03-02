@@ -36,6 +36,7 @@
 #include "util/runtime_profile.h"
 
 namespace starrocks {
+namespace spill {
 enum class SpillFormaterType { NONE, SPILL_BY_COLUMN };
 
 using ChunkBuilder = std::function<ChunkUniquePtr()>;
@@ -60,11 +61,8 @@ struct SpilledOptions {
     size_t spill_file_size{};
     // spilled format type
     SpillFormaterType spill_type{};
-    // file path for spiller
-    // SpillPathProviderFactory path_provider_factory;
     // creator for create a spilling chunk
     ChunkBuilder chunk_builder;
-    // @TODO remove
     std::string name;
     int32_t plan_node_id;
     std::shared_ptr<spill::BlockManager> block_manager;
@@ -94,22 +92,6 @@ enum class SpillStrategy {
     NO_SPILL,
     SPILL_ALL,
 };
-
-// thread safe formater
-// class SpillFormater {
-// public:
-//     virtual ~SpillFormater() = default;
-//     // spilled data format
-//     virtual Status spill_as_fmt(SpillFormatContext& context, std::unique_ptr<WritableFile>& writable,
-//                                 const ChunkPtr& chunk) const noexcept = 0;
-//     // restore chunk data from input stream
-//     virtual StatusOr<ChunkUniquePtr> restore_from_fmt(SpillFormatContext& context,
-//                                                       std::unique_ptr<RawInputStreamWrapper>& readable) const = 0;
-//     // write footer and flush data for output stream
-//     virtual Status flush(std::unique_ptr<WritableFile>& writable) const = 0;
-//     // create a concrete formater
-//     static StatusOr<std::unique_ptr<SpillFormater>> create(SpillFormaterType type, ChunkBuilder chunk_builder);
-// };
 
 // major spill interfaces
 class Spiller {
@@ -264,4 +246,5 @@ private:
     std::shared_ptr<spill::BlockGroup> _block_group;
     std::shared_ptr<spill::InputStream> _input_stream;
 };
+} // namespace spill
 } // namespace starrocks

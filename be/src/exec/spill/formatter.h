@@ -17,12 +17,12 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exec/spill/block.h"
+#include "exec/spill/block_manager.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
-class SpilledOptions;
 namespace spill {
+class SpilledOptions;
 
 enum class FormatterType {
     BY_COLUMN,

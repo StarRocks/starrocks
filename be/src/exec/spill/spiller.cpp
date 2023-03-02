@@ -36,7 +36,7 @@
 #include "serde/column_array_serde.h"
 
 namespace starrocks {
-
+namespace spill {
 SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
     spill_timer = ADD_TIMER(profile, "SpillTime");
     spill_rows = ADD_COUNTER(profile, "SpilledRows", TUnit::UNIT);
@@ -126,5 +126,5 @@ Status Spiller::_decrease_running_flush_tasks() {
     }
     return Status::OK();
 }
-
+} // namespace spill
 } // namespace starrocks

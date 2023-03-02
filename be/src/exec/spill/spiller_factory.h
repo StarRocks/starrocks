@@ -24,6 +24,7 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
+namespace spill {
 struct SpilledOptions;
 class Spiller;
 
@@ -45,5 +46,5 @@ private:
 
 using SpillerFactoryPtr = std::shared_ptr<SpillerFactory>;
 SpillerFactoryPtr make_spilled_factory();
-
+} // namespace spill
 } // namespace starrocks

@@ -21,6 +21,7 @@
 #include "exec/spill/spiller.h"
 
 namespace starrocks {
+namespace spill {
 std::shared_ptr<Spiller> SpillerFactory::create(const SpilledOptions& options) {
     std::lock_guard guard(_mutex);
     auto spiller = std::make_shared<Spiller>(options, shared_from_this());
@@ -31,5 +32,5 @@ std::shared_ptr<Spiller> SpillerFactory::create(const SpilledOptions& options) {
 SpillerFactoryPtr make_spilled_factory() {
     return std::make_shared<SpillerFactory>();
 }
-
+} // namespace spill
 } // namespace starrocks

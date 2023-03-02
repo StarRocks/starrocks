@@ -20,7 +20,6 @@
 #include <queue>
 #include <unordered_map>
 
-#include "exec/spill/block.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
 

@@ -26,7 +26,7 @@
 #include "util/defer_op.h"
 
 namespace starrocks {
-
+namespace spill {
 template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, ChunkPtr chunk, TaskExecutor&& executor, MemGuard&& guard) {
     SCOPED_TIMER(_metrics.spill_timer);
@@ -123,5 +123,5 @@ Status Spiller::trigger_restore(RuntimeState* state, TaskExecutor&& executor, Me
     }
     return Status::OK();
 }
-
+} // namespace spill
 } // namespace starrocks

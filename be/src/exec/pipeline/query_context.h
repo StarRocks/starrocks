@@ -167,7 +167,7 @@ public:
     // STREAM MV
     StreamEpochManager* stream_epoch_manager() const { return _stream_epoch_manager.get(); }
 
-    QuerySpillManager* spill_manager() { return _spill_manager.get(); }
+    spill::QuerySpillManager* spill_manager() { return _spill_manager.get(); }
 
     spill::BlockManager* spill_block_manager() { return _spill_block_manager.get(); }
 
@@ -214,7 +214,7 @@ private:
     // STREAM MV
     std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
 
-    std::unique_ptr<QuerySpillManager> _spill_manager;
+    std::unique_ptr<spill::QuerySpillManager> _spill_manager;
     std::unique_ptr<spill::BlockManager> _spill_block_manager;
 };
 

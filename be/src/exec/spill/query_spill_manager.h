@@ -24,7 +24,7 @@
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {
-
+namespace spill {
 class QuerySpillManager {
 public:
     QuerySpillManager(const TUniqueId& uid) : _uid(uid) {}
@@ -35,4 +35,5 @@ private:
     TUniqueId _uid;
     std::atomic_size_t _spilled_bytes;
 };
+} // namespace spill
 } // namespace starrocks
