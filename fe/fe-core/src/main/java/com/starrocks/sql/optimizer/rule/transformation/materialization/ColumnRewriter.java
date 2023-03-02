@@ -23,7 +23,6 @@ import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -89,7 +88,7 @@ public class ColumnRewriter {
 
         private Map<Integer, Integer> srcToDstRelationIdMapping;
         private ColumnRefFactory srcRefFactory;
-        private Map<Integer, List<ColumnRefOperator>> dstRelationIdToColumns;
+        private Map<Integer, Map<String, ColumnRefOperator>> dstRelationIdToColumns;
         private EquivalenceClasses equivalenceClasses;
 
         public ColumnRewriteVisitor(RewriteContext rewriteContext, boolean enableRelationRewrite, boolean viewToQuery,
@@ -121,17 +120,12 @@ public class ColumnRewriter {
                     return null;
                 }
                 Integer targetRelationId = srcToDstRelationIdMapping.get(srcRelationId);
-                List<ColumnRefOperator> relationColumns = dstRelationIdToColumns.get(targetRelationId);
+                Map<String, ColumnRefOperator> relationColumns = dstRelationIdToColumns.get(targetRelationId);
                 if (relationColumns == null) {
                     LOG.warn("no columns for relation id:{}", targetRelationId);
                     return null;
                 }
-                for (ColumnRefOperator dstColumnRef : relationColumns) {
-                    if (columnRef.getName().equals(dstColumnRef.getName())) {
-                        result = dstColumnRef;
-                        break;
-                    }
-                }
+                result = relationColumns.getOrDefault(columnRef.getName(), columnRef);
             }
             if (enableEquivalenceClassesRewrite && equivalenceClasses != null) {
                 Set<ColumnRefOperator> equalities = equivalenceClasses.getEquivalenceClass(result);

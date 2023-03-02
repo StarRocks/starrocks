@@ -175,9 +175,9 @@ public class MaterializedViewRewriter {
             return Lists.newArrayList();
         }
 
-        Map<Integer, List<ColumnRefOperator>> queryRelationIdToColumns =
+        final Map<Integer, Map<String, ColumnRefOperator>> queryRelationIdToColumns =
                 getRelationIdToColumns(materializationContext.getQueryRefFactory());
-        final Map<Integer, List<ColumnRefOperator>> mvRelationIdToColumns =
+        final Map<Integer, Map<String, ColumnRefOperator>> mvRelationIdToColumns =
                 getRelationIdToColumns(materializationContext.getMvColumnRefFactory());
 
         // for query: A1 join A2 join B, mv: A1 join A2 join B
@@ -191,19 +191,12 @@ public class MaterializedViewRewriter {
         if (relationIdMappings.isEmpty()) {
             return Lists.newArrayList();
         }
-        // used to judge whether query scalar ops can be rewritten
-        final List<ColumnRefOperator> scanMvOutputColumns =
-                materializationContext.getScanMvOperator().getOutputColumns();
-        final Set<ColumnRefOperator> queryColumnSet = queryRelationIdToColumns.values()
-                .stream().flatMap(List::stream)
-                .filter(columnRef -> !scanMvOutputColumns.contains(columnRef))
-                .collect(Collectors.toSet());
         final EquivalenceClasses queryEc = createEquivalenceClasses(queryPredicateSplit.getEqualPredicates());
         RewriteContext rewriteContext = new RewriteContext(queryExpression, queryPredicateSplit, queryEc,
                 queryRelationIdToColumns, materializationContext.getQueryRefFactory(),
                 queryColumnRefRewriter, mvExpression, mvPredicateSplit, mvRelationIdToColumns,
                 materializationContext.getMvColumnRefFactory(), mvColumnRefRewriter,
-                materializationContext.getOutputMapping(), queryColumnSet);
+                materializationContext.getOutputMapping(), materializationContext.getOriginQueryColumns());
 
         List<OptExpression> results = Lists.newArrayList();
         for (BiMap<Integer, Integer> relationIdMapping : relationIdMappings) {
@@ -1058,13 +1051,13 @@ public class MaterializedViewRewriter {
         return tableToRelationId;
     }
 
-    private Map<Integer, List<ColumnRefOperator>> getRelationIdToColumns(ColumnRefFactory refFactory) {
-        // relationId -> column list
-        Map<Integer, List<ColumnRefOperator>> result = Maps.newHashMap();
+    private Map<Integer, Map<String, ColumnRefOperator>> getRelationIdToColumns(ColumnRefFactory refFactory) {
+        // relationId -> column map
+        Map<Integer, Map<String, ColumnRefOperator>> result = Maps.newHashMap();
         for (Map.Entry<Integer, Integer> entry : refFactory.getColumnToRelationIds().entrySet()) {
-            result.computeIfAbsent(entry.getValue(), k -> Lists.newArrayList());
+            result.computeIfAbsent(entry.getValue(), k -> Maps.newHashMap());
             ColumnRefOperator columnRef = refFactory.getColumnRef(entry.getKey());
-            result.get(entry.getValue()).add(columnRef);
+            result.get(entry.getValue()).put(columnRef.getName(), columnRef);
         }
         return result;
     }
