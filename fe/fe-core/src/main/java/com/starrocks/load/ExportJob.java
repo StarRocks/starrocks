@@ -991,7 +991,7 @@ public class ExportJob implements Writable {
     }
 
     public boolean exportLakeTable() {
-        return exportTable.isLakeTable();
+        return exportTable.isCloudNativeTable();
     }
 
     public boolean exportOlapTable() {

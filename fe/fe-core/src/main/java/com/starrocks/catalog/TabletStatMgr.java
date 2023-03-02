@@ -41,7 +41,6 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.TabletStatRequest;
@@ -183,26 +182,26 @@ public class TabletStatMgr extends LeaderDaemon {
                 continue;
             }
 
-            List<LakeTable> tables = Lists.newArrayList();
+            List<OlapTable> tables = Lists.newArrayList();
             db.readLock();
             try {
                 for (Table table : db.getTables()) {
-                    if (table.isLakeTable()) {
-                        tables.add((LakeTable) table);
+                    if (table.isCloudNativeTable()) {
+                        tables.add((OlapTable) table);
                     }
                 }
             } finally {
                 db.readUnlock();
             }
 
-            for (LakeTable table : tables) {
+            for (OlapTable table : tables) {
                 updateLakeTableTabletStat(db, table);
             }
         }
     }
 
     @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
-    private void updateLakeTableTabletStat(Database db, LakeTable table) {
+    private void updateLakeTableTabletStat(Database db, OlapTable table) {
         // prepare tablet infos
         Map<Long, List<TabletInfo>> beToTabletInfos = Maps.newHashMap();
         Map<Long, Long> partitionToVersion = Maps.newHashMap();
