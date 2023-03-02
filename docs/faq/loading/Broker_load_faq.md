@@ -10,7 +10,7 @@ Both the destination StarRocks table and the Broker Load job are compiled at cre
 
 ## 3. When I load ORC-formatted data by using Broker Load, what do I do if the "ErrorMsg: type:ETL_RUN_FAIL; msg:Cannot cast '<slot 6>' from VARCHAR to ARRAY<VARCHAR(30)>" error occurs?
 
-The source data file has different column names than the destination StarRocks table. In this situation, you must use the `SET` clause in the load statement to specify the column mapping between the file and the table. When executing the `SET` clause, StarRocks needs to perform a type inference, but it fails in invoking the [cast](../../sql-reference/sql-functions/cast.md) function to transform the source data to the destination data types. To resolve this issue, make sure that the source data file have the same column names as the destination StarRocks table. As such, the `SET` clause is not needed and therefore StarRocks does not need to invoke the cast function to perform data type conversions. Then the Broker Load job can be run successfully.
+The source data file has different column names than the destination StarRocks table. In this situation, you must use the `SET` clause in the load statement to specify the column mapping between the file and the table. When executing the `SET` clause, StarRocks needs to perform a type inference, but it fails in invoking the [cast](../../sql-reference/sql-functions/cast.md) function to transform the source data to the destination data types. To resolve this issue, make sure that the source data file has the same column names as the destination StarRocks table. As such, the `SET` clause is not needed and therefore StarRocks does not need to invoke the cast function to perform data type conversions. Then the Broker Load job can be run successfully.
 
 ## 4. The Broker Load job does not report errors, but why am I unable to query the loaded data?
 
@@ -93,4 +93,4 @@ If you have a custom file system, you also need to copy the file system-related 
 
 Check that the **/etc/krb5.conf** file is configured on all hosts on which brokers are deployed.
 
-If the error persists，add `-Djava.security.krb5.conf:/etc/krb5.conf` to the end of the `JAVA_OPTS` variable in the broker startup script.
+If the error persists, add `-Djava.security.krb5.conf:/etc/krb5.conf` to the end of the `JAVA_OPTS` variable in the broker startup script.
