@@ -1121,7 +1121,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 31. " +
+            Assert.assertEquals("Getting analyzing error at line 3, column 29. " +
                     "Detail message: date_trunc function can't support argument other than year|quarter|month|week|day.",
                     e.getMessage());
         }
