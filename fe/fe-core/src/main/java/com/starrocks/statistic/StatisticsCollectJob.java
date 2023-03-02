@@ -126,9 +126,10 @@ public abstract class StatisticsCollectJob {
     protected String getDataSize(Column column, boolean isSample) {
         if (column.getPrimitiveType().isCharFamily() || column.getPrimitiveType().isJsonType()) {
             if (isSample) {
-                return "IFNULL(SUM(CHAR_LENGTH(`" + column.getName() + "`) * t1.count), 0)";
+                return "IFNULL(SUM(CHAR_LENGTH(`column_key`) * t1.count), 0)";
+            } else {
+                return "IFNULL(SUM(CHAR_LENGTH(`" + column.getName() + "`)), 0)";
             }
-            return "IFNULL(SUM(CHAR_LENGTH(`" + column.getName() + "`)), 0)";
         }
 
         long typeSize = column.getType().getTypeSize();
