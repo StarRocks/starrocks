@@ -89,11 +89,13 @@ public class HiveConnector implements Connector {
     }
 
     public void onCreate() {
+        Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
         if (internalMgr.enableHmsEventsIncrementalSync()) {
-            Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
             updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
                     .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
         }
+        updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
     }
 
     @Override
@@ -101,6 +103,7 @@ public class HiveConnector implements Connector {
         internalMgr.shutdown();
         metadataFactory.getCacheUpdateProcessor().ifPresent(CacheUpdateProcessor::invalidateAll);
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterCacheUpdateProcessor(catalogName);
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
     }
 
     public CloudConfiguration getCloudConfiguration() {

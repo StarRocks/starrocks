@@ -21,6 +21,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
@@ -28,8 +29,10 @@ import org.apache.logging.log4j.Logger;
 import org.spark_project.guava.collect.Lists;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class ConnectorTableMetadataProcessor extends LeaderDaemon {
@@ -37,8 +40,20 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
 
     private final Set<BaseTableInfo> registeredTableInfos = Sets.newConcurrentHashSet();
 
+    private final Map<String, CacheUpdateProcessor> cacheUpdateProcessors = new ConcurrentHashMap<>();
+
     public void registerTableInfo(BaseTableInfo tableInfo) {
         registeredTableInfos.add(tableInfo);
+    }
+
+    public void registerCacheUpdateProcessor(String catalogName, CacheUpdateProcessor cache) {
+        LOG.info("register updating {} metadata cache to ConnectorTableMetadataProcessor", catalogName);
+        cacheUpdateProcessors.put(catalogName, cache);
+    }
+
+    public void unRegisterCacheUpdateProcessor(String catalogName) {
+        LOG.info("stop to register updating {} metadata cache to ConnectorTableMetadataProcessor", catalogName);
+        cacheUpdateProcessors.remove(catalogName);
     }
 
     public ConnectorTableMetadataProcessor() {
@@ -52,6 +67,41 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
         }
 
         refreshRegisteredTable();
+        refreshCatalogTable();
+    }
+
+    private void refreshCatalogTable() {
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        List<String> catalogNames = com.google.common.collect.Lists.newArrayList(cacheUpdateProcessors.keySet());
+        for (String catalogName : catalogNames) {
+            CacheUpdateProcessor updateProcessor = cacheUpdateProcessors.get(catalogName);
+            if (updateProcessor == null) {
+                LOG.error("Failed to get cacheUpdateProcessor by catalog {}.", catalogName);
+                continue;
+            }
+            if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
+                continue;
+            }
+
+            for (HiveTableName cachedTableName : updateProcessor.getCachedTableNames()) {
+                String dbName = cachedTableName.getDatabaseName();
+                String tableName = cachedTableName.getTableName();
+                Table table;
+                try {
+                    table = metadataMgr.getTable(catalogName, dbName, tableName);
+                } catch (Exception e) {
+                    LOG.warn("can't get table of {}.{}.{}", catalogName, dbName, tableName);
+                    continue;
+                }
+                if (table == null) {
+                    LOG.warn("{}.{}.{} not exist", catalogName, dbName, tableName);
+                    continue;
+                }
+                updateProcessor.refreshTable(dbName, table, true);
+                LOG.info("refresh table {}.{}.{} success", catalogName, dbName, tableName);
+            }
+            LOG.info("refresh catalog {} success", catalogName);
+        }
     }
 
     private void refreshRegisteredTable() {
