@@ -57,7 +57,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 ### `data_desc`
 
-用于描述待导入数据文件，包括待导入数据文件的名称、格式、列分隔符、行分隔符、目标分区、以及与 StarRocks 表之间的列对应关系等。语法如下：
+用于描述源数据文件，包括源数据文件的名称、格式、列分隔符、行分隔符、目标分区、以及与 StarRocks 表之间的列对应关系等。语法如下：
 
 ```Bash
 -T <file_name>
@@ -77,17 +77,17 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 | **参数名称** | **是否必选** | **参数说明**                                                 |
 | ------------ | ------------ | ------------------------------------------------------------ |
-| file_name    | 是           | 指定待导入数据文件的名称。文件名里可选包含或者不包含扩展名。 |
+| file_name    | 是           | 指定源数据文件的名称。文件名里可选包含或者不包含扩展名。 |
 | format       | 否           | 指定待导入数据的格式。取值包括 `CSV` 和 `JSON`。默认值：`CSV`。 |
 | partitions   | 否           | 指定要把数据导入哪些分区。如果不指定该参数，则默认导入到 StarRocks 表所在的所有分区中。 |
-| columns      | 否           | 指定待导入数据文件和 StarRocks 表之间的列对应关系。如果待导入数据文件中的列与 StarRocks 表中的列按顺序一一对应，则不需要指定 `columns` 参数。您可以通过 `columns` 参数实现数据转换。例如，要导入一个 CSV 格式的数据文件，文件中有两列，分别可以对应到目标 StarRocks 表的 `id` 和 `city` 两列。如果要实现把数据文件中第一列的数据乘以 100 以后再落入 StarRocks 表的转换，可以指定 `"columns: city,tmp_id, id = tmp_id * 100"`。具体请参见本文“[列映射](#列映射)”章节。 |
+| columns      | 否           | 指定源数据文件和 StarRocks 表之间的列对应关系。如果源数据文件中的列与 StarRocks 表中的列按顺序一一对应，则不需要指定 `columns` 参数。您可以通过 `columns` 参数实现数据转换。例如，要导入一个 CSV 格式的数据文件，文件中有两列，分别可以对应到目标 StarRocks 表的 `id` 和 `city` 两列。如果要实现把数据文件中第一列的数据乘以 100 以后再落入 StarRocks 表的转换，可以指定 `"columns: city,tmp_id, id = tmp_id * 100"`。具体请参见本文“[列映射](#列映射)”章节。 |
 
 #### CSV 适用参数
 
 | **参数名称**     | **是否必选** | **参数说明**                                                 |
 | ---------------- | ------------ | ------------------------------------------------------------ |
-| column_separator | 否           | 用于指定待导入数据文件中的列分隔符。如果不指定该参数，则默认为 `\t`，即 Tab。必须确保这里指定的列分隔符与待导入数据文件中的列分隔符一致。<br>**说明**<br>StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (\|)。 |
-| row_delimiter    | 否           | 用于指定待导入数据文件中的行分隔符。如果不指定该参数，则默认为 `\n`。 |
+| column_separator | 否           | 用于指定源数据文件中的列分隔符。如果不指定该参数，则默认为 `\t`，即 Tab。必须确保这里指定的列分隔符与源数据文件中的列分隔符一致。<br>**说明**<br>StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (\|)。 |
+| row_delimiter    | 否           | 用于指定源数据文件中的行分隔符。如果不指定该参数，则默认为 `\n`。 |
 
 #### JSON 适用参数
 
@@ -130,26 +130,26 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 ### 导入 CSV 数据时配置列映射关系
 
-在导入 CSV 格式的数据时，只需要通过 `columns` 参数来指定待导入数据文件和 StarRocks 表之间的列映射关系。如果待导入数据文件中的列与 StarRocks 表中的列按顺序一一对应，则不需要指定该参数；否则，必须通过该参数来配置列映射关系，一般包括如下两种场景：
+在导入 CSV 格式的数据时，只需要通过 `columns` 参数来指定源数据文件和 StarRocks 表之间的列映射关系。如果源数据文件中的列与 StarRocks 表中的列按顺序一一对应，则不需要指定该参数；否则，必须通过该参数来配置列映射关系，一般包括如下两种场景：
 
-- 待导入数据文件中的列与 StarRocks 表中的列一一对应，并且数据不需要通过函数计算、可以直接落入 StarRocks 表中对应的列。
+- 源数据文件中的列与 StarRocks 表中的列一一对应，并且数据不需要通过函数计算、可以直接落入 StarRocks 表中对应的列。
 
-  您需要在 `columns` 参数中按照待导入数据文件中的列顺序、使用 StarRocks 表中对应的列名来配置列映射关系。
+  您需要在 `columns` 参数中按照源数据文件中的列顺序、使用 StarRocks 表中对应的列名来配置列映射关系。
 
-  例如，StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3`；待导入数据文件中也有三列，按顺序依次对应 StarRocks 表中的 `col3`、`col2` 和 `col1`。这种情况下，需要指定 `"columns: col3, col2, col1"`。
+  例如，StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3`；源数据文件中也有三列，按顺序依次对应 StarRocks 表中的 `col3`、`col2` 和 `col1`。这种情况下，需要指定 `"columns: col3, col2, col1"`。
 
-- 待导入数据文件中的列与 StarRocks 表中的列不一一对应，或者某些列的数据需要通过函数计算以后才能落入 StarRocks 表中对应的列。
+- 源数据文件中的列与 StarRocks 表中的列不一一对应，或者某些列的数据需要通过函数计算以后才能落入 StarRocks 表中对应的列。
 
-  您不仅需要在 `columns` 参数中按照待导入数据文件中的列顺序、使用 StarRocks 表中对应的列名来配置列映射关系，还需要指定参与数据计算的函数。以下为两个示例：
+  您不仅需要在 `columns` 参数中按照源数据文件中的列顺序、使用 StarRocks 表中对应的列名来配置列映射关系，还需要指定参与数据计算的函数。以下为两个示例：
 
-  - StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3` ；待导入数据文件中有四列，前三列按顺序依次对应 StarRocks 表中的 `col1`、`col2` 和 `col3`，第四列在 StarRocks 表中无对应的列。这种情况下，需要指定 `"columns: col1, col2, col3, temp"`，其中，最后一列可随意指定一个名称（如 `temp`）用于占位即可。
-  - StarRocks 表中有三列，按顺序依次为 `year`、`month` 和 `day`。待导入数据文件中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。这种情况下，可以指定 `"columns: col, year = year(col), month=month(col), day=day(col)"`。其中，`col` 是待导入数据文件中所包含的列的临时命名，`year = year(col)`、`month=month(col)` 和 `day=day(col)` 用于指定从待导入数据文件中的 `col` 列提取对应的数据并落入 StarRocks 表中对应的列，如 `year = year(col)` 表示通过 `year` 函数提取待导入数据文件中 `col` 列的 `yyyy` 部分的数据并落入 StarRocks 表中的 `year` 列。
+  - StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3` ；源数据文件中有四列，前三列按顺序依次对应 StarRocks 表中的 `col1`、`col2` 和 `col3`，第四列在 StarRocks 表中无对应的列。这种情况下，需要指定 `"columns: col1, col2, col3, temp"`，其中，最后一列可随意指定一个名称（如 `temp`）用于占位即可。
+  - StarRocks 表中有三列，按顺序依次为 `year`、`month` 和 `day`。源数据文件中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。这种情况下，可以指定 `"columns: col, year = year(col), month=month(col), day=day(col)"`。其中，`col` 是源数据文件中所包含的列的临时命名，`year = year(col)`、`month=month(col)` 和 `day=day(col)` 用于指定从源数据文件中的 `col` 列提取对应的数据并落入 StarRocks 表中对应的列，如 `year = year(col)` 表示通过 `year` 函数提取源数据文件中 `col` 列的 `yyyy` 部分的数据并落入 StarRocks 表中的 `year` 列。
 
 ### 导入 JSON 数据时配置列映射关系
 
-在导入 JSON 格式的数据时，需要通过 `jsonpaths` 和 `columns` 两个参数来指定待导入数据文件和 StarRocks 表之间的列映射关系：
+在导入 JSON 格式的数据时，需要通过 `jsonpaths` 和 `columns` 两个参数来指定源数据文件和 StarRocks 表之间的列映射关系：
 
-- `jsonpaths` 参数中声明的字段与待导入数据文件中的字段**按名称**保持一一对应。
+- `jsonpaths` 参数中声明的字段与源数据文件中的字段**按名称**保持一一对应。
 
 - `columns` 中声明的列与 `jsonpaths` 中声明的字段**按顺序**保持一一对应。
 

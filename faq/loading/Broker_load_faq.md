@@ -2,7 +2,7 @@
 
 ## 1. Broker Load 是否支持再次执行已经执行成功、处于 FINISHED 状态的导入作业？
 
-Broker Load 不支持再次执行已经执行成功、处于 FINISHED 状态的导入作业。而且，为了保证导入作业的不丢不重，每个执行成功的导入作业的标签 (Label) 均不可复用。可以使用 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句查看历史的导入记录，找到想要再次执行的导入作业，复制作业信息，并修改作业标签后，重新创建一个导入作业并执行。
+Broker Load 不支持再次执行已经执行成功、处于 FINISHED 状态的导入作业。而且，为了保证数据不丢不重，每个执行成功的导入作业的标签 (Label) 均不可复用。可以使用 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句查看历史的导入记录，找到想要再次执行的导入作业，复制作业信息，并修改作业标签后，重新创建一个导入作业并执行。
 
 ## 2. 通过 Broker Load 导入 HDFS 数据时，为什么数据的导入日期字段会出现异常，比正确的日期时间多加了 8 小时？这种情况应该怎么处理？
 
@@ -10,15 +10,15 @@ StarRocks 表在建表时设置的 `timezone` 为中国时区，创建 Broker Lo
 
 ## 3. 通过 Broker Load 导入 ORC 格式的数据时，发生 "ErrorMsg: type:ETL_RUN_FAIL; msg:Cannot cast '<slot 6>' from VARCHAR to ARRAY<VARCHAR(30)>" 错误应该如何处理？
 
-待导入数据文件和 Starrocks 表两侧的列名不一致，执行 `SET` 子句的时候系统内部会有一个类型推断，但是在调用 cast 函数执行数据类型转换的时候失败了。解决办法是确保两侧的列名一致，这样就不需要 `SET` 子句，也就不会调用 cast 函数执行数据类型转换，导入就可以成功了。
+源数据文件和 Starrocks 表两侧的列名不一致，执行 `SET` 子句的时候系统内部会有一个类型推断，但是在调用 [cast](../../sql-reference/sql-functions/cast.md) 函数执行数据类型转换的时候失败了。解决办法是确保两侧的列名一致，这样就不需要 `SET` 子句，也就不会调用 cast 函数执行数据类型转换，导入就可以成功了。
 
 ## 4. 为什么 Broker Load 导入作业没报错，但是却查询不到数据？
 
 Broker Load 是一种异步的导入方式，创建导入作业的语句没报错，不代表导入作业成功了。可以通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句来查看导入作业的结果状态和 `errmsg` 信息，然后修改导入作业的参数配置后，再重试导入作业。
 
-## 5. 导入报 "failed to send batch"或"TabletWriter add batch with unknown id" 错误应该如何处理？
+## 5. 导入报 "failed to send batch" 或 "TabletWriter add batch with unknown id" 错误应该如何处理？
 
-该错误由数据写入超时而引起。需要修改系统变量 `query_timeout` 和 BE 配置项 `streaming_load_rpc_max_alive_time_sec` 的配置。具体请参考 [系统变量](/reference/System_variable.md) 和 [配置 BE 静态参数](/administration/Configuration.md#配置-be-静态参数)。
+该错误由数据写入超时而引起。需要修改[系统变量](/reference/System_variable.md) `query_timeout` 和 [BE 配置项](/administration/Configuration.md#配置-be-静态参数) `streaming_load_rpc_max_alive_time_sec` 的配置。
 
 ## 6. 导入报 "LOAD-RUN-FAIL; msg:OrcScannerAdapter::init_include_columns. col name = xxx not found" 错误应该如何处理？
 
@@ -47,13 +47,13 @@ SET
 
 按照如下配置：
 
-- `dfs.nameservices`：自定义 HDFS 服务的名字，如 `"dfs.nameservices" = "my_ha"`。
+- `dfs.nameservices`：自定义 HDFS 集群的名称，如 `"dfs.nameservices" = "my_ha"`。
 
-- `dfs.ha.namenodes.xxx`：自定义 NameNode 的名字，多个名字以逗号 (,) 分隔。其中 `xxx` 为 `dfs.nameservices` 中配置的 HDFS 服务的名字，如 `"dfs.ha.namenodes.my_ha" = "my_nn"`。
+- `dfs.ha.namenodes.xxx`：自定义 NameNode 的名字，多个名称以逗号 (,) 分隔。其中 `xxx` 为 `dfs.nameservices` 中配置的 HDFS 集群的名称，如 `"dfs.ha.namenodes.my_ha" = "my_nn"`。
 
-- `dfs.namenode.rpc-address.xxx.nn`：指定 NameNode 的 RPC 地址信息。其中 `nn` 表示 `dfs.ha.namenodes.xxx` 中配置的 NameNode 的名字，如 `"dfs.namenode.rpc-address.my_ha.my_nn" = "host:port"`。
+- `dfs.namenode.rpc-address.xxx.nn`：指定 NameNode 的 RPC 地址信息。其中 `nn` 表示 `dfs.ha.namenodes.xxx` 中自定义 NameNode 的名称，如 `"dfs.namenode.rpc-address.my_ha.my_nn" = "host:port"`。
 
-- `dfs.client.failover.proxy.provider`：指定客户端连接 NameNode 的 `provider`，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。
+- `dfs.client.failover.proxy.provider`：指定客户端连接 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。
 
 示例如下：
 
@@ -89,7 +89,7 @@ SET
 
 如果有自定义的文件系统，需要将文件系统相关的 **.jar** 文件拷贝到 **broker/lib** 目录中。
 
-## 10. 访问 Kerberos 认证的集群时，报 "Can't get Kerberos realm" 错误应该如何处理？
+## 10. 通过 Kerberos 认证访问 HDFS 集群时，报 "Can't get Kerberos realm" 错误应该如何处理？
 
 首先检查是否所有的 Broker 所在的机器都配置了 **/etc/krb5.conf** 文件。
 

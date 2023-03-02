@@ -12,11 +12,11 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
 ## 应用场景
 
-在向 StarRocks 表中导入数据时，有时候 StarRocks 表中的内容与待导入数据文件中的内容不完全一致。在以下几种情况下，您不需要进行任何外部的 ETL 工作，StarRocks 就可以帮助您在导入过程中完成数据的提取和转化：
+在向 StarRocks 表中导入数据时，有时候 StarRocks 表中的内容与源数据文件中的内容不完全一致。在以下几种情况下，您不需要进行任何外部的 ETL 工作，StarRocks 就可以帮助您在导入过程中完成数据的提取和转化：
 
 - 跳过不需要导入的列。
   
-  一方面，该功能使您可以跳过不需要导入的列；另一方面，当 StarRocks 表与待导入数据文件的列顺序不一致时，您可以通过该功能建立两者之间的列映射关系。
+  一方面，该功能使您可以跳过不需要导入的列；另一方面，当 StarRocks 表与源数据文件的列顺序不一致时，您可以通过该功能建立两者之间的列映射关系。
 
 - 过滤掉不需要导入的行。
   
@@ -24,7 +24,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
 - 生成衍生列。
   
-  衍生列是指对待导入数据文件中的列进行计算之后产生的新列。该功能使您可以将计算后产生的新列落入到 StarRocks 表中。
+  衍生列是指对源数据文件中的列进行计算之后产生的新列。该功能使您可以将计算后产生的新列落入到 StarRocks 表中。
 
 - 从文件路径中获取分区字段的内容。
   
@@ -89,7 +89,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
 ## 跳过不需要导入的列
 
-待导入数据文件中可能包含一些 StarRocks 表中不存在的列。StarRocks 支持您只导入 StarRocks 表中存在的列，而忽略掉不需要的列。
+源数据文件中可能包含一些 StarRocks 表中不存在的列。StarRocks 支持您只导入 StarRocks 表中存在的列，而忽略掉不需要的列。
 
 该特性支持如下数据源：
 
@@ -102,11 +102,11 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
 - Kafka
 
-通常情况下，CSV 文件中待导入数据文件中的列，是没有命名的。有些 CSV 文件中，会在首行给出列名，但其实 StarRocks 仍然是不感知的，会当做普通数据处理。因此，在导入 CSV 格式的数据时，您需要在导入命令或者语句中对待导入数据文件中的列**按顺序**依次临时命名。这些临时命名的列，会和 StarRocks 表中的列**按名称**进行对应。这里需要注意以下几点：
+通常情况下，CSV 文件中源数据文件中的列，是没有命名的。有些 CSV 文件中，会在首行给出列名，但其实 StarRocks 仍然是不感知的，会当做普通数据处理。因此，在导入 CSV 格式的数据时，您需要在导入命令或者语句中对源数据文件中的列**按顺序**依次临时命名。这些临时命名的列，会和 StarRocks 表中的列**按名称**进行对应。这里需要注意以下几点：
 
-- 待导入数据文件中与 StarRocks 表中都存在、且命名相同的列，其数据会直接导入。
+- 源数据文件中与 StarRocks 表中都存在、且命名相同的列，其数据会直接导入。
 
-- 待导入数据文件中存在、但是 StarRocks 表中不存在的列，其数据会在导入过程中忽略掉。
+- 源数据文件中存在、但是 StarRocks 表中不存在的列，其数据会在导入过程中忽略掉。
 
 - 如果有 StarRocks 表中存在、但是未声明的列，会报错。
 
@@ -195,7 +195,7 @@ MySQL [test_db]> SELECT * FROM table1;
 
 ## 过滤掉不需要导入的行
 
-待导入数据文件中可能包含一些 StarRocks 表中不需要的行。StarRocks 支持您通过 WHERE 子句来指定要导入哪些行，不符合条件的数据就会被过滤掉。
+源数据文件中可能包含一些 StarRocks 表中不需要的行。StarRocks 支持您通过 WHERE 子句来指定要导入哪些行，不符合条件的数据就会被过滤掉。
 
 该特性支持如下数据源：
 
@@ -282,7 +282,7 @@ MySQL [test_db]> SELECT * FROM table1;
 
 ## 生成衍生列
 
-待导入数据文件中的数据可能需要进行一些转化工作后，才能导入到 StarRocks 表中。StarRocks 支持您在导入命令或者语句中通过函数实现数据转化。
+源数据文件中的数据可能需要进行一些转化工作后，才能导入到 StarRocks 表中。StarRocks 支持您在导入命令或者语句中通过函数实现数据转化。
 
 该特性支持如下数据源：
 
@@ -313,7 +313,7 @@ curl --location-trusted -u root: \
 
 > **说明**
 >
-> - 必须通过 `columns` 参数先声明待导入数据文件中包含的**所有列**，然后再声明衍生列。如上述示例中，`columns` 参数中先声明 `file2.csv` 文件中包含的仅有的一列临时命名为 `date`，然后再声明需要调用函数经过转化才能生成的衍生列：`year=year(date)`、`month=month(date)` 和 `day=day(date)`。
+> - 必须通过 `columns` 参数先声明源数据文件中包含的**所有列**，然后再声明衍生列。如上述示例中，`columns` 参数中先声明 `file2.csv` 文件中包含的仅有的一列临时命名为 `date`，然后再声明需要调用函数经过转化才能生成的衍生列：`year=year(date)`、`month=month(date)` 和 `day=day(date)`。
 >
 > - 不支持 `column_name = function(column_name)` 的形式，需要时可以重命名衍生列之前的列，比如为 `column_name = func(``tempcolumn_name``)`。
 
@@ -338,7 +338,7 @@ WITH BROKER "broker1";
 
 > **说明**
 >
-> 必须先通过 `column_list` 参数声明待导入数据文件中包含的所有列，然后再通过 SET 子句声明衍生列。如上述示例中，先通过 `column_list` 参数声明 `file2.csv` 文件中包含的仅有的一列临时命名为 `date`，然后再通过 SET 子句声明需要调用函数经过转化才能生成的衍生列：`year=year(date)`、`month=month(date)` 和 `day=day(date)`。
+> 必须先通过 `column_list` 参数声明源数据文件中包含的所有列，然后再通过 SET 子句声明衍生列。如上述示例中，先通过 `column_list` 参数声明 `file2.csv` 文件中包含的仅有的一列临时命名为 `date`，然后再通过 SET 子句声明需要调用函数经过转化才能生成的衍生列：`year=year(date)`、`month=month(date)` 和 `day=day(date)`。
 
 有关详细的语法和参数介绍，请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
 
@@ -360,7 +360,7 @@ FROM KAFKA
 
 > **说明**
 >
-> 必须通过 `COLUMNS` 参数先声明待导入数据文件中包含的所有列，然后再声明衍生列。如上述示例中，`COLUMNS` 参数中先声明 `file2.csv` 文件中包含的仅有的一列临时命名为 `date`，然后再声明需要调用函数经过转化才能生成的衍生列：`year=year(date)`、`month=month(date)` 和 `day=day(date)`。
+> 必须通过 `COLUMNS` 参数先声明源数据文件中包含的所有列，然后再声明衍生列。如上述示例中，`COLUMNS` 参数中先声明 `file2.csv` 文件中包含的仅有的一列临时命名为 `date`，然后再声明需要调用函数经过转化才能生成的衍生列：`year=year(date)`、`month=month(date)` 和 `day=day(date)`。
 
 有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)。
 
@@ -383,7 +383,7 @@ MySQL [test_db]> SELECT * FROM table2;
 
 ## 从文件路径中获取分区字段的内容
 
-当指定的文件路径中存在分区字段时，StarRocks 支持您使用 `COLUMNS FROM PATH AS` 参数指定要提取文件路径中哪些分区字段的信息，相当于待导入数据文件中的列。该参数只有在从 HDFS 导入数据时可用。
+当指定的文件路径中存在分区字段时，StarRocks 支持您使用 `COLUMNS FROM PATH AS` 参数指定要提取文件路径中哪些分区字段的信息，相当于源数据文件中的列。该参数只有在从 HDFS 导入数据时可用。
 
 例如，要导入 Hive 生成的四个数据文件，这些文件存储在 HDFS 上的 `/user/starrocks/data/input/` 路径下，每个数据文件都按照 `date` 分区字段进行分区，并且每个数据文件都只包含两列，分别代表事件类型和用户 ID，如下所示：
 

@@ -46,31 +46,31 @@ StarRocks 集群中同一个数据库内已经有一个具有相同标签的导�
 
 - "convert csv string to INT failed."
   
-  待导入数据文件中某列的字符串在转化为对应类型的数据时出错。比如，将 `abc` 转化为数字时失败。
+  源数据文件中某列的字符串在转化为对应类型的数据时出错。比如，将 `abc` 转化为数字时失败。
 
 - "the length of input is too long than schema."
   
-  待导入数据文件中某列的长度不正确。比如定长字符串超过建表设置的长度，或 INT 类型的字段超过 4 个字节。
+  源数据文件中某列的长度不正确。比如定长字符串超过建表设置的长度，或 INT 类型的字段超过 4 个字节。
 
 - "actual column number is less than schema column number."
   
-  待导入数据文件中某一行按照指定的分隔符切分后，列数小于指定的列数。可能原因是分隔符不正确。
+  源数据文件中某一行按照指定的分隔符切分后，列数小于指定的列数。可能原因是分隔符不正确。
 
 - "actual column number is more than schema column number."
   
-  待导入数据文件中某一行按照指定的分隔符切分后，列数大于指定的列数。
+  源数据文件中某一行按照指定的分隔符切分后，列数大于指定的列数。
 
 - "the frac part length longer than schema scale."
   
-  待导入数据文件中某 DECIMAL 类型的列的小数部分超过指定的长度。
+  源数据文件中某 DECIMAL 类型的列的小数部分超过指定的长度。
 
 - "the int part length longer than schema precision."
   
-  待导入数据文件中某 DECIMAL 类型的列的整数部分超过指定的长度。
+  源数据文件中某 DECIMAL 类型的列的整数部分超过指定的长度。
 
 - "there is no corresponding partition for this key."
   
-  待导入数据文件中某行的分区列的值不在分区范围内。
+  源数据文件中某行的分区列的值不在分区范围内。
 
 ## 4. 导入过程中，发生 RPC 超时应该如何处理？
 

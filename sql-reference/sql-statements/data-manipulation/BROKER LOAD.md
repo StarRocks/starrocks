@@ -57,7 +57,7 @@ INTO TABLE <table_name>
 
 - `file_path`
 
-  用于指定待导入数据文件所在的路径。
+  用于指定源数据文件所在的路径。
 
   您可以指定导入一个具体的数据文件。例如，通过指定 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/20210411"` 可以匹配 HDFS 服务器上 `/user/data/tablename` 目录下名为 `20210411` 的数据文件。
 
@@ -92,13 +92,13 @@ INTO TABLE <table_name>
 
 - `FORMAT AS`
 
-  用于指定待导入数据文件的格式。取值包括 `CSV`、`Parquet` 和 `ORC`。如果不指定该参数，则默认通过 `file_path` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
+  用于指定源数据文件的格式。取值包括 `CSV`、`Parquet` 和 `ORC`。如果不指定该参数，则默认通过 `file_path` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
 
 - `COLUMNS TERMINATED BY`
 
-  用于指定待导入数据文件中的列分隔符。如果不指定该参数，则默认列分隔符为 `\t`，即 Tab。必须确保这里指定的列分隔符与待导入数据文件中的列分隔符一致；否则，导入作业会因数据质量错误而失败，作业状态 (`State`) 会显示为 `CANCELLED`。
+  用于指定源数据文件中的列分隔符。如果不指定该参数，则默认列分隔符为 `\t`，即 Tab。必须确保这里指定的列分隔符与源数据文件中的列分隔符一致；否则，导入作业会因数据质量错误而失败，作业状态 (`State`) 会显示为 `CANCELLED`。
 
-  需要注意的是，Broker Load 通过 MySQL 协议提交导入请求，除了 StarRocks 会做转义处理以外，MySQL 协议也会做转义处理。因此，如果列分隔符是 Tab 等不可见字符，则需要在列分隔字符前面多加一个反斜线 (\\)。例如，如果列分隔符是 `\t`，这里必须输入 `\\t`；如果列分隔符是 `\n`，这里必须输入 `\\n`。Apache Hive™ 文件的列分隔符为 `\x01`，因此，如果待导入数据文件是 Hive 文件，这里必须传入 `\\x01`。
+  需要注意的是，Broker Load 通过 MySQL 协议提交导入请求，除了 StarRocks 会做转义处理以外，MySQL 协议也会做转义处理。因此，如果列分隔符是 Tab 等不可见字符，则需要在列分隔字符前面多加一个反斜线 (\\)。例如，如果列分隔符是 `\t`，这里必须输入 `\\t`；如果列分隔符是 `\n`，这里必须输入 `\\n`。Apache Hive™ 文件的列分隔符为 `\x01`，因此，如果源数据文件是 Hive 文件，这里必须传入 `\\x01`。
 
   > **说明**
   >
@@ -106,19 +106,19 @@ INTO TABLE <table_name>
 
 - `column_list`
 
-  用于指定待导入数据文件和 StarRocks 表之间的列对应关系。语法如下：`(<column_name>[, <column_name> ...])`。`column_list` 中声明的列与 StarRocks 表中的列按名称一一对应。
+  用于指定源数据文件和 StarRocks 表之间的列对应关系。语法如下：`(<column_name>[, <column_name> ...])`。`column_list` 中声明的列与 StarRocks 表中的列按名称一一对应。
 
   > **说明**
   >
-  > 如果待导入数据文件的列和 StarRocks 表中的列按顺序一一对应，则不需要指定 `column_list` 参数。
+  > 如果源数据文件的列和 StarRocks 表中的列按顺序一一对应，则不需要指定 `column_list` 参数。
 
-  如果要跳过待导入数据文件中的某一列，只需要在 `column_list` 参数中将该列命名为 StarRocks 表中不存在的列名即可。具体请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)。
+  如果要跳过源数据文件中的某一列，只需要在 `column_list` 参数中将该列命名为 StarRocks 表中不存在的列名即可。具体请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)。
 
 - `COLUMNS FROM PATH AS`
 
   用于从指定的文件路径中提取一个或多个分区字段的信息。该参数仅当指定的文件路径中存在分区字段时有效。
 
-  例如，待导入数据文件所在的路径为 `/path/col_name=col_value/file1`，其中 `col_name` 可以对应到 StarRocks 表中的列。这时候，您可以设置参数为 `col_name`。导入时，StarRocks 会将 `col_value` 落入 `col_name` 对应的列中。
+  例如，源数据文件所在的路径为 `/path/col_name=col_value/file1`，其中 `col_name` 可以对应到 StarRocks 表中的列。这时候，您可以设置参数为 `col_name`。导入时，StarRocks 会将 `col_value` 落入 `col_name` 对应的列中。
 
   > **说明**
   >
@@ -126,10 +126,10 @@ INTO TABLE <table_name>
 
 - `SET`
 
-  用于将待导入数据文件的某一列按照指定的函数进行转化，然后将转化后的结果落入 StarRocks 表中。语法如下：`column_name = expression`。以下为两个示例：
+  用于将源数据文件的某一列按照指定的函数进行转化，然后将转化后的结果落入 StarRocks 表中。语法如下：`column_name = expression`。以下为两个示例：
 
-  - StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3`；待导入数据文件中有四列，前两列按顺序依次对应 StarRocks 表中的 `col1`、`col2` 列，后两列之和对应 StarRocks 表中的 `col3` 列。这种情况下，需要通过 `column_list` 参数声明 `(col1,col2,tmp_col3,tmp_col4)`，并使用 SET 子句指定 `SET (col3=tmp_col3+tmp_col4)` 来实现数据转换。
-  - StarRocks 表中有三列，按顺序依次为 `year`、`month` 和 `day`；待导入数据文件中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。这种情况下，需要通过 `column_list` 参数声明 `(tmp_time)`、并使用 SET 子句指定 `SET (year = year(tmp_time), month=month(tmp_time), day=day(tmp_time))` 来实现数据转换。
+  - StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3`；源数据文件中有四列，前两列按顺序依次对应 StarRocks 表中的 `col1`、`col2` 列，后两列之和对应 StarRocks 表中的 `col3` 列。这种情况下，需要通过 `column_list` 参数声明 `(col1,col2,tmp_col3,tmp_col4)`，并使用 SET 子句指定 `SET (col3=tmp_col3+tmp_col4)` 来实现数据转换。
+  - StarRocks 表中有三列，按顺序依次为 `year`、`month` 和 `day`；源数据文件中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。这种情况下，需要通过 `column_list` 参数声明 `(tmp_time)`、并使用 SET 子句指定 `SET (year = year(tmp_time), month=month(tmp_time), day=day(tmp_time))` 来实现数据转换。
 
 - `WHERE`
 
@@ -321,7 +321,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
   推荐超时时间大于下面公式的计算值：
 
-  **超时时间 > (待导入数据文件的总大小 x 待导入数据文件及相关物化视图的个数)/(平均导入速度 x 导入并发数)**
+  **超时时间 > (源数据文件的总大小 x 源数据文件及相关物化视图的个数)/(平均导入速度 x 导入并发数)**
 
     > **说明**
     >
@@ -365,20 +365,20 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 ## 列映射
 
-在导入数据时，可以通过 `column_list` 参数来指定待导入数据文件和 StarRocks 表之间的列映射关系。如果待导入数据文件中的列与 StarRocks 表中的列按顺序一一对应，则不需要指定该参数；否则，必须通过该参数来配置列映射关系，一般包括如下两种场景：
+在导入数据时，可以通过 `column_list` 参数来指定源数据文件和 StarRocks 表之间的列映射关系。如果源数据文件中的列与 StarRocks 表中的列按顺序一一对应，则不需要指定该参数；否则，必须通过该参数来配置列映射关系，一般包括如下两种场景：
 
-- 待导入数据文件中的列与 StarRocks 表中的列一一对应，并且数据不需要通过函数计算、可以直接落入 StarRocks 表中对应的列。
+- 源数据文件中的列与 StarRocks 表中的列一一对应，并且数据不需要通过函数计算、可以直接落入 StarRocks 表中对应的列。
 
-  您需要在 `column_list` 参数中按照待导入数据文件中的列顺序、使用 StarRocks 表中对应的列名来配置列映射关系。
+  您需要在 `column_list` 参数中按照源数据文件中的列顺序、使用 StarRocks 表中对应的列名来配置列映射关系。
 
-  例如，StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3`；待导入数据文件中也有三列，按顺序依次对应 StarRocks 表中的 `col3`、`col2` 和 `col1`。这种情况下，需要指定 `(col3, col2, col1)`。
+  例如，StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3`；源数据文件中也有三列，按顺序依次对应 StarRocks 表中的 `col3`、`col2` 和 `col1`。这种情况下，需要指定 `(col3, col2, col1)`。
 
-- 待导入数据文件中的列与 StarRocks 表中的列不一一对应，或者某些列的数据需要通过函数计算以后才能落入 StarRocks 表中对应的列。
+- 源数据文件中的列与 StarRocks 表中的列不一一对应，或者某些列的数据需要通过函数计算以后才能落入 StarRocks 表中对应的列。
 
-  您不仅需要在 `column_list` 参数中按照待导入数据文件中的列顺序、使用 StarRocks 表中对应的列名来配置列映射关系，还需要指定参与数据计算的函数。以下为两个示例：
+  您不仅需要在 `column_list` 参数中按照源数据文件中的列顺序、使用 StarRocks 表中对应的列名来配置列映射关系，还需要指定参与数据计算的函数。以下为两个示例：
 
-  - StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3` ；待导入数据文件中有四列，前三列按顺序依次对应 StarRocks 表中的 `col1`、`col2` 和 `col3`，第四列在 StarRocks 表中无对应的列。这种情况下，需要指定 `(col1, col2, col3, temp)`，其中，最后一列可随意指定一个名称（如 `temp`）用于占位即可。
-  - StarRocks 表中有三列，按顺序依次为 `year`、`month` 和 `day`。待导入数据文件中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。这种情况下，可以指定 `(col, year = year(col), month=month(col), day=day(col))`。其中，`col` 是待导入数据文件中所包含的列的临时命名，`year = year(col)`、`month=month(col)` 和 `day=day(col)` 用于指定从待导入数据文件中的 `col` 列提取对应的数据并落入 StarRocks 表中对应的列，如 `year = year(col)` 表示通过 `year` 函数提取待导入数据文件中 `col` 列的 `yyyy` 部分的数据并落入 StarRocks 表中的 `year` 列。
+  - StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3` ；源数据文件中有四列，前三列按顺序依次对应 StarRocks 表中的 `col1`、`col2` 和 `col3`，第四列在 StarRocks 表中无对应的列。这种情况下，需要指定 `(col1, col2, col3, temp)`，其中，最后一列可随意指定一个名称（如 `temp`）用于占位即可。
+  - StarRocks 表中有三列，按顺序依次为 `year`、`month` 和 `day`。源数据文件中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。这种情况下，可以指定 `(col, year = year(col), month=month(col), day=day(col))`。其中，`col` 是源数据文件中所包含的列的临时命名，`year = year(col)`、`month=month(col)` 和 `day=day(col)` 用于指定从源数据文件中的 `col` 列提取对应的数据并落入 StarRocks 表中对应的列，如 `year = year(col)` 表示通过 `year` 函数提取源数据文件中 `col` 列的 `yyyy` 部分的数据并落入 StarRocks 表中的 `year` 列。
 
 ## 示例
 
