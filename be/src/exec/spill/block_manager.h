@@ -23,7 +23,6 @@ namespace starrocks {
 namespace spill {
 
 struct AcquireBlockOptions {
-    // size_t block_size = 0;
     TUniqueId query_id;
     int32_t plan_node_id;
     std::string name;
@@ -37,6 +36,7 @@ class BlockManager {
 public:
     virtual ~BlockManager() = default;
     virtual Status open() = 0;
+    virtual void close() = 0;
     // create a block with option, if cannot create return an error
     virtual StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) = 0;
     virtual Status release_block(const BlockPtr& block) = 0;

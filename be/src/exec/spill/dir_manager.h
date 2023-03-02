@@ -51,12 +51,9 @@ public:
     DirManager() = default;
     ~DirManager() = default;
 
-    // read from confit
     Status init();
 
-    // choose a dir for write
     StatusOr<Dir*> acquire_writable_dir(const AcquireDirOptions& opts);
-    // @TODO update dir stats
 
 private:
     std::vector<DirPtr> _dirs;

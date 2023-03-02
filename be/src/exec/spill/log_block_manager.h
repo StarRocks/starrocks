@@ -29,8 +29,7 @@ namespace spill {
 
 class LogBlockContainer;
 using LogBlockContainerPtr = std::shared_ptr<LogBlockContainer>;
-// @TODO make it global
-// query-level LogBlockManager
+
 class LogBlockManager: public BlockManager {
 public:
     LogBlockManager(TUniqueId query_id):
@@ -38,16 +37,12 @@ public:
     ~LogBlockManager();
 
     virtual Status open() override;
-    // 1. pick dir
-    // 2. pick container
-    virtual StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) override;
+    virtual void close() override;
 
-    // after flush, use this method to tell log block manager that related-containter can be release
+    virtual StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) override;
     virtual Status release_block(const BlockPtr& block) override;
 
 private:
-    std::string get_storage_path();
-    StatusOr<LogBlockContainerPtr> get_or_create_container(const std::string& path);
     StatusOr<LogBlockContainerPtr> get_or_create_container(Dir* dir, int32_t plan_node_id, const std::string& plan_node_name);
 
 private:
@@ -58,11 +53,7 @@ private:
     TUniqueId _query_id;
 
     std::atomic<uint64_t> _next_container_id = 0;
-    // FileSystem* _fs;
-    std::vector<std::string> _local_storage_paths;
     std::mutex _mutex;
-    // path => container queue
-    std::unordered_map<std::string, ContainerQueuePtr> _available_containers_by_path;
 
     typedef std::unordered_map<int32_t, ContainerQueuePtr> PlanNodeContainerMap;
     typedef std::unordered_map<TUniqueId, std::shared_ptr<PlanNodeContainerMap>> QueryContainerMap;
@@ -71,14 +62,6 @@ private:
     std::unordered_map<Dir*, std::shared_ptr<PlanNodeContainerMap>> _available_containers;
 
     std::vector<LogBlockContainerPtr> _full_containers;
-    // file: ${storage_dir}/${query_id}/${plan_name}-${plan_node_id}-${container-id}
-    // storage dir => query container map
-    // @TODO need a dir manager?
-    // std::unordered_map<std::string, std::shared_ptr<QueryContainerMap>> _available_containers;
-
-    // StorageDir=>(query-id,plan-name,plan_node-id)=>containerid
-    // all containers
-    ContainerMap _containers;
 };
 }
 }

@@ -149,8 +149,8 @@ Status Spiller::_open(RuntimeState* state) {
     }
 
     // init path provider
-    ASSIGN_OR_RETURN(_path_provider, _opts.path_provider_factory());
-    RETURN_IF_ERROR(_path_provider->open(state));
+    // ASSIGN_OR_RETURN(_path_provider, _opts.path_provider_factory());
+    // RETURN_IF_ERROR(_path_provider->open(state));
     _has_opened = true;
 
     return Status::OK();

@@ -60,8 +60,6 @@ protected:
 
 typedef std::shared_ptr<InputStream> InputStreamPtr;
 
-// a group of multi blocks
-// @TODO do we really need this？
 class BlockGroup {
 public:
     BlockGroup(Formatter* formatter):

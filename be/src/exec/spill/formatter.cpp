@@ -47,6 +47,7 @@ size_t ColumnarFormatter::serialize_size(const ChunkPtr& chunk) const {
 }
 
 Status ColumnarFormatter::serialize(FormatterContext& ctx, const ChunkPtr& chunk, BlockPtr block) {
+    // 1. serialize
     size_t max_size = serialize_size(chunk);
     auto& serialize_buffer = ctx.serialize_buffer;
     serialize_buffer.resize(max_size);
@@ -55,65 +56,66 @@ Status ColumnarFormatter::serialize(FormatterContext& ctx, const ChunkPtr& chunk
     for (const auto& column : chunk->columns()) {
         buf = serde::ColumnArraySerde::serialize(*column, buf);
     }
-    size_t real_size = buf - begin;
-    serialize_buffer.resize(real_size);
-    // LOG(INFO) << "serialize, max_size: " << max_size << ", real size:" << real_size;
+    size_t uncompressed_size = buf - begin;
+    serialize_buffer.resize(uncompressed_size);
 
-    // compress
+    // 2. compress
     auto& compress_buffer = ctx.compress_buffer;
-    Slice compress_input(serialize_buffer.data(), real_size);
+    Slice compress_input(serialize_buffer.data(), uncompressed_size);
     Slice compress_slice;
 
-    int max_compressed_size = _compress_codec->max_compressed_len(real_size);
+    int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
     if (compress_buffer.size() < max_compressed_size) {
         compress_buffer.resize(max_compressed_size);
     }
     compress_slice = Slice(compress_buffer.data(), compress_buffer.size());
     RETURN_IF_ERROR(_compress_codec->compress(compress_input, &compress_slice));
-    compress_buffer.resize(compress_slice.size);
-    // LOG(INFO) << "uncompressed size: " << real_size << ", compressed size: " << compress_slice.size;
+    size_t compressed_size = compress_slice.size;
+    compress_buffer.resize(compressed_size);
 
+    // 3. append data to block
     uint8_t meta_buf[sizeof(size_t) * 2];
-    UNALIGNED_STORE64(meta_buf, compress_slice.size);
-    UNALIGNED_STORE64(meta_buf + sizeof(size_t), real_size);
+    UNALIGNED_STORE64(meta_buf, compressed_size);
+    UNALIGNED_STORE64(meta_buf + sizeof(size_t), uncompressed_size);
+
     std::vector<Slice> data;
     data.emplace_back(Slice(meta_buf, sizeof(size_t) * 2));
     data.emplace_back(compress_slice);
     RETURN_IF_ERROR(block->append(data));
+    TRACE_SPILL_LOG << "serialize chunk to block: " << block->debug_string()
+        << ", compressed size: " << compressed_size << ", uncompressed size: " << uncompressed_size;
     return Status::OK();
 }
 
 StatusOr<ChunkUniquePtr> ColumnarFormatter::deserialize(FormatterContext& ctx, const BlockPtr block) {
-    size_t compress_size, uncompress_size;
-    RETURN_IF_ERROR(block->read_fully(&compress_size, sizeof(size_t)));
-    RETURN_IF_ERROR(block->read_fully(&uncompress_size, sizeof(size_t)));
-    LOG(INFO) << "deserialize, compress size: " << compress_size << ", uncompress size: " << uncompress_size;
+    size_t compressed_size, uncompressed_size;
+    RETURN_IF_ERROR(block->read_fully(&compressed_size, sizeof(size_t)));
+    RETURN_IF_ERROR(block->read_fully(&uncompressed_size, sizeof(size_t)));
+    TRACE_SPILL_LOG << "deserialize chunk from block: " << block->debug_string()
+        << ", compressed size: " << compressed_size << ", uncompressed size: " << uncompressed_size;
 
-    // @TODO decompress
     auto& compress_buffer = ctx.compress_buffer;
     auto& serialize_buffer = ctx.serialize_buffer;
-    compress_buffer.resize(compress_size);
-    serialize_buffer.resize(uncompress_size);
+    compress_buffer.resize(compressed_size);
+    serialize_buffer.resize(uncompressed_size);
 
     auto buf = reinterpret_cast<uint8_t*>(compress_buffer.data());
-    RETURN_IF_ERROR(block->read_fully(buf, compress_size));
+    RETURN_IF_ERROR(block->read_fully(buf, compressed_size));
     // decompress
-    Slice input_slice(compress_buffer.data(), compress_size);
-    Slice serialize_slice(serialize_buffer.data(), uncompress_size);
+    Slice input_slice(compress_buffer.data(), compressed_size);
+    Slice serialize_slice(serialize_buffer.data(), uncompressed_size);
     RETURN_IF_ERROR(_compress_codec->decompress(input_slice, &serialize_slice));
-    LOG(INFO) << "decompress done";
 
+    // deserialize
     auto chunk = _chunk_builder();
     const uint8_t* read_cursor = reinterpret_cast<uint8_t*>(serialize_buffer.data());
     for (const auto& column: chunk->columns()) {
         read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, column.get());
     }
-    LOG(INFO) << "return chunk";
     return chunk;
 }
 
 StatusOr<FormatterPtr> create_formatter(SpilledOptions* options) {
-    // @TODO
     auto compress_type = options->compress_type;
     const BlockCompressionCodec* codec = nullptr;
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &codec));
