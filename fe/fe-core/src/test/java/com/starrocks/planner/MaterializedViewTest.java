@@ -17,7 +17,6 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableList;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -33,6 +32,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void setUp() throws Exception {
         MaterializedViewTestBase.setUp();
+
+        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         String deptsTable = "" +
                 "CREATE TABLE depts(    \n" +
@@ -83,7 +84,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
 
-        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME)
+        starRocksAssert
                 .withTable(deptsTable)
                 .withTable(empsTable)
                 .withTable(locationsTable)
@@ -308,15 +309,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"foreign_key_constraints\" = \"(c2) REFERENCES t2(c5);(c3) REFERENCES t2(c5)\",\n" +
                 "    \"storage_format\" = \"DEFAULT\"\n" +
                 ")");
-    }
-
-    @AfterClass
-    public static void afterClass() {
-        try {
-            starRocksAssert.dropDatabase(MATERIALIZED_DB_NAME);
-        } catch (Exception e) {
-            LOG.warn("drop database failed:", e);
-        }
     }
 
     @Test

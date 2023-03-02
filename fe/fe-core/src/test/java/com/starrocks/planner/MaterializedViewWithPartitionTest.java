@@ -14,13 +14,8 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -52,15 +47,6 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                 " PARTITION p5 values less than (\"3000\"))" +
                 " distributed by hash(c1)" +
                 " properties (\"replication_num\"=\"1\");");
-    }
-
-    @AfterClass
-    public static void afterClass() {
-        try {
-            starRocksAssert.dropDatabase(MATERIALIZED_DB_NAME);
-        } catch (Exception e) {
-            LOG.warn("drop database failed:", e);
-        }
     }
 
     // MV's partition columns is the same with the base table, and mv has partition filter predicates.
