@@ -247,6 +247,10 @@ set(EXEC_FILES
     spill/spiller_path_provider.cpp
     spill/mem_table.cpp
     spill/query_spill_manager.cpp
+    spill/dir_manager.cpp
+    spill/formatter.cpp
+    spill/input_stream.cpp
+    spill/log_block_manager.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
     stream/aggregate/agg_group_state.cpp

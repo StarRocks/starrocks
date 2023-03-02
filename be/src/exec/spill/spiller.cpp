@@ -35,6 +35,7 @@
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
+#include "exec/pipeline/query_context.h"
 
 namespace starrocks {
 SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
@@ -134,6 +135,9 @@ Status Spiller::prepare(RuntimeState* state) {
     }
 
     _file_group = std::make_shared<SpilledFileGroup>(*_spill_fmt);
+    ASSIGN_OR_RETURN(_formatter, spill::create_formatter(&_opts));
+    _block_group = std::make_shared<spill::BlockGroup>(_formatter.get());
+    _block_manager = state->query_ctx()->spill_block_manager();
 
     return Status::OK();
 }
@@ -162,30 +166,37 @@ Status Spiller::_flush_and_closed(std::unique_ptr<WritableFile>& writable) {
 }
 
 Status Spiller::_run_flush_task(RuntimeState* state, const MemTablePtr& mem_table) {
-    RETURN_IF_ERROR(this->_open(state));
-    // prepare current file
-    ASSIGN_OR_RETURN(auto file, _path_provider->get_file());
-    ASSIGN_OR_RETURN(auto writable, file->as<WritableFile>());
-    // TODO: reuse io context
-    SpillFormatContext spill_ctx;
-    {
-        std::lock_guard guard(_mutex);
-        _file_group->append_file(std::move(file));
+    if (state->is_cancelled()) {
+        LOG(INFO) << "query is cancelled, just return";
+        return Status::OK();
     }
-    DCHECK(writable != nullptr);
-    {
-        SCOPED_TIMER(_metrics.write_io_timer);
-        // flush all pending result to spilled files
-        size_t num_rows_flushed = 0;
-        RETURN_IF_ERROR(mem_table->flush([&](const auto& chunk) {
-            num_rows_flushed += chunk->num_rows();
-            RETURN_IF_ERROR(_spill_fmt->spill_as_fmt(spill_ctx, writable, chunk));
-            return Status::OK();
-        }));
-        TRACE_SPILL_LOG << "spill flush rows:" << num_rows_flushed << ",spiller:" << this;
-    }
-    // then release the pending memory
-    RETURN_IF_ERROR(_flush_and_closed(writable));
+    // LOG(INFO) << "invoke flush_mem_table";
+    // flush mem table
+    // acuire block
+    spill::AcquireBlockOptions opts;
+    opts.query_id = state->query_id();
+    opts.plan_node_id = _opts.plan_node_id;
+    opts.name = _opts.name;
+    // @TODO plan node id, name
+    ASSIGN_OR_RETURN(auto block, _block_manager->acquire_block(opts));
+    // LOG(INFO) << "get block";
+    spill::FormatterContext ctx;
+
+    size_t num_rows_flushed = 0;
+    // @TODO remove callback
+    RETURN_IF_ERROR(mem_table->flush([&] (const auto& chunk) {
+        num_rows_flushed += chunk->num_rows();
+        // LOG(INFO) << "serialize chunk";
+        RETURN_IF_ERROR(_formatter->serialize(ctx, chunk, block));
+        return Status::OK();
+    }));
+    // LOG(INFO) << "flush block begin";
+    RETURN_IF_ERROR(block->flush());
+    _block_manager->release_block(block);
+    // LOG(INFO) << "flush block end";
+    std::lock_guard<std::mutex> l(_mutex);
+    _block_group->append(block);
+    LOG(INFO) << "append block: " << block->debug_string();
     return Status::OK();
 }
 
@@ -196,31 +207,11 @@ void Spiller::_update_spilled_task_status(Status&& st) {
     }
 }
 
-StatusOr<std::shared_ptr<SpilledInputStream>> Spiller::_acquire_input_stream(RuntimeState* state) {
-    DCHECK(_restore_tasks.empty());
-    std::vector<SpillRestoreTaskPtr> restore_tasks;
-    std::shared_ptr<SpilledInputStream> input_stream;
+StatusOr<std::shared_ptr<spill::InputStream>> Spiller::_acquire_input_stream(RuntimeState* state) {
     if (_opts.is_unordered) {
-        ASSIGN_OR_RETURN(auto res, _file_group->as_flat_stream(_parent));
-        auto& [stream, tasks] = res;
-        input_stream = std::move(stream);
-        restore_tasks = std::move(tasks);
-    } else {
-        ASSIGN_OR_RETURN(auto res, _file_group->as_sorted_stream(_parent, state, _opts.sort_exprs, _opts.sort_desc));
-        auto& [stream, tasks] = res;
-        input_stream = std::move(stream);
-        restore_tasks = std::move(tasks);
+        return _block_group->as_unordered_stream();
     }
-
-    std::lock_guard guard(_mutex);
-    {
-        // put all restore_tasks to pending lists
-        for (auto& task : restore_tasks) {
-            _restore_tasks.push(task);
-        }
-        _total_restore_tasks = _restore_tasks.size();
-    }
-    return input_stream;
+    return _block_group->as_ordered_stream(state, _opts.sort_exprs, _opts.sort_desc);
 }
 
 Status Spiller::_decrease_running_flush_tasks() {

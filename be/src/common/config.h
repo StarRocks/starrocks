@@ -838,6 +838,7 @@ CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 // spill dirs
 CONF_String(spill_local_storage_dir, "spill");
 CONF_mBool(experimental_spill_skip_sync, "false");
+CONF_Int64(experimental_spill_max_log_block_container_bytes, "20971520");
 
 // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
