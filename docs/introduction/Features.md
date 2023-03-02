@@ -1,59 +1,58 @@
-# Features
+#امکانات
 
-StarRocks offers a rich set of features to deliver a blazing-fast, real-time analytics experience on data at scale.
+ استار راکت مجموعه ای غنی از ویژگی ها را برای ارائه یک تجربه تجزیه و تحلیل سریع و بی درنگ در داده ها در مقیاس ارائه می دهد.
 
-## MPP framework
+ ## چارچوب ام پی پی
 
-StarRocks adopts the massively parallel processing (MPP) framework. One query request is split into multiple physical computing units that can be executed in parallel on multiple machines. Each machine has dedicated CPU and memory resources. The MPP framework fully uses the resources of all CPU cores and machines. The performance of a single query can continuously increase as the cluster is scaled out.
+ استار راکت چارچوب پردازش انبوه موازی (MPP) را پذیرفته است.  یک درخواست پرس و جو به چندین واحد محاسباتی فیزیکی تقسیم می شود که می توانند به صورت موازی در چندین ماشین اجرا شوند.  هر دستگاه دارای CPU و منابع حافظه اختصاصی است.  چارچوب MPP به طور کامل از منابع تمام هسته‌ها و ماشین‌های CPU استفاده می‌کند.  عملکرد یک پرس و جو می تواند به طور مداوم با کوچک شدن خوشه افزایش یابد.
 
-![MPP](../assets/1.1-3-mpp.png)
+ ![MPP](../assets/1.1-3-mpp.png)
 
-In the preceding figure, StarRocks parses an SQL statement into multiple logical execution units (query fragments) according to the semantics of the statement. Each fragment is then implemented by one or multiple physical execution units (fragment instances) based on the computing complexity. A physical execution unit is the smallest scheduling unit in StarRocks. They will be scheduled to backends (BEs) for execution. One logical execution unit can contain one or more operators, such as the Scan, Project, and Agg operators, as shown on the right side of the figure. Each physical execution unit processes only part of the data and the result will be merged to generate the final data. **Parallel execution of logical execution units fully utilizes the resources of all CPU cores and physical machines and accelerates the query speed.**
+ در شکل قبل، استار راکت یک دستور SQL را به چند واحد اجرای منطقی (قطعات پرس و جو) با توجه به معنایی عبارت تجزیه می کند.  سپس هر قطعه توسط یک یا چند واحد اجرای فیزیکی (نمونه های قطعه) بر اساس پیچیدگی محاسبات پیاده سازی می شود.  واحد اجرای فیزیکی کوچکترین واحد زمانبندی در استار راکس است.  آنها برای اجرا در backends (BEs) برنامه ریزی خواهند شد.  همانطور که در سمت راست شکل نشان داده شده است، یک واحد اجرای منطقی می تواند شامل یک یا چند عملگر مانند عملگرهای Scan، Project و Agg باشد.  هر واحد اجرای فیزیکی تنها بخشی از داده ها را پردازش می کند و نتیجه برای تولید داده های نهایی ادغام می شود.  ** اجرای موازی واحدهای اجرای منطقی به طور کامل از منابع تمام هسته های CPU و ماشین های فیزیکی استفاده می کند و سرعت پرس و جو را افزایش می دهد.**
 
-![MPP](../assets/1.1-4-mpp.png)
+ ![MPP](../assets/1.1-4-mpp.png)
 
-Unlike the Scatter-Gather framework used by many other data analytics systems, the MPP framework can utilize more resources to process query requests. In the Scatter-Gather framework, only the Gather node can perform the final merge operation. In the MPP framework, data is shuffled to multiple nodes for merge operations. For complex queries, such as Group By on high-cardinality fields and large table joins, StarRocks' MPP framework has noticeable performance advantages over the Scatter-Gather framework.
+ برخلاف چارچوب Scatter-Gather که توسط بسیاری دیگر از سیستم های تحلیل داده استفاده می شود، چارچوب MPP می تواند از منابع بیشتری برای پردازش درخواست های پرس و جو استفاده کند.  در چارچوب Scatter-Gather، تنها گره Gather می تواند عملیات ادغام نهایی را انجام دهد.  در چارچوب MPP، داده ها برای عملیات ادغام به چندین گره تبدیل می شوند.  برای پرس و جوهای پیچیده، مانند Group By در فیلدهای با کاردینالیته بالا و پیوستن به جدول بزرگ، چارچوب MPP StarRocks دارای مزایای عملکرد قابل توجهی نسبت به چارچوب Scatter-Gather است.
 
-## Fully vectorized execution engine
+ ## موتور اجرای کاملا برداری
 
-The fully vectorized execution engine makes more efficient use of CPU processing power because this engine organizes and processes data in a columnar manner. Specifically, StarRocks stores data, organizes data in memory, and computes SQL operators all in a columnar manner. Columnar organization makes full use of CPU cache. Columnar computing reduces the number of virtual function calls and branch judgments, resulting in more sufficient CPU instruction flows.
+ موتور اجرایی کاملاً برداری شده از قدرت پردازش CPU استفاده موثرتری می کند زیرا این موتور داده ها را به صورت ستونی سازماندهی و پردازش می کند.  به طور خاص، استارراکت داده ها را ذخیره می کند، داده ها را در حافظه سازماندهی می کند و عملگرهای SQL را به صورت ستونی محاسبه می کند.  سازماندهی ستونی به طور کامل از حافظه پنهان CPU استفاده می کند.  محاسبات ستونی تعداد فراخوانی‌های تابع مجازی و قضاوت‌های شاخه‌ای را کاهش می‌دهد و در نتیجه جریان‌های دستورالعمل CPU کافی‌تر می‌شود.
 
-The vectorized execution engine also makes full use of SIMD instructions. This engine can complete more data operations with fewer instructions. Tests against standard datasets show that this engine enhances the overall performance of operators by 3 to 10 times.
+ موتور اجرای بردار نیز از دستورالعمل های SIMD استفاده کامل می کند.  این موتور می تواند عملیات داده های بیشتری را با دستورالعمل های کمتر تکمیل کند.  آزمایش‌ها در برابر مجموعه داده‌های استاندارد نشان می‌دهد که این موتور عملکرد کلی اپراتورها را 3 تا 10 برابر افزایش می‌دهد.
+علاوه بر بردارسازی عملگر، استار راکت بهینه‌سازی‌های دیگری را برای موتور پرس و جو پیاده‌سازی کرده است.  به عنوان مثال، استارراکت از فناوری Operation on Encoded Data برای اجرای مستقیم عملگرها بر روی رشته های رمزگذاری شده، بدون نیاز به رمزگشایی استفاده می کند.  این به طور قابل توجهی پیچیدگی SQL را کاهش می دهد و سرعت پرس و جو را بیش از 2 برابر افزایش می دهد.
 
-In addition to operator vectorization, StarRocks has implemented other optimizations for the query engine. For example, StarRocks uses the Operation on Encoded Data technology to directly execute operators on encoded strings, without the need for decoding. This noticeably reduces SQL complexity and increases the query speed by more than 2 times.
+ ## بهینه سازی مبتنی بر هزینه
 
-## Cost-based optimizer
+ ![CBO](../assets/1.1-5-cbo.png)
 
-![CBO](../assets/1.1-5-cbo.png)
+ بهینه سازی عملکرد پرس و جوهای پیوستن چند جدولی دشوار است.  موتورهای اجرا به تنهایی نمی توانند عملکرد برتر را ارائه دهند زیرا پیچیدگی برنامه های اجرایی ممکن است در سناریوهای پرس و جوی چند جدولی با چندین مرتبه بزرگی متفاوت باشد.  هر چه جداول مرتبط بیشتر باشد، برنامه های اجرایی بیشتر می شود، که انتخاب یک طرح بهینه را NP سخت می کند.  فقط یک بهینه ساز پرس و جو به اندازه کافی عالی می تواند یک طرح پرس و جو نسبتاً بهینه را برای تجزیه و تحلیل کارآمد چند جدولی انتخاب کند.
 
-Performance of multi-table join queries is difficult to optimize. Execution engines alone cannot deliver superior performance because the complexity of execution plans may vary by several orders of magnitude in multi-table join query scenarios. The more the associated tables, the more the execution plans, which makes it NP-hard to choose an optimal plan. Only a query optimizer excellent enough can choose a relatively optimal query plan for efficient multi-table analytics.
+ استار راکت یک CBO کاملاً جدید را از ابتدا طراحی می کند.  این CBO چارچوبی شبیه آبشار را به کار می گیرد و عمیقاً برای موتور اجرایی بردار شده با تعدادی بهینه سازی و نوآوری سفارشی شده است.  این بهینه‌سازی‌ها شامل استفاده مجدد از عبارات جدول رایج (CTEs)، بازنویسی پرس‌و‌جوهای فرعی، پیوستن جانبی، ترتیب مجدد پیوستن، انتخاب استراتژی برای اجرای پیوستن توزیع‌شده و بهینه‌سازی با کاردینالیته پایین است.  CBO در مجموع از 99 عبارت TPC-DS SQL پشتیبانی می کند.
 
-StarRocks designs a brand-new CBO from scratch. This CBO adopts the cascades-like framework and is deeply customized for the vectorized execution engine with a number of optimizations and innovations. These optimizations include the reuse of common table expressions (CTEs), rewriting of subqueries, Lateral Join, Join Reorder, strategy selection for distributed Join execution, and low-cardinality optimization. The CBO supports a total of 99 TPC-DS SQL statements.
+ CBO استارراکت را قادر می سازد تا عملکرد جستجوی پیوستن چند جدولی بهتری را نسبت به رقبا ارائه دهد، به خصوص در جستارهای پیوستن چند جدولی پیچیده.
 
-The CBO enables StarRocks to deliver better multi-table join query performance than competitors, especially in complex multi-table join queries.
+ ## موتور ذخیره سازی ستونی در زمان واقعی و قابل به روز رسانی
 
-## Real-time, updatable columnar storage engine
+ استار راکت یک موتور ذخیره سازی ستونی است که اجازه می دهد تا داده های یک نوع به طور مداوم ذخیره شوند.  در ذخیره سازی ستونی، داده ها را می توان به روشی کارآمدتر رمزگذاری کرد و نسبت فشرده سازی را افزایش داد و هزینه ذخیره سازی را کاهش داد.  ذخیره سازی ستونی همچنین کل داده های خوانده شده ورودی/خروجی را کاهش می دهد و عملکرد پرس و جو را بهبود می بخشد.  علاوه بر این، در اکثر سناریوهای OLAP، تنها ستون‌های خاص پرس و جو می‌شوند.  فضای ذخیره‌سازی ستونی به کاربران امکان می‌دهد تنها بخشی از ستون‌ها را جستجو کنند و ورودی/خروجی دیسک را به میزان قابل توجهی کاهش می‌دهد.
 
-StarRocks is a columnar storage engine that allows data of the same type to be stored continuously. In columnar storage, data can be encoded in a more efficient way, increasing the compression ratio and lowering the storage cost. Columnar storage also reduces the total data read I/Os, improving query performance. In addition, in most OLAP scenarios, only specific columns are queried. Columnar storage enables users to query only part of the columns, significantly reducing disk I/Os.
+ استار راکت می‌تواند داده‌ها را در عرض چند ثانیه برای تجزیه و تحلیل در زمان واقعی بارگذاری کند.  موتور ذخیره سازی استار راکت اتمی بودن، سازگاری، جداسازی و دوام (ACID) هر عملیات جذب داده را تضمین می کند.  برای یک تراکنش بارگذاری داده، کل تراکنش یا موفق می شود یا ناموفق.  تراکنش‌های همزمان بر یکدیگر تأثیر نمی‌گذارند و انزوا در سطح تراکنش فراهم می‌کنند.
 
-StarRocks can load data within seconds for near-real-time analytics. StarRocks' storage engine guarantees the atomicity, consistency, isolation, and durability (ACID) of each data ingestion operation. For a data loading transaction, the entire transaction either succeeds or fails. Concurrent transactions do not affect each other, providing transaction-level isolation.
+ ![Realtime](../assets/1.1-6-realtime.png)
 
-![Realtime](../assets/1.1-6-realtime.png)
+ موتور ذخیره سازی استار راکت از الگوی Delete-and-Insert (Merge on Read) استفاده می کند که امکان عملیات Append و UPSERT کارآمد را فراهم می کند.  موتور ذخیره‌سازی می‌تواند به سرعت داده‌ها را با استفاده از شاخص‌های کلید اصلی فیلتر کند و نیاز به عملیات مرتب‌سازی و ادغام در خواندن داده‌ها را از بین ببرد.  موتور همچنین می تواند به طور کامل از شاخص های ثانویه استفاده کند.  این عملکرد نهایی پرس و جو را حتی در حجم عظیمی از به روز رسانی داده ها ارائه می دهد.
 
-StarRocks' storage engine uses the Delete-and-insert (Merge on Read) pattern, which allows for efficient Append and UPSERT operations. The storage engine can quickly filter data using primary key indexes,  eliminating the need for Sort and Merge operations at data reading. The engine can also make full use of secondary indexes. It delivers ultimate query performance even on huge amounts of data updates.
+ ## نمای مادی شده هوشمند
 
-## Intelligent materialized view
+ استار راکت از نماهای مادی هوشمند برای سرعت بخشیدن به پرس و جوها استفاده می کند.  نماهای تحقق یافته  با توجه به تغییرات داده ها در جدول پایه، بدون نیاز به عملیات تعمیر و نگهداری اضافی، به طور خودکار داده ها را مطابق با تغییرات داده ها در جدول پایه، به روز می کنند که نیاز به همگام سازی ناهمزمان داده ها با جدول پایه دارند.  علاوه بر این، انتخاب نماهای تحقق یافته نیز به صورت خودکار است.  در طول برنامه ریزی پرس و جو، اگر  تشخیص دهد که یک نمای مادی مناسب می تواند برای سرعت بخشیدن به پرس و جو ایجاد شود، استارراکت به طور خودکار پرس و جو را بازنویسی می کند و یک نمای واقعی ایجاد می کند.
 
-StarRocks uses intelligent materialized views to accelerate queries. Different from materialized views of other similar database produces that need to asynchronously synchronize data with the base table, StarRocks' materialized views automatically update data according to the data changes in the base table without requiring additional maintenance operations. In addition, the selection of materialized views is also automatic. During query planning, if StarRocks identifies that a suitable materialized view can be created to speed up the query, StarRocks will automatically rewrite the query and create an appropriate materialized view.
+ نماهای تحقق یافته استار راکت را می توان در صورت تقاضا ایجاد یا حذف کرد.  هنگام ایجاد جدول پایه، نیازی به ایجاد نمای مادی شده ندارید.  درعوض، می‌توانید بر اساس نیازهای کسب‌وکارتان، تعیین کنید که آیا یک نمای واقعی ایجاد کنید یا حذف کنید.  استار راکت به طور خودکار نماهای واقعی را در پس زمینه ایجاد یا تنظیم می کند.
 
-StarRocks' materialized views can be created or deleted on demand. You do not need to create a materialized view when you create a base table. Instead, you can determine whether to create or delete a materialized view based on your business requirements. StarRocks automatically creates or adjusts materialized views in the background.
+ ![MV](../assets/1.1-7-mv.png)
 
-![MV](../assets/1.1-7-mv.png)
+ ## تجزیه و تحلیل دریاچه داده
 
-## Data lake analytics
+ ![DLA](../assets/1.1-8-dla.png)
 
-![DLA](../assets/1.1-8-dla.png)
+ علاوه بر تجزیه و تحلیل کارآمد داده های محلی، StarRocks می تواند به عنوان موتور محاسباتی برای تجزیه و تحلیل داده های ذخیره شده در دریاچه های داده مانند Apache Hive، Apache Iceberg و Apache Hudi کار کند.  کاربران می توانند از استار راکت برای تجزیه و تحلیل داده ها در فرمت های مختلف فایل از جمله Parquet، ORC و CSV استفاده کنند که می توانند در سیستم های مختلفی مانند HDFS، Amazon S3 و Alibaba Cloud OSS ذخیره شوند.
 
-In addition to efficient analytics of local data, StarRocks can work as the compute engine to analyze data stored in data lakes such as Apache Hive, Apache Iceberg, and Apache Hudi. Users can use StarRocks to analyze data in a variety of file formats, including Parquet, ORC, and CSV, which can be stored in various systems such as HDFS, Amazon S3, and Alibaba Cloud OSS.
-
-The preceding figure shows a data lake analytics scenario where StarRocks is responsible for data computing and analysis, and the data lake is responsible for data storage, organization, and maintenance. Data lakes allow users to store data in open storage formats and use flexible schemas to produce reports on "single source of truth" for various BI, AI, ad-hoc, and reporting use cases. StarRocks fully leverages the advantages of its vectorization engine and CBO, significantly improving the performance of data lake analytics.
+ شکل قبل یک سناریوی تجزیه و تحلیل دریاچه داده را نشان می دهد که در آن استار راکت مسئول محاسبه و تجزیه و تحلیل داده ها است و دریاچه داده مسئول ذخیره سازی، سازماندهی و نگهداری داده ها است.  دریاچه‌های داده به کاربران اجازه می‌دهند داده‌ها را در قالب‌های ذخیره‌سازی باز ذخیره کنند و از طرح‌واره‌های انعطاف‌پذیر برای تولید گزارش‌هایی درباره «منبع منفرد حقیقت» برای موارد مختلف BI، AI، ad-hoc و گزارش‌گیری استفاده کنند.  استارراکت به طور کامل از مزایای موتور برداری و CBO خود استفاده می کند و به طور قابل توجهی عملکرد تجزیه و تحلیل دریاچه داده را بهبود می بخشد.
