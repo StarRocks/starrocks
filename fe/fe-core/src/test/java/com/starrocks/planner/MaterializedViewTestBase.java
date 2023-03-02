@@ -17,23 +17,71 @@ package com.starrocks.planner;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.statistic.StatsConstants;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static com.starrocks.utframe.UtFrameUtils.CREATE_STATISTICS_TABLE_STMT;
+
 public class MaterializedViewTestBase extends PlanTestBase {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
+
+    protected static final String MATERIALIZED_DB_NAME = "test_mv";
+
+    @BeforeClass
+    public static void setUp() throws Exception {
+        FeConstants.runningUnitTest = true;
+        Config.enable_experimental_mv = true;
+        UtFrameUtils.createMinStarRocksCluster();
+
+        connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setEnablePipelineEngine(true);
+        connectContext.getSessionVariable().setEnableQueryCache(false);
+        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        FeConstants.runningUnitTest = true;
+        starRocksAssert = new StarRocksAssert(connectContext);
+
+
+        if (!starRocksAssert.databaseExist("_statistics_")) {
+            starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.STATISTICS_DB_NAME)
+                    .useDatabase(StatsConstants.STATISTICS_DB_NAME);
+            starRocksAssert.withTable(CREATE_STATISTICS_TABLE_STMT);
+        }
+
+        starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
+                .useDatabase(MATERIALIZED_DB_NAME);
+
+    }
+
+    @AfterClass
+    public static void afterClass() {
+        try {
+            starRocksAssert.dropDatabase(MATERIALIZED_DB_NAME);
+        } catch (Exception e) {
+            LOG.warn("drop database failed:", e);
+        }
+    }
 
     protected class MVRewriteChecker {
         private String mv;
