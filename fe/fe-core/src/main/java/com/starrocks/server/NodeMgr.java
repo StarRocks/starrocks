@@ -741,9 +741,13 @@ public class NodeMgr {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            Frontend fe = getFeByHost(host);
-            if (null != fe) {
-                throw new DdlException("frontend use host [" + host + "] already exists ");
+            try {
+                if (checkFeExistByIpOrFqdn(host)) {
+                    throw new DdlException("FE with the same host: " + host + " already exists");
+                }
+            } catch (UnknownHostException e) {
+                LOG.warn("failed to get right ip by fqdn {}", host, e);
+                throw new DdlException("unknown fqdn host: " + host);
             }
 
             String nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, false /* new name style */);
@@ -752,7 +756,7 @@ public class NodeMgr {
                 throw new DdlException("frontend name already exists " + nodeName + ". Try again");
             }
 
-            fe = new Frontend(role, nodeName, host, editLogPort);
+            Frontend fe = new Frontend(role, nodeName, host, editLogPort);
             frontends.put(nodeName, fe);
             if (role == FrontendNodeType.FOLLOWER) {
                 helperNodes.add(Pair.create(host, editLogPort));
@@ -929,6 +933,35 @@ public class NodeMgr {
             }
         }
         return null;
+    }
+
+    protected boolean checkFeExistByIpOrFqdn(String ipOrFqdn) throws UnknownHostException {
+        Pair<String, String> targetIpAndFqdn = NetUtils.getIpAndFqdnByHost(ipOrFqdn);
+
+        for (Frontend fe : frontends.values()) {
+            Pair<String, String> curIpAndFqdn;
+            try {
+                curIpAndFqdn = NetUtils.getIpAndFqdnByHost(fe.getHost());
+            } catch (UnknownHostException e) {
+                LOG.warn("failed to get right ip by fqdn {}", fe.getHost(), e);
+                if (targetIpAndFqdn.second.equals(fe.getHost())
+                        && !Strings.isNullOrEmpty(targetIpAndFqdn.second)) {
+                    return true;
+                }
+                continue;
+            }
+            // target, cur has same ip
+            if (targetIpAndFqdn.first.equals(curIpAndFqdn.first)) {
+                return true;
+            }
+            // target, cur has same fqdn and both of them are not equal ""
+            if (targetIpAndFqdn.second.equals(curIpAndFqdn.second)
+                    && !Strings.isNullOrEmpty(targetIpAndFqdn.second)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public Frontend getFeByHost(String ipOrFqdn) {
