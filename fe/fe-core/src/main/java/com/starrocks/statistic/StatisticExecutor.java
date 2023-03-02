@@ -127,8 +127,13 @@ public class StatisticExecutor {
 
         Database db = MetaUtils.getDatabase(dbId);
         Table table = MetaUtils.getTable(dbId, tableId);
+<<<<<<< HEAD
         if (!table.isOlapTable()) {
             throw new SemanticException("Table '%s' is not a OLAP table", table.getName());
+=======
+        if (!(table.isOlapOrLakeTable() || table.isMaterializedView())) {
+            throw new SemanticException("Table '%s' is not a OLAP table or LAKE table or Materialize View", table.getName());
+>>>>>>> bcb154ec7 ([BugFix] Fix Lowcardinality optimization could not work in Materialized View (#17425))
         }
 
         OlapTable olapTable = (OlapTable) table;
