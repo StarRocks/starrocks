@@ -453,6 +453,20 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return "MySQL";
         } else if (this instanceof SchemaTable) {
             return "MEMORY";
+        } else if (this instanceof HiveTable) {
+            return "Hive";
+        } else if (this instanceof HudiTable) {
+            return "Hudi";
+        } else if (this instanceof IcebergTable) {
+            return "Iceberg";
+        } else if (this instanceof DeltaLakeTable) {
+            return "DeltaLake";
+        } else if (this instanceof EsTable) {
+            return "Elasticsearch";
+        } else if (this instanceof JDBCTable) {
+            return "JDBC";
+        } else if (this instanceof FileTable) {
+            return "File";
         } else {
             return null;
         }
