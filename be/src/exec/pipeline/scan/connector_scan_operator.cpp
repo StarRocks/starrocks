@@ -174,6 +174,7 @@ ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProf
     _data_source->set_runtime_filters(_runtime_bloom_filters);
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
+    _data_source->update_has_any_predicate();
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
@@ -203,7 +204,7 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(_data_source->open(state));
-    if (_data_source->skip_predicate() && _limit != -1 && _limit < state->chunk_size()) {
+    if (!_data_source->has_any_predicate() && _limit != -1 && _limit < state->chunk_size()) {
         _ck_acc.set_max_size(_limit);
     } else {
         _ck_acc.set_max_size(state->chunk_size());

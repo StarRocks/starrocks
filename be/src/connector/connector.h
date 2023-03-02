@@ -40,7 +40,7 @@ public:
     virtual Status open(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
     virtual Status get_next(RuntimeState* state, ChunkPtr* chunk) { return Status::OK(); }
-    virtual bool skip_predicate() const { return false; }
+    virtual bool has_any_predicate() const { return _has_any_predicate; }
 
     // how many rows read from storage
     virtual int64_t raw_rows_read() const = 0;
@@ -61,12 +61,14 @@ public:
     void set_runtime_filters(const RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     Status parse_runtime_filters(RuntimeState* state);
+    void update_has_any_predicate();
 
 protected:
     int64_t _read_limit = -1; // no limit
+    bool _has_any_predicate = false;
     std::vector<ExprContext*> _conjunct_ctxs;
-    const RuntimeFilterProbeCollector* _runtime_filters;
-    RuntimeProfile* _runtime_profile;
+    const RuntimeFilterProbeCollector* _runtime_filters = nullptr;
+    RuntimeProfile* _runtime_profile = nullptr;
     const TupleDescriptor* _tuple_desc = nullptr;
     void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
 };
