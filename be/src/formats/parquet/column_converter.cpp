@@ -543,8 +543,7 @@ Status parquet::Int32ToDateConverter::convert(const ColumnPtr& src, Column* dst)
     return Status::OK();
 }
 
-Status Int96ToDateTimeConverter::init(const std::string& timezone) {
-    cctz::time_zone _ctz;
+Status Int96ToDateTimeConverter::init(const std::string& timezone) {    
     if (!TimezoneUtils::find_cctz_time_zone(timezone, _ctz)) {
         return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
     }
