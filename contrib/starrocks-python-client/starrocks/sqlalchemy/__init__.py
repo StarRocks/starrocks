@@ -16,6 +16,4 @@
 
 from sqlalchemy.dialects import registry
 
-from .util import _url as URL  # noqa
-
 registry.register("starrocks", "starrocks.sqlalchemy.dialect", "StarRocksDialect")
