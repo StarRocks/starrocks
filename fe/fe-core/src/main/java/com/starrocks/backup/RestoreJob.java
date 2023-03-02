@@ -491,7 +491,7 @@ public class RestoreJob extends AbstractJob {
                         ((OlapTable) localTbl).sendDropAutoIncrementMapTask();
                     }
 
-                    backupMeta.checkAndRecoverAutoIncrementId(localTbl);
+                    tblInfo.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
                     if (!localTbl.isOlapOrLakeTable()) {
                         status = new Status(ErrCode.COMMON_ERROR,
@@ -603,7 +603,7 @@ public class RestoreJob extends AbstractJob {
                         return;
                     }
 
-                    backupMeta.checkAndRecoverAutoIncrementId((Table) remoteOlapTbl);
+                    tblInfo.checkAndRecoverAutoIncrementId((Table) remoteOlapTbl);
 
                     // DO NOT set remote table's new name here, cause we will still need the origin name later
                     // remoteOlapTbl.setName(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
