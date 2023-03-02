@@ -445,6 +445,7 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_runtime_filters(_runtime_bloom_filters);
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
+    _data_source->update_has_any_predicate();
     _op = down_cast<ConnectorScanOperator*>(op);
 }
 
@@ -494,7 +495,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 
         if (!_opened) {
             RETURN_IF_ERROR(_data_source->open(state));
-            if (_data_source->skip_predicate() && _limit != -1 && _limit < state->chunk_size()) {
+            if (_data_source->has_any_predicate() && _limit != -1 && _limit < state->chunk_size()) {
                 _ck_acc.set_max_size(_limit);
             } else {
                 _ck_acc.set_max_size(state->chunk_size());
