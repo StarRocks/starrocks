@@ -29,6 +29,21 @@ namespace spill {
 class LogBlockContainer;
 using LogBlockContainerPtr = std::shared_ptr<LogBlockContainer>;
 
+// LogBlockManager is an implementations of BlockManager that attempts to reduce the number of spill files,
+// the basic idea is to cluster multiple Blocks into serveral large files.
+// Each large file is called a LogBlockContainer.
+// LogBlockContainer begins empty and is written to sequentially, block by block, just like log writing,
+// this is also the origin of the LogBlockManager name.
+
+// LogBlockManager contains multiple LogBlockContainers,
+// when a new block application arrives, it will first determine the directory to place the Block through DirManager,
+// and then try to select one of the existing available containers to place the Block,
+// if there is no avaiable container, it will create a new one.
+
+// When Block writing is completed, the upper layer returns the Block to LogBlockManager by calling `release_block`.
+// If the corresponding container is not full, LogBlockManager will save it for reuse.
+// LogBlockContainer does not guarantee thread safety, and only one thread can write at a time,
+// so theoretically, the number of containers being written at the same time will be equivalent to the number of io threads
 class LogBlockManager : public BlockManager {
 public:
     LogBlockManager(TUniqueId query_id) : _query_id(query_id) {}

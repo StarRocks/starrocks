@@ -26,13 +26,14 @@
 namespace starrocks {
 namespace spill {
 
+// InputStream is used in restore phase to represent an input stream of a restore task.
+// InputStream reads multiple Blocks and returns the deserialized Chunks.
 class InputStream {
 public:
     InputStream() {}
     InputStream(const std::vector<BlockPtr>& input_blocks) : _input_blocks(input_blocks) {}
 
     virtual ~InputStream() = default;
-    // @TODO pass context?
     virtual StatusOr<ChunkUniquePtr> get_next() = 0;
     virtual bool is_ready() = 0;
     virtual void close() = 0;

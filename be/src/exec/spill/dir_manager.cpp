@@ -42,8 +42,9 @@ Status DirManager::init() {
 }
 
 StatusOr<Dir*> DirManager::acquire_writable_dir(const AcquireDirOptions& opts) {
-    // put data to _dirs
-    return _dirs[0].get();
+    // @TODO(silverbullet233): refine the strategy for dir selection
+    size_t idx = _idx++ % _dirs.size();
+    return _dirs[idx].get();
 }
 
 } // namespace spill

@@ -33,11 +33,14 @@ struct FormatterContext {
     raw::RawString compress_buffer;
 };
 
+// Formatter is used to serialize and deserialize spilled data.
 class Formatter {
 public:
     virtual ~Formatter() = default;
 
+    // serialize chunk and append the serialized data into block
     virtual Status serialize(FormatterContext& ctx, const ChunkPtr& chunk, BlockPtr block) = 0;
+    // deserialize data from block, return the chunk after deserialized
     virtual StatusOr<ChunkUniquePtr> deserialize(FormatterContext& ctx, const BlockPtr block) = 0;
 };
 using FormatterPtr = std::shared_ptr<Formatter>;

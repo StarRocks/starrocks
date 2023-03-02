@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 
 #include "common/status.h"
@@ -23,6 +24,8 @@
 namespace starrocks {
 namespace spill {
 
+// Dir describes a specific directory, including the directory name and the corresponding FileSystem
+// @TODO(silverbullet233): maintain some stats, such as the capacity
 class Dir {
 public:
     Dir(const std::string& dir, std::shared_ptr<FileSystem> fs) : _dir(dir), _fs(fs) {}
@@ -33,25 +36,27 @@ public:
 private:
     std::string _dir;
     std::shared_ptr<FileSystem> _fs;
-    // @TODO maintain stats, such as capacity
 };
 using DirPtr = std::shared_ptr<Dir>;
 
 struct AcquireDirOptions {
-    // @TBD
+    // @TOOD(silverbullet233): support more properties when acquiring dir, such as the preference of dir selection
 };
 
-class DirManager {
+// DirManager is used to manage all spill-available directories,
+// BlockManager should rely on DirManager to decide which directory to put Block in.
+// DirManager is thread-safe.
 public:
-    DirManager() = default;
-    ~DirManager() = default;
+DirManager() = default;
+~DirManager() = default;
 
-    Status init();
+Status init();
 
-    StatusOr<Dir*> acquire_writable_dir(const AcquireDirOptions& opts);
+StatusOr<Dir*> acquire_writable_dir(const AcquireDirOptions& opts);
 
 private:
-    std::vector<DirPtr> _dirs;
+std::atomic<size_t> _idx = 0;
+std::vector<DirPtr> _dirs;
 };
 
 } // namespace spill
