@@ -67,13 +67,13 @@ struct RuntimeColumnPredicateBuilder {
             if constexpr (ltype == TYPE_VARCHAR) {
                 auto cid = parser->column_id(*slot);
                 if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
-                    _build_minmax_range<RangeType, value_type, LowCardDictType, GlobalDictCodeDecoder>(range, rf,
-                                                                                                       iter->second);
+                    build_minmax_range<RangeType, value_type, LowCardDictType, GlobalDictCodeDecoder>(range, rf,
+                                                                                                      iter->second);
                 } else {
-                    _build_minmax_range<RangeType, value_type, mapping_type, DummyDecoder>(range, rf, nullptr);
+                    build_minmax_range<RangeType, value_type, mapping_type, DummyDecoder>(range, rf, nullptr);
                 }
             } else {
-                _build_minmax_range<RangeType, value_type, mapping_type, DummyDecoder>(range, rf, nullptr);
+                build_minmax_range<RangeType, value_type, mapping_type, DummyDecoder>(range, rf, nullptr);
             }
 
             std::vector<TCondition> filters;
@@ -95,12 +95,12 @@ struct RuntimeColumnPredicateBuilder {
         }
     }
 
-private:
     template <class InputType>
     struct DummyDecoder {
         DummyDecoder(std::nullptr_t) {}
         auto decode(InputType input) const { return input; }
     };
+
     template <class InputType>
     struct GlobalDictCodeDecoder {
         GlobalDictCodeDecoder(const GlobalDictMap* dict_map) : _dict_map(dict_map) {}
@@ -140,7 +140,7 @@ private:
     };
 
     template <class Range, class value_type, LogicalType mapping_type, template <class> class Decoder, class... Args>
-    void _build_minmax_range(Range& range, const JoinRuntimeFilter* rf, Args&&... args) {
+    static void build_minmax_range(Range& range, const JoinRuntimeFilter* rf, Args&&... args) {
         const RuntimeBloomFilter<mapping_type>* filter = down_cast<const RuntimeBloomFilter<mapping_type>*>(rf);
         using DecoderType = Decoder<typename RunTimeTypeTraits<mapping_type>::CppType>;
         DecoderType decoder(std::forward<Args>(args)...);

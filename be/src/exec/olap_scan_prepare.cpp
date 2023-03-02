@@ -24,6 +24,7 @@
 #include "runtime/descriptors.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_runtime_range_pruner.h"
+#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
 #include "types/date_value.hpp"
 #include "types/logical_type.h"
@@ -387,6 +388,7 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
     for (const auto it : runtime_filters->descriptors()) {
         const RuntimeFilterProbeDescriptor* desc = it.second;
         const JoinRuntimeFilter* rf = desc->runtime_filter();
+        using RangeType = ColumnValueRange<RangeValueType>;
         using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
         SlotId slot_id;
 
@@ -401,20 +403,32 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
 
         if (rf->has_null()) continue;
 
-        const auto* filter = down_cast<const RuntimeBloomFilter<SlotType>*>(rf);
         // If this column doesn't have other filter, we use join runtime filter
         // to fast comput row range in storage engine
         if (range->is_init_state()) {
             range->set_index_filter_only(true);
         }
 
-        SQLFilterOp min_op = to_olap_filter_type(TExprOpcode::GE, false);
-        ValueType min_value = filter->min_value();
-        range->add_range(min_op, static_cast<RangeValueType>(min_value));
+        // if we have multi-scanners
+        // If a scanner has finished building a runtime filter,
+        // the rest of the runtime filters will be normalized here
 
-        SQLFilterOp max_op = to_olap_filter_type(TExprOpcode::LE, false);
-        ValueType max_value = filter->max_value();
-        range->add_range(max_op, static_cast<RangeValueType>(max_value));
+        auto& global_dicts = runtime_state->get_query_global_dict_map();
+        if constexpr (SlotType == TYPE_VARCHAR) {
+            if (auto iter = global_dicts.find(slot_id); iter != global_dicts.end()) {
+                detail::RuntimeColumnPredicateBuilder::build_minmax_range<
+                        RangeType, ValueType, LowCardDictType,
+                        detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder>(*range, rf, &iter->second.first);
+            } else {
+                detail::RuntimeColumnPredicateBuilder::build_minmax_range<
+                        RangeType, ValueType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(*range, rf,
+                                                                                                             nullptr);
+            }
+        } else {
+            detail::RuntimeColumnPredicateBuilder::build_minmax_range<
+                    RangeType, ValueType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(*range, rf,
+                                                                                                         nullptr);
+        }
     }
 }
 
