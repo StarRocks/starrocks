@@ -74,7 +74,7 @@ public class RefreshMaterializedViewStatementTest {
                         " DISTRIBUTED BY HASH(c1) BUCKETS 1 " +
                         " PROPERTIES(\"replication_num\" = \"1\");");
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
-        starRocksAssert.withNewMaterializedView("create materialized view mv1 distributed by hash(`c1`) " +
+        starRocksAssert.withMaterializedView("create materialized view mv1 distributed by hash(`c1`) " +
                 " refresh manual" +
                 " as select c1, sum(c3) as total from t1 group by c1");
         cluster.runSql("test", "insert into t1 values(1, \"str1\", 100)");

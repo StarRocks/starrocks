@@ -12,16 +12,24 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -48,8 +56,10 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
+import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -57,8 +67,10 @@ import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -119,6 +131,22 @@ public class MvUtils {
         }
     }
 
+    public static List<JoinOperator> getAllJoinOperators(OptExpression root) {
+        List<JoinOperator> joinOperators = Lists.newArrayList();
+        getAllJoinOperators(root, joinOperators);
+        return joinOperators;
+    }
+
+    private static void getAllJoinOperators(OptExpression root, List<JoinOperator> joinOperators) {
+        if (root.getOp() instanceof LogicalJoinOperator) {
+            LogicalJoinOperator join = (LogicalJoinOperator) root.getOp();
+            joinOperators.add(join.getJoinType());
+        } else {
+            for (OptExpression child : root.getInputs()) {
+                getAllJoinOperators(child, joinOperators);
+            }
+        }
+    }
     public static List<LogicalScanOperator> getScanOperator(OptExpression root) {
         List<LogicalScanOperator> scanOperators = Lists.newArrayList();
         getScanOperator(root, scanOperators);
@@ -170,6 +198,10 @@ public class MvUtils {
         return isLogicalSPJG(root, 0);
     }
 
+    /**
+     * Whether `root` and its children are all Select/Project/Join/Group ops,
+     * NOTE: This method requires `root` must be Aggregate op to check whether MV is satisfiable quickly.
+     */
     public static boolean isLogicalSPJG(OptExpression root, int level) {
         if (root == null) {
             return false;
@@ -191,6 +223,9 @@ public class MvUtils {
         return isLogicalSPJG(child, level + 1);
     }
 
+    /**
+     *  Whether `root` and its children are Select/Project/Join ops.
+     */
     public static boolean isLogicalSPJ(OptExpression root) {
         if (root == null) {
             return false;
@@ -272,6 +307,23 @@ public class MvUtils {
         return predicates;
     }
 
+    public static ScalarOperator rewriteOptExprCompoundPredicate(OptExpression root,
+                                                                 ReplaceColumnRefRewriter columnRefRewriter) {
+        List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(root);
+        ScalarOperator compoundPredicate = null;
+        if (!conjuncts.isEmpty()) {
+            compoundPredicate = Utils.compoundAnd(conjuncts);
+            compoundPredicate = columnRefRewriter.rewrite(compoundPredicate.clone());
+        }
+        return compoundPredicate;
+    }
+
+    public static ReplaceColumnRefRewriter getReplaceColumnRefWriter(OptExpression root,
+                                                                     ColumnRefFactory columnRefFactory) {
+        Map<ColumnRefOperator, ScalarOperator> mvLineage = LineageFactory.getLineage(root, columnRefFactory);
+        return new ReplaceColumnRefRewriter(mvLineage, true);
+    }
+
     private static void getAllPredicates(OptExpression root, List<ScalarOperator> predicates) {
         Operator operator = root.getOp();
         if (operator.getPredicate() != null) {
@@ -307,7 +359,7 @@ public class MvUtils {
     public static ScalarOperator getCompensationPredicateForDisjunctive(ScalarOperator src, ScalarOperator target) {
         List<ScalarOperator> srcItems = Utils.extractDisjunctive(src);
         List<ScalarOperator> targetItems = Utils.extractDisjunctive(target);
-        if (!targetItems.containsAll(srcItems)) {
+        if (!new HashSet<>(targetItems).containsAll(srcItems)) {
             return null;
         }
         targetItems.removeAll(srcItems);
@@ -517,8 +569,7 @@ public class MvUtils {
     public static List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {
         ranges.sort(RangeUtils.RANGE_COMPARATOR);
         List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();
-        for (int i = 0; i < ranges.size(); i++) {
-            Range<PartitionKey> currentRange = ranges.get(i);
+        for (Range<PartitionKey> currentRange : ranges) {
             boolean merged = false;
             for (int j = 0; j < mergedRanges.size(); j++) {
                 // 1 < r < 10, 10 <= r < 20 => 1 < r < 20
@@ -534,5 +585,69 @@ public class MvUtils {
             }
         }
         return mergedRanges;
+    }
+
+    public static ScalarOperator compensatePartitionPredicate(OptExpression plan, ColumnRefFactory columnRefFactory) {
+        List<LogicalOlapScanOperator> olapScanOperators = MvUtils.getOlapScanNode(plan);
+        if (olapScanOperators.isEmpty()) {
+            return ConstantOperator.createBoolean(true);
+        }
+        List<ScalarOperator> partitionPredicates = Lists.newArrayList();
+        for (LogicalOlapScanOperator olapScanOperator : olapScanOperators) {
+            Preconditions.checkState(olapScanOperator.getTable().isNativeTable());
+            OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
+            if (olapScanOperator.getSelectedPartitionId() != null
+                    && olapScanOperator.getSelectedPartitionId().size() == olapTable.getPartitions().size()) {
+                continue;
+            }
+
+            if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
+                ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
+                Expr partitionExpr = partitionInfo.getPartitionExprs().get(0);
+                List<SlotRef> slotRefs = Lists.newArrayList();
+                partitionExpr.collect(SlotRef.class, slotRefs);
+                Preconditions.checkState(slotRefs.size() == 1);
+                Optional<ColumnRefOperator> partitionColumn = olapScanOperator.getColRefToColumnMetaMap().keySet().stream()
+                        .filter(columnRefOperator -> columnRefOperator.getName().equals(slotRefs.get(0).getColumnName()))
+                        .findFirst();
+                if (!partitionColumn.isPresent()) {
+                    return null;
+                }
+                ExpressionMapping mapping = new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()));
+                mapping.put(slotRefs.get(0), partitionColumn.get());
+                ScalarOperator partitionScalarOperator =
+                        SqlToScalarOperatorTranslator.translate(partitionExpr, mapping, columnRefFactory);
+                List<Range<PartitionKey>> selectedRanges = Lists.newArrayList();
+                for (long pid : olapScanOperator.getSelectedPartitionId()) {
+                    selectedRanges.add(partitionInfo.getRange(pid));
+                }
+                List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
+                List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionScalarOperator, mergedRanges);
+                ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+                partitionPredicates.add(partitionPredicate);
+            } else if (olapTable.getPartitionInfo() instanceof RangePartitionInfo) {
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                if (partitionColumns.size() != 1) {
+                    // now do not support more than one partition columns
+                    return null;
+                }
+                List<Range<PartitionKey>> selectedRanges = Lists.newArrayList();
+                for (long pid : olapScanOperator.getSelectedPartitionId()) {
+                    selectedRanges.add(rangePartitionInfo.getRange(pid));
+                }
+                List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
+                ColumnRefOperator partitionColumnRef = olapScanOperator.getColumnReference(partitionColumns.get(0));
+                List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionColumnRef, mergedRanges);
+                ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+                if (partitionPredicate != null) {
+                    partitionPredicates.add(partitionPredicate);
+                }
+            } else {
+                return null;
+            }
+        }
+        return partitionPredicates.isEmpty() ?
+                ConstantOperator.createBoolean(true) : Utils.compoundAnd(partitionPredicates);
     }
 }

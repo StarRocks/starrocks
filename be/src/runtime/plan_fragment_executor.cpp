@@ -378,11 +378,6 @@ void PlanFragmentExecutor::cancel() {
         }
         _stream_load_contexts.resize(0);
     }
-
-    if (_sink != nullptr) {
-        _sink->cancel();
-    }
-
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
     _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
 

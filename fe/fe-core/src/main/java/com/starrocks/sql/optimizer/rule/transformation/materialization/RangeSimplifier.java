@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class RangeSimplifier {
-    private List<ScalarOperator> srcPredicates;
+    private final List<ScalarOperator> srcPredicates;
 
     public RangeSimplifier(List<ScalarOperator> srcPredicates) {
         this.srcPredicates = srcPredicates;
@@ -116,7 +116,7 @@ public class RangeSimplifier {
                         List<ScalarOperator> columnScalars = srcPredicates.stream().filter(
                                 predicate -> isScalarForColumns(predicate, columnId)
                         ).collect(Collectors.toList());
-                        columnScalars.stream().forEach(
+                        columnScalars.forEach(
                                 predicate -> result.set(Utils.compoundAnd(result.get(), predicate))
                         );
                     }

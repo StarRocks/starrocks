@@ -693,7 +693,7 @@ public class PrivilegeCheckerTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv1\n" +
+                .withMaterializedView("create materialized view mv1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k2, sum(v1) as total from tbl_with_mv group by k2;");
