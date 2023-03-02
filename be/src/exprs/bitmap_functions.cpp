@@ -589,7 +589,7 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_subset_in_range(FunctionContext* con
 
         auto bitmap = bitmap_viewer.value(row);
         auto range_start = range_start_viewer.value(row);
-        auto range_end = range_end.value(row);
+        auto range_end = range_end_viewer.value(row);
 
         if (range_start < 0) {
             range_start = 0;
