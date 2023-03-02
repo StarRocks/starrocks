@@ -20,23 +20,28 @@ from setuptools import find_packages, setup
 
 _version_re = re.compile(r"__version__\s+=\s+(.*)")
 
-with open("starrocks/sqlalchemy/__init__.py", "rb") as f:
+with open("starrocks/__init__.py", "rb") as f:
     python_client_version = _version_re.search(f.read().decode("utf-8"))
     assert python_client_version is not None
     version = str(ast.literal_eval(python_client_version.group(1)))
 
+with open('README.md') as readme:
+    long_description = readme.read()
+
 setup(
     name="starrocks",
     version=version,
-    description="StarRocks Dialect for SQLAlchemy",
+    description="Python interface to StarRocks",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    license="Apache 2.0",
     author="StarRocks Team",
     url="https://github.com/StarRocks/starrocks",
-    license="Apache 2.0",
     classifiers=[
-        "Development Status :: 3 - Alpha",
+	"Development Status :: 5 - Production/Stable",
         "Environment :: Console",
         "Intended Audience :: Developers",
-        "License :: Apache Software License",
+        "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: Implementation :: CPython",
@@ -48,6 +53,7 @@ setup(
         "sqlalchemy-utils>=0.38.3, <0.39",
     ],
     packages=find_packages(include=["starrocks", "starrocks.*"]),
+    package_data={"": ["LICENSE", "README.md"]},
     include_package_data=True,
     zip_safe=False,
     entry_points={

@@ -1,6 +1,8 @@
 # StarRocks Python Client
 A StarRocks client for the Python programming language.
 
+StarRocks is the next-generation data platform designed to make data-intensive real-time analytics fast and easy. It delivers query speeds 5 to 10 times faster than other popular solutions. StarRocks can perform real-time analytics well while updating historical records. It can also enhance real-time analytics with historical data from data lakes easily. With StarRocks, you can get rid of the de-normalized tables and get the best performance and flexibility.
+
 ## Installation
 ```
 pip install starrocks
@@ -36,7 +38,3 @@ connection = engine.connect()
 
 rows = connection.execute(text("SELECT * FROM hive_table")).fetchall()
 ```
-
-## Resources
-1. [SQLAlchemy documentation](https://docs.sqlalchemy.org/en/13/index.html)
-2. [SQLAlchemy dialects](https://docs.sqlalchemy.org/en/13/dialects/index.html)
