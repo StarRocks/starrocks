@@ -5,13 +5,18 @@ commands_restrictions:
       - sender-permission>=read
 
 pull_request_rules:
-  - name: ingore backport patches when conflict
+  - name: assign PRs with the pr author
     conditions:
-      - check-success=modify-branch-label
+      - -merged
     actions:
-      backport:
-        ignore_conflicts: false
-
-
-
-
+      assign:
+        add_users: 
+          - "{{author}}"
+  - name: close pr when conflict
+    conditions:
+      - label=conflicts
+      - author=mergify
+    actions:
+      close:
+        message:
+          "Backport conflict, please reslove the conflict and resubmit the pr"
