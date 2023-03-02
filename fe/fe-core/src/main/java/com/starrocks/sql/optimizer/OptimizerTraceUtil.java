@@ -197,7 +197,7 @@ public class OptimizerTraceUtil {
         @Override
         public String visitLogicalIcebergScan(LogicalIcebergScanOperator node, Void context) {
             StringBuilder sb = new StringBuilder("LogicalIcebergScanOperator");
-            sb.append(" {").append("table=").append(((IcebergTable) node.getTable()).getTable())
+            sb.append(" {").append("table=").append(((IcebergTable) node.getTable()).getRemoteTableName())
                     .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                     .append(", predicates=").append(node.getScanOperatorPredicates())
                     .append("}");
@@ -412,7 +412,7 @@ public class OptimizerTraceUtil {
         @Override
         public String visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, Void context) {
             StringBuilder sb = new StringBuilder("PhysicalIcebergScanOperator");
-            sb.append(" {").append("table=").append(((IcebergTable) node.getTable()).getTable())
+            sb.append(" {").append("table=").append(((IcebergTable) node.getTable()).getRemoteTableName())
                     .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                     .append(", predicates=").append(node.getScanOperatorPredicates())
                     .append("}");
