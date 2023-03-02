@@ -123,7 +123,7 @@ Status SpillablePartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     auto* sort_desc = state->obj_pool()->add(new SortDescs(_is_asc_order, _is_null_first));
 
     // init spill parameters
-    auto* spill_manager = state->query_ctx()->spill_manager();
+    // auto* spill_manager = state->query_ctx()->spill_manager();
     _spill_options = std::make_shared<SpilledOptions>(&_sort_exec_exprs, sort_desc);
     _spill_options->spill_file_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
@@ -131,7 +131,7 @@ Status SpillablePartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->chunk_builder = [&]() {
         return ChunkHelper::new_chunk(*_materialized_tuple_desc, _state->chunk_size());
     };
-    _spill_options->path_provider_factory = spill_manager->provider(fmt::format("local-sort-spill-{}", _plan_node_id));
+    // _spill_options->path_provider_factory = spill_manager->provider(fmt::format("local-sort-spill-{}", _plan_node_id));
     _spill_options->name = "local-sort-spill";
     _spill_options->plan_node_id = _plan_node_id;
 

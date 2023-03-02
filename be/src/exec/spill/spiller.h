@@ -25,9 +25,7 @@
 #include "common/status.h"
 #include "exec/spill/common.h"
 #include "exec/spill/mem_table.h"
-#include "exec/spill/spilled_stream.h"
 #include "exec/spill/spiller_factory.h"
-#include "exec/spill/spiller_path_provider.h"
 #include "exec/spill/input_stream.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/formatter.h"
@@ -63,7 +61,7 @@ struct SpilledOptions {
     // spilled format type
     SpillFormaterType spill_type{};
     // file path for spiller
-    SpillPathProviderFactory path_provider_factory;
+    // SpillPathProviderFactory path_provider_factory;
     // creator for create a spilling chunk
     ChunkBuilder chunk_builder;
     // @TODO remove
@@ -98,20 +96,20 @@ enum class SpillStrategy {
 };
 
 // thread safe formater
-class SpillFormater {
-public:
-    virtual ~SpillFormater() = default;
-    // spilled data format
-    virtual Status spill_as_fmt(SpillFormatContext& context, std::unique_ptr<WritableFile>& writable,
-                                const ChunkPtr& chunk) const noexcept = 0;
-    // restore chunk data from input stream
-    virtual StatusOr<ChunkUniquePtr> restore_from_fmt(SpillFormatContext& context,
-                                                      std::unique_ptr<RawInputStreamWrapper>& readable) const = 0;
-    // write footer and flush data for output stream
-    virtual Status flush(std::unique_ptr<WritableFile>& writable) const = 0;
-    // create a concrete formater
-    static StatusOr<std::unique_ptr<SpillFormater>> create(SpillFormaterType type, ChunkBuilder chunk_builder);
-};
+// class SpillFormater {
+// public:
+//     virtual ~SpillFormater() = default;
+//     // spilled data format
+//     virtual Status spill_as_fmt(SpillFormatContext& context, std::unique_ptr<WritableFile>& writable,
+//                                 const ChunkPtr& chunk) const noexcept = 0;
+//     // restore chunk data from input stream
+//     virtual StatusOr<ChunkUniquePtr> restore_from_fmt(SpillFormatContext& context,
+//                                                       std::unique_ptr<RawInputStreamWrapper>& readable) const = 0;
+//     // write footer and flush data for output stream
+//     virtual Status flush(std::unique_ptr<WritableFile>& writable) const = 0;
+//     // create a concrete formater
+//     static StatusOr<std::unique_ptr<SpillFormater>> create(SpillFormaterType type, ChunkBuilder chunk_builder);
+// };
 
 // major spill interfaces
 class Spiller {
@@ -207,11 +205,11 @@ private:
 
     Status _run_flush_task(RuntimeState* state, const MemTablePtr& writable);
 
-    // should running in executor threads
-    // flush and close
-    Status _flush_and_closed(std::unique_ptr<WritableFile>& writable);
-
     void _update_spilled_task_status(Status&& st);
+    Status _get_spilled_task_status() {
+        std::lock_guard l(_mutex);
+        return _spilled_task_status;
+    }
 
     MemTablePtr _acquire_mem_table_from_pool() {
         std::lock_guard guard(_mutex);
@@ -223,7 +221,7 @@ private:
         return res;
     }
 
-    StatusOr<std::shared_ptr<spill::InputStream>> _acquire_input_stream(RuntimeState* state);
+    Status _acquire_input_stream(RuntimeState* state);
 
     Status _decrease_running_flush_tasks();
 
@@ -233,7 +231,7 @@ private:
     std::weak_ptr<SpillerFactory> _parent;
 
     bool _has_opened = false;
-    std::shared_ptr<SpillerPathProvider> _path_provider;
+    // std::shared_ptr<SpillerPathProvider> _path_provider;
 
     std::mutex _mutex;
     std::queue<MemTablePtr> _mem_table_pool;
@@ -242,13 +240,13 @@ private:
     FlushAllCallBack _flush_all_callback;
     FlushAllCallBack _inner_flush_all_callback;
 
-    std::unique_ptr<SpillFormater> _spill_fmt;
-    std::shared_ptr<SpilledFileGroup> _file_group;
+    // std::unique_ptr<SpillFormater> _spill_fmt;
+    // std::shared_ptr<SpilledFileGroup> _file_group;
     Status _spilled_task_status;
 
     // std::atomic_int32_t _total_restore_tasks{};
-    std::shared_ptr<SpilledInputStream> _current_stream;
-    std::queue<SpillRestoreTaskPtr> _restore_tasks;
+    // std::shared_ptr<SpilledInputStream> _current_stream;
+    // std::queue<SpillRestoreTaskPtr> _restore_tasks;
 
     // stats
     std::atomic_uint64_t _total_restore_tasks{};
@@ -259,7 +257,7 @@ private:
 
     size_t _spilled_append_rows{};
     size_t _restore_read_rows{};
-    SpillFormatContext _spill_read_ctx;
+    // SpillFormatContext _spill_read_ctx;
 
     // const BlockCompressionCodec* _compress_codec = nullptr;
     std::shared_ptr<spill::Formatter> _formatter;// @TODO make unique

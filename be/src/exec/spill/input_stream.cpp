@@ -74,7 +74,6 @@ Status BufferedInputStream::prefetch() {
     if (is_buffer_full()) {
         return Status::OK();
     }
-    // DCHECK(!is_buffer_full());
 
     auto res = _input_stream->get_next();
     if (res.ok()) {
@@ -86,6 +85,7 @@ Status BufferedInputStream::prefetch() {
     }
     return res.status();
 }
+
 class UnorderedInputStream: public InputStream {
 public:
     UnorderedInputStream(const std::vector<BlockPtr>& input_blocks, Formatter* formatter):
@@ -211,14 +211,12 @@ StatusOr<ChunkUniquePtr> OrderedInputStream::get_next() {
 }
 
 Status OrderedInputStream::prefetch() {
-    LOG(INFO) << "OrderedInputStream prefetch";
     // prefetch all stream
     size_t eof_num = 0;
     for (auto& input_stream : _input_streams) {
         RETURN_IF_ERROR(input_stream->prefetch());
         eof_num += input_stream->eof();
     }
-    LOG(INFO) << "eof stream num: " << eof_num <<", total:" << _input_streams.size();
     if (eof_num == _input_streams.size()) {
         mark_is_eof();
         return Status::EndOfFile("end of stream");
@@ -228,10 +226,7 @@ Status OrderedInputStream::prefetch() {
 
 
 StatusOr<InputStreamPtr> BlockGroup::as_unordered_stream() {
-    // @TODO make buffer input stream
-    // @TODO
     return std::make_shared<UnorderedInputStream>(_blocks, _formatter);
-    // return nullptr;
 }
 
 StatusOr<InputStreamPtr> BlockGroup::as_ordered_stream(RuntimeState* state, const SortExecExprs* sort_exprs, const SortDescs* sort_descs) {

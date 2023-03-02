@@ -20,7 +20,6 @@
 
 #include "exec/sort_exec_exprs.h"
 #include "exec/sorting/sorting.h"
-#include "exec/spill/spiller_path_provider.h"
 #include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
 

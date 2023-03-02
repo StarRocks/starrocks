@@ -87,14 +87,12 @@ Status Spiller::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& g
 
 template <class TaskExecutor, class MemGuard>
 StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    LOG(INFO) << "restore_v2";
-    RETURN_IF_ERROR(_spilled_task_status);
-    ChunkPtr chunk;
-    if (_input_stream == nullptr) {
-        ASSIGN_OR_RETURN(_input_stream, _acquire_input_stream(state));
-        LOG(INFO) << "acquire input stream done";
-    }
     DCHECK(has_output_data());
+
+    RETURN_IF_ERROR(_get_spilled_task_status());
+    RETURN_IF_ERROR(_acquire_input_stream(state));
+
+    ChunkPtr chunk;
     ASSIGN_OR_RETURN(chunk, _input_stream->get_next());
     _restore_read_rows += chunk->num_rows();
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
@@ -103,23 +101,19 @@ StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor
 
 template <class TaskExecutor, class MemGuard>
 Status Spiller::trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    // @TODO need lock?
-    RETURN_IF_ERROR(_spilled_task_status);
-    if (_input_stream == nullptr) {
-        ASSIGN_OR_RETURN(_input_stream, _acquire_input_stream(state));
-    }
+    RETURN_IF_ERROR(_get_spilled_task_status());
+    RETURN_IF_ERROR(_acquire_input_stream(state));
+
     // if all is well and input stream enable prefetch and not eof
     if (_input_stream->enable_prefetch() && !_input_stream->eof()) {
         auto restore_task = [this, state, guard] () {
-            LOG(INFO) << "run restore task";
             _running_restore_tasks++;
             guard.scoped_begin();
             auto res = _input_stream->prefetch();
-            // @TODO if not ok, no push
+
             _update_spilled_task_status(res.is_end_of_file() ? Status::OK(): res);
             guard.scoped_end();
             _running_restore_tasks--;
-            LOG(INFO) << "restore task finish, eof: " << _input_stream->eof();
             if (!res.ok()) {
                 _finished_restore_tasks++;
                 return;

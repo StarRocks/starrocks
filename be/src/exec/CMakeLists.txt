@@ -243,10 +243,7 @@ set(EXEC_FILES
     query_cache/ticket_checker.cpp
     spill/spiller.cpp
     spill/spiller_factory.cpp
-    spill/spilled_stream.cpp
-    spill/spiller_path_provider.cpp
     spill/mem_table.cpp
-    spill/query_spill_manager.cpp
     spill/dir_manager.cpp
     spill/formatter.cpp
     spill/input_stream.cpp

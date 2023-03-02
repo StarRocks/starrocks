@@ -19,7 +19,6 @@
 
 #include "common/statusor.h"
 #include "exec/spill/spiller.h"
-#include "exec/spill/spiller_path_provider.h"
 
 namespace starrocks {
 std::shared_ptr<Spiller> SpillerFactory::create(const SpilledOptions& options) {
