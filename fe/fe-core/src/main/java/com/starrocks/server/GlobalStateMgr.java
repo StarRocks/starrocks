@@ -3230,21 +3230,11 @@ public class GlobalStateMgr {
         ctx.setCurrentWarehouse(newWarehouseName);
     }
 
-    // Change current catalog of this session.
-    // We can support "use 'catalog <catalog_name>'" from mysql client or "use catalog <catalog_name>" from jdbc.
-    public void changeCatalog(ConnectContext ctx, String newCatalogName) throws AnalysisException {
-        if (!catalogMgr.catalogExists(newCatalogName)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
-        }
-        if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
-        }
-        ctx.setCurrentCatalog(newCatalogName);
-    }
-
     // Change current catalog and database of this session.
-    // We can support 'USE [CATALOG.]DB'
+    // identifier could be one of three cases: "CATALOG.", "CATALOG.DB", "DB".
+    // For "CATALOG.", we change the current catalog and reset current database.
+    // For "CATALOG.DB", we change the current catalog database.
+    // For "DB", we keep the current catalog and change the current database.
     public void changeCatalogDb(ConnectContext ctx, String identifier) throws DdlException {
         String dbName;
 
