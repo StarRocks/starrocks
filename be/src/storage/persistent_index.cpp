@@ -3155,8 +3155,114 @@ static Status merge_shard_kvs(size_t key_size, std::vector<KVRef>& l0_kvs, std::
     return Status::OK();
 }
 
+template <size_t KeySize>
+Status merge_shard_kvs_fixed_len_with_delete(std::vector<KVRef>& l0_kvs, std::vector<std::vector<KVRef>>& l1_kvs,
+                                             size_t estimated_size, std::vector<KVRef>& ret) {
+    phmap::flat_hash_set<KVRef, KVRefHash, KVRefEq<KeySize>> kvs_set;
+    kvs_set.reserve(estimated_size);
+    DCHECK(!l1_kvs.empty());
+    for (size_t i = 0; i < l1_kvs.size(); i++) {
+        for (const auto& kv : l1_kvs[i]) {
+            auto [it, inserted] = kvs_set.emplace(kv);
+            if (!inserted) {
+                DCHECK(it->hash == kv.hash) << "upsert kv in set, hash should be the same";
+                kvs_set.erase(it);
+                kvs_set.emplace(kv);
+            }
+        }
+    }
+    for (const auto& kv : l0_kvs) {
+        auto [it, inserted] = kvs_set.emplace(kv);
+        if (!inserted) {
+            DCHECK(it->hash == kv.hash) << "upsert kv in set, hash should be the same";
+            // TODO: find a way to modify iterator directly, currently just erase then re-insert
+            // it->kv_pos = kv.kv_pos;
+            kvs_set.erase(it);
+            kvs_set.emplace(kv);
+        }
+    }
+    ret.reserve(ret.size() + kvs_set.size());
+    for (const auto& kv : kvs_set) {
+        ret.emplace_back(kv);
+    }
+    return Status::OK();
+}
+
+Status merge_shard_kvs_var_len_with_delete(std::vector<KVRef>& l0_kvs, std::vector<std::vector<KVRef>>& l1_kvs,
+                                           size_t estimate_size, std::vector<KVRef>& ret) {
+    phmap::flat_hash_set<KVRef, KVRefHash, KVRefEq<0>> kvs_set;
+    kvs_set.reserve(estimate_size);
+    DCHECK(!l1_kvs.empty());
+    for (size_t i = 0; i < l1_kvs.size(); i++) {
+        for (const auto& kv : l1_kvs[i]) {
+            auto [it, inserted] = kvs_set.emplace(kv);
+            if (!inserted) {
+                DCHECK(it->hash == kv.hash) << "upsert kv in set, hash should be the same";
+                kvs_set.erase(it);
+                kvs_set.emplace(kv);
+            }
+        }
+    }
+    for (auto& kv : l0_kvs) {
+        if (auto [it, inserted] = kvs_set.emplace(kv); !inserted) {
+            DCHECK(it->hash == kv.hash) << "upsert kv in set, hash should be the same";
+            // TODO: find a way to modify iterator directly, currently just erase then re-insert
+            // it->kv_pos = kv.kv_pos;
+            kvs_set.erase(it);
+            kvs_set.emplace(kv);
+        }
+    }
+    ret.reserve(ret.size() + kvs_set.size());
+    for (const auto& kv : kvs_set) {
+        ret.emplace_back(kv);
+    }
+    return Status::OK();
+}
+
+static Status merge_shard_kvs_with_delete(size_t key_size, std::vector<KVRef>& l0_kvs,
+                                          std::vector<std::vector<KVRef>>& l1_kvs, size_t estimated_size,
+                                          std::vector<KVRef>& ret) {
+    if (key_size > 0) {
+#define CASE_SIZE(s) \
+    case s:          \
+        return merge_shard_kvs_fixed_len_with_delete<s>(l0_kvs, l1_kvs, estimated_size, ret);
+#define CASE_SIZE_8(s) \
+    CASE_SIZE(s)       \
+    CASE_SIZE(s + 1)   \
+    CASE_SIZE(s + 2)   \
+    CASE_SIZE(s + 3)   \
+    CASE_SIZE(s + 4)   \
+    CASE_SIZE(s + 5)   \
+    CASE_SIZE(s + 6)   \
+    CASE_SIZE(s + 7)
+        switch (key_size) {
+            CASE_SIZE_8(1)
+            CASE_SIZE_8(9)
+            CASE_SIZE_8(17)
+            CASE_SIZE_8(25)
+            CASE_SIZE_8(33)
+            CASE_SIZE_8(41)
+            CASE_SIZE_8(49)
+            CASE_SIZE_8(57)
+            CASE_SIZE_8(65)
+            CASE_SIZE_8(73)
+            CASE_SIZE_8(81)
+            CASE_SIZE_8(89)
+            CASE_SIZE_8(97)
+            CASE_SIZE_8(105)
+            CASE_SIZE_8(113)
+            CASE_SIZE_8(121)
+#undef CASE_SIZE_8
+#undef CASE_SIZE
+        }
+    } else if (key_size == 0) {
+        return merge_shard_kvs_var_len_with_delete(l0_kvs, l1_kvs, estimated_size, ret);
+    }
+    return Status::OK();
+}
+
 Status PersistentIndex::_merge_compaction_internal(ImmutableIndexWriter* writer, int l1_start_idx, int l1_end_idx,
-                                                   size_t total_usage, size_t total_size) {
+                                                   size_t total_usage, size_t total_size, bool keep_delete) {
     for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
         auto [l0_shard_offset, l0_shard_size] = shard_info;
         const auto [nshard, npage_hint] = MutableIndex::estimate_nshard_and_npage(total_usage);
@@ -3232,8 +3338,13 @@ Status PersistentIndex::_merge_compaction_internal(ImmutableIndexWriter* writer,
             for (size_t i = 0; i < merge_l1_num; i++) {
                 l1_kvs[i].swap(l1_kvs_by_shard[i][shard_idx]);
             }
-            RETURN_IF_ERROR(
-                    merge_shard_kvs(key_size, l0_kvs_by_shard[shard_idx], l1_kvs, estimate_size_per_shard, kvs));
+            if (keep_delete) {
+                RETURN_IF_ERROR(merge_shard_kvs_with_delete(key_size, l0_kvs_by_shard[shard_idx], l1_kvs,
+                                                            estimate_size_per_shard, kvs));
+            } else {
+                RETURN_IF_ERROR(
+                        merge_shard_kvs(key_size, l0_kvs_by_shard[shard_idx], l1_kvs, estimate_size_per_shard, kvs));
+            }
             // write shard
             RETURN_IF_ERROR(writer->write_shard(key_size, npage_hint, nbucket, kvs));
             // clear shard
@@ -3261,8 +3372,8 @@ Status PersistentIndex::_merge_compaction() {
     const std::string idx_file_path =
             strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
     RETURN_IF_ERROR(writer->init(idx_file_path, _version, true));
-    RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), 0, _l1_vec.size(), _usage, _size));
-    // _usage should be equal to total_kv_size. But they may be differen because of compatibility problemw when we upgrade
+    RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), 0, _l1_vec.size(), _usage, _size, false));
+    // _usage should be equal to total_kv_size. But they may be differen because of compatibility problem when we upgrade
     // from old version and _usage maybe not accurate.
     // so we use total_kv_size to correct the _usage.
     if (_usage != writer->total_kv_size()) {
@@ -3280,14 +3391,15 @@ Status PersistentIndex::_merge_compaction_advance() {
     int merge_l1_start_idx = _l1_vec.size() - config::max_tmp_l1_num;
     int merge_l1_end_idx = _l1_vec.size();
     LOG(INFO) << "merge compaction advance, start_idx: " << merge_l1_start_idx << " end_idx: " << merge_l1_end_idx;
+    bool keep_delete = (merge_l1_start_idx != 0);
     size_t total_usage = _l0->memory_usage();
     size_t total_size = _l0->size();
     for (int i = merge_l1_start_idx; i < merge_l1_end_idx; i++) {
         total_usage += _l1_vec[i]->total_usage();
         total_size += _l1_vec[i]->total_size();
     }
-    RETURN_IF_ERROR(
-            _merge_compaction_internal(writer.get(), merge_l1_start_idx, merge_l1_end_idx, total_usage, total_size));
+    RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), merge_l1_start_idx, merge_l1_end_idx, total_usage,
+                                               total_size, keep_delete));
     RETURN_IF_ERROR(writer->finish());
     std::vector<std::unique_ptr<ImmutableIndex>> new_l1_vec;
     std::vector<int> new_l1_merged_num;
