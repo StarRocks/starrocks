@@ -1706,26 +1706,38 @@ public class Config extends ConfigBase {
     /**
      * iceberg metadata cache dir
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static String iceberg_metadata_cache_disk_path = StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg";
 
     /**
-     * iceberg metadata cache total size, default 2GB
+     * iceberg metadata memory cache total size, default 512MB
      */
-    @ConfField
-    public static long iceberg_metadata_cache_capacity = 2147483648L;
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_memory_cache_capacity = 536870912L;
+
+    /**
+     * iceberg metadata memory cache expiration time, default 86500s
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_memory_cache_expiration_seconds = 86500;
+
+    /**
+     * enable iceberg metadata disk cache, default false
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_iceberg_metadata_disk_cache = false;
+
+    /**
+     * iceberg metadata disk cache total size, default 2GB
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_disk_cache_capacity = 2147483648L;
 
     /**
      * iceberg metadata cache max entry size, default 8MB
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static long iceberg_metadata_cache_max_entry_size = 8388608L;
-
-    /**
-     * iceberg metadata cache expire after access
-     */
-    @ConfField
-    public static long iceberg_metadata_cache_expiration_seconds = 7L * 24L * 60L * 60L;
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
