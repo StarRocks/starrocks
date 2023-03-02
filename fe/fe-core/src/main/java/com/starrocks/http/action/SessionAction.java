@@ -54,13 +54,14 @@ public class SessionAction extends WebBaseAction {
         SESSION_TABLE_HEADER.add("Id");
         SESSION_TABLE_HEADER.add("User");
         SESSION_TABLE_HEADER.add("Host");
-        SESSION_TABLE_HEADER.add("Cluster");
         SESSION_TABLE_HEADER.add("Db");
         SESSION_TABLE_HEADER.add("Command");
         SESSION_TABLE_HEADER.add("ConnectionStartTime");
         SESSION_TABLE_HEADER.add("Time");
         SESSION_TABLE_HEADER.add("State");
         SESSION_TABLE_HEADER.add("Info");
+        SESSION_TABLE_HEADER.add("IsPending");
+        SESSION_TABLE_HEADER.add("Warehouse");
     }
 
     public SessionAction(ActionController controller) {
