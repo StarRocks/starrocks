@@ -358,7 +358,7 @@ public class ShowExecutor {
         } else if (stmt instanceof ShowCreateExternalCatalogStmt) {
             handleShowCreateExternalCatalog();
         } else {
-            handleEmtpy();
+            handleEmpty();
         }
 
         List<List<String>> rows = doPredicate(stmt, stmt.getMetaData(), resultSet.getResultRows());
@@ -624,7 +624,7 @@ public class ShowExecutor {
     }
 
     // Handle show authors
-    private void handleEmtpy() {
+    private void handleEmpty() {
         // Only success
         resultSet = new ShowResultSet(stmt.getMetaData(), EMPTY_SET);
     }
@@ -2378,11 +2378,11 @@ public class ShowExecutor {
         CatalogMgr catalogMgr = globalStateMgr.getCatalogMgr();
         List<List<String>> rowSet = catalogMgr.getCatalogsInfo().stream()
                 .filter(row -> {
-                            if (globalStateMgr.isUsingNewPrivilege()) {
-                                return PrivilegeActions.checkAnyActionOnCatalog(connectContext, row.get(0));
-                            } else {
-                                return true;
+                            if (globalStateMgr.isUsingNewPrivilege() &&
+                                    !InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(row.get(0))) {
+                                // TODO(yiming): check any action on or in catalog
                             }
+                            return true;
                         }
                 )
                 .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
