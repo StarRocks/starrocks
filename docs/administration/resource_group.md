@@ -10,14 +10,14 @@ The roadmap of Resource Group:
 
 - Since v2.2, StarRocks supports limiting resource consumption for queries and implementing isolation and efficient use of resources among tenants in the same cluster.
 - In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, to guarantee the system stability.
-- StarRocks v2.5 supports resource group for data loading.
+- StarRocks v2.5 supports limiting computation resource consumption for data loading (INSERT).
 
-|  | Internal Table | External Table | Big Query Restriction| Short Query | Data Ingestion  | Schema Change |
-|---|---|---|---|---|---|---|
-| 2.2 | √ | × | × | × | × | × |
-| 2.3 | √ | √ | √ | √ | × | × |
-| 2.4 | √ | √ | √ | √ | × | × |
-| 2.5 | √ | √ | √ | √ | √ | × |
+|  | Internal Table | External Table | Big Query Restriction| Short Query | Data Ingestion  | Schema Change | INSERT |
+|---|---|---|---|---|---|---|---|
+| 2.2 | √ | × | × | × | × | × | × |
+| 2.3 | √ | √ | √ | √ | × | × | × |
+| 2.4 | √ | √ | √ | √ | × | × | × |
+| 2.5 | √ | √ | √ | √ | √ | × | √ |
 
 ## Terms
 
@@ -72,10 +72,9 @@ On the basis of the above resource consumption restrictions, you can further res
 >
 > When a query running in a resource group exceeds the above big query limit, the query will be terminated with an error. You can also view error messages in the `ErrorCode` column of the FE node **fe.audit.log**.
 
-You can set the resource group `type` to `short_query`, `insert`, or `normal`.
+You can set the resource group `type` to `short_query`, or `normal`.
 
 - The default value is `normal`. You do not need specify `normal` in the parameter `type`.
-- When loading tasks hit a `insert` resource group, the BE node reserves the specified CPU resources for the loading tasks.
 - When queries hit a `short_query` resource group, the BE node reserves the CPU resource specified in `short_query.cpu_core_limit`. The CPU resource reserved for queries that hit `normal` resource group is limited to `BE core - short_query.cpu_core_limit`.
 - When no query hits the `short_query` resource group, no limit is imposed to the resource of `normal` resource group.
 
@@ -92,7 +91,7 @@ Classifiers support the following conditions:
 
 - `user`: the name of the user.
 - `role`: the role of the user.
-- `query_type`: the type of the query. `SELECT` and `INSERT` are supported.
+- `query_type`: the type of the query. `SELECT` and `INSERT` are supported. When INSERT tasks hit a resource group with `query_type` as `insert`, the BE node reserves the specified CPU resources for the tasks.
 - `source_ip`: the CIDR block from which the query is initiated.
 - `db`: the database which the query accesses. It can be specified by strings separated by commas `,`.
 
@@ -140,7 +139,7 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 
 -- Classifier C has fewer query types specified in it than Classifier D. Therefore, Classifier has a higher degree of matching than Classifier D.
 classifier C (user='Alice', query_type in ('select'))
-classifier D (user='Alice', query_type in ('insert','select', 'ctas')）
+classifier D (user='Alice', query_type in ('insert','select')）
 ```
 
 ## Isolate computing resources
