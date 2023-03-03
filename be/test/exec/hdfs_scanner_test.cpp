@@ -58,6 +58,7 @@ protected:
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeState* _runtime_state = nullptr;
     std::string _debug_row_output;
+    int _debug_rows_per_call = 1;
 };
 
 void HdfsScannerTest::_create_runtime_profile() {
@@ -305,29 +306,32 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
     params->partition_values = part_values;
 }
 
-#define READ_SCANNER_RETURN_ROWS(scanner, records)                                     \
-    do {                                                                               \
-        _debug_row_output = "";                                                        \
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                       \
-        for (;;) {                                                                     \
-            chunk->reset();                                                            \
-            status = scanner->get_next(_runtime_state, &chunk);                        \
-            if (status.is_end_of_file()) {                                             \
-                break;                                                                 \
-            }                                                                          \
-            if (!status.ok()) {                                                        \
-                std::cout << "status not ok: " << status.get_error_msg() << std::endl; \
-                break;                                                                 \
-            }                                                                          \
-            chunk->check_or_die();                                                     \
-            if (chunk->num_rows() > 0) {                                               \
-                _debug_row_output += chunk->debug_row(0);                              \
-                _debug_row_output += '\n';                                             \
-                std::cout << "row#0: " << chunk->debug_row(0) << std::endl;            \
-                EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());           \
-            }                                                                          \
-            records += chunk->num_rows();                                              \
-        }                                                                              \
+#define READ_SCANNER_RETURN_ROWS(scanner, records)                                        \
+    do {                                                                                  \
+        _debug_row_output = "";                                                           \
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                          \
+        for (;;) {                                                                        \
+            chunk->reset();                                                               \
+            status = scanner->get_next(_runtime_state, &chunk);                           \
+            if (status.is_end_of_file()) {                                                \
+                break;                                                                    \
+            }                                                                             \
+            if (!status.ok()) {                                                           \
+                std::cout << "status not ok: " << status.get_error_msg() << std::endl;    \
+                break;                                                                    \
+            }                                                                             \
+            chunk->check_or_die();                                                        \
+            if (chunk->num_rows() > 0) {                                                  \
+                int rep = std::min(_debug_rows_per_call, (int)chunk->num_rows());         \
+                for (int i = 0; i < rep; i++) {                                           \
+                    std::cout << "row#" << i << ": " << chunk->debug_row(i) << std::endl; \
+                    _debug_row_output += chunk->debug_row(i);                             \
+                    _debug_row_output += '\n';                                            \
+                }                                                                         \
+                EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());              \
+            }                                                                             \
+            records += chunk->num_rows();                                                 \
+        }                                                                                 \
     } while (0)
 
 #define READ_SCANNER_ROWS(scanner, exp)             \
@@ -2044,6 +2048,81 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
 
         EXPECT_EQ(_debug_row_output, "[{'key1':NULL,'key2':NULL}]\n");
     }
+}
+
+// =============================================================================
+/*
+spark-sql> select * from test_hudi_mor13;
+_hoodie_commit_time     _hoodie_commit_seqno    _hoodie_record_key      _hoodie_partition_path  _hoodie_file_name       a       b       ts      uuid
+20230216103800029       20230216103800029_0_0   aa1             14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet      300     3023-01-01 00:00:00     40      aa1
+20230216103800029       20230216103800029_0_1   aa0             14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet      200     2023-01-01 00:00:00     30      aa0
+20230216103800029       20230216103800029_0_2   aa2             14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet      400     1000-01-01 00:00:00     50      aa2
+20230216103800029       20230216103800029_0_3   aa              14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet      100     1900-01-01 00:00:00     20      aa
+*/
+
+/*
+_hoodie_commit_time = 20230216103800029
+_hoodie_commit_seqno = 20230216103800029_0_0
+_hoodie_record_key = aa1
+_hoodie_partition_path =
+_hoodie_file_name = 14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet
+a = 300
+b = 33229411200000000
+ts = 40
+uuid = aa1
+
+_hoodie_commit_time = 20230216103800029
+_hoodie_commit_seqno = 20230216103800029_0_1
+_hoodie_record_key = aa0
+_hoodie_partition_path =
+_hoodie_file_name = 14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet
+a = 200
+b = 1672502400000000
+ts = 30
+uuid = aa0
+
+_hoodie_commit_time = 20230216103800029
+_hoodie_commit_seqno = 20230216103800029_0_2
+_hoodie_record_key = aa2
+_hoodie_partition_path =
+_hoodie_file_name = 14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet
+a = 400
+b = -30610253143000000
+ts = 50
+uuid = aa2
+
+_hoodie_commit_time = 20230216103800029
+_hoodie_commit_seqno = 20230216103800029_0_3
+_hoodie_record_key = aa
+_hoodie_partition_path =
+_hoodie_file_name = 14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet
+a = 100
+b = -2209017943000000
+ts = 20
+uuid = aa
+*/
+
+TEST_F(HdfsScannerTest, TestParquetTimestampToDatetime) {
+    SlotDesc parquet_descs[] = {{"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)}, {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/timestamp_to_datetime.parquet";
+
+    _create_runtime_state("Asia/Shanghai");
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    _debug_rows_per_call = 10;
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 4);
+    EXPECT_EQ(scanner->raw_rows_read(), 4);
+    EXPECT_EQ(_debug_row_output,
+              "[3023-01-01 00:00:00]\n[2023-01-01 00:00:00]\n[1000-01-01 00:00:00]\n[1900-01-01 00:00:00]\n");
+    scanner->close(_runtime_state);
 }
 
 } // namespace starrocks
