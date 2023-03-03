@@ -30,6 +30,7 @@ import io.delta.standalone.types.DataType;
 import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
+import org.apache.iceberg.types.Types;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -369,6 +370,95 @@ public class ColumnTypeConverter {
         return ScalarType.createType(primitiveType);
     }
 
+    public static Type fromIcebergType(org.apache.iceberg.types.Type icebergType) {
+        if (icebergType == null) {
+            return Type.NULL;
+        }
+
+        PrimitiveType primitiveType;
+
+        switch (icebergType.typeId()) {
+            case BOOLEAN:
+                primitiveType = PrimitiveType.BOOLEAN;
+                break;
+            case INTEGER:
+                primitiveType = PrimitiveType.INT;
+                break;
+            case LONG:
+                primitiveType = PrimitiveType.BIGINT;
+                break;
+            case FLOAT:
+                primitiveType = PrimitiveType.FLOAT;
+                break;
+            case DOUBLE:
+                primitiveType = PrimitiveType.DOUBLE;
+                break;
+            case DATE:
+                primitiveType = PrimitiveType.DATE;
+                break;
+            case TIMESTAMP:
+                primitiveType = PrimitiveType.DATETIME;
+                break;
+            case STRING:
+            case UUID:
+                return ScalarType.createDefaultExternalTableString();
+            case DECIMAL:
+                int precision = ((Types.DecimalType) icebergType).precision();
+                int scale = ((Types.DecimalType) icebergType).scale();
+                return ScalarType.createUnifiedDecimalType(precision, scale);
+            case LIST:
+                Type type = convertToArrayTypeForIceberg(icebergType);
+                if (type.isArrayType()) {
+                    return type;
+                } else {
+                    return Type.UNKNOWN_TYPE;
+                }
+            case MAP:
+                Type mapType = convertToMapTypeForIceberg(icebergType);
+                if (mapType.isMapType()) {
+                    return mapType;
+                } else {
+                    return Type.UNKNOWN_TYPE;
+                }
+            case STRUCT:
+                List<Types.NestedField> fields = icebergType.asStructType().fields();
+                Preconditions.checkArgument(fields.size() > 0);
+                ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+                for (Types.NestedField field : fields) {
+                    String fieldName = field.name();
+                    Type fieldType = fromIcebergType(field.type());
+                    if (fieldType.isUnknown()) {
+                        return Type.UNKNOWN_TYPE;
+                    }
+                    structFields.add(new StructField(fieldName, fieldType));
+                }
+                return new StructType(structFields);
+            case TIME:
+            case FIXED:
+            case BINARY:
+            default:
+                primitiveType = PrimitiveType.UNKNOWN_TYPE;
+        }
+        return ScalarType.createType(primitiveType);
+    }
+
+    private static ArrayType convertToArrayTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
+        return new ArrayType(fromIcebergType(icebergType.asNestedType().asListType().elementType()));
+    }
+
+    private static Type convertToMapTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
+        Type keyType = fromIcebergType(icebergType.asMapType().keyType());
+        // iceberg support complex type as key type, but sr is not supported now
+        if (keyType.isComplexType() || keyType.isUnknown()) {
+            return Type.UNKNOWN_TYPE;
+        }
+        Type valueType = fromIcebergType(icebergType.asMapType().valueType());
+        if (valueType.isUnknown()) {
+            return Type.UNKNOWN_TYPE;
+        }
+        return new MapType(keyType, valueType);
+    }
+
     private static ArrayType convertToArrayType(io.delta.standalone.types.ArrayType arrayType) {
         return new ArrayType(fromDeltaLakeType(arrayType.getElementType()));
     }
@@ -494,7 +584,7 @@ public class ColumnTypeConverter {
         throw new StarRocksConnectorException("Failed to get varchar length at " + typeStr);
     }
 
-    public static boolean validateHiveColumnType(Type type, Type otherType) {
+    public static boolean validateColumnType(Type type, Type otherType) {
         if (type == null || otherType == null) {
             return false;
         }
@@ -505,7 +595,7 @@ public class ColumnTypeConverter {
 
         if (type.isArrayType()) {
             if (otherType.isArrayType()) {
-                return validateHiveColumnType(((ArrayType) type).getItemType(), ((ArrayType) otherType).getItemType());
+                return validateColumnType(((ArrayType) type).getItemType(), ((ArrayType) otherType).getItemType());
             } else {
                 return false;
             }
@@ -513,8 +603,8 @@ public class ColumnTypeConverter {
 
         if (type.isMapType()) {
             if (otherType.isMapType()) {
-                return validateHiveColumnType(((MapType) type).getKeyType(), ((MapType) otherType).getKeyType()) &&
-                        validateHiveColumnType(((MapType) type).getValueType(), ((MapType) otherType).getValueType());
+                return validateColumnType(((MapType) type).getKeyType(), ((MapType) otherType).getKeyType()) &&
+                        validateColumnType(((MapType) type).getValueType(), ((MapType) otherType).getValueType());
             } else {
                 return false;
             }
@@ -525,7 +615,7 @@ public class ColumnTypeConverter {
                 StructType structType = (StructType) type;
                 StructType otherStructType = (StructType) otherType;
                 for (int i = 0; i < structType.getFields().size(); i++) {
-                    if (!validateHiveColumnType(
+                    if (!validateColumnType(
                             structType.getField(i).getType(),
                             otherStructType.getField(i).getType())) {
                         return false;

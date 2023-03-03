@@ -21,6 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -44,6 +45,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Resource.ResourceType.HIVE;
 import static com.starrocks.catalog.Resource.ResourceType.HUDI;
+import static com.starrocks.catalog.Resource.ResourceType.ICEBERG;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 
 public class TableFactory {
@@ -56,13 +58,16 @@ public class TableFactory {
     public static Table createTable(CreateTableStmt stmt, Table.TableType type) throws DdlException {
         Table table;
         switch (type) {
-            case HIVE :
+            case HIVE:
                 table = createHiveTable(stmt);
                 break;
-            case HUDI :
+            case ICEBERG:
+                table = createIcebergTable(stmt);
+                break;
+            case HUDI:
                 table = createHudiTable(stmt);
                 break;
-            case FILE :
+            case FILE:
                 table = createFileTable(stmt);
                 break;
             default:
@@ -85,7 +90,7 @@ public class TableFactory {
         }
         HiveTable oHiveTable = (HiveTable) table;
 
-        validateHiveColumnType(columns, oHiveTable);
+        validateColumnType(columns, oHiveTable, "hive");
 
         HiveTable.Builder tableBuilder = HiveTable.builder()
                 .setId(tableId)
@@ -112,25 +117,45 @@ public class TableFactory {
         return hiveTable;
     }
 
-    private static FileTable createFileTable(CreateTableStmt stmt) throws DdlException {
+    private static IcebergTable createIcebergTable(CreateTableStmt stmt) throws DdlException {
         GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
         String tableName = stmt.getTableName();
         List<Column> columns = stmt.getColumns();
         Map<String, String> properties = stmt.getProperties();
         long tableId = gsm.getNextId();
 
-        FileTable.Builder tableBuilder = FileTable.builder()
-                .setId(tableId)
-                .setTableName(tableName)
-                .setFullSchema(columns)
-                .setProperties(properties);
+        IcebergTable oIcebergTable = (IcebergTable) getTableFromResourceMappingCatalog(
+                properties, Table.TableType.ICEBERG, ICEBERG);
 
-        FileTable fileTable = tableBuilder.build();
-
-        if (!Strings.isNullOrEmpty(stmt.getComment())) {
-            fileTable.setComment(stmt.getComment());
+        if (oIcebergTable == null) {
+            throw new DdlException("Can not find iceberg table "
+                    + properties.get(DB) + "." + properties.get(TABLE)
+                    + " from the resource " + properties.get(RESOURCE));
         }
-        return fileTable;
+
+        validateColumnType(columns, oIcebergTable, "iceberg");
+
+        IcebergTable.Builder tableBuilder = IcebergTable.builder()
+                .setId(tableId)
+                .setSrTableName(tableName)
+                .setCatalogName(oIcebergTable.getCatalogName())
+                .setResourceName(oIcebergTable.getResourceName())
+                .setRemoteDbName(oIcebergTable.getRemoteDbName())
+                .setRemoteTableName(oIcebergTable.getRemoteTableName())
+                .setFullSchema(columns)
+                .setIcebergProperties(properties)
+                .setNativeTable(oIcebergTable.getNativeTable());
+
+        IcebergTable icebergTable = tableBuilder.build();
+
+        // partition key, commented for show partition key
+        if (Strings.isNullOrEmpty(stmt.getComment()) && !icebergTable.isUnPartitioned()) {
+            String partitionCmt = "PARTITION BY (" + String.join(", ", icebergTable.getPartitionColumnNames()) + ")";
+            icebergTable.setComment(partitionCmt);
+        } else if (!Strings.isNullOrEmpty(stmt.getComment())) {
+            icebergTable.setComment(stmt.getComment());
+        }
+        return icebergTable;
     }
 
     private static HudiTable createHudiTable(CreateTableStmt stmt) throws DdlException {
@@ -185,20 +210,41 @@ public class TableFactory {
         return hudiTable;
     }
 
-    private static void validateHiveColumnType(List<Column> columns, HiveTable oTable) throws DdlException {
+    private static FileTable createFileTable(CreateTableStmt stmt) throws DdlException {
+        GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+        String tableName = stmt.getTableName();
+        List<Column> columns = stmt.getColumns();
+        Map<String, String> properties = stmt.getProperties();
+        long tableId = gsm.getNextId();
+
+        FileTable.Builder tableBuilder = FileTable.builder()
+                .setId(tableId)
+                .setTableName(tableName)
+                .setFullSchema(columns)
+                .setProperties(properties);
+
+        FileTable fileTable = tableBuilder.build();
+
+        if (!Strings.isNullOrEmpty(stmt.getComment())) {
+            fileTable.setComment(stmt.getComment());
+        }
+        return fileTable;
+    }
+
+    private static void validateColumnType(List<Column> columns, Table oTable, String type) throws DdlException {
         for (Column column : columns) {
             Column oColumn = oTable.getColumn(column.getName());
             if (oColumn == null) {
-                throw new DdlException("column [" + column.getName() + "] not exists in hive");
+                throw new DdlException("column [" + column.getName() + "] not exists in " + type);
             }
 
             if (oColumn.getType() == Type.UNKNOWN_TYPE) {
                 throw new DdlException("Column type convert failed on column: " + column.getName());
             }
 
-            if (!ColumnTypeConverter.validateHiveColumnType(column.getType(), oColumn.getType()) &&
+            if (!ColumnTypeConverter.validateColumnType(column.getType(), oColumn.getType()) &&
                     !FeConstants.runningUnitTest) {
-                throw new DdlException("can not convert hive external table column type [" + column.getType() + "] " +
+                throw new DdlException("can not convert " + type + " external table column type [" + column.getType() + "] " +
                         "to correct type [" + oColumn.getType() + "]");
             }
         }
@@ -238,7 +284,7 @@ public class TableFactory {
                 throw new DdlException("Column type convert failed on column: " + column.getName());
             }
 
-            if (!ColumnTypeConverter.validateHiveColumnType(column.getType(), oColumn.getType())) {
+            if (!ColumnTypeConverter.validateColumnType(column.getType(), oColumn.getType())) {
                 throw new DdlException("can not convert hudi external table column type [" + column.getPrimitiveType() + "] " +
                         "to correct type [" + oColumn.getPrimitiveType() + "]");
             }
@@ -274,13 +320,13 @@ public class TableFactory {
         }
 
         Map<String, String> copiedProps = Maps.newHashMap(properties);
-        String hiveDbName = copiedProps.get(DB);
-        if (Strings.isNullOrEmpty(hiveDbName)) {
+        String remoteDbName = copiedProps.get(DB);
+        if (Strings.isNullOrEmpty(remoteDbName)) {
             throw new DdlException(String.format(PROPERTY_MISSING_MSG, DB, DB));
         }
 
-        String hiveTableName = copiedProps.get(TABLE);
-        if (Strings.isNullOrEmpty(hiveTableName)) {
+        String remoteTableName = copiedProps.get(TABLE);
+        if (Strings.isNullOrEmpty(remoteTableName)) {
             throw new DdlException(String.format(PROPERTY_MISSING_MSG, TABLE, TABLE));
         }
 
@@ -293,6 +339,6 @@ public class TableFactory {
 
         checkResource(resourceName, resourceType);
         String resourceMappingCatalogName = getResourceMappingCatalogName(resourceName, resourceType.name());
-        return gsm.getMetadataMgr().getTable(resourceMappingCatalogName, hiveDbName, hiveTableName);
+        return gsm.getMetadataMgr().getTable(resourceMappingCatalogName, remoteDbName, remoteTableName);
     }
 }
