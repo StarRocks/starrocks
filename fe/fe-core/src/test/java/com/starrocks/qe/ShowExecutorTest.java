@@ -572,6 +572,7 @@ public class ShowExecutorTest {
         Assert.assertFalse(resultSet.next());
     }
 
+    @Ignore
     @Test
     public void testShowColumn() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);

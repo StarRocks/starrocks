@@ -840,7 +840,8 @@ public class Coordinator {
                 }
 
                 if (tabletSinkTotalDop < 0) {
-                    throw new UserException("tabletSinkTotalDop = " + String.valueOf(tabletSinkTotalDop) + " should be >= 0");
+                    throw new UserException(
+                            "tabletSinkTotalDop = " + String.valueOf(tabletSinkTotalDop) + " should be >= 0");
                 }
 
                 boolean isFirst = true;
@@ -1110,7 +1111,8 @@ public class Coordinator {
                     }
 
                     if (tabletSinkTotalDop < 0) {
-                        throw new UserException("tabletSinkTotalDop = " + String.valueOf(tabletSinkTotalDop) + " should be >= 0");
+                        throw new UserException(
+                                "tabletSinkTotalDop = " + String.valueOf(tabletSinkTotalDop) + " should be >= 0");
                     }
 
                     for (Map.Entry<TNetworkAddress, List<FInstanceExecParam>> hostAndRequests : requestsPerHost.entrySet()) {
@@ -2385,7 +2387,9 @@ public class Coordinator {
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),
-                                forceScheduleLocal);
+                                hasComputeNode,
+                                forceScheduleLocal,
+                                connectContext.getSessionVariable().getHDFSBackendSelectorScanRangeShuffle());
                 selector.computeScanRangeAssignment();
             } else {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
