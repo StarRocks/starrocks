@@ -4,12 +4,9 @@
 #include <string>
 
 #include "common/compiler_util.h"
-<<<<<<< HEAD
 
 #pragma once
 
-=======
->>>>>>> e25691928 ([BugFix] fix timestamp underflow for parquet format (#18521))
 namespace starrocks {
 namespace vectorized {
 
