@@ -10,12 +10,12 @@
 
 资源隔离功能支持计划
 
-|  | 内部表 | 外部表 | 大小查询隔离 | Short query 资源组 | 导入计算资源隔离 | Schema Change 资源隔离 |
-|---|---|---|---|---|---|---|
-| 2.2 | √ | × | × | × | × | × |
-| 2.3 | √ | √ | √ |√ | × | × |
-| 2.4 | √ | √ | √ |√ | × | × |
-| 2.5 | √ | √ | √ |√ | √ | × |
+|  | 内部表 | 外部表 | 大小查询隔离 | Short query 资源组 | 导入计算资源隔离 | Schema Change 资源隔离 | INSERT 计算资源隔离 |
+|---|---|---|---|---|---|---|---|
+| 2.2 | √ | × | × | × | × | × | × |
+| 2.3 | √ | √ | √ |√ | × | × | × |
+| 2.4 | √ | √ | √ |√ | × | × | × |
+| 2.5 | √ | √ | √ |√ | √ | × | √ |
 
 ## 基本概念
 
@@ -43,10 +43,9 @@
 >
 > 当资源组中运行的查询超过以上大查询限制时，查询将会终止，并返回错误。您也可以在 FE 节点 **fe.audit.log** 的 `ErrorCode` 列中查看错误信息。
 
-资源组的类型 `type` 支持 `short_query`、`insert` 与 `normal`。
+资源组的类型 `type` 支持 `short_query` 与 `normal`。
 
 - 默认为 `normal` 资源组，无需通过 `type` 参数指定。
-- 当 `insert` 资源组有导入任务正在运行时，当前 BE 节点会为其预留相应的计算资源。
 - 当 `short_query` 资源组有查询正在运行时，当前 BE 节点会为其预留 `short_query.cpu_core_limit` 的 CPU 资源，即所有 `normal` 资源组的总 CPU 核数使用上限会被硬限制为 BE 节点核数 - `short_query.cpu_core_limit`。
 - 当 `short_query` 资源组没有查询正在运行时，所有 `normal` 资源组的 CPU 核数没有硬限制。
 
@@ -63,7 +62,7 @@
 
 - `user`：用户名。
 - `role`：用户所属的 Role。
-- `query_type`: 查询类型，目前支持 `SELECT` 与 `INSERT`。
+- `query_type`: 查询类型，目前支持 `SELECT` 与 `INSERT`。当 `query_type` 为 `insert` 的资源组有导入任务正在运行时，当前 BE 节点会为其预留相应的计算资源。
 - `source_ip`：发起查询的 IP 地址，类型为 CIDR。
 - `db`：查询所访问的 Database，可以为 `,` 分割的字符串。
 
@@ -107,7 +106,7 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 
 -- 因为分类器 C 限定的查询类型数量更少，所以 C 的匹配度比 D 高。
 classifier C (user='Alice', query_type in ('select'))
-classifier D (user='Alice', query_type in ('insert','select', 'ctas')）
+classifier D (user='Alice', query_type in ('insert','select')）
 ```
 
 ## 隔离计算资源
