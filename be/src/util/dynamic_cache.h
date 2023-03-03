@@ -313,8 +313,14 @@ public:
 
 private:
     bool _evict() {
+        // Limit usage to 80% of capacity if possible. If usage is larger than capacity,
+        // we will release all entry which can be release to recycle memory.
+        size_t target_capacity = _capacity * 0.8;
+        if (_size > _capacity) {
+            target_capacity = 0;
+        }
         auto itr = _list.begin();
-        while (_size > _capacity && itr != _list.end()) {
+        while (_size > target_capacity && itr != _list.end()) {
             Entry* entry = (*itr);
             // no need to check iobj != obj, cause obj is in use, so _ref > 1
             if (entry->_ref == 1) {

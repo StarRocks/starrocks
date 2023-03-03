@@ -47,7 +47,6 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
     int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
-    byte_limits = byte_limits * 0.9;
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _index_cache.set_capacity(byte_limits * update_mem_percent);
 }
