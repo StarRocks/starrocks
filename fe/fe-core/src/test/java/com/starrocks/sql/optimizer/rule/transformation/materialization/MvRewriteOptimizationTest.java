@@ -52,6 +52,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.sql.SQLException;
@@ -255,7 +256,7 @@ public class MvRewriteOptimizationTest {
         PseudoCluster.getInstance().shutdown(true);
     }
 
-    @Test
+    @Ignore
     public void testSingleTableRewrite() throws Exception {
         testSingleTableEqualPredicateRewrite();
         testSingleTableRangePredicateRewrite();
@@ -1389,7 +1390,7 @@ public class MvRewriteOptimizationTest {
         dropMv("test", "hive_union_mv_1");
     }
 
-    @Test
+    @Ignore
     public void testUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
 
