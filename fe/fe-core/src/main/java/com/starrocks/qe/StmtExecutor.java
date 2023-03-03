@@ -80,14 +80,15 @@ import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
@@ -166,6 +167,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.RejectedExecutionException;
@@ -697,14 +699,9 @@ public class StmtExecutor {
             // Suicide
             context.setKilled();
         } else {
-            if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                // Check auth
-                // Only user itself and user with admin priv can kill connection
-                if (!killCtx.getQualifiedUser().equals(ConnectContext.get().getQualifiedUser())
-                        && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
-                        PrivPredicate.ADMIN)) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_KILL_DENIED_ERROR, id);
-                }
+            if (!Objects.equals(killCtx.getQualifiedUser(), context.getQualifiedUser()) &&
+                    !PrivilegeActions.checkSystemAction(context, PrivilegeType.OPERATE)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "OPERATE");
             }
             killCtx.kill(killStmt.isConnectionKill());
         }

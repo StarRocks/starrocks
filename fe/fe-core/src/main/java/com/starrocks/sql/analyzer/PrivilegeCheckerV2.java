@@ -155,6 +155,7 @@ import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
+import com.starrocks.sql.ast.ShowProcesslistStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowResourcesStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
@@ -1434,7 +1435,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitKillStatement(KillStmt statement, ConnectContext context) {
-            checkStmtOperatePrivilege(context);
+            // Privilege is checked in execution logic, see `StatementExecutor#handleKill()` for details.
             return null;
         }
 
@@ -1453,6 +1454,12 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitShowProcStmt(ShowProcStmt statement, ConnectContext context) {
             checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowProcesslistStatement(ShowProcesslistStmt statement, ConnectContext context) {
+            // Privilege is checked in execution logic, see `StatementExecutor#handleShowProcesslist()` for details.
             return null;
         }
 
