@@ -1,4 +1,4 @@
-# 使用 StarRocks Operator  部署和管理 StarRocks 集群
+# 在 Kubernetes 上部署 StarRocks 集群
 
 本文介绍如何在 Kubernetes 集群上通过 StarRocks Operator 自动化部署和管理 StarRocks 集群。
 
@@ -13,7 +13,7 @@
 
 ## 工作原理
 
-![sr operator and src](../assets/starrocks%20operator%26starrocks%20cluster.png)
+![sr operator and src](../assets/starrocks_operator.png)
 
 ## **环境准备**
 
