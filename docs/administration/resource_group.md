@@ -139,7 +139,7 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 
 -- Classifier C has fewer query types specified in it than Classifier D. Therefore, Classifier has a higher degree of matching than Classifier D.
 classifier C (user='Alice', query_type in ('select'))
-classifier D (user='Alice', query_type in ('insert','select', 'ctas')）
+classifier D (user='Alice', query_type in ('insert','select')）
 ```
 
 ## Isolate computing resources
