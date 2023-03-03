@@ -18,6 +18,7 @@
 
 #include <starlet.h>
 
+#include <memory>
 #include <shared_mutex>
 #include <unordered_map>
 
@@ -28,6 +29,9 @@
 #include "fslib/file_system.h"
 
 namespace starrocks {
+
+class Cache;
+class CacheKey;
 
 // TODO: find a better place to put this function
 // Convert absl::Status to starrocks::Status
@@ -43,9 +47,9 @@ public:
     using FileSystem = staros::starlet::fslib::FileSystem;
     using Configuration = staros::starlet::fslib::Configuration;
 
-    StarOSWorker() = default;
+    StarOSWorker();
 
-    ~StarOSWorker() override = default;
+    ~StarOSWorker() override;
 
     absl::Status add_shard(const ShardInfo& shard) override;
 
@@ -70,9 +74,16 @@ private:
         ShardInfoDetails(const ShardInfo& info) : shard_info(info) {}
     };
 
-private:
+    using CacheValue = std::weak_ptr<FileSystem>;
+
+    static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
+
+    absl::StatusOr<std::shared_ptr<FileSystem>> new_shared_filesystem(std::string_view scheme,
+                                                                      const Configuration& conf);
+
     mutable std::shared_mutex _mtx;
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
+    std::unique_ptr<Cache> _fs_cache;
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;
