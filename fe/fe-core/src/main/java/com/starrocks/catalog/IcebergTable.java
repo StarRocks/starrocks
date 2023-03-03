@@ -167,10 +167,6 @@ public class IcebergTable extends Table {
                 .collect(Collectors.toList());
     }
 
-    public String getFileIOMaxTotalBytes() {
-        return icebergProperties.get(IcebergCachingFileIO.FILEIO_CACHE_MAX_TOTAL_BYTES);
-    }
-
     public String getResourceName() {
         return resourceName;
     }
@@ -284,9 +280,9 @@ public class IcebergTable extends Table {
         icebergProperties.put(ICEBERG_CATALOG_TYPE, type.name());
         LOG.info("Iceberg table type is " + type.name());
 
+        // deprecated
         String fileIOCacheMaxTotalBytes = copiedProps.get(IcebergCachingFileIO.FILEIO_CACHE_MAX_TOTAL_BYTES);
         if (!Strings.isNullOrEmpty(fileIOCacheMaxTotalBytes)) {
-            icebergProperties.put(IcebergCachingFileIO.FILEIO_CACHE_MAX_TOTAL_BYTES, fileIOCacheMaxTotalBytes);
             copiedProps.remove(IcebergCachingFileIO.FILEIO_CACHE_MAX_TOTAL_BYTES);
         }
 
