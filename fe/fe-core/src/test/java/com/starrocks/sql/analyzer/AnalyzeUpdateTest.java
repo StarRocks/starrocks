@@ -44,7 +44,7 @@ public class AnalyzeUpdateTest {
     @Test
     public void testSingle() {
         analyzeFail("update tjson set v_json = '' where v_int = 1",
-                "only support updating primary key table");
+                "does not support update");
 
         analyzeFail("update tprimary set pk = 2 where pk = 1",
                 "primary key column cannot be updated:");
@@ -74,5 +74,10 @@ public class AnalyzeUpdateTest {
         analyzeSuccess(
                 "with tp2cte as (select * from tprimary2 where v2 < 10) update tprimary set v2 = tp2cte.v2 " +
                         "from tp2cte where tprimary.pk = tp2cte.pk");
+    }
+
+    @Test
+    public void testSelectBeSchemaTable() {
+        analyzeSuccess("select * from information_schema.be_tablets");
     }
 }

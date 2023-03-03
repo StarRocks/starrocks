@@ -39,11 +39,13 @@ public class PrivilegeActions {
             return manager.checkAction(collection, objectType, privilegeType, objectTokens);
         } catch (PrivObjNotFoundException e) {
             LOG.info("Object not found when checking action[{}] on {} {}, message: {}",
-                    privilegeType, objectType.name(), Joiner.on(".").join(objectTokens), e.getMessage());
+                    privilegeType, objectType.name().replace("_", " "),
+                    Joiner.on(".").join(objectTokens), e.getMessage());
             return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on {} {}",
-                    privilegeType, objectType.name(), Joiner.on(".").join(objectTokens), e);
+                    privilegeType, objectType.name().replace("_", " "),
+                    Joiner.on(".").join(objectTokens), e);
             return false;
         }
     }
@@ -242,8 +244,10 @@ public class PrivilegeActions {
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:
+            case LAKE:
                 return checkAnyActionOnTable(currentUser, roleIds, dbName, tbl.getName());
             case MATERIALIZED_VIEW:
+            case LAKE_MATERIALIZED_VIEW:
                 return checkAnyActionOnMaterializedView(currentUser, roleIds, dbName, tbl.getName());
             case VIEW:
                 return checkAnyActionOnView(currentUser, roleIds, dbName, tbl.getName());

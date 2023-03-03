@@ -181,7 +181,6 @@ import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
-import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -208,7 +207,6 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
@@ -824,42 +822,6 @@ public class LocalMetastore implements ConnectorMetadata {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, engineName);
         }
         Preconditions.checkState(false);
-    }
-
-    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
-        try {
-            Database db = getDb(stmt.getExistedDbName());
-            List<String> createTableStmt = Lists.newArrayList();
-            db.readLock();
-            try {
-                Table table = db.getTable(stmt.getExistedTableName());
-                if (table == null) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getExistedTableName());
-                }
-                GlobalStateMgr.getDdlStmt(stmt.getDbName(), table, createTableStmt, null, null, false, false);
-                if (createTableStmt.isEmpty()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERROR_CREATE_TABLE_LIKE_EMPTY, "CREATE");
-                }
-            } finally {
-                db.readUnlock();
-            }
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(createTableStmt.get(0),
-                    ConnectContext.get().getSessionVariable()).get(0);
-            com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ConnectContext.get());
-            if (statementBase instanceof CreateTableStmt) {
-                CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;
-                parsedCreateTableStmt.setTableName(stmt.getTableName());
-                if (stmt.isSetIfNotExists()) {
-                    parsedCreateTableStmt.setIfNotExists();
-                }
-                createTable(parsedCreateTableStmt);
-            } else if (statementBase instanceof CreateViewStmt) {
-                ErrorReport.reportDdlException(ErrorCode.ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW);
-            }
-        } catch (UserException e) {
-            throw new DdlException("Failed to execute CREATE TABLE LIKE " + stmt.getExistedTableName() + ". Reason: " +
-                    e.getMessage(), e);
-        }
     }
 
     @Override
@@ -3494,6 +3456,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         DataProperty dataProperty;
+        boolean isNonPartitioned = partitionInfo.getType() == PartitionType.UNPARTITIONED;
         try {
             // set storage medium
             boolean hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
@@ -3512,18 +3475,30 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(number));
                 materializedView.getTableProperty().setPartitionTTLNumber(number);
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER
+                            + " does not support non-partitioned materialized view.");
+                }
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
                 int limit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT, String.valueOf(limit));
                 materializedView.getTableProperty().setAutoRefreshPartitionsLimit(limit);
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT
+                            + " does not support non-partitioned materialized view.");
+                }
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
                 int number = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(number));
                 materializedView.getTableProperty().setPartitionRefreshNumber(number);
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER
+                            + " does not support non-partitioned materialized view.");
+                }
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
                 List<TableName> tables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
@@ -3854,17 +3829,19 @@ public class LocalMetastore implements ConnectorMetadata {
 
         db.dropTable(oldTableName);
         db.createTable(olapTable);
-        disableMaterializedView(db, olapTable);
+        disableMaterializedViewForRenameTable(db, olapTable);
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         editLog.logTableRename(tableInfo);
         LOG.info("rename table[{}] to {}, tableId: {}", oldTableName, newTableName, olapTable.getId());
     }
 
-    private void disableMaterializedView(Database db, OlapTable olapTable) {
+    private void disableMaterializedViewForRenameTable(Database db, OlapTable olapTable) {
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv != null) {
+                LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
                 mv.setActive(false);
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
@@ -3885,7 +3862,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.dropTable(tableName);
             table.setName(newTableName);
             db.createTable(table);
-            disableMaterializedView(db, table);
+            disableMaterializedViewForRenameTable(db, table);
 
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
         } finally {
@@ -3922,7 +3899,6 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         olapTable.renamePartition(partitionName, newPartitionName);
-        disableMaterializedView(db, olapTable);
 
         // log
         TableInfo tableInfo = TableInfo.createForPartitionRename(db.getId(), olapTable.getId(), partition.getId(),
@@ -3943,7 +3919,6 @@ public class LocalMetastore implements ConnectorMetadata {
             OlapTable table = (OlapTable) db.getTable(tableId);
             Partition partition = table.getPartition(partitionId);
             table.renamePartition(partition.getName(), newPartitionName);
-            disableMaterializedView(db, table);
             LOG.info("replay rename partition[{}] to {}", partition.getName(), newPartitionName);
         } finally {
             db.writeUnlock();
@@ -5231,11 +5206,13 @@ public class LocalMetastore implements ConnectorMetadata {
         return oldId;
     }
 
-    public void removeAutoIncrementIdByTableId(Long tableId) {
-        ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
-        deltaMap.put(tableId, 0L);
-        AutoIncrementInfo info = new AutoIncrementInfo(deltaMap);
-        GlobalStateMgr.getCurrentState().getEditLog().logSaveDeleteAutoIncrementId(info);
+    public void removeAutoIncrementIdByTableId(Long tableId, boolean isReplay) {
+        if (!isReplay) {
+            ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
+            deltaMap.put(tableId, 0L);
+            AutoIncrementInfo info = new AutoIncrementInfo(deltaMap);
+            GlobalStateMgr.getCurrentState().getEditLog().logSaveDeleteAutoIncrementId(info);
+        }
 
         tableIdToIncrementId.remove(tableId);
     }

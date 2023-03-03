@@ -262,6 +262,7 @@ import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
@@ -270,6 +271,8 @@ import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TNodeInfo;
+import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TResourceUsage;
@@ -507,6 +510,16 @@ public class GlobalStateMgr {
         return nodeMgr.getOrCreateSystemInfo(clusterId);
     }
 
+    public TNodesInfo createNodesInfo(Integer clusterId) {
+        TNodesInfo nodesInfo = new TNodesInfo();
+        SystemInfoService systemInfoService = getOrCreateSystemInfo(clusterId);
+        for (Long id : systemInfoService.getBackendIds(false)) {
+            Backend backend = systemInfoService.getBackend(id);
+            nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+        }
+        return nodesInfo;
+    }
+
     public SystemInfoService getClusterInfo() {
         return nodeMgr.getClusterInfo();
     }
@@ -662,7 +675,6 @@ public class GlobalStateMgr {
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, connectorTblMetaInfoMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
-
 
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
@@ -1414,14 +1426,16 @@ public class GlobalStateMgr {
                 for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
                     Table table = baseTableInfo.getTable();
                     if (table == null) {
-                        LOG.warn("tableName :{} do not exist. set materialized view:{} to invalid",
-                                baseTableInfo.getTableName(), mv.getId());
+                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
                         mv.setActive(false);
                         continue;
                     }
                     if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                        LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
-                                baseTableInfo.getTableName(), mv.getId());
+                        MaterializedView baseMv = (MaterializedView) table;
+                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                        "the materialized view{}({}) is invalid.", mv.getName(), mv.getId(),
+                                baseMv.getName(), baseMv.getId());
                         mv.setActive(false);
                         continue;
                     }
@@ -1944,7 +1958,6 @@ public class GlobalStateMgr {
 
         streamLoadManager.cancelUnDurableTaskAfterRestart();
 
-
         long replayInterval = System.currentTimeMillis() - replayStartTime;
         LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
     }
@@ -2114,7 +2127,7 @@ public class GlobalStateMgr {
     }
 
     public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
-        localMetastore.createTableLike(stmt);
+        localMetastore.createTable(stmt.getCreateTableStmt());
     }
 
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
@@ -2592,12 +2605,8 @@ public class GlobalStateMgr {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(icebergTable.getDb()).append("\",\n");
-            sb.append("\"table\" = \"").append(icebergTable.getTable()).append("\",\n");
-            String maxTotalBytes = icebergTable.getFileIOMaxTotalBytes();
-            if (!Strings.isNullOrEmpty(maxTotalBytes)) {
-                sb.append("\"fileIO.cache.max-total-bytes\" = \"").append(maxTotalBytes).append("\",\n");
-            }
+            sb.append("\"database\" = \"").append(icebergTable.getRemoteDbName()).append("\",\n");
+            sb.append("\"table\" = \"").append(icebergTable.getRemoteTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == TableType.JDBC) {
@@ -3531,8 +3540,8 @@ public class GlobalStateMgr {
         return localMetastore.allocateAutoIncrementId(tableId, rows);
     }
 
-    public void removeAutoIncrementIdByTableId(Long tableId) {
-        localMetastore.removeAutoIncrementIdByTableId(tableId);
+    public void removeAutoIncrementIdByTableId(Long tableId, boolean isReplay) {
+        localMetastore.removeAutoIncrementIdByTableId(tableId, isReplay);
     }
 
     public Long getCurrentAutoIncrementIdByTableId(Long tableId) {

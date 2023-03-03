@@ -1,3 +1,4 @@
+
 #! /usr/bin/python3
 # Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
@@ -13,18 +14,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from sqlalchemy.dialects.mysql import DECIMAL
-from sqlalchemy.dialects.mysql.mysqldb import MySQLDialect_mysqldb
+__version__ = "1.0.3"
 
-class StarRocksDialect(MySQLDialect_mysqldb):
-
-    name = 'starrocks'
-
-    def __init__(self, *args, **kw):
-        super(StarRocksDialect, self).__init__(*args, **kw)
-        self.ischema_names = self.ischema_names.copy()
-        self.ischema_names['largeint'] = DECIMAL
-
-    @classmethod
-    def dbapi(cls):
-        return __import__("MySQLdb")

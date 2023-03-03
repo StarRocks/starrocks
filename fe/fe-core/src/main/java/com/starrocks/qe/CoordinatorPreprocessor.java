@@ -683,6 +683,10 @@ public class CoordinatorPreprocessor {
                                 int expectedDop = Math.max(1, Math.min(pipelineDop, scanRangeParams.size()));
                                 List<List<TScanRangeParams>> scanRangeParamsPerDriverSeq =
                                         ListUtil.splitBySize(scanRangeParams, expectedDop);
+                                if (fragment.isForceAssignScanRangesPerDriverSeq() && scanRangeParamsPerDriverSeq.size() 
+                                        != pipelineDop) {
+                                    fragment.setPipelineDop(scanRangeParamsPerDriverSeq.size());
+                                }
                                 instanceParam.pipelineDop = scanRangeParamsPerDriverSeq.size();
                                 if (fragment.isUseRuntimeAdaptiveDop()) {
                                     instanceParam.pipelineDop = Utils.computeMinGEPower2(instanceParam.pipelineDop);

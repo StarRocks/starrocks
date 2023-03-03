@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.parser;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -389,7 +390,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import javax.validation.constraints.NotNull;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.util.stream.Collectors.toList;
@@ -2817,7 +2817,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName tableName = qualifiedNameToTableName(qualifiedName);
         PartitionNames partitionNames = null;
         if (context.tableDesc().partitionNames() != null) {
-            stop =  context.tableDesc().partitionNames().stop;
+            stop = context.tableDesc().partitionNames().stop;
             partitionNames = (PartitionNames) visit(context.tableDesc().partitionNames());
         }
         TableRef tableRef = new TableRef(tableName, null, partitionNames, createPos(start, stop));
@@ -4477,7 +4477,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitGrantOnAll(StarRocksParser.GrantOnAllContext context) {
         List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
                 c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-        String objectTypeUnResolved = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
+        String objectTypeUnResolved = ((Identifier) visit(context.privObjectTypePlural())).getValue().toUpperCase();
 
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         if (context.isAll != null) {
@@ -4498,7 +4498,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitRevokeOnAll(StarRocksParser.RevokeOnAllContext context) {
         List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
                 c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-        String objectTypeUnResolved = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
+        String objectTypeUnResolved = ((Identifier) visit(context.privObjectTypePlural())).getValue().toUpperCase();
 
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         if (context.isAll != null) {
@@ -4515,52 +4515,33 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitGrantOnAllGlobalFunctions(StarRocksParser.GrantOnAllGlobalFunctionsContext context) {
-        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
-                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-
-        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
-        objects.setAllPrivilegeObject(false, null);
-
-        return new GrantPrivilegeStmt(privilegeList, "GLOBAL_FUNCTIONS",
-                (GrantRevokeClause) visit(context.grantRevokeClause()),
-                objects, context.WITH() != null, createPos(context));
-    }
-
-    @Override
-    public ParseNode visitRevokeOnAllGlobalFunctions(StarRocksParser.RevokeOnAllGlobalFunctionsContext context) {
-        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
-                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-
-        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
-        objects.setAllPrivilegeObject(false, null);
-
-        return new RevokePrivilegeStmt(privilegeList, "GLOBAL_FUNCTIONS",
-                (GrantRevokeClause) visit(context.grantRevokeClause()), objects, createPos(context));
+    public ParseNode visitPrivilegeType(StarRocksParser.PrivilegeTypeContext context) {
+        NodePosition pos = createPos(context);
+        List<String> ps = new ArrayList<>();
+        for (int i = 0; i < context.getChildCount(); ++i) {
+            ps.add(context.getChild(i).getText());
+        }
+        return new Identifier(Joiner.on(" ").join(ps), pos);
     }
 
     @Override
     public ParseNode visitPrivObjectType(StarRocksParser.PrivObjectTypeContext context) {
-        if (context.identifier() == null) {
-            return new Identifier(context.getText(), createPos(context));
-        } else {
-            return visit(context.identifier());
+        NodePosition pos = createPos(context);
+        List<String> ps = new ArrayList<>();
+        for (int i = 0; i < context.getChildCount(); ++i) {
+            ps.add(context.getChild(i).getText());
         }
+        return new Identifier(Joiner.on(" ").join(ps), pos);
     }
 
     @Override
-    public ParseNode visitPrivilegeType(StarRocksParser.PrivilegeTypeContext context) {
+    public ParseNode visitPrivObjectTypePlural(StarRocksParser.PrivObjectTypePluralContext context) {
         NodePosition pos = createPos(context);
-        if (context.identifier() == null) {
-            if (context.ALL() != null) {
-                //Syntax ALL PRIVILEGES -> ALL
-                return new Identifier("ALL", pos);
-            } else {
-                return new Identifier(context.getText(), pos);
-            }
-        } else {
-            return visit(context.identifier());
+        List<String> ps = new ArrayList<>();
+        for (int i = 0; i < context.getChildCount(); ++i) {
+            ps.add(context.getChild(i).getText());
         }
+        return new Identifier(Joiner.on(" ").join(ps), pos);
     }
 
     private GrantRevokePrivilegeObjects parsePrivilegeObjectNameList(StarRocksParser.PrivObjectNameListContext context) {
@@ -6063,8 +6044,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new NodePosition(start, stop);
     }
 
+    // labelName can be null or (db.)name format
     private LabelName createLabelName(StarRocksParser.QualifiedNameContext dbCtx,
-                                      @NotNull StarRocksParser.IdentifierContext nameCtx) {
+                                      StarRocksParser.IdentifierContext nameCtx) {
+        if (dbCtx == null && nameCtx == null) {
+            return new LabelName(null, null, NodePosition.ZERO);
+        }
         Token start = nameCtx.start;
         Token stop = nameCtx.stop;
         String name = getIdentifierName(nameCtx);
