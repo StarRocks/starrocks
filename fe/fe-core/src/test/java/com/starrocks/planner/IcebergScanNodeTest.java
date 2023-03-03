@@ -179,7 +179,7 @@ public class IcebergScanNodeTest {
 
         new Expectations() {
             {
-                table.getIcebergTable();
+                table.getNativeTable();
                 result = iTable;
 
                 iTable.currentSnapshot();
