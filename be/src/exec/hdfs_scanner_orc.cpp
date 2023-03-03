@@ -465,8 +465,8 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
         {
             SCOPED_RAW_TIMER(&_stats.column_read_ns);
-            _orc_reader->lazy_seek_to(position.row_in_stripe);
-            _orc_reader->lazy_read_next(read_num_values);
+            RETURN_IF_ERROR(_orc_reader->lazy_seek_to(position.row_in_stripe));
+            RETURN_IF_ERROR(_orc_reader->lazy_read_next(read_num_values));
         }
         {
             SCOPED_RAW_TIMER(&_stats.column_convert_ns);
