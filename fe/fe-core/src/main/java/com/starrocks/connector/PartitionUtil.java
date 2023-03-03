@@ -44,6 +44,9 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.DmlException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
+import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.StructLike;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -275,6 +278,25 @@ public class PartitionUtil {
                             ImmutableList.of(partitionColumn))));
         }
         return partitionRangeMap;
+    }
+
+    public static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {
+        int filePartitionFields = partition.size();
+        StringBuilder sb = new StringBuilder();
+        for (int index = 0; index < filePartitionFields; ++index) {
+            PartitionField partitionField = partitionSpec.fields().get(index);
+            sb.append(partitionField.name());
+            sb.append("=");
+            String value = partitionField.transform().toHumanString(getPartitionValue(partition, index,
+                    partitionSpec.javaClasses()[index]));
+            sb.append(value);
+            sb.append("/");
+        }
+        return sb.substring(0, sb.length() - 1);
+    }
+
+    public static <T> T getPartitionValue(StructLike partition, int position, Class<?> javaClass) {
+        return partition.get(position, (Class<T>) javaClass);
     }
 
     public static String getSuffixName(String dirPath, String filePath) {
