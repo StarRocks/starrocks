@@ -23,11 +23,18 @@
 #include "common/logging.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
+#include "gutil/strings/fastmem.h"
 #include "util/debug_util.h"
+#include "util/lru_cache.h"
+#include "util/sha.h"
 
 namespace starrocks {
 
 namespace fslib = staros::starlet::fslib;
+
+StarOSWorker::StarOSWorker() : _mtx(), _shards(), _fs_cache(new_lru_cache(1024)) {}
+
+StarOSWorker::~StarOSWorker() = default;
 
 absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     std::unique_lock l(_mtx);
@@ -186,14 +193,59 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             setenv(fslib::kFslibCacheDir.c_str(), cache_dir.c_str(), 0 /*overwrite*/);
         }
 
-        auto fs = fslib::FileSystemFactory::new_filesystem(scheme, localconf);
+        auto fs = new_shared_filesystem(scheme, localconf);
         if (!fs.ok()) {
             return fs.status();
         }
-        // turn unique_ptr to shared_ptr
         shard_iter->second.fs = std::move(fs).value();
         return shard_iter->second.fs;
     }
+}
+
+absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shared_filesystem(
+        std::string_view scheme, const Configuration& conf) {
+    // Take the SHA-256 hash value as the cache key
+    SHA256Digest sha256;
+    sha256.update(scheme.data(), scheme.size());
+    for (const auto& [k, v] : conf) {
+        sha256.update(k.data(), k.size());
+        sha256.update(v.data(), v.size());
+    }
+    sha256.digest();
+    CacheKey key(sha256.hex());
+
+    // Lookup LRU cache
+    std::shared_ptr<FileSystem> fs;
+    auto handle = _fs_cache->lookup(key);
+    if (handle != nullptr) {
+        auto value = static_cast<CacheValue*>(_fs_cache->value(handle));
+        fs = value->lock();
+        _fs_cache->release(handle);
+        if (fs != nullptr) {
+            VLOG(9) << "Share filesystem";
+            return std::move(fs);
+        }
+    }
+    VLOG(9) << "Create a new filesystem";
+
+    // Create a new instance of FileSystem
+    auto fs_or = fslib::FileSystemFactory::new_filesystem(scheme, conf);
+    if (!fs_or.ok()) {
+        return fs_or.status();
+    }
+    // turn unique_ptr to shared_ptr
+    fs = std::move(fs_or).value();
+
+    // Put the FileSysatem into LRU cache
+    auto value = new CacheValue(fs);
+    handle = _fs_cache->insert(key, value, 1, cache_value_deleter);
+    if (handle == nullptr) {
+        delete value;
+    } else {
+        _fs_cache->release(handle);
+    }
+
+    return std::move(fs);
 }
 
 Status to_status(absl::Status absl_status) {
