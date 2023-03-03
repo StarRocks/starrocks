@@ -683,7 +683,7 @@ public class CoordinatorPreprocessor {
                                 int expectedDop = Math.max(1, Math.min(pipelineDop, scanRangeParams.size()));
                                 List<List<TScanRangeParams>> scanRangeParamsPerDriverSeq =
                                         ListUtil.splitBySize(scanRangeParams, expectedDop);
-                                if (fragment.isForceAssignScanRangesPerDriverSeq() && scanRangeParamsPerDriverSeq.size() 
+                                if (fragment.isForceAssignScanRangesPerDriverSeq() && scanRangeParamsPerDriverSeq.size()
                                         != pipelineDop) {
                                     fragment.setPipelineDop(scanRangeParamsPerDriverSeq.size());
                                 }
@@ -1035,13 +1035,15 @@ public class CoordinatorPreprocessor {
                     queryOptions.
                             setEnable_populate_block_cache(
                                     connectContext.getSessionVariable().getEnablePopulateBlockCache());
-                    queryOptions.setHudi_mor_force_jni_reader(connectContext.getSessionVariable().getHudiMORForceJNIReader());
+                    queryOptions.setHudi_mor_force_jni_reader(
+                            connectContext.getSessionVariable().getHudiMORForceJNIReader());
                 }
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),
                                 hasComputeNode,
-                                forceScheduleLocal);
+                                forceScheduleLocal,
+                                connectContext.getSessionVariable().getHDFSBackendSelectorScanRangeShuffle());
                 selector.computeScanRangeAssignment();
             } else {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());

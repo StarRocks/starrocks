@@ -380,6 +380,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // control on/off of this bucketization optimization.
     public static final String DISTINCT_COLUMN_BUCKETS = "count_distinct_column_buckets";
     public static final String ENABLE_DISTINCT_COLUMN_BUCKETIZATION = "enable_distinct_column_bucketization";
+    public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -946,6 +947,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_DISTINCT_COLUMN_BUCKETIZATION)
     private boolean enableDistinctColumnBucketization = true;
+
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
+    private boolean hdfsBackendSelectorScanRangeShuffle = false;
 
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
@@ -1818,6 +1822,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setDefaultTableCompression(String compression) {
         this.defaultTableCompressionAlgorithm = compression;
+    }
+
+    public boolean getHDFSBackendSelectorScanRangeShuffle() {
+        return hdfsBackendSelectorScanRangeShuffle;
     }
 
     // Serialize to thrift object
