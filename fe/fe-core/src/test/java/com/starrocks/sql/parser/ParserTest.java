@@ -123,7 +123,7 @@ class ParserTest {
 
     @Test
     void testNonReservedWords_1() {
-        String sql = "select anti, authentication, auto_increment, cancel, current_role, distributed, enclose, escape, export," +
+        String sql = "select anti, authentication, auto_increment, cancel, distributed, enclose, escape, export," +
                 "host, incremental, minus, nodes, optimizer, privileges, qualify, skip_header, semi, trace, trim_space " +
                 "from tbl left anti join t1 on ture left semi join t2 on false full join t3 on true minus select * from tbl";
         SessionVariable sessionVariable = new SessionVariable();
@@ -164,17 +164,15 @@ class ParserTest {
         }
     }
 
-    @Test
-    void testReservedWords() {
-        // full is reserved words
-        String sql = "select * from full full join anti anti on anti.col join t1 on true";
+    @ParameterizedTest
+    @MethodSource("reservedWordSqls")
+    void testReservedWords(String sql) {
         SessionVariable sessionVariable = new SessionVariable();
         try {
-            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
-            fail("sql should fail");
+            SqlParser.parse(sql, sessionVariable).get(0);
+            fail("Not quoting reserved words. sql should fail.");
         } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(), "Getting syntax error at line 1, column 14. Detail message: " +
-                            "No viable statement for input 'full', please check the SQL Reference.", e.getMessage());
+            Assert.assertTrue(e instanceof ParsingException);
         }
     }
     
@@ -188,13 +186,18 @@ class ParserTest {
         sqls.add("ALTER SYSTEM MODIFY BACKEND HOST '1' to '1'");
         sqls.add("SHOW COMPUTE NODES");
         sqls.add("trace optimizer select 1");
-        sqls.add("select * from t1 left anti join t2 on true");
-        sqls.add("select * from t1 left semi join t2 on true");
+        sqls.add("select anti from t1 left anti join t2 on true");
+        sqls.add("select anti, semi from t1 left semi join t2 on true");
         return sqls.stream().map(e -> Arguments.of(e));
     }
 
 
-
+    private static Stream<Arguments> reservedWordSqls() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select * from current_role ");
+        sqls.add("select * from full full join anti anti on anti.col join t1 on true");
+        return sqls.stream().map(e -> Arguments.of(e));
+    }
 }
 
 
