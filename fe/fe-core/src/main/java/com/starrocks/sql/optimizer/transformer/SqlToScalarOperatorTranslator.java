@@ -391,14 +391,20 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
-        public ScalarOperator visitFunctionCall(FunctionCallExpr expr, Void context) {
-            List<ScalarOperator> arguments = expr.getChildren().stream().map(this::visit).collect(Collectors.toList());
-            return new CallOperator(
-                    expr.getFnName().getFunction(),
-                    expr.getType(),
+        public ScalarOperator visitFunctionCall(FunctionCallExpr node, Void context) {
+            List<ScalarOperator> arguments = node.getChildren()
+                    .stream()
+                    .map(child -> visit(child, context))
+                    .collect(Collectors.toList());
+
+            CallOperator callOperator = new CallOperator(
+                    node.getFnName().getFunction(),
+                    node.getType(),
                     arguments,
-                    expr.getFn(),
-                    expr.getParams().isDistinct());
+                    node.getFn(),
+                    node.getParams().isDistinct());
+            callOperator.setHints(node.getHints());
+            return callOperator;
         }
 
         @Override

@@ -52,6 +52,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
@@ -175,6 +176,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // Needed for properly capturing expr precedences in the SQL string.
     protected boolean printSqlInParens = false;
 
+    private List<String> hints = Collections.emptyList();
     protected Expr() {
         super();
         type = Type.INVALID;
@@ -199,6 +201,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         fn = other.fn;
         printSqlInParens = other.printSqlInParens;
         children = Expr.cloneList(other.children);
+        hints = Lists.newArrayList(hints);
     }
 
     @SuppressWarnings("unchecked")
@@ -1342,4 +1345,13 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             return expr;
         }
     }
+
+    public void setHints(List<String> hints) {
+        this.hints = hints;
+    }
+
+    public List<String> getHints() {
+        return hints;
+    }
+
 }

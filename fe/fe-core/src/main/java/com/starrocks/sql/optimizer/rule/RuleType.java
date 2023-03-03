@@ -123,6 +123,8 @@ public enum RuleType {
     TF_PRUNE_CTE_PRODUCE,
     TF_COMPUTE_CTE_COSTS,
 
+    TF_GROUP_BY_COUNT_DISTINCT_DATA_SKEW_ELIMINATE_RULE,
+
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,

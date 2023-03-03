@@ -3,11 +3,13 @@ package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -44,6 +46,9 @@ public class LogicalAggregationOperator extends LogicalOperator {
     // if singleDistinctFunctionPos is -1, means no single distinct function
     private int singleDistinctFunctionPos = -1;
 
+
+    private DataSkewInfo distinctColumnDataSkew = null;
+
     public LogicalAggregationOperator(AggType type,
                                       List<ColumnRefOperator> groupingKeys,
                                       Map<ColumnRefOperator, CallOperator> aggregations) {
@@ -76,6 +81,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
         this.aggregations = builder.aggregations;
         this.isSplit = builder.isSplit;
         this.singleDistinctFunctionPos = builder.singleDistinctFunctionPos;
+        this.distinctColumnDataSkew = builder.distinctColumnDataSkew;
     }
 
     public AggType getType() {
@@ -108,6 +114,31 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public void setPartitionByColumns(List<ColumnRefOperator> partitionByColumns) {
         this.partitionByColumns = partitionByColumns;
+    }
+
+    public void setDistinctColumnDataSkew(DataSkewInfo distinctColumnDataSkew) {
+        this.distinctColumnDataSkew = distinctColumnDataSkew;
+    }
+
+    public DataSkewInfo getDistinctColumnDataSkew() {
+        return distinctColumnDataSkew;
+    }
+
+    public boolean checkGroupByCountDistinct() {
+        if (groupingKeys.size() != 1 || aggregations.size() != 1) {
+            return false;
+        }
+        CallOperator call = aggregations.values().stream().iterator().next();
+        if (call.isDistinct() && call.getFnName().equalsIgnoreCase(FunctionSet.COUNT) &&
+                call.getChildren().size() == 1 && call.getChild(0).isColumnRef() &&
+                !groupingKeys.get(0).equals(call.getChild(0))) {
+            return true;
+        }
+        return false;
+    }
+
+    public boolean checkGroupByCountDistinctWithSkewHint() {
+        return checkGroupByCountDistinct() && aggregations.values().iterator().next().getHints().contains("skew");
     }
 
     @Override
@@ -166,6 +197,8 @@ public class LogicalAggregationOperator extends LogicalOperator {
         private List<ColumnRefOperator> partitionByColumns;
         private int singleDistinctFunctionPos = -1;
 
+        private DataSkewInfo distinctColumnDataSkew = null;
+
         @Override
         public LogicalAggregationOperator build() {
             return new LogicalAggregationOperator(this);
@@ -180,6 +213,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
             this.aggregations = aggregationOperator.aggregations;
             this.isSplit = aggregationOperator.isSplit;
             this.singleDistinctFunctionPos = aggregationOperator.singleDistinctFunctionPos;
+            this.distinctColumnDataSkew = aggregationOperator.distinctColumnDataSkew;
             return this;
         }
 
@@ -213,6 +247,14 @@ public class LogicalAggregationOperator extends LogicalOperator {
         public Builder setSingleDistinctFunctionPos(int singleDistinctFunctionPos) {
             this.singleDistinctFunctionPos = singleDistinctFunctionPos;
             return this;
+        }
+
+        public void setDistinctColumnDataSkew(DataSkewInfo distinctColumnDataSkew) {
+            this.distinctColumnDataSkew = distinctColumnDataSkew;
+        }
+
+        public DataSkewInfo getDistinctColumnDataSkew() {
+            return distinctColumnDataSkew;
         }
     }
 }
