@@ -1402,6 +1402,13 @@ public class Config extends ConfigBase {
     public static String authentication_kerberos_service_key_tab = "";
 
     /**
+     * When set to true, we cannot drop user named 'admin' or grant/revoke role to/from user named 'admin',
+     * except that we're root user.
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_admin_user_protection = false;
+
+    /**
      * In some cases, some tablets may have all replicas damaged or lost.
      * At this time, the data has been lost, and the damaged tablets
      * will cause the entire query to fail, and the remaining healthy tablets cannot be queried.

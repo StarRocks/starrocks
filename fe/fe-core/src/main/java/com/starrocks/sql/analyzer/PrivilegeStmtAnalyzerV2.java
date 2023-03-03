@@ -26,6 +26,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -180,17 +181,29 @@ public class PrivilegeStmtAnalyzerV2 {
             return null;
         }
 
+        private boolean needProtectAdminUser(UserIdentity userIdentity, ConnectContext context) {
+            return Config.authorization_enable_admin_user_protection &&
+                    userIdentity.getQualifiedUser().equalsIgnoreCase("admin") &&
+                    !context.getCurrentUserIdentity().equals(UserIdentity.ROOT);
+        }
+
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
             UserIdentity userIdentity = stmt.getUserIdentity();
             userIdentity.analyze();
+
+            if (needProtectAdminUser(userIdentity, session)) {
+                throw new SemanticException("'admin' user cannot be dropped because of " +
+                        "'authorization_enable_admin_user_protection' configuration is enabled");
+            }
+
             if (!authenticationManager.doesUserExist(userIdentity) && !stmt.isIfExists()) {
                 throw new SemanticException("Operation DROP USER failed for " + userIdentity + " : user not exists");
             }
 
             if (stmt.getUserIdentity().equals(UserIdentity.ROOT)) {
                 throw new SemanticException("Operation DROP USER failed for " + UserIdentity.ROOT +
-                        " : cannot drop user" + UserIdentity.ROOT);
+                        " : cannot drop user " + UserIdentity.ROOT);
             }
             return null;
         }
@@ -442,12 +455,16 @@ public class PrivilegeStmtAnalyzerV2 {
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
             if (stmt.getUserIdentity() != null) {
                 analyseUser(stmt.getUserIdentity(), true);
+                if (needProtectAdminUser(stmt.getUserIdentity(), session)) {
+                    throw new SemanticException("roles of 'admin' user cannot be changed because of " +
+                            "'authorization_enable_admin_user_protection' configuration is enabled");
+                }
                 stmt.getGranteeRole().forEach(role ->
-                        validRoleName(role, "Can not granted/revoke role to user", true));
+                        validRoleName(role, "Can not granted/revoke role to/from user", true));
             } else {
-                validRoleName(stmt.getRole(), "Can not granted/revoke role to role", true);
+                validRoleName(stmt.getRole(), "Can not granted/revoke role to/from role", true);
                 stmt.getGranteeRole().forEach(role ->
-                        validRoleName(role, "Can not granted/revoke role to user", true));
+                        validRoleName(role, "Can not granted/revoke role to/from user", true));
             }
             return null;
         }
