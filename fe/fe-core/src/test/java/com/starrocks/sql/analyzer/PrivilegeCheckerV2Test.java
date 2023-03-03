@@ -118,6 +118,7 @@ public class PrivilegeCheckerV2Test {
         starRocksAssert.withTable(createTblStmtStr2);
         starRocksAssert.withTable(createTblStmtStr3);
         createMvForTest(starRocksAssert.getCtx());
+
         privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
         starRocksAssert.getCtx().setRemoteIP("localhost");
         privilegeManager.initBuiltinRolesAndUsers();
@@ -810,6 +811,8 @@ public class PrivilegeCheckerV2Test {
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateTableAsSelectStmt createTableAsSelectStmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create table db1.ctas_t2 as select k1,k2 from db1.tbl1", ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant select on TABLE db1.tbl1 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
         PrivilegeCheckerV2.check(createTableAsSelectStmt.getInsertStmt(), ctx);
 
         // check create table like: create table on db and SELECT on existed table
@@ -1125,16 +1128,12 @@ public class PrivilegeCheckerV2Test {
 
         // test select view
         String selectViewSql = "select * from db1.view1";
-        verifyGrantRevoke(
-                selectViewSql,
-                grantBaseTableSql,
-                revokeBaseTableSql,
-                "SELECT command denied to user 'test'");
+
         verifyGrantRevoke(
                 selectViewSql,
                 "grant select on view db1.view1 to test",
                 "revoke select on view db1.view1 from test",
-                "SELECT command denied to user 'test'");
+                "Access denied for user 'test' to table 'db1.view1' when checking privilege");
 
         // drop view
         verifyGrantRevoke(
@@ -2598,4 +2597,104 @@ public class PrivilegeCheckerV2Test {
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
     }
+
+
+    @Test
+    public void testQueryAndDML() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE db1.`tprimary` (\n" +
+                "  `pk` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v1` string NOT NULL COMMENT \"\",\n" +
+                "  `v2` int NOT NULL,\n" +
+                "  `v3` array<int> not null" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk`)\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant SELECT on TABLE db1.tbl1, db1.tbl2 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+
+        verifyGrantRevoke(
+                "select * from db1.tbl1, db1.tbl2, db2.tbl1",
+                "grant SELECT on TABLE db2.tbl1 to test",
+                "revoke SELECT on TABLE db2.tbl1 from test",
+                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        verifyGrantRevoke(
+                "select * from db1.tbl1, db1.tbl2 where exists (select * from db2.tbl1)",
+                "grant SELECT on TABLE db2.tbl1 to test",
+                "revoke SELECT on TABLE db2.tbl1 from test",
+                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        verifyGrantRevoke(
+                "with cte as (select * from db2.tbl1) select * from db1.tbl1, db1.tbl2",
+                "grant SELECT on TABLE db2.tbl1 to test",
+                "revoke SELECT on TABLE db2.tbl1 from test",
+                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant SELECT on TABLE db2.tbl1 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+
+        verifyGrantRevoke(
+                "insert into db1.tbl2 select * from db2.tbl1",
+                "grant SELECT, INSERT on TABLE db1.tbl2 to test",
+                "revoke INSERT on TABLE db1.tbl2 from test",
+                "INSERT command denied to user 'test'@'localhost' for table 'tbl2'");
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant INSERT on TABLE db1.tbl2 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "revoke select on TABLE db2.tbl1 from test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+        verifyGrantRevoke(
+                "insert into db1.tbl2 select * from db2.tbl1",
+                "grant SELECT on TABLE db2.tbl1 to test",
+                "revoke SELECT on TABLE db2.tbl1 from test",
+                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        verifyGrantRevoke(
+                "update db1.tprimary set v1 = db1.tbl1.k1 from db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
+                "grant select, update on table db1.tprimary to test",
+                "revoke update on TABLE db1.tprimary from test",
+                "UPDATE command denied to user 'test'@'localhost' for table 'tprimary'");
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant UPDATE on TABLE db1.tprimary to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "revoke select on TABLE db1.tbl1 from test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+
+        verifyGrantRevoke(
+                "update db1.tprimary set v1 = db1.tbl1.k1 from db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
+                "grant select on table db1.tbl1 to test",
+                "revoke select on TABLE db1.tbl1 from test",
+                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant select on TABLE db1.tbl1 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+
+        verifyGrantRevoke(
+                "delete from db1.tprimary using db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
+                "grant select, delete on table db1.tprimary to test",
+                "revoke delete on TABLE db1.tprimary from test",
+                "DELETE command denied to user 'test'@'localhost' for table 'tprimary'");
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant DELETE on TABLE db1.tprimary to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "revoke select on TABLE db1.tbl1 from test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+
+        verifyGrantRevoke(
+                "delete from db1.tprimary using db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
+                "grant select on TABLE db1.tbl1 to test",
+                "revoke select on TABLE db1.tbl1 from test",
+                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        starRocksAssert.dropTable("db1.tprimary");
+    }
+
 }

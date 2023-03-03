@@ -288,7 +288,7 @@ public class MaterializedViewAnalyzer {
                 Preconditions.checkState((selectListItem.getExpr() instanceof SlotRef)
                         || selectListItem.getAlias() != null);
             }
-            for (Expr expr : selectRelation.getOutputExpr()) {
+            for (Expr expr : selectRelation.getOutputExpression()) {
                 checkNondeterministicFunction(expr);
             }
         }

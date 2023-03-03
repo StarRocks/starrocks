@@ -155,10 +155,6 @@ public class SelectRelation extends QueryRelation {
         this.setScope(analyzeState.getOutputScope());
     }
 
-    public List<Expr> getOutputExpr() {
-        return outputExpr;
-    }
-
     public Expr getPredicate() {
         return predicate;
     }
@@ -295,10 +291,6 @@ public class SelectRelation extends QueryRelation {
     public boolean hasAnalyticInfo() {
         return (outputAnalytic != null && outputAnalytic.size() > 0)
                 || (orderByAnalytic != null && orderByAnalytic.size() > 0);
-    }
-
-    public List<OrderByElement> getSortClause() {
-        return sortClause;
     }
 
     @Override

@@ -72,7 +72,7 @@ public class AnalyzeExprTest {
 
     private void testTranslateArrowExprForValue(String sql, String expected) {
         QueryRelation query = ((QueryStatement) analyzeSuccess(sql)).getQueryRelation();
-        List<Expr> row = ((SelectRelation) query).getOutputExpr();
+        List<Expr> row = ((SelectRelation) query).getOutputExpression();
         ArrowExpr arrow = (ArrowExpr) row.get(0);
 
         // translate arrow expression
