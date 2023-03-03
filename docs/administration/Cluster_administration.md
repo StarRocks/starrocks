@@ -104,8 +104,6 @@ cd StarRocks-x.x.x/be
 
 StarRocks can perform a rolling upgrade, which allows you to first upgrade the BEs, then the FEs, and finally the Brokers in a cluster. StarRocks ensures that the BEs are backward compatible with the FEs.
 
-<<<<<<< HEAD
-=======
 > **CAUTION**
 >
 > - StarRocks ensures that BE is backward compatible with FE. Therefore, you need to **upgrade BE nodes first, and then upgrade FE nodes**. Upgrading them in a wrong order may lead to the incompatibility between FE and BE nodes, which will cause the BE node to stop.
@@ -121,7 +119,6 @@ StarRocks can perform a rolling upgrade, which allows you to first upgrade the B
 > | v2.4.x | Can be upgraded from v2.3.x, v2.2.x, v2.1.x, and v2.0.x | We do not recommend downgrading across major versions. Switch to IP address access before downgrading if you enabled [FQDN access](../administration/enable_fqdn.md). | No |
 > | v2.5.x | Can be upgraded from v2.4.x, v2.3.x, v2.2.x, v2.1.x, and v2.0.x | We do not recommend downgrading across major versions. If you have a partitioned table that uses LIST partitioning, you must delete this table before the upgrade. | Yes |
 
->>>>>>> d9ac71193 ([Doc] Add downgrade tips (#18071))
 ### Before you begin
 
 - Test whether the cluster after the upgrade affects your current data.
