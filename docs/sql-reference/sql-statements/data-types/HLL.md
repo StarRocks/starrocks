@@ -16,7 +16,7 @@ In actual business scenarios, data volume and data distribution affect the memor
 - Data distribution：In the case of large data volume and high-cardinality dimension column for GROUP BY，data computation will use more memory. HLL is not recommended in this situation. It is recommended when you perform no-group-by count distinct or GROUP BY on low-cardinality dimension columns.
 - Query granularity: If you query data at a large query granularity, we recommend you use the Aggregate Key table or materialized view to pre-aggregate data to reduce data volume.
 
-For details about using HLL, see [](../../../using_starrocks/Using_HLL.md) and [](../data-definition/HLL.md).
+For details about using HLL, see [Use HLL for approximate count distinct](../../../using_starrocks/Using_HLL.md) and [HLL](../data-definition/HLL.md).
 
 ## Examples
 
