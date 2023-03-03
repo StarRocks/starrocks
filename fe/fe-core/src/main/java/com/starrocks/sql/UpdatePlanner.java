@@ -116,7 +116,7 @@ public class UpdatePlanner {
             if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getDegreeOfParallelism());
+                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
                 } else {
                     sinkFragment
                             .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
