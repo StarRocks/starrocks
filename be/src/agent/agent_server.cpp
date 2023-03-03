@@ -61,6 +61,8 @@ constexpr size_t DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE = 2048;
 constexpr size_t MIN_CLONE_TASK_THREADS_IN_POOL = 2;
 } // namespace
 
+using TTaskTypeHash = std::hash<std::underlying_type<TTaskType::type>::type>;
+
 const uint32_t REPORT_TASK_WORKER_COUNT = 1;
 const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
@@ -291,8 +293,8 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         return;
     }
 
-    phmap::flat_hash_map<TTaskType::type, std::vector<const TAgentTaskRequest*>> task_divider;
-    phmap::flat_hash_map<TPushType::type, std::vector<const TAgentTaskRequest*>> push_divider;
+    phmap::flat_hash_map<TTaskType::type, std::vector<const TAgentTaskRequest*>, TTaskTypeHash> task_divider;
+    phmap::flat_hash_map<TPushType::type, std::vector<const TAgentTaskRequest*>, TTaskTypeHash> push_divider;
 
     for (const auto& task : tasks) {
         VLOG_RPC << "submit one task: " << apache::thrift::ThriftDebugString(task).c_str();
