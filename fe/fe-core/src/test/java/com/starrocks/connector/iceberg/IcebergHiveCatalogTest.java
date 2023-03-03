@@ -41,15 +41,15 @@ public class IcebergHiveCatalogTest {
     @Test
     public void testCatalogType() {
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
         IcebergHiveCatalog icebergHiveCatalog =
-                IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties, hdfsEnvironment);
+                (IcebergHiveCatalog) CatalogLoader.hive("hive_native_catalog", new Configuration(), icebergProperties)
+                        .loadCatalog();
         Assert.assertEquals(IcebergCatalogType.HIVE_CATALOG, icebergHiveCatalog.getIcebergCatalogType());
     }
 
     @Test
     public void testLoadTable(@Mocked IcebergHiveCatalog hiveCatalog) {
-        TableIdentifier identifier = IcebergUtil.getIcebergTableIdentifier("db", "table");
+        TableIdentifier identifier = TableIdentifier.of("db", "table");
         new Expectations() {
             {
                 hiveCatalog.loadTable(identifier);
@@ -70,7 +70,8 @@ public class IcebergHiveCatalogTest {
         Map<String, String> icebergProperties = new HashMap<>();
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
         IcebergHiveCatalog icebergHiveCatalog =
-                IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties, hdfsEnvironment);
+                (IcebergHiveCatalog) CatalogLoader.hive("hive_native_catalog", new Configuration(), icebergProperties)
+                        .loadCatalog();
         Table table = icebergHiveCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
     }
@@ -96,9 +97,9 @@ public class IcebergHiveCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
         IcebergHiveCatalog icebergHiveCatalog =
-                IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties, hdfsEnvironment);
+                (IcebergHiveCatalog) CatalogLoader.hive("hive_native_catalog", new Configuration(), icebergProperties)
+                        .loadCatalog();
         List<String> dbs = icebergHiveCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }

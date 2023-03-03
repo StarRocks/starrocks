@@ -170,7 +170,10 @@ public class IcebergMetadata implements ConnectorMetadata {
 
             ImmutableList.Builder<FileScanTask> builder = ImmutableList.builder();
             org.apache.iceberg.Table nativeTable = table.getNativeTable();
-            TableScan scan = nativeTable.newScan().useSnapshot(snapshotId).filter(icebergPredicate);
+            TableScan scan = nativeTable.newScan().useSnapshot(snapshotId);
+            if (icebergPredicate.op() != Expression.Operation.TRUE) {
+                scan = scan.filter(icebergPredicate);
+            }
 
             for (CombinedScanTask combinedScanTask : scan.planTasks()) {
                 for (FileScanTask fileScanTask : combinedScanTask.files()) {
