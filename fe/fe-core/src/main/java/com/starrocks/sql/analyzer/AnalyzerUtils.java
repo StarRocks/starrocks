@@ -26,7 +26,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
@@ -52,6 +51,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -72,7 +72,6 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.LocalDateTime;
@@ -313,62 +312,41 @@ public class AnalyzerUtils {
         return tables;
     }
 
-    private static class TableCollector extends AstVisitor<Void, Void> {
+    private static class TableCollector extends AstTraverser<Void, Void> {
         protected final Map<TableName, Table> tables;
 
         public TableCollector(Map<TableName, Table> dbs) {
             this.tables = dbs;
         }
 
+        // ---------------------------------------- Query Statement --------------------------------------------------------------
+
+        @Override
+        public Void visitQueryStatement(QueryStatement statement, Void context) {
+            return visit(statement.getQueryRelation());
+        }
+
+        // ------------------------------------------- DML Statement -------------------------------------------------------
+
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
             Table table = node.getTargetTable();
             tables.put(node.getTableName(), table);
-            return visit(node.getQueryStatement());
+            return super.visitInsertStatement(node, context);
         }
 
         @Override
-        public Void visitQueryStatement(QueryStatement node, Void context) {
-            return visit(node.getQueryRelation());
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            Table table = node.getTable();
+            tables.put(node.getTableName(), table);
+            return super.visitUpdateStatement(node, context);
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation node, Void context) {
-            return visit(node.getQueryStatement());
-        }
-
-        public Void visitView(ViewRelation node, Void context) {
-            return visit(node.getQueryStatement(), context);
-        }
-
-        @Override
-        public Void visitSelect(SelectRelation node, Void context) {
-            if (node.hasWithClause()) {
-                node.getCteRelations().forEach(this::visit);
-            }
-
-            return visit(node.getRelation());
-        }
-
-        @Override
-        public Void visitSetOp(SetOperationRelation node, Void context) {
-            if (node.hasWithClause()) {
-                node.getRelations().forEach(this::visit);
-            }
-            node.getRelations().forEach(this::visit);
-            return null;
-        }
-
-        @Override
-        public Void visitJoin(JoinRelation node, Void context) {
-            visit(node.getLeft());
-            visit(node.getRight());
-            return null;
-        }
-
-        @Override
-        public Void visitCTE(CTERelation node, Void context) {
-            return visit(node.getCteQueryStatement());
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            Table table = node.getTable();
+            tables.put(node.getTableName(), table);
+            return super.visitDeleteStatement(node, context);
         }
 
         @Override
@@ -430,29 +408,6 @@ public class AnalyzerUtils {
             Table table = node.getView();
             tables.put(node.getResolveTableName(), table);
             return null;
-        }
-
-        @Override
-        public Void visitSelect(SelectRelation node, Void context) {
-            if (node.hasWithClause()) {
-                node.getCteRelations().forEach(this::visit);
-            }
-            if (node.getPredicate() != null && CollectionUtils.isNotEmpty(node.getPredicate().getChildren())) {
-                node.getPredicate().getChildren().forEach(this::visit);
-            }
-            return visit(node.getRelation());
-        }
-
-        @Override
-        public Void visitInPredicate(InPredicate node, Void context) {
-            if (CollectionUtils.isNotEmpty(node.getChildren())) {
-                node.getChildren().forEach(this::visit);
-            }
-            return null;
-        }
-
-        public Void visitSubquery(Subquery node, Void context) {
-            return visit(node.getQueryStatement());
         }
     }
 
