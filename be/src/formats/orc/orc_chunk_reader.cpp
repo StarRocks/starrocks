@@ -664,12 +664,30 @@ StatusOr<ChunkPtr> OrcChunkReader::get_lazy_chunk() {
     return _cast_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
 }
 
-void OrcChunkReader::lazy_read_next(size_t numValues) {
-    _row_reader->lazyLoadNext(*_batch, numValues);
+Status OrcChunkReader::lazy_read_next(size_t numValues) {
+    try {
+        // It may throw orc::ParseError exception
+        _row_reader->lazyLoadNext(*_batch, numValues);
+    } catch (std::exception& e) {
+        auto s = strings::Substitute("OrcChunkReader::lazy_read_next failed. reason = $0, file = $1", e.what(),
+                                     _current_file_name);
+        LOG(WARNING) << s;
+        return Status::InternalError(s);
+    }
+    return Status::OK();
 }
 
-void OrcChunkReader::lazy_seek_to(size_t rowInStripe) {
-    _row_reader->lazyLoadSeekTo(rowInStripe);
+Status OrcChunkReader::lazy_seek_to(size_t rowInStripe) {
+    try {
+        // It may throw orc::ParseError exception
+        _row_reader->lazyLoadSeekTo(rowInStripe);
+    } catch (std::exception& e) {
+        auto s = strings::Substitute("OrcChunkReader::lazy_seek_to failed. reason = $0, file = $1", e.what(),
+                                     _current_file_name);
+        LOG(WARNING) << s;
+        return Status::InternalError(s);
+    }
+    return Status::OK();
 }
 
 void OrcChunkReader::set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter) {
