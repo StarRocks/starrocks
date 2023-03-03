@@ -178,6 +178,8 @@ class ParserTest {
     
     private static Stream<Arguments> keyWordSqls() {
         List<String> sqls = Lists.newArrayList();
+        sqls.add("select current_role()");
+        sqls.add("select current_role");
         sqls.add("SHOW ALL AUTHENTICATION ");
         sqls.add("CANCEL BACKUP from tbl");
         sqls.add("select current_role() from tbl");
