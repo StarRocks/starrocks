@@ -490,7 +490,7 @@ CONF_mInt32(priority_queue_remaining_tasks_increased_frequency, "512");
 CONF_mBool(sync_tablet_meta, "false");
 
 // Default thrift rpc timeout ms.
-CONF_mInt32(thrift_rpc_timeout_ms, "5000");
+CONF_mInt32(thrift_rpc_timeout_ms, "30000");
 
 // txn commit rpc timeout
 CONF_mInt32(txn_commit_rpc_timeout_ms, "20000");

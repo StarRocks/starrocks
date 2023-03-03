@@ -1368,7 +1368,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
         if (!db.tryReadLock(timeoutMs, TimeUnit.MILLISECONDS)) {
-            throw new UserException("get database read lock timeout, database=" + dbName);
+            throw new UserException("get database read lock timeout, database=" + dbName + ", timeoutMs=" + timeoutMs);
         }
         try {
             Table table = db.getTable(request.getTbl());

@@ -1169,8 +1169,8 @@ public class LeaderImpl {
             TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.getCommit_attachment());
             long timeoutMs = request.isSetCommit_timeout_ms() ? request.getCommit_timeout_ms() : 5000;
             // Make publish timeout is less than thrift_rpc_timeout_ms
-            // Otherwise, the publish will be successful but commit timeout in FE
-            // It will results as error like "call frontend service failed"
+            // Otherwise, the publishing will be successful but commit timeout in FE
+            // It will result as error like "call frontend service failed"
             timeoutMs = timeoutMs * 3 / 4;
             boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                     db, request.getTxn_id(),
