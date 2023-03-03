@@ -98,6 +98,9 @@ public:
 
     void expire_cache();
 
+    // check if pk index's cache ref == ref_cnt
+    bool TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt);
+
 private:
     // print memory tracker state
     void _print_memory_stats();
