@@ -488,6 +488,7 @@ Status UpdateManager::check_meta_version(const Tablet& tablet, int64_t base_vers
         auto& index = index_entry->value();
         if (index.data_version() > base_version) {
             // return error, and ignore this publish later
+            _index_cache.release(index_entry);
             LOG(INFO) << "Primary index version is greater than the base version. tablet_id: " << tablet.id()
                       << " index_version: " << index.data_version() << " base_version: " << base_version;
             return Status::AlreadyExist("lake primary publish txn already finish");
@@ -537,6 +538,17 @@ int32_t UpdateManager::_get_condition_column(const TxnLogPB_OpWrite& op_write, c
         }
     }
     return -1;
+}
+
+bool UpdateManager::TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
+        if (index_entry->get_ref() != ref_cnt + 1) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace lake
