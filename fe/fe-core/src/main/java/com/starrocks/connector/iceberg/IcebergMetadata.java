@@ -176,13 +176,13 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         if (!tasks.containsKey(key)) {
             List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
-            org.apache.iceberg.Table nativeTbl = table.getIcebergTable();
+            org.apache.iceberg.Table nativeTbl = table.getNativeTable();
             Types.StructType schema = nativeTbl.schema().asStruct();
             ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
             Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
 
             ImmutableList.Builder<FileScanTask> builder = ImmutableList.builder();
-            org.apache.iceberg.Table nativeTable = table.getIcebergTable();
+            org.apache.iceberg.Table nativeTable = table.getNativeTable();
             TableScan scan = nativeTable.newScan().useSnapshot(snapshotId).filter(icebergPredicate);
 
             for (CombinedScanTask combinedScanTask : scan.planTasks()) {
