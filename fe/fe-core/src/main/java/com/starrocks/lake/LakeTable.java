@@ -181,12 +181,6 @@ public class LakeTable extends OlapTable {
         return Status.OK;
     }
 
-    @Override
-    public Short getDefaultReplicationNum() {
-        // Unlike OlapTable, LakeTable will ignore the user provided "replication_num" parameter.
-        return 1;
-    }
-
     // used in colocate table index, return an empty list for LakeTable
     @Override
     public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {

@@ -423,7 +423,7 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             // remove worker
-            if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+            if (RunMode.allowCreateLakeTable()) {
                 long starletPort = droppedBackend.getStarletPort();
                 // only need to remove worker after be reported its staretPort
                 if (starletPort != 0) {
@@ -1026,7 +1026,7 @@ public class SystemInfoService {
         if (null != cluster) {
             cluster.removeBackend(backend.getId());
             // clear map in starosAgent
-            if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+            if (RunMode.allowCreateLakeTable()) {
                 long starletPort = backend.getStarletPort();
                 if (starletPort == 0) {
                     return;
