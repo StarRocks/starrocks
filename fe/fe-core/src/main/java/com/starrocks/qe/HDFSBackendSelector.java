@@ -79,6 +79,7 @@ public class HDFSBackendSelector implements BackendSelector {
     private final ImmutableCollection<ComputeNode> computeNodes;
     private boolean forceScheduleLocal;
     private boolean chooseComputeNode;
+    private boolean shuffleScanRange;
     private final int kCandidateNumber = 3;
     private final int kMaxImbalanceRatio = 3;
     private final int kMaxNodeSizeUseRendezvousHashRing = 64;
@@ -138,7 +139,7 @@ public class HDFSBackendSelector implements BackendSelector {
     public HDFSBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
                                FragmentScanRangeAssignment assignment, Map<TNetworkAddress, Long> addressToBackendId,
                                Set<Long> usedBackendIDs, ImmutableCollection<ComputeNode> computeNodes,
-                               boolean chooseComputeNode, boolean forceScheduleLocal) {
+                               boolean chooseComputeNode, boolean forceScheduleLocal, boolean shuffleScanRange) {
         this.scanNode = scanNode;
         this.locations = locations;
         this.assignment = assignment;
@@ -148,6 +149,7 @@ public class HDFSBackendSelector implements BackendSelector {
         this.addressToBackendId = addressToBackendId;
         this.usedBackendIDs = usedBackendIDs;
         this.hdfsScanRangeHasher = new HdfsScanRangeHasher();
+        this.shuffleScanRange = shuffleScanRange;
     }
 
     private ComputeNode selectLeastScanBytesComputeNode(Collection<ComputeNode> backends, long maxImbalanceBytes) {
@@ -266,7 +268,9 @@ public class HDFSBackendSelector implements BackendSelector {
 
         // use consistent hashing to schedule remote scan ranges
         HashRing hashRing = makeHashRing();
-        Collections.shuffle(remoteScanRangeLocations);
+        if (shuffleScanRange) {
+            Collections.shuffle(remoteScanRangeLocations);
+        }
         // assign scan ranges.
         for (int i = 0; i < remoteScanRangeLocations.size(); ++i) {
             TScanRangeLocations scanRangeLocations = remoteScanRangeLocations.get(i);
