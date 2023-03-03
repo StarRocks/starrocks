@@ -6,18 +6,11 @@ This topic describes the resource group feature of StarRocks.
 
 With this feature, you could simultaneously run several workloads in a single cluster, including short query, ad-hoc query, ETL jobs, to save extra cost of deploying multiple clusters. From technical perspective, the execution engine would schedule concurrent workloads according to users' specification and isolate the interference among them.
 
-
-<<<<<<< HEAD
 Roadmap of Resource Group feature:
-- Since v2.2, StarRocks supports limiting resource consumption for queries and implementing isolation and efficient use of resources among tenants in the same cluster. 
-- In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, to guarantee the system stability. 
-- StarRocks v2.5 supports resource group of data ingestio,
 
-=======
 - Since v2.2, StarRocks supports limiting resource consumption for queries and implementing isolation and efficient use of resources among tenants in the same cluster.
 - In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, to guarantee the system stability.
 - StarRocks v2.5 supports limiting computation resource consumption for data loading (INSERT).
->>>>>>> 807d4a981 ([Doc] Fix RG query type (#18872))
 
 |  | Internal Table | External Table | Big Query Restriction| Short Query | Data Ingestion  | Schema Change | INSERT |
 |---|---|---|---|---|---|---|---|
