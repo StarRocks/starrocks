@@ -21,6 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.hive.HiveMetaStoreThriftClient;
 import com.starrocks.connector.iceberg.hive.HiveTableOperations;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.iceberg.BaseTable;

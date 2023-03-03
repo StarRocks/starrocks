@@ -23,6 +23,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
