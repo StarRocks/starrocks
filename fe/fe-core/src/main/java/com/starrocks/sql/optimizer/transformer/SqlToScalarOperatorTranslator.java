@@ -652,12 +652,14 @@ public final class SqlToScalarOperatorTranslator {
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
 
-            return new CallOperator(
+            CallOperator callOperator = new CallOperator(
                     node.getFnName().getFunction(),
                     node.getType(),
                     arguments,
                     node.getFn(),
                     node.getParams().isDistinct());
+            callOperator.setHints(node.getHints());
+            return callOperator;
         }
 
         @Override

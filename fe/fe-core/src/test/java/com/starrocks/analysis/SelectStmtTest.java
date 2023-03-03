@@ -271,4 +271,17 @@ public class SelectStmtTest {
             Assert.assertTrue(e.getMessage().contains("Subquery in left-side child of in-predicate is not supported"));
         }
     }
+
+    @Test
+    public void testGroupByCountDistinctWithSkewHint() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql =
+                "select cast(k1 as int), count(distinct [skew] cast(k2 as int)) from db1.tbl1 group by cast(k1 as int)";
+        String s = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(s, s.contains("  3:Project\n" +
+                "  |  <slot 5> : 5: cast\n" +
+                "  |  <slot 6> : 6: cast\n" +
+                "  |  <slot 8> : CAST(murmur_hash3_32(CAST(6: cast AS VARCHAR)) % 512 AS SMALLINT)"));
+        FeConstants.runningUnitTest = false;
+    }
 }

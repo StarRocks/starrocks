@@ -409,8 +409,10 @@ public class LowCardinalityTest extends PlanTestBase {
 
         sql = "select count(distinct S_NATIONKEY) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains(
+                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
+                        "query_global_dicts:[TGlobalDict(columnId:11, strings:[6D 6F 63 6B], ids:[1])]"));
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
