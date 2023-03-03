@@ -993,7 +993,6 @@ public class ExpressionAnalyzer {
                         throw new SemanticException("The second input of map_filter " +
                                 node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
                     }
-                    node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
                     break;
             }
         }
