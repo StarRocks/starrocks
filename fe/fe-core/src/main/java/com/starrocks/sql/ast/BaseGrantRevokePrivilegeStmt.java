@@ -29,7 +29,7 @@ import java.util.List;
 
 public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected GrantRevokeClause clause;
-    protected GrantRevokePrivilegeObjects objects;
+    protected GrantRevokePrivilegeObjects objectsUnResolved;
 
     protected String role;
     protected String objectTypeUnResolved;
@@ -45,15 +45,17 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     private List<PrivilegeType> privilegeTypes;
     private List<PEntryObject> objectList;
 
+
+
     public BaseGrantRevokePrivilegeStmt(
             List<String> privilegeTypeUnResolved,
             String objectTypeUnResolved,
             GrantRevokeClause clause,
-            GrantRevokePrivilegeObjects objects) {
+            GrantRevokePrivilegeObjects objectsUnResolved) {
         this.privilegeTypeUnResolved = privilegeTypeUnResolved;
         this.objectTypeUnResolved = objectTypeUnResolved;
         this.clause = clause;
-        this.objects = objects;
+        this.objectsUnResolved = objectsUnResolved;
         this.role = clause.getRoleName();
     }
 
@@ -71,19 +73,19 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
      * old privilege framework only support grant/revoke on one single object
      */
     public UserIdentity getUserPrivilegeObject() {
-        return objects.getUserPrivilegeObjectList().get(0);
+        return objectsUnResolved.getUserPrivilegeObjectList().get(0);
     }
 
     public List<List<String>> getPrivilegeObjectNameTokensList() {
-        return objects.getPrivilegeObjectNameTokensList();
+        return objectsUnResolved.getPrivilegeObjectNameTokensList();
     }
 
     public List<UserIdentity> getUserPrivilegeObjectList() {
-        return objects.getUserPrivilegeObjectList();
+        return objectsUnResolved.getUserPrivilegeObjectList();
     }
 
     public List<Pair<FunctionName, FunctionArgsDef>> getFunctions() {
-        return objects.getFunctions();
+        return objectsUnResolved.getFunctions();
     }
 
     public void setPrivBitSet(PrivBitSet privBitSet) {
@@ -147,14 +149,14 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     }
 
     public boolean hasPrivilegeObject() {
-        return this.objects != null;
+        return this.objectsUnResolved != null;
     }
 
     public List<String> getTokens() {
-        if (!objects.isAllDB() && objects.getDbName() == null) {
+        if (!objectsUnResolved.isAllDB() && objectsUnResolved.getDbName() == null) {
             return Lists.newArrayList("*");
-        } else if (objects.getDbName() != null) {
-            return Lists.newArrayList(objects.getDbName(), "*");
+        } else if (objectsUnResolved.getDbName() != null) {
+            return Lists.newArrayList(objectsUnResolved.getDbName(), "*");
         } else {
             return Lists.newArrayList("*", "*");
         }
