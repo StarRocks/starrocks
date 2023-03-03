@@ -161,6 +161,7 @@ inline Status AsyncDeltaWriterImpl::do_open() {
         return Status::InternalError("AsyncDeltaWriterExecutor init failed");
     }
     if (int r = bthread::execution_queue_start(&_queue_id, &opts, execute, this); r != 0) {
+        _queue_id.value = kInvalidQueueId;
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
     }
     return _writer->open();
@@ -186,6 +187,9 @@ inline void AsyncDeltaWriterImpl::finish(Callback cb) {
     task.indexes_size = 0;
     task.finish_after_write = true;
     task.cb = std::move(cb); // Do NOT touch |cb| since here
+    // NOTE: the submited tasks will be executed in the thread pool `StorageEngine::instance()->async_delta_writer_executor()`,
+    // which is a thread pool of pthraed NOT bthread, so don't worry the bthread worker threads or RPC threads will be blocked
+    // by the submitted tasks.
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
         task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
@@ -194,7 +198,7 @@ inline void AsyncDeltaWriterImpl::finish(Callback cb) {
 
 inline void AsyncDeltaWriterImpl::close() {
     std::lock_guard l(_mtx);
-    if (_opened && !_closed) {
+    if (_queue_id.value != kInvalidQueueId) {
         // After the execution_queue been `stop()`ed all incoming `write()` and `finish()` requests
         // will fail immediately.
         int r = bthread::execution_queue_stop(_queue_id);
