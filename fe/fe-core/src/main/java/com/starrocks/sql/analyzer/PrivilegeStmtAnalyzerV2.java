@@ -379,7 +379,7 @@ public class PrivilegeStmtAnalyzerV2 {
                     stmt.setObjectList(objectList);
                 } else {
                     stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
-                    stmt.setObjectList(null);
+                    stmt.setObjectList(Arrays.asList(new PEntryObject[] {null}));
                 }
 
                 List<PrivilegeType> privilegeTypes = new ArrayList<>();

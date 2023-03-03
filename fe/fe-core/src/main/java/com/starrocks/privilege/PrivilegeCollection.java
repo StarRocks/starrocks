@@ -137,11 +137,6 @@ public class PrivilegeCollection {
             throws PrivilegeException {
         typeToPrivilegeEntryList.computeIfAbsent(objectType, k -> new ArrayList<>());
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(objectType);
-        if (objects == null) {
-            // objects can be null, we should adjust it to a list of one null object
-            objects = new ArrayList<>();
-            objects.add(null);
-        }
         for (PEntryObject object : objects) {
             grantObjectToList(new ActionSet(privilegeTypes), object, isGrant, privilegeEntryList);
         }
@@ -180,11 +175,6 @@ public class PrivilegeCollection {
         if (privilegeEntryList == null) {
             LOG.debug("revoke a non-existence type {}", objectType);
             return;
-        }
-        if (objects == null) {
-            // objects can be null, we should adjust it to a list of one null object
-            objects = new ArrayList<>();
-            objects.add(null);
         }
         for (PEntryObject object : objects) {
             PrivilegeEntry entry = findEntry(privilegeEntryList, object, false);
@@ -256,6 +246,7 @@ public class PrivilegeCollection {
         if (privilegeEntryList == null) {
             return false;
         }
+
         List<PEntryObject> unCheckedObjects = new ArrayList<>(objects);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
             Iterator<PEntryObject> iterator = unCheckedObjects.iterator();
