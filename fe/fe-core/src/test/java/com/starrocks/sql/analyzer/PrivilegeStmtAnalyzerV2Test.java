@@ -258,7 +258,8 @@ public class PrivilegeStmtAnalyzerV2Test {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Operation DROP USER failed for 'root'@'%' : cannot drop user'root'@'%'"));
+            Assert.assertTrue(e.getMessage().contains(
+                    "Operation DROP USER failed for 'root'@'%' : cannot drop user 'root'@'%'"));
         }
     }
 
