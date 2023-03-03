@@ -405,7 +405,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |sys_log_level|INFO|日志级别，INFO < WARNING < ERROR < FATAL。|
 |sys_log_roll_mode|SIZE-MB-1024|日志拆分的大小，每 1G 拆分一个日志。|
 |sys_log_roll_num|10|日志保留的数目。|
-|sys_log_verbose_modules|空字符串|日志打印的模块，写 olap 就只打印 olap 模块下的日志。|
+|sys_log_verbose_modules|空字符串|日志打印的模块。有效值为 BE 的 namespace，包括 `starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream` 以及 `starrocks::workgroup`。|
 |sys_log_verbose_level|10|日志显示的级别，用于控制代码中 VLOG 开头的日志输出。|
 |log_buffer_level|空字符串|日志刷盘的策略，默认保持在内存中。|
 |num_threads_per_core|3|每个 CPU core 启动的线程数。|

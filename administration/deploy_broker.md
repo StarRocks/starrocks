@@ -47,7 +47,7 @@ cd StarRocks-x.x.x/apache_hdfs_broker
 | audit_log_modules | Empty string | N/A | StarRocks 为其生成审核日志条目的模块。默认情况下，StarRocks 会为 slow_query 模块和 query 模块生成审计日志。您可以指定多个模块，使用逗号（,）和一个空格分隔。|
 | audit_log_roll_mode | TIME-DAY | N/A | 审计日志分卷方式。有效值包括 TIME-DAY、TIME-HOUR 和 SIZE-MB-nnn。 |
 | audit_log_roll_num | 10 | N/A | 要保留的升级日志卷数。如果 `audit_log_roll_mode` 设置为 `SIZE-MB-nnn`，则此配置无效。 |
-| sys_log_verbose_modules | com.starrocks | N/A | StarRocks 为其生成系统日志的模块。 有效值是 BE 中的 namespace，包括 `starrocks`、`starrocks::vectorized` 以及 `pipeline`。 |
+| sys_log_verbose_modules | com.starrocks | N/A | StarRocks 为其生成系统日志的模块。 有效值是 BE 中的 namespace，包括 `starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream` 以及 `starrocks::workgroup`。 |
 
 ## 启动 Broker 节点
 
