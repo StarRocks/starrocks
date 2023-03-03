@@ -669,8 +669,8 @@ Status OrcChunkReader::lazy_read_next(size_t numValues) {
         // It may throw orc::ParseError exception
         _row_reader->lazyLoadNext(*_batch, numValues);
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcChunkReader::lazy_read_next failed. reason = $0, file = $1",
-                                     e.what(),_current_file_name);
+        auto s = strings::Substitute("OrcChunkReader::lazy_read_next failed. reason = $0, file = $1", e.what(),
+                                     _current_file_name);
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }
@@ -682,8 +682,8 @@ Status OrcChunkReader::lazy_seek_to(size_t rowInStripe) {
         // It may throw orc::ParseError exception
         _row_reader->lazyLoadSeekTo(rowInStripe);
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcChunkReader::lazy_seek_to failed. reason = $0, file = $1",
-                                     e.what(),_current_file_name);
+        auto s = strings::Substitute("OrcChunkReader::lazy_seek_to failed. reason = $0, file = $1", e.what(),
+                                     _current_file_name);
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }
