@@ -547,7 +547,7 @@ public class MaterializedViewAnalyzer {
         }
 
         private void checkPartitionColumnWithBaseIcebergTable(SlotRef slotRef, IcebergTable table) {
-            org.apache.iceberg.Table icebergTable = table.getIcebergTable();
+            org.apache.iceberg.Table icebergTable = table.getNativeTable();
             PartitionSpec partitionSpec = icebergTable.spec();
             if (partitionSpec.isUnpartitioned()) {
                 throw new SemanticException("Materialized view partition column in partition exp " +

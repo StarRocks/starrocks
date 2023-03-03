@@ -369,12 +369,12 @@ public class Utils {
                 IcebergTable table = (IcebergTable) scanOperator.getTable();
                 try {
                     List<ScalarOperator> predicates = Utils.extractConjuncts(operator.getPredicate());
-                    Types.StructType schema = table.getIcebergTable().schema().asStruct();
+                    Types.StructType schema = table.getNativeTable().schema().asStruct();
                     ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
                             new ScalarOperatorToIcebergExpr.IcebergContext(schema);
                     Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(predicates, icebergContext);
                     List<ColumnStatistic> columnStatisticList = IcebergTableStatisticCalculator.getColumnStatistics(
-                            icebergPredicate, table.getIcebergTable(),
+                            icebergPredicate, table.getNativeTable(),
                             scanOperator.getColRefToColumnMetaMap());
                     return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                 } catch (Exception e) {

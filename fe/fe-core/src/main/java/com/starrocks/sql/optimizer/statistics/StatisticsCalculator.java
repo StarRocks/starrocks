@@ -285,7 +285,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         if (context.getStatistics() == null) {
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
-            org.apache.iceberg.Table icebergTbl = ((IcebergTable) table).getIcebergTable();
+            org.apache.iceberg.Table icebergTbl = ((IcebergTable) table).getNativeTable();
             Types.StructType schema = icebergTbl.schema().asStruct();
             ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
                     new ScalarOperatorToIcebergExpr.IcebergContext(schema);
