@@ -9,6 +9,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -50,6 +51,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     private boolean useStreamingPreAgg = true;
 
     private boolean useSortAgg = false;
+
+    private DataSkewInfo distinctColumnDataSkew = null;
 
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
@@ -125,6 +128,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public void setUseSortAgg(boolean useSortAgg) {
         this.useSortAgg = useSortAgg;
+    }
+
+    public void setDistinctColumnDataSkew(DataSkewInfo distinctColumnDataSkew) {
+        this.distinctColumnDataSkew = distinctColumnDataSkew;
+    }
+
+    public DataSkewInfo getDistinctColumnDataSkew() {
+        return distinctColumnDataSkew;
     }
 
     @Override

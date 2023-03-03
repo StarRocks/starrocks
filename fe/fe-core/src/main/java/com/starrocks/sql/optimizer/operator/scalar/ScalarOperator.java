@@ -1,10 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+import java.util.Collections;
 import java.util.List;
 
 import static java.util.Objects.requireNonNull;
@@ -16,6 +18,8 @@ public abstract class ScalarOperator implements Cloneable {
     protected boolean notEvalEstimate = false;
     // Used to determine if it is derive from predicate range extractor
     protected boolean fromPredicateRangeDerive = false;
+
+    private List<String> hints = Collections.emptyList();
 
     public ScalarOperator(OperatorType opType, Type type) {
         this.opType = requireNonNull(opType, "opType is null");
@@ -100,6 +104,7 @@ public abstract class ScalarOperator implements Cloneable {
         ScalarOperator operator = null;
         try {
             operator = (ScalarOperator) super.clone();
+            operator.hints = Lists.newArrayList(hints);
         } catch (CloneNotSupportedException ignored) {
         }
         return operator;
@@ -125,5 +130,13 @@ public abstract class ScalarOperator implements Cloneable {
 
     public boolean isConstantNull() {
         return this instanceof ConstantOperator && ((ConstantOperator) this).isNull();
+    }
+
+    public void setHints(List<String> hints) {
+        this.hints = hints;
+    }
+
+    public List<String> getHints() {
+        return hints;
     }
 }

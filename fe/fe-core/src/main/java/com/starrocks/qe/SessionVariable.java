@@ -853,6 +853,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return fullSortLateMaterialization;
     }
 
+    public void setDistinctColumnBuckets(int buckets) {
+        distinctColumnBuckets = buckets;
+    }
+
+    public int getDistinctColumnBuckets() {
+        return distinctColumnBuckets;
+    }
+
+    public void setEnableDistinctColumnBucketization(boolean flag) {
+        enableDistinctColumnBucketization = flag;
+    }
+
+    public boolean isEnableDistinctColumnBucketization() {
+        return enableDistinctColumnBucketization;
+    }
+
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
     }
