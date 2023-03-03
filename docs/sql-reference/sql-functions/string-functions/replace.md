@@ -2,9 +2,9 @@
 
 ## Description
 
-This function uses repl to replace a sequence of characters in str that matches pattern.
-If any argument is NULL, the result is NULL.
-Note: Prior to 3.0, it was implemented as [regexp_replace](../like_predicate-functions/regexp_replace.md).
+Replaces all occurrences of characters in a string with another string. This function performs a case-sensitive match when searching for `pattern`.
+
+Note: Prior to 3.0, this function was implemented as [regexp_replace](../like_predicate-functions/regexp_replace.md).
 
 ## Syntax
 
@@ -12,15 +12,35 @@ Note: Prior to 3.0, it was implemented as [regexp_replace](../like_predicate-fun
 VARCHAR replace(VARCHAR str, VARCHAR pattern, VARCHAR repl)
 ```
 
+## Parameters
+
+- `str`: the original string.
+
+- `pattern`: the characters to replace. Note that this is not a regular expression.
+
+- `repl`: the string used to replace characters in `pattern`.
+
+## Return value
+
+Returns a string with the specified characters replaced.
+
+If any argument is NULL, the result is NULL.
+
+If no matching characters are found, the original string is returned.
+
 ## Examples
 
-```SQL
+```plain
+-- Replace '.' in 'a.b.c' with '+'.
+
 MySQL > SELECT replace('a.b.c', '.', '+');
 +----------------------------+
 | replace('a.b.c', '.', '+') |
 +----------------------------+
 | a+b+c                      |
 +----------------------------+
+
+-- No matching characters are found and the original string is returned.
 
 MySQL > SELECT replace('a b c', '', '*');
 +----------------------------+
@@ -29,6 +49,8 @@ MySQL > SELECT replace('a b c', '', '*');
 | a b c                      |
 +----------------------------+
 
+-- Replace 'like' with an empty string.
+
 MySQL > SELECT replace('We like StarRocks', 'like', '');
 +------------------------------------------+
 | replace('We like StarRocks', 'like', '') |
@@ -36,50 +58,16 @@ MySQL > SELECT replace('We like StarRocks', 'like', '');
 | We  StarRocks                            |
 +------------------------------------------+
 
-MySQL > SELECT replace('We like StarRocks', 'like', 'also like');
-+---------------------------------------------------+
-| replace('We like StarRocks', 'like', 'also like') |
-+---------------------------------------------------+
-| We also like StarRocks                            |
-+---------------------------------------------------+
+-- No matching characters are found and the original string is returned.
 
-MySQL > SELECT replace('Do you also like StarRocks?', 'Do you also like StarRocks?', 'Yes, of course!');
-+------------------------------------------------------------------------------------------+
-| replace('Do you also like StarRocks?', 'Do you also like StarRocks?', 'Yes, of course!') |
-+------------------------------------------------------------------------------------------+
-| Yes, of course!                                                                          |
-+------------------------------------------------------------------------------------------+
-
-MySQL > SELECT replace('StarRocks is awesome', 'handsome', '404: Pattern Not Found');
-+-----------------------------------------------------------------------+
-| replace('StarRocks is awesome', 'handsome', '404: Pattern Not Found') |
-+-----------------------------------------------------------------------+
-| StarRocks is awesome                                                  |
-+-----------------------------------------------------------------------+
-
-
-MySQL > SELECT replace(NULL, 'a', 'z');
-+-------------------------+
-| replace(NULL, 'a', 'z') |
-+-------------------------+
-| NULL                    |
-+-------------------------+
-
-MySQL > SELECT replace('abc', NULL, 'z');
-+---------------------------+
-| replace('abc', NULL, 'z') |
-+---------------------------+
-| NULL                      |
-+---------------------------+
-
-MySQL > SELECT replace('abc', 'a', NULL);
-+---------------------------+
-| replace('abc', 'a', NULL) |
-+---------------------------+
-| NULL                      |
-+---------------------------+
+MySQL > SELECT replace('He is awesome', 'handsome', 'smart');
++-----------------------------------------------+
+| replace('He is awesome', 'handsome', 'smart') |
++-----------------------------------------------+
+| He is awesome                                 |
++-----------------------------------------------+
 ```
 
-## keyword
+## keywords
 
-REPLACE
+REPLACE, replace
