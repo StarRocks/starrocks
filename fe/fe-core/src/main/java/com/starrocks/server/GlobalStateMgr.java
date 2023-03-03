@@ -3248,7 +3248,7 @@ public class GlobalStateMgr {
         } else { // use catalog.database
             String newCatalogName = parts[0];
             if (!catalogMgr.catalogExists(newCatalogName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
             }
             if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
                     !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
