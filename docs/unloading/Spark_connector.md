@@ -58,7 +58,7 @@ This section describes the parameters you need to configure when you use the Spa
 
 The following parameters apply to all three reading methods: Spark SQL, Spark DataFrame, and Spark RDD.
 
-| Parameter                            | Default value     | Parameter                                                    |
+| Parameter                            | Default value     | Description                                                    |
 | ------------------------------------ | ----------------- | ------------------------------------------------------------ |
 | starrocks.fenodes                    | None              | The HTTP URL of the FE in your StarRocks cluster. Format `<fe_host>:<fe_http_port>`. You can specify multiple URLs, which must be separated by a comma (,). |
 | starrocks.table.identifier           | None              | The name of the StarRocks table. Format: `<database_name>.<table_name>`. |
@@ -77,7 +77,7 @@ The following parameters apply to all three reading methods: Spark SQL, Spark Da
 
 The following parameters apply only to the Spark SQL and Spark DataFrame reading methods.
 
-| Parameter                           | Default value | Parameter                                                    |
+| Parameter                           | Default value | Description                                                    |
 | ----------------------------------- | ------------- | ------------------------------------------------------------ |
 | user                                | None          | The username of your StarRocks cluster account.              |
 | password                            | None          | The password of your StarRocks cluster account.              |
@@ -87,7 +87,7 @@ The following parameters apply only to the Spark SQL and Spark DataFrame reading
 
 The following parameters apply only to the Spark RDD reading method.
 
-| Parameter                       | Default value | Parameter                                                    |
+| Parameter                       | Default value | Description                                                    |
 | ------------------------------- | ------------- | ------------------------------------------------------------ |
 | starrocks.request.auth.user     | None          | The username of your StarRocks cluster account.              |
 | starrocks.request.auth.password | None          | The password of your StarRocks cluster account.              |
