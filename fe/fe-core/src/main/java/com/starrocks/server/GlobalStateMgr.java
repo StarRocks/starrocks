@@ -583,7 +583,6 @@ public class GlobalStateMgr {
         if (!isCkptGlobalState) {
             RunMode.detectRunMode();
         }
-
         if (RunMode.allowCreateLakeTable()) {
             this.starOSAgent = new StarOSAgent();
         }
