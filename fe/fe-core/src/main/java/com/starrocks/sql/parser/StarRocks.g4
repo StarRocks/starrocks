@@ -1275,10 +1275,9 @@ grantPrivilegeStatement
         TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithType
     | GRANT privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithFunc
-    | GRANT privilegeTypeList ON ALL privObjectType
+    | GRANT privilegeTypeList ON ALL privObjectTypePlural
         (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? TO grantRevokeClause
         (WITH GRANT OPTION)?                                                                            #grantOnAll
-    | GRANT privilegeTypeList ON ALL GLOBAL FUNCTIONS TO grantRevokeClause (WITH GRANT OPTION)?         #grantOnAllGlobalFunctions
     ;
 
 revokePrivilegeStatement
@@ -1288,9 +1287,8 @@ revokePrivilegeStatement
         FROM grantRevokeClause                                                                          #revokePrivWithType
     | REVOKE privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         FROM grantRevokeClause                                                                          #revokePrivWithFunc
-    | REVOKE privilegeTypeList ON ALL privObjectType
+    | REVOKE privilegeTypeList ON ALL privObjectTypePlural
         (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? FROM grantRevokeClause                #revokeOnAll
-    | REVOKE privilegeTypeList ON ALL GLOBAL FUNCTIONS FROM grantRevokeClause                           #revokeOnAllGlobalFunctions
     ;
 
 showGrantsStatement
@@ -1321,14 +1319,21 @@ privilegeTypeList
     ;
 
 privilegeType
-    : ADMIN | ALTER | CREATE | DROP | GRANT | LOAD
-    | SELECT | INSERT | DELETE | UPDATE | EXPORT | REPOSITORY| ALL PRIVILEGES?
-    | identifier
+    : ALL PRIVILEGES?
+    | GRANT| NODE| OPERATE| DELETE| DROP| INSERT| SELECT | ALTER| EXPORT| UPDATE| USAGE| PLUGIN| FILE| BLACKLIST
+    | REPOSITORY| REFRESH| IMPERSONATE
+    | CREATE (DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW| RESOURCE| RESOURCE GROUP|
+        EXTERNAL CATALOG)
     ;
 
 privObjectType
-    : SYSTEM | TABLE | DATABASE | CATALOG | DATABASES | FUNCTION
-    | identifier
+    : TABLE| DATABASE| SYSTEM| USER| RESOURCE| VIEW| CATALOG| MATERIALIZED VIEW| FUNCTION| RESOURCE GROUP
+    | GLOBAL FUNCTION
+    ;
+
+privObjectTypePlural
+    : TABLES| DATABASES| USERS| RESOURCES| VIEWS| CATALOGS| MATERIALIZED VIEWS| FUNCTIONS| RESOURCE GROUPS
+    | GLOBAL FUNCTIONS
     ;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
@@ -2176,30 +2181,30 @@ number
 
 nonReserved
     : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
-    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
-    | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
+    | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HUB
     | IDENTIFIED | IMAGE | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL
     | MANUAL | MAP | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NONE | NULLS
-    | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
+    | OBSERVER | OF | OFFSET | ONLY | OPEN | OPERATE | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
-    | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
+    | REMOVE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW
-    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP
+    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | STREAM | SUM | STATUS | STOP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
-    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER | USERS
+    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USAGE | USER | USERS
     | VALUE | VARIABLES | VIEW | VIEWS | VERBOSE
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR

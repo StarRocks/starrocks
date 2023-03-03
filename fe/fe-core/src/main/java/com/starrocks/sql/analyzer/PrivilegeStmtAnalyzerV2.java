@@ -26,6 +26,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -180,17 +181,29 @@ public class PrivilegeStmtAnalyzerV2 {
             return null;
         }
 
+        private boolean needProtectAdminUser(UserIdentity userIdentity, ConnectContext context) {
+            return Config.authorization_enable_admin_user_protection &&
+                    userIdentity.getQualifiedUser().equalsIgnoreCase("admin") &&
+                    !context.getCurrentUserIdentity().equals(UserIdentity.ROOT);
+        }
+
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
             UserIdentity userIdentity = stmt.getUserIdentity();
             userIdentity.analyze();
+
+            if (needProtectAdminUser(userIdentity, session)) {
+                throw new SemanticException("'admin' user cannot be dropped because of " +
+                        "'authorization_enable_admin_user_protection' configuration is enabled");
+            }
+
             if (!authenticationManager.doesUserExist(userIdentity) && !stmt.isIfExists()) {
                 throw new SemanticException("Operation DROP USER failed for " + userIdentity + " : user not exists");
             }
 
             if (stmt.getUserIdentity().equals(UserIdentity.ROOT)) {
                 throw new SemanticException("Operation DROP USER failed for " + UserIdentity.ROOT +
-                        " : cannot drop user" + UserIdentity.ROOT);
+                        " : cannot drop user " + UserIdentity.ROOT);
             }
             return null;
         }
@@ -262,18 +275,22 @@ public class PrivilegeStmtAnalyzerV2 {
         }
 
         private ObjectType analyzeObjectType(String objectTypeUnResolved) {
-            if (!EnumUtils.isValidEnumIgnoreCase(ObjectType.class, objectTypeUnResolved)) {
+            String o = objectTypeUnResolved.replace(" ", "_");
+
+            if (!EnumUtils.isValidEnumIgnoreCase(ObjectType.class, o)) {
                 throw new SemanticException("cannot find privilege object type " + objectTypeUnResolved);
             }
-            return ObjectType.valueOf(objectTypeUnResolved);
+            return ObjectType.valueOf(o);
         }
 
         private PrivilegeType analyzePrivType(ObjectType objectType, String privTypeString) {
-            if (!EnumUtils.isValidEnumIgnoreCase(PrivilegeType.class, privTypeString)) {
+            String p = privTypeString.replace(" ", "_");
+
+            if (!EnumUtils.isValidEnumIgnoreCase(PrivilegeType.class, p)) {
                 throw new SemanticException("cannot find privilege type " + privTypeString);
             }
 
-            PrivilegeType privilegeType = PrivilegeType.valueOf(privTypeString);
+            PrivilegeType privilegeType = PrivilegeType.valueOf(p);
             if (!privilegeManager.isAvailablePirvType(objectType, privilegeType)) {
                 throw new SemanticException("Cant grant " + privTypeString + " to object " + objectType);
             }
@@ -347,11 +364,12 @@ public class PrivilegeStmtAnalyzerV2 {
                         }
 
                     } else {
-                        // all statement
-                        // TABLES -> TABLE
-                        ObjectType objectType = privilegeManager.getObjectByPlural(stmt.getObjectTypeUnResolved());
-
-                        // TABLE -> 0/1
+                        // grant on all object
+                        ObjectType objectType = ObjectType.OBJECT_TO_PLURAL.get(stmt.getObjectTypeUnResolved());
+                        if (objectType == null) {
+                            throw new SemanticException("invalid plural privilege type " +
+                                    stmt.getObjectTypeUnResolved());
+                        }
                         stmt.setObjectType(objectType);
 
                         if (stmt.getTokens().size() == 1 && (stmt.getObjectType().equals(ObjectType.TABLE) ||
@@ -379,7 +397,8 @@ public class PrivilegeStmtAnalyzerV2 {
 
                 List<PrivilegeType> privilegeTypes = new ArrayList<>();
                 for (String privTypeUnResolved : stmt.getPrivilegeTypeUnResolved()) {
-                    if (privTypeUnResolved.equals("ALL")) {
+                    if (privTypeUnResolved.equalsIgnoreCase("all")
+                            || privTypeUnResolved.equalsIgnoreCase("all privileges")) {
                         privilegeTypes.addAll(privilegeManager.getAvailablePrivType(stmt.getObjectType()));
                     } else {
                         privilegeTypes.add(analyzePrivType(stmt.getObjectType(), privTypeUnResolved));
@@ -436,12 +455,16 @@ public class PrivilegeStmtAnalyzerV2 {
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
             if (stmt.getUserIdentity() != null) {
                 analyseUser(stmt.getUserIdentity(), true);
+                if (needProtectAdminUser(stmt.getUserIdentity(), session)) {
+                    throw new SemanticException("roles of 'admin' user cannot be changed because of " +
+                            "'authorization_enable_admin_user_protection' configuration is enabled");
+                }
                 stmt.getGranteeRole().forEach(role ->
-                        validRoleName(role, "Can not granted/revoke role to user", true));
+                        validRoleName(role, "Can not granted/revoke role to/from user", true));
             } else {
-                validRoleName(stmt.getRole(), "Can not granted/revoke role to role", true);
+                validRoleName(stmt.getRole(), "Can not granted/revoke role to/from role", true);
                 stmt.getGranteeRole().forEach(role ->
-                        validRoleName(role, "Can not granted/revoke role to user", true));
+                        validRoleName(role, "Can not granted/revoke role to/from user", true));
             }
             return null;
         }
