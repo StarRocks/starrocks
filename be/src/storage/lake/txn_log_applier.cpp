@@ -43,11 +43,12 @@ public:
     }
 
     ~PrimaryKeyTxnLogApplier() override {
-        if (_inited) {
-            _s_schema_change_set.erase(_tablet.id());
-        }
+        // handle failure first, then release lock
         if (_check_meta_version_succ) {
             _builder.handle_failure();
+        }
+        if (_inited) {
+            _s_schema_change_set.erase(_tablet.id());
         }
     }
 
