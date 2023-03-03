@@ -24,10 +24,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.ast.AstVisitor;
@@ -126,7 +126,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
         String replicationNumStr = table.getTableProperty().getProperties().get("replication_num");
         short replicationNum;
         if (replicationNumStr == null) {
-            replicationNum = FeConstants.default_replication_num;
+            replicationNum = RunMode.defaultReplicationNum();
         } else {
             replicationNum = Short.parseShort(replicationNumStr);
         }

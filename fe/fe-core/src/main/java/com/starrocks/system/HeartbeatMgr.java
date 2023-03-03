@@ -236,7 +236,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                                     .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
                         }
                     } else {
-                        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable() && !isReplay) {
+                        if (RunMode.allowCreateLakeTable() && !isReplay) {
                             // addWorker
                             int starletPort = computeNode.getStarletPort();
                             if (starletPort != 0) {

@@ -42,12 +42,12 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -519,7 +519,7 @@ public class RangePartitionInfo extends PartitionInfo {
         String replicationNumStr = table.getTableProperty().getProperties().get("replication_num");
         short replicationNum;
         if (replicationNumStr == null) {
-            replicationNum = FeConstants.default_replication_num;
+            replicationNum = RunMode.defaultReplicationNum();
         } else {
             replicationNum = Short.parseShort(replicationNumStr);
         }

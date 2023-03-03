@@ -104,7 +104,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 return;
             }
 
-            if (!RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+            if (!RunMode.allowCreateLakeTable()) {
                 publishVersionForOlapTable(readyTransactionStates);
                 return;
             }

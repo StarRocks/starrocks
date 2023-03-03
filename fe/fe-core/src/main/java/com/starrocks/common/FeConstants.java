@@ -68,8 +68,6 @@ public class FeConstants {
 
     public static boolean USE_MOCK_DICT_MANAGER = false;
 
-    // Database and table's default configurations, we will never change them
-    public static short default_replication_num = 3;
     public static int checkpoint_interval_second = 60; // 1 minutes
     // set to true to skip some step when running FE unit test
     public static boolean runningUnitTest = false;

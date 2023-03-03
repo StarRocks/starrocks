@@ -393,7 +393,7 @@ public class NodeMgr {
                 }
             }
             getNewImageOnStartup(rightHelperNode, "");
-            if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) { // get star mgr image
+            if (RunMode.allowCreateLakeTable()) { // get star mgr image
                 // subdir might not exist
                 String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
                 File dir = new File(subDir);
@@ -416,17 +416,17 @@ public class NodeMgr {
 
         if (Strings.isNullOrEmpty(runMode)) {
             if (isFirstTimeStartUp) {
-                runMode = RunMode.getCurrentRunMode().getName();
+                runMode = RunMode.name();
                 storage.setRunMode(runMode);
                 isVersionFileChanged = true;
-            } else if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+            } else if (RunMode.allowCreateLakeTable()) {
                 LOG.error("Upgrading from a cluster with version less than 3.0 to a cluster with run mode {} of " +
-                          "version 3.0 or above is disallowed. will exit", RunMode.getCurrentRunMode().getName());
+                          "version 3.0 or above is disallowed. will exit", RunMode.name());
                 System.exit(-1);
             }
-        } else if (!runMode.equalsIgnoreCase(RunMode.getCurrentRunMode().getName())) {
+        } else if (!runMode.equalsIgnoreCase(RunMode.name())) {
             LOG.error("Unmatched run mode between config file and version file: {} vs {}. will exit! ",
-                      RunMode.getCurrentRunMode().getName(), runMode);
+                      RunMode.name(), runMode);
             System.exit(-1);
         } // else nothing to do
 

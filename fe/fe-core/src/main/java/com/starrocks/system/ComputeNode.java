@@ -462,7 +462,7 @@ public class ComputeNode implements IComputable, Writable {
                 this.brpcPort = hbResponse.getBrpcPort();
             }
 
-            if (RunMode.getCurrentRunMode().isAllowCreateLakeTable() && this.starletPort != hbResponse.getStarletPort()) {
+            if (RunMode.allowCreateLakeTable() && this.starletPort != hbResponse.getStarletPort()) {
                 isChanged = true;
                 this.starletPort = hbResponse.getStarletPort();
             }

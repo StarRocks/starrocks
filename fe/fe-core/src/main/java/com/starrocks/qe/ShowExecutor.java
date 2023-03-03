@@ -82,7 +82,6 @@ import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
@@ -126,6 +125,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
@@ -2231,7 +2231,7 @@ public class ShowExecutor {
                     String tableName = olapTable.getName();
                     int replicationNum = dynamicPartitionProperty.getReplicationNum();
                     replicationNum = (replicationNum == DynamicPartitionProperty.NOT_SET_REPLICATION_NUM) ?
-                            olapTable.getDefaultReplicationNum() : FeConstants.default_replication_num;
+                            olapTable.getDefaultReplicationNum() : RunMode.defaultReplicationNum();
                     rows.add(Lists.newArrayList(
                             tableName,
                             String.valueOf(dynamicPartitionProperty.getEnable()),
