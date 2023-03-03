@@ -130,8 +130,8 @@ public class AstToSQLBuilder {
             }
 
             List<String> selectListString = new ArrayList<>();
-            for (int i = 0; i < stmt.getOutputExpr().size(); ++i) {
-                Expr expr = stmt.getOutputExpr().get(i);
+            for (int i = 0; i < stmt.getOutputExpression().size(); ++i) {
+                Expr expr = stmt.getOutputExpression().get(i);
                 String columnName = stmt.getColumnOutputNames().get(i);
 
                 if (expr instanceof FieldReference) {

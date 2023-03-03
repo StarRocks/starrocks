@@ -59,8 +59,6 @@ public abstract class AstVisitor<R, C> {
         return null;
     }
 
-    // ---------------------------------------- Statement --------------------------------------------------------------
-
     public R visitStatement(StatementBase statement, C context) {
         return visitNode(statement, context);
     }
@@ -68,6 +66,8 @@ public abstract class AstVisitor<R, C> {
     public R visitDDLStatement(DdlStmt statement, C context) {
         return visitStatement(statement, context);
     }
+
+    // ---------------------------------------- Query Statement --------------------------------------------------------------
 
     public R visitQueryStatement(QueryStatement statement, C context) {
         return visitStatement(statement, context);
@@ -315,8 +315,8 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitDeleteStatement(DeleteStmt node, C context) {
-        return visitStatement(node, context);
+    public R visitDeleteStatement(DeleteStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ------------------------------------------- Routine Statement ---------------------------------------------------

@@ -23,6 +23,7 @@ public abstract class DmlStmt extends StatementBase {
     protected DmlStmt(NodePosition pos) {
         super(pos);
     }
+
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
