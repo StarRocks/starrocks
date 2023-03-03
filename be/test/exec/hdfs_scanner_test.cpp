@@ -306,31 +306,6 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
     params->partition_values = part_values;
 }
 
-<<<<<<< HEAD
-#define READ_SCANNER_RETURN_ROWS(scanner, records)                                     \
-    do {                                                                               \
-        _debug_row_output = "";                                                        \
-        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                           \
-        for (;;) {                                                                     \
-            chunk->reset();                                                            \
-            status = scanner->get_next(_runtime_state, &chunk);                        \
-            if (status.is_end_of_file()) {                                             \
-                break;                                                                 \
-            }                                                                          \
-            if (!status.ok()) {                                                        \
-                std::cout << "status not ok: " << status.get_error_msg() << std::endl; \
-                break;                                                                 \
-            }                                                                          \
-            chunk->check_or_die();                                                     \
-            if (chunk->num_rows() > 0) {                                               \
-                _debug_row_output += chunk->debug_row(0);                              \
-                _debug_row_output += '\n';                                             \
-                std::cout << "row#0: " << chunk->debug_row(0) << std::endl;            \
-                EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());           \
-            }                                                                          \
-            records += chunk->num_rows();                                              \
-        }                                                                              \
-=======
 #define READ_SCANNER_RETURN_ROWS(scanner, records)                                        \
     do {                                                                                  \
         _debug_row_output = "";                                                           \
@@ -357,7 +332,6 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
             }                                                                             \
             records += chunk->num_rows();                                                 \
         }                                                                                 \
->>>>>>> e25691928 ([BugFix] fix timestamp underflow for parquet format (#18521))
     } while (0)
 
 #define READ_SCANNER_ROWS(scanner, exp)             \
