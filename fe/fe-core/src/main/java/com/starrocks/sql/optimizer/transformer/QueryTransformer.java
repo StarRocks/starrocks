@@ -104,7 +104,7 @@ class QueryTransformer {
                 }
 
                 builder = projectForOrder(builder,
-                        Iterables.concat(queryBlock.getOutputExpr(),
+                        Iterables.concat(queryBlock.getOutputExpression(),
                                 queryBlock.getOrderSourceExpressions(),
                                 queryBlock.getOrderByAnalytic()),
                         queryBlock.getOutputExprInOrderByScope(),
@@ -114,19 +114,19 @@ class QueryTransformer {
             }
         }
 
-        builder = distinct(builder, queryBlock.isDistinct(), queryBlock.getOutputExpr());
+        builder = distinct(builder, queryBlock.isDistinct(), queryBlock.getOutputExpression());
         // add project to express order by expression
-        builder = project(builder, Iterables.concat(queryBlock.getOrderByExpressions(), queryBlock.getOutputExpr()));
+        builder = project(builder, Iterables.concat(queryBlock.getOrderByExpressions(), queryBlock.getOutputExpression()));
         List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
         builder = sort(builder, queryBlock.getOrderBy(), orderByColumns);
         builder = limit(builder, queryBlock.getLimit());
 
-        List<ColumnRefOperator> outputColumns = computeOutputs(builder, queryBlock.getOutputExpr(), columnRefFactory);
+        List<ColumnRefOperator> outputColumns = computeOutputs(builder, queryBlock.getOutputExpression(), columnRefFactory);
 
         // Add project operator to prune order by columns
         if (!orderByColumns.isEmpty() && !outputColumns.containsAll(orderByColumns)) {
             long limit = queryBlock.hasLimit() ? queryBlock.getLimit().getLimit() : -1;
-            builder = project(builder, queryBlock.getOutputExpr(), limit);
+            builder = project(builder, queryBlock.getOutputExpression(), limit);
         }
 
         return new LogicalPlan(builder, outputColumns, correlation);

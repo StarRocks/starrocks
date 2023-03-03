@@ -331,7 +331,7 @@ public class CreateRoutineLoadStmtTest {
         String selectSQL = "SELECT \"Pat O\"\"Hanrahan & <Matthew Eldridge]\"\"\";";
         QueryStatement selectStmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(selectSQL, ctx);
 
-        Expr expr = ((SelectRelation) (selectStmt.getQueryRelation())).getOutputExpr().get(0);
+        Expr expr = ((SelectRelation) (selectStmt.getQueryRelation())).getOutputExpression().get(0);
         Assert.assertTrue(expr instanceof StringLiteral);
         StringLiteral stringLiteral = (StringLiteral) expr;
         Assert.assertEquals(stringLiteral.getValue(), "Pat O\"Hanrahan & <Matthew Eldridge]\"");

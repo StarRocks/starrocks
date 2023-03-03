@@ -134,8 +134,8 @@ public class SqlWithIdUtils {
                 sqlBuilder.append("DISTINCT ");
             }
             List<String> selectListString = new ArrayList<>();
-            for (int i = 0; i < stmt.getOutputExpr().size(); ++i) {
-                Expr expr = stmt.getOutputExpr().get(i);
+            for (int i = 0; i < stmt.getOutputExpression().size(); ++i) {
+                Expr expr = stmt.getOutputExpression().get(i);
                 String columnName = stmt.getScope().getRelationFields().getFieldByIndex(i).getName();
 
                 if (expr instanceof FieldReference) {
