@@ -1473,4 +1473,21 @@ public class PrivilegeManagerTest {
         statementBase =
                 UtFrameUtils.parseStmtWithNewParser("revoke select on table db.tbl0 from test_user", ctx);
     }
+
+    @Test
+    public void testSystem() throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create user u1", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create user u2", ctx), ctx);
+
+        String sql = "grant OPERATE ON SYSTEM TO USER u1 with grant option";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+
+        ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.OPERATE));
+
+        sql = "grant OPERATE ON SYSTEM TO USER u2";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+        ctx.setCurrentUserIdentity(new UserIdentity("u2", "%"));
+        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.OPERATE));
+    }
 }

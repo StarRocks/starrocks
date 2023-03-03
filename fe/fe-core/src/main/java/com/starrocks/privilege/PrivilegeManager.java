@@ -209,9 +209,11 @@ public class PrivilegeManager {
     // called by initBuiltinRolesAndUsers()
     private void initPrivilegeCollections(PrivilegeCollection collection, ObjectType objectType, List<PrivilegeType> actionList,
                                           List<String> tokens, boolean isGrant) throws PrivilegeException {
-        List<PEntryObject> object = null;
+        List<PEntryObject> object;
         if (tokens != null) {
             object = Collections.singletonList(provider.generateObject(objectType, tokens, globalStateMgr));
+        } else {
+            object = Arrays.asList(new PEntryObject[] {null});
         }
         collection.grant(objectType, actionList, object, isGrant);
     }
@@ -250,7 +252,7 @@ public class PrivilegeManager {
                 break;
 
             case SYSTEM:
-                collection.grant(objectType, actionList, null, false);
+                collection.grant(objectType, actionList, Arrays.asList(new PEntryObject[] {null}), false);
                 break;
 
             default:
