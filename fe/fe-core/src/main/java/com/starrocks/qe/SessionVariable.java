@@ -370,6 +370,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // that, non-order-by output columns are permuted according to the ordinal column.
     public static final String FULL_SORT_LATE_MATERIALIZATION = "full_sort_late_materialization";
 
+    // For group-by-count-distinct query like select a, count(distinct b) from t group by a, if group-by column a
+    // is low-cardinality while count-distinct column b is high-cardinality, there exists a performance bottleneck
+    // if column a is a0 for the majority rows, since the data is shuffle by only column a, so one PipelineDriver will
+    // tackle with the majority portion of data that can not scale to multi-machines or multi-cores. so we add a
+    // bucket column produced from evaluation of expression hash(b)%num_buckets to the partition-by column of shuffle
+    // ExchangeNode to make the computation scale-out to multi-machines/multi-cores.
+    // Here: count_distinct_column_buckets means the num_buckets and enable_distinct_column_bucketization is switch to
+    // control on/off of this bucketization optimization.
+    public static final String DISTINCT_COLUMN_BUCKETS = "count_distinct_column_buckets";
+    public static final String ENABLE_DISTINCT_COLUMN_BUCKETIZATION = "enable_distinct_column_bucketization";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -930,6 +941,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION)
     private boolean fullSortLateMaterialization = false;
 
+    @VariableMgr.VarAttr(name = DISTINCT_COLUMN_BUCKETS)
+    private int distinctColumnBuckets = 1024;
+
+    @VariableMgr.VarAttr(name = ENABLE_DISTINCT_COLUMN_BUCKETIZATION)
+    private boolean enableDistinctColumnBucketization = true;
+
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
     }
@@ -952,6 +969,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isFullSortLateMaterialization() {
         return fullSortLateMaterialization;
+    }
+
+    public void setDistinctColumnBuckets(int buckets) {
+        distinctColumnBuckets = buckets;
+    }
+
+    public int getDistinctColumnBuckets() {
+        return distinctColumnBuckets;
+    }
+
+    public void setEnableDistinctColumnBucketization(boolean flag) {
+        enableDistinctColumnBucketization = flag;
+    }
+
+    public boolean isEnableDistinctColumnBucketization() {
+        return enableDistinctColumnBucketization;
     }
 
     public boolean isActivateAllRolesOnLogin() {
