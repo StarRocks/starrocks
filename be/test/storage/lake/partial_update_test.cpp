@@ -137,6 +137,8 @@ public:
     }
 
     void TearDown() override {
+        // check primary index cache's ref
+        EXPECT_TRUE(_update_manager->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
         tablet.delete_txn_log(_txn_id);
         _txn_id++;

@@ -51,6 +51,8 @@ public:
 
         void update_expire_time(int64_t expire_ms) { _expire_ms = expire_ms; }
 
+        uint32_t get_ref() const { return _ref.load(); }
+
     protected:
         friend class DynamicCache<Key, T>;
         typedef typename std::list<Entry*>::const_iterator Handle;

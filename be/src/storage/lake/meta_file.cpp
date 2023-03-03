@@ -95,8 +95,6 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
             }
         }
         if (need_del) {
-            // free cache
-            _tablet.tablet_mgr()->erase_metacache(delvec_cache_key(_tablet_meta->id(), delvec_it->second));
             delvec_it = _tablet_meta->mutable_delvec_meta()->mutable_delvecs()->erase(delvec_it);
             delvec_erase_cnt++;
         } else {
@@ -123,8 +121,6 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version) {
     for (auto&& each_delvec : *(_tablet_meta->mutable_delvec_meta()->mutable_delvecs())) {
         auto iter = _delvecs.find(each_delvec.first);
         if (iter != _delvecs.end()) {
-            // erase old version delvec from cache
-            _tablet.tablet_mgr()->erase_metacache(delvec_cache_key(_tablet_meta->id(), each_delvec.second));
             each_delvec.second.set_version(version);
             each_delvec.second.set_offset(iter->second.offset());
             each_delvec.second.set_size(iter->second.size());
