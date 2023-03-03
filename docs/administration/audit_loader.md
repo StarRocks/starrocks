@@ -2,7 +2,7 @@
 
 This topic describes how to manage StarRocks audit logs within a table via the plugin - Audit Loader.
 
-StarRocks stores its audit logs in the local file **fe/log/fe.audit.log** rather than an internal database. The plugin Audit Loader allows you to manage audit logs directly within the cluster. Audit Loader reads logs from the file, and loads them into StarRocks via HTTP PUT.
+StarRocks stores its audit logs in the local file **fe/log/fe.audit.log** rather than an internal database. The plugin Audit Loader allows you to manage audit logs directly within your cluster. Audit Loader reads logs from the file, and loads them into StarRocks via HTTP PUT.
 
 ## Create a table to store audit logs
 
@@ -17,7 +17,43 @@ Because the fields of audit logs vary among different StarRocks versions, you mu
 - StarRocks v2.4.0 and later minor versions:
 
 ```SQL
-
+CREATE DATABASE starrocks_audit_db__;
+CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
+  `queryId`        VARCHAR(48)            COMMENT "Unique query ID",
+  `timestamp`      DATETIME     NOT NULL  COMMENT "Query start time",
+  `clientIp`       VARCHAR(32)            COMMENT "Client IP address",
+  `user`           VARCHAR(64)            COMMENT "User who initiates the query",
+  `resourceGroup`  VARCHAR(64)            COMMENT "Resource group name",
+  `db`             VARCHAR(96)            COMMENT "Database that the query scans",
+  `state`          VARCHAR(8)             COMMENT "Query state (EOF，ERR，OK)",
+  `errorCode`      VARCHAR(96)            COMMENT "Error code",
+  `queryTime`      BIGINT                 COMMENT "Query latency in milliseconds",
+  `scanBytes`      BIGINT                 COMMENT "Size of the scanned data in bytes",
+  `scanRows`       BIGINT                 COMMENT "Row count of the scanned data",
+  `returnRows`     BIGINT                 COMMENT "Row count of the result",
+  `cpuCostNs`      BIGINT                 COMMENT "CPU resources consumption time for query in nanoseconds",
+  `memCostBytes`   BIGINT                 COMMENT "Memory cost for query in bytes",
+  `stmtId`         INT                    COMMENT "Incremental SQL statement ID",
+  `isQuery`        TINYINT                COMMENT "If the SQL is a query (0 and 1)",
+  `feIp`           VARCHAR(32)            COMMENT "IP address of FE that executes the SQL",
+  `stmt`           STRING                 COMMENT "SQL statement",
+  `digest`         VARCHAR(32)            COMMENT "SQL fingerprint",
+  `planCpuCosts`   DOUBLE                 COMMENT "CPU resources consumption time for planning in nanoseconds",
+  `planMemCosts`   DOUBLE                 COMMENT "Memory cost for planning in bytes"
+) ENGINE = OLAP
+DUPLICATE KEY (`queryId`, `timestamp`, `clientIp`)
+COMMENT "Audit log table"
+PARTITION BY RANGE (`timestamp`) ()
+DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
+PROPERTIES (
+  "dynamic_partition.time_unit" = "DAY",
+  "dynamic_partition.start" = "-30",
+  "dynamic_partition.end" = "3",
+  "dynamic_partition.prefix" = "p",
+  "dynamic_partition.buckets" = "3",
+  "dynamic_partition.enable" = "true",
+  "replication_num" = "3"
+);
 ```
 
 - StarRocks v2.3.0 and later minor versions:
