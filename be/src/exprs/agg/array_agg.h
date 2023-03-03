@@ -29,23 +29,76 @@ namespace starrocks {
 // input columns result in intermediate result: struct{array[col0], array[col1], array[col2]... array[coln]}
 struct ArrayAggAggregateState {
     void update(const Column& column, size_t index, size_t offset, size_t count) {
-        if (index >= data_columns.size()) {
-            DCHECK(index == data_columns.size());
-            data_columns.push_back(column.clone_empty());
+        if (UNLIKELY(index >= data_columns->size())) {
+            throw std::runtime_error(
+                    fmt::format("index {} is larger than column size {}.", index, data_columns->size()));
         }
-        data_columns[index]->append(column, offset, count);
+        (*data_columns)[index]->append(column, offset, count);
     }
-    Columns data_columns; // TODO: how to construct columns firstly?
+    void update_nulls(size_t index, size_t count) {
+        if (UNLIKELY(index >= data_columns->size())) {
+            throw std::runtime_error(
+                    fmt::format("index {} is larger than column size {}.", index, data_columns->size()));
+        }
+        DCHECK((*data_columns)[index]->is_nullable());
+        (*data_columns)[index]->append_nulls(count);
+    }
+    ~ArrayAggAggregateState() {
+        if (data_columns != nullptr) {
+            data_columns->clear();
+        }
+    }
+    // using pointer rather than vector to avoid variadic size
+    Columns* data_columns;
 };
 
 class ArrayAggAggregateFunction
         : public AggregateFunctionBatchHelper<ArrayAggAggregateState, ArrayAggAggregateFunction> {
 public:
+    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
+        auto num = ctx->get_num_args();
+        auto* state = new (ptr) ArrayAggAggregateState;
+        state->data_columns = new Columns;
+        for (auto i = 0; i < num; ++i) {
+            auto arg_type = ctx->get_arg_type(i);
+            // TODO: support nested type
+            if (arg_type->type == LogicalType::TYPE_STRUCT || arg_type->type == LogicalType::TYPE_ARRAY ||
+                arg_type->type == LogicalType::TYPE_MAP) {
+                throw std::runtime_error(fmt::format("array_agg can't support nest type now."));
+            }
+            state->data_columns->emplace_back(
+                    ColumnHelper::create_column(TypeDescriptor::from_logical_type(arg_type->type, arg_type->len,
+                                                                                  arg_type->precision, arg_type->scale),
+                                                true));
+        }
+    }
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        auto& state_impl = this->data(state);
+        if (state_impl.data_columns != nullptr) {
+            for (auto& col : *state_impl.data_columns) {
+                col->resize(0);
+            }
+        }
+    }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         for (auto i = 0; i < ctx->get_num_args(); ++i) {
+            DCHECK(columns[i]->size() > row_num);
             // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
-            this->data(state).update(*columns[i], i, row_num, 1);
+            if ((columns[i]->is_nullable() && columns[i]->is_null(row_num)) || columns[i]->only_null()) {
+                this->data(state).update_nulls(i, 1);
+                continue;
+            }
+            auto* data_col = columns[i];
+            auto tmp_row_num = row_num;
+            if (columns[i]->is_constant()) {
+                // just copy the first const value.
+                data_col = down_cast<const ConstColumn*>(columns[i])->data_column().get();
+                tmp_row_num = 0;
+            }
+            this->data(state).update(*data_col, i, tmp_row_num, 1);
         }
     }
 
@@ -66,12 +119,18 @@ public:
             down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
         }
         for (auto i = 0; i < columns.size(); ++i) {
-            auto elem_size = state_impl.data_columns[i]->size();
+            auto elem_size = (*state_impl.data_columns)[i]->size();
             auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[i].get()));
             if (columns[i]->is_nullable()) {
                 down_cast<NullableColumn*>(columns[i].get())->null_column_data().emplace_back(0);
             }
-            array_col->elements_column()->append(*state_impl.data_columns[i], 0, elem_size);
+            if ((*state_impl.data_columns)[i]->only_null()) {
+                array_col->elements_column()->append_nulls((*state_impl.data_columns)[i]->size());
+            } else {
+                array_col->elements_column()->append(
+                        *ColumnHelper::unpack_and_duplicate_const_column(elem_size, (*state_impl.data_columns)[i]), 0,
+                        elem_size);
+            }
             auto& offsets = array_col->offsets_column()->get_data();
             offsets.push_back(offsets.back() + elem_size);
         }
@@ -80,24 +139,29 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_array());
         auto& state_impl = this->data(state);
-        auto elem_size = state_impl.data_columns[0]->size();
-        auto res = state_impl.data_columns[0].get();
-        auto tmp = state_impl.data_columns[0]->clone_empty();
-        if (state_impl.data_columns.size() > 1) {
+        auto elem_size = (*state_impl.data_columns)[0]->size();
+        auto res = (*state_impl.data_columns)[0];
+        auto tmp = (*state_impl.data_columns)[0]->clone_empty();
+        if ((*state_impl.data_columns).size() > 1) {
             Permutation perm;
             Columns sort_by_columns;
             SortDescs sort_desc(ctx->get_is_asc_order(), ctx->get_nulls_first());
-            sort_by_columns.assign(state_impl.data_columns.begin() + 1, state_impl.data_columns.end());
+            sort_by_columns.assign((*state_impl.data_columns).begin() + 1, (*state_impl.data_columns).end());
             Status st = sort_and_tie_columns(false, sort_by_columns, sort_desc, &perm);
             CHECK(st.ok());
-            materialize_column_by_permutation(tmp.get(), {state_impl.data_columns[0]}, perm);
-            res = tmp.get();
+            materialize_column_by_permutation(tmp.get(), {(*state_impl.data_columns)[0]}, perm);
+            res = ColumnPtr(std::move(tmp));
         }
         auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(to));
         if (to->is_nullable()) {
             down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
         }
-        array_col->elements_column()->append(*res, 0, elem_size);
+        if (res->only_null()) {
+            array_col->elements_column()->append_nulls(res->size());
+        } else {
+            array_col->elements_column()->append(*ColumnHelper::unpack_and_duplicate_const_column(elem_size, res), 0,
+                                                 elem_size);
+        }
         auto& offsets = array_col->offsets_column()->get_data();
         offsets.push_back(offsets.back() + elem_size);
     }

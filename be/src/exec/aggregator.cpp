@@ -384,7 +384,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         _agg_states_offsets[i] = _agg_states_total_size;
         _agg_states_total_size += _agg_functions[i]->size();
-        _max_agg_state_align_size = std::max(_max_agg_state_align_size, _agg_functions[i]->alignof_size());
+        _max_agg_state_align_size = std::max(_max_agg_state_align_size, _agg_functions[i]->alignof_size()); // TODO
 
         // If not the last aggregate_state, we need pad it so that next aggregate_state will be aligned.
         if (i + 1 < _agg_fn_ctxs.size()) {

@@ -177,6 +177,7 @@ private:
     FunctionContext::TypeDesc _return_type;
 
     // Type descriptors for each argument of the function.
+    // TODO: support complex type
     std::vector<FunctionContext::TypeDesc> _arg_types;
 
     std::vector<ColumnPtr> _constant_columns;

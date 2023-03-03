@@ -920,6 +920,9 @@ public class ExpressionAnalyzer {
                         nullsFirst.add(elem.getNullsFirstParam());
                     }
                 }
+                for (int i = 0; i < argumentTypes.length; ++i) {
+                    argumentTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
+                }
                 fn.setArgsType(argumentTypes); // as accepting various types
                 fn.setIsNullable(false);
                 ArrayList<Type> structTypes = new ArrayList<>(argumentTypes.length);
