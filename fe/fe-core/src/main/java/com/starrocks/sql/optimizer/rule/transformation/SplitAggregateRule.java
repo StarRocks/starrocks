@@ -84,8 +84,11 @@ public class SplitAggregateRule extends TransformationRule {
             return false;
         }
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        if (agg.checkGroupByCountDistinctWithSkewHint()) {
+            return false;
+        }
         // Only apply this rule if the aggregate type is global and not split
-        return agg.getType().isGlobal() && !agg.isSplit();
+        return agg.getType().isGlobal() && !agg.isSplit() && agg.getDistinctColumnDataSkew() == null;
     }
 
     private boolean mustGenerateMultiStageAggregate(OptExpression input, List<CallOperator> distinctAggCallOperator) {

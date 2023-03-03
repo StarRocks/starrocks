@@ -62,11 +62,10 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(distinct P_TYPE) from part group by P_BRAND;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "1:AGGREGATE (update serialize)\n"
-                + "  |  STREAMING\n"
-                + "  |  output: multi_distinct_count(5: P_TYPE)");
-        assertContains(plan, "3:AGGREGATE (merge finalize)\n"
-                + "  |  output: multi_distinct_count(11: count)");
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 4> : 4: P_BRAND\n" +
+                "  |  <slot 5> : 5: P_TYPE\n" +
+                "  |  <slot 12> : CAST(murmur_hash3_32(5: P_TYPE) % 512 AS SMALLINT)\n");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
