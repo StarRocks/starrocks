@@ -45,6 +45,7 @@ import com.starrocks.thrift.TScanRangeParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -117,7 +118,7 @@ public class HDFSBackendSelector implements BackendSelector {
         public void acceptScanRangeLocations(TScanRangeLocations tScanRangeLocations, PrimitiveSink primitiveSink) {
             THdfsScanRange hdfsScanRange = tScanRangeLocations.scan_range.hdfs_scan_range;
             if (hdfsScanRange.isSetFull_path()) {
-                primitiveSink.putBytes(hdfsScanRange.full_path.getBytes());
+                primitiveSink.putString(hdfsScanRange.full_path, StandardCharsets.UTF_8);
             } else {
                 if (hdfsScanRange.isSetPartition_id() &&
                         predicates.getIdToPartitionKey().containsKey(hdfsScanRange.getPartition_id())) {
@@ -125,7 +126,7 @@ public class HDFSBackendSelector implements BackendSelector {
                     primitiveSink.putInt(partitionKey.hashCode());
                 }
                 if (hdfsScanRange.isSetRelative_path()) {
-                    primitiveSink.putBytes(hdfsScanRange.relative_path.getBytes());
+                    primitiveSink.putString(hdfsScanRange.relative_path, StandardCharsets.UTF_8);
                 }
             }
             if (hdfsScanRange.isSetOffset()) {
@@ -183,7 +184,7 @@ public class HDFSBackendSelector implements BackendSelector {
     class ComputeNodeFunnel implements Funnel<ComputeNode> {
         @Override
         public void funnel(ComputeNode computeNode, PrimitiveSink primitiveSink) {
-            primitiveSink.putBytes(computeNode.getHost().getBytes());
+            primitiveSink.putString(computeNode.getHost(), StandardCharsets.UTF_8);
             primitiveSink.putInt(computeNode.getBePort());
         }
     }
