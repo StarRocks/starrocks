@@ -18,6 +18,7 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 
 public abstract class DmlStmt extends StatementBase {
+
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
