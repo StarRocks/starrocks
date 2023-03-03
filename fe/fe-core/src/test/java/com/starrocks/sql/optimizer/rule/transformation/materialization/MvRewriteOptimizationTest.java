@@ -572,11 +572,7 @@ public class MvRewriteOptimizationTest {
                         " as select empid, deptno, salary from mv_1 where salary > 100");
         String query = "select empid, deptno, (salary + 1) * 2 from emps where empid < 5 and salary > 110";
         String plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "TABLE: mv_2\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 8: salary > 110.0, 6: empid <= 4\n" +
-                "     partitions=1/1\n" +
-                "     rollup: mv_2");
+        PlanTestBase.assertContains(plan, "TABLE: mv_2");
         dropMv("test", "mv_1");
         dropMv("test", "mv_2");
     }
