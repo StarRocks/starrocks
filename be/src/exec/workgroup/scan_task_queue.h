@@ -27,6 +27,11 @@
 
 namespace starrocks::workgroup {
 
+struct ScanTaskGroup {
+    int64_t runtime_ns = 0;
+    int sub_queue_level = 0;
+};
+
 struct ScanTask {
 public:
     using WorkFunction = std::function<void()>;
@@ -52,6 +57,7 @@ public:
     WorkGroup* workgroup;
     WorkFunction work_function;
     int priority = 0;
+    std::shared_ptr<ScanTaskGroup> task_group = nullptr;
 };
 
 class ScanTaskQueue {
@@ -67,8 +73,54 @@ public:
     virtual size_t size() const = 0;
     bool empty() const { return size() == 0; }
 
-    virtual void update_statistics(WorkGroup* wg, int64_t runtime_ns) = 0;
+    virtual void update_statistics(ScanTask& task, int64_t runtime_ns) = 0;
     virtual bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const = 0;
+};
+
+class MultiLevelFeedScanTaskQueue final : public ScanTaskQueue {
+public:
+    MultiLevelFeedScanTaskQueue();
+    ~MultiLevelFeedScanTaskQueue() override = default;
+
+    void close() override;
+
+    StatusOr<ScanTask> take() override;
+    bool try_offer(ScanTask task) override;
+
+    size_t size() const override { return _num_tasks; }
+
+    void update_statistics(ScanTask& task, int64_t runtime_ns) override;
+    bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override { return false; }
+
+    static constexpr int NUM_QUEUES = 8;
+    static double ratio_of_adjacent_queue() { return config::pipeline_scan_queue_ratio_of_adjacent_queue; }
+
+private:
+    int _compute_queue_level(const ScanTask& task) const;
+
+    struct SubQueue {
+        void incr_cost_ns(int64_t delta) { cost_ns += delta; }
+        double normalized_cost() const { return cost_ns / factor_for_normal; }
+
+        std::queue<ScanTask> queue;
+
+        int64_t level_time_slice = 0;
+        double factor_for_normal = 0;
+        int64_t cost_ns = 0;
+    };
+
+    // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
+    // so when a driver's execution time exceeds 0.1s, 0.3s, 0.6s, 1.0s, 1.5s, 2.1s, 2.8s, 3.7s.
+    // it will move to next level.
+    const int64_t LEVEL_TIME_SLICE_BASE_NS = config::pipeline_scan_queue_level_time_slice_base_ns;
+    const double RATIO_OF_ADJACENT_QUEUE = ratio_of_adjacent_queue();
+
+    mutable std::mutex _global_mutex;
+    std::condition_variable _cv;
+    bool _is_closed = false;
+
+    SubQueue _queues[NUM_QUEUES];
+    std::atomic<size_t> _num_tasks = 0;
 };
 
 class PriorityScanTaskQueue final : public ScanTaskQueue {
@@ -83,7 +135,7 @@ public:
 
     size_t size() const override { return _queue.get_size(); }
 
-    void update_statistics(WorkGroup* wg, int64_t runtime_ns) override {}
+    void update_statistics(ScanTask& task, int64_t runtime_ns) override {}
     bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override { return false; }
 
 private:
@@ -104,7 +156,7 @@ public:
 
     size_t size() const override { return _num_tasks.load(std::memory_order_acquire); }
 
-    void update_statistics(WorkGroup* wg, int64_t runtime_ns) override;
+    void update_statistics(ScanTask& task, int64_t runtime_ns) override;
     bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override;
 
 private:
@@ -168,5 +220,7 @@ private:
 
     std::atomic<size_t> _num_tasks = 0;
 };
+
+std::unique_ptr<ScanTaskQueue> create_scan_task_queue();
 
 } // namespace starrocks::workgroup
