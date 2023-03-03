@@ -45,6 +45,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static java.util.stream.Collectors.toSet;
 
 // TODO @caneGuy add cache for statistics, currently getting stats from iceberg metafiles is not time consuming
@@ -79,7 +80,7 @@ public class IcebergTableStatisticCalculator {
                 generateIcebergFileStats(icebergPredicate, columns);
 
         Map<Integer, String> idToColumnNames = columns.stream().
-                filter(column -> !IcebergUtil.convertColumnType(column.type()).isUnknown())
+                filter(column -> !fromIcebergType(column.type()).isUnknown())
                 .collect(Collectors.toMap(Types.NestedField::fieldId, Types.NestedField::name));
 
         double recordCount = Math.max(icebergFileStats == null ? 0 : icebergFileStats.getRecordCount(), 1);
@@ -105,7 +106,7 @@ public class IcebergTableStatisticCalculator {
         IcebergFileStats icebergFileStats = generateIcebergFileStats(icebergPredicate, columns);
 
         Map<Integer, String> idToColumnNames = columns.stream()
-                .filter(column -> !IcebergUtil.convertColumnType(column.type()).isUnknown())
+                .filter(column -> !fromIcebergType(column.type()).isUnknown())
                 .collect(Collectors.toMap(Types.NestedField::fieldId, Types.NestedField::name));
 
         Statistics.Builder statisticsBuilder = Statistics.builder();
