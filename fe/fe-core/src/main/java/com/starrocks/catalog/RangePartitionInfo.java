@@ -236,7 +236,7 @@ public class RangePartitionInfo extends PartitionInfo {
             PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
             range = Range.closedOpen(shadowPartitionKey, shadowPartitionKey);
             setRangeInternal(partitionId, false, range);
-        } catch (IllegalArgumentException e) {
+        } catch (Exception e) {
             // Range.closedOpen may throw this if (lower > upper)
             throw new DdlException("Invalid key range: " + e.getMessage());
         }
