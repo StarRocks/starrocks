@@ -415,6 +415,10 @@ public class OlapTableSink extends DataSink {
                         range.upperEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
             }
         }
+
+        if (partition.getName().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+            tPartition.setIs_shadow_partition(true);
+        }
     }
 
     private void setIndexAndBucketNums(Partition partition, TOlapTablePartition tPartition) {

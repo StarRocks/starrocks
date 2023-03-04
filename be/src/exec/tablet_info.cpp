@@ -175,21 +175,6 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
     for (auto& t_part : _t_param.partitions) {
         OlapTablePartition* part = _obj_pool.add(new OlapTablePartition());
         part->id = t_part.id;
-        if (t_part.__isset.start_keys) {
-            RETURN_IF_ERROR_WITH_WARN(_create_partition_keys(t_part.start_keys, &part->start_key), "start_keys");
-        }
-
-        if (t_part.__isset.end_keys) {
-            RETURN_IF_ERROR_WITH_WARN(_create_partition_keys(t_part.end_keys, &part->end_key), "end_keys");
-        }
-
-        if (t_part.__isset.in_keys) {
-            part->in_keys.resize(t_part.in_keys.size());
-            for (int i = 0; i < t_part.in_keys.size(); i++) {
-                RETURN_IF_ERROR_WITH_WARN(_create_partition_keys(t_part.in_keys[i], &part->in_keys[i]), "in_keys");
-            }
-        }
-
         part->num_buckets = t_part.num_buckets;
         auto num_indexes = _schema->indexes().size();
         if (t_part.indexes.size() != num_indexes) {
@@ -216,6 +201,27 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
             }
         }
         _partitions.emplace(part->id, part);
+
+        if (t_part.is_shadow_partition) {
+            VLOG(1) << "add shadow partition:" << part->id;
+            continue;
+        }
+
+        if (t_part.__isset.start_keys) {
+            RETURN_IF_ERROR_WITH_WARN(_create_partition_keys(t_part.start_keys, &part->start_key), "start_keys");
+        }
+
+        if (t_part.__isset.end_keys) {
+            RETURN_IF_ERROR_WITH_WARN(_create_partition_keys(t_part.end_keys, &part->end_key), "end_keys");
+        }
+
+        if (t_part.__isset.in_keys) {
+            part->in_keys.resize(t_part.in_keys.size());
+            for (int i = 0; i < t_part.in_keys.size(); i++) {
+                RETURN_IF_ERROR_WITH_WARN(_create_partition_keys(t_part.in_keys[i], &part->in_keys[i]), "in_keys");
+            }
+        }
+
         if (t_part.__isset.in_keys) {
             for (auto& in_key : part->in_keys) {
                 _partitions_map.emplace(&in_key, part);
