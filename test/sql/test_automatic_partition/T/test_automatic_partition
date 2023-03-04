@@ -163,3 +163,19 @@ truncate table ss;
 show create table ss;
 insert into ss values('2002-01-01', 2);
 show create table ss;
+
+-- name: test_shadown_partition
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+ADMIN SET FRONTEND CONFIG("enable_display_shadow_partitions"="true");
+show partitions from ss;
+ADMIN SET FRONTEND CONFIG("enable_display_shadow_partitions"="false");
+show partitions from ss;
+insert into ss values('2002-01-01', 2);
+show create table ss;
+-- insert into ss values(null, 2);
+-- insert into ss values('0000-01-01', 2);
+insert into ss values('0001-02-01', 2);
+-- insert into ss values('0000-00-00', 2);
+select * from ss;
+alter table ss drop partition p200201;
+select * from ss;
