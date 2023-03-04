@@ -149,7 +149,8 @@ Status OrcChunkReader::_slot_to_orc_column_name(const SlotDescriptor* desc,
 
 Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& mapping) {
     // TODO(SmithCruise) delete _name_to_column_id, _hive_column_names when develop subfield lazy load.
-    build_column_name_to_id_mapping(&_formatted_slot_name_to_column_id, _hive_column_names, _reader->getType(), _case_sensitive);
+    build_column_name_to_id_mapping(&_formatted_slot_name_to_column_id, _hive_column_names, _reader->getType(),
+                                    _case_sensitive);
 
     std::list<uint64_t> include_column_id;
 
