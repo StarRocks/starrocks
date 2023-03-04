@@ -272,7 +272,7 @@ std::shared_ptr<TabletsChannel> LoadChannel::get_tablets_channel(int64_t index_i
     std::lock_guard l(_lock);
     auto it = _tablets_channels.find(index_id);
     if (it != _tablets_channels.end()) {
-        auto local_tablets_channel = down_cast<LocalTabletsChannel*>(it->second.get());
+        auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(it->second.get());
         if (local_tablets_channel) {
             local_tablets_channel->incr_num_ref_senders();
         }

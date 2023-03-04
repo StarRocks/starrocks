@@ -89,7 +89,19 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
         for (Column column : columns) {
-            partitionKey.keys.add(DateLiteral.createMinValue(Type.fromPrimitiveType(column.getPrimitiveType())));
+            PrimitiveType primitiveType = column.getPrimitiveType();
+            DateLiteral shadowLiteral;
+            switch (primitiveType) {
+                case DATE:
+                    shadowLiteral = new DateLiteral(0, 0, 0);
+                    break;
+                case DATETIME:
+                    shadowLiteral = new DateLiteral(0, 0, 0, 0, 0, 0, 0);
+                    break;
+                default:
+                    throw new AnalysisException("Unsupported shadow partition type:" + primitiveType);
+            }
+            partitionKey.keys.add(shadowLiteral);
             partitionKey.types.add(column.getPrimitiveType());
         }
         return partitionKey;
