@@ -117,7 +117,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
     ChunkPtr max_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = min_max_tuple_desc->slots()[i];
-        int32_t column_index = _reader->get_column_id_by_name(slot->col_name());
+        int32_t column_index = _reader->get_column_id_by_slot_name(slot->col_name());
         if (column_index >= 0) {
             auto row_idx_iter = rowIndexes.find(column_index);
             // there is no column stats, skip filter process.
@@ -163,6 +163,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
         auto min = min_col->get(0).get_int8();
         auto max = max_col->get(0).get_int8();
         if (min == 0 && max == 0) {
+            // Means this row group dont stastisfy min-max predicates, we can filter this row group.
             return true;
         }
     }
@@ -190,7 +191,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
             if (!_scanner_ctx.can_use_dict_filter_on_slot(slot)) {
                 continue;
             }
-            int32_t column_index = _reader->get_column_id_by_name(col.col_name);
+            int32_t column_index = _reader->get_column_id_by_slot_name(col.col_name);
             if (column_index < 0) {
                 continue;
             }
