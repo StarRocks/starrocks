@@ -375,7 +375,6 @@ public class FunctionCallExpr extends Expr {
         return true;
     }
 
-
     @Override
     public void write(DataOutput out) throws IOException {
         fnName.write(out);
@@ -482,4 +481,5 @@ public class FunctionCallExpr extends Expr {
             return this;
         }
     }
+
 }

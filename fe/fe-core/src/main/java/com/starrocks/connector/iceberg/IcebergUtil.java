@@ -15,26 +15,16 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
 import org.apache.iceberg.BaseTable;
-import org.apache.iceberg.FileFormat;
-import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Snapshot;
@@ -44,16 +34,15 @@ import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
 
 public class IcebergUtil {
@@ -63,7 +52,7 @@ public class IcebergUtil {
      * Get Iceberg table identifier by table property
      */
     public static TableIdentifier getIcebergTableIdentifier(IcebergTable table) {
-        return TableIdentifier.of(table.getDb(), table.getTable());
+        return TableIdentifier.of(table.getRemoteDbName(), table.getRemoteTableName());
     }
 
     /**
@@ -129,24 +118,6 @@ public class IcebergUtil {
      */
     public static IcebergCatalog getIcebergRESTCatalog(Map<String, String> icebergProperties, HdfsEnvironment hdfsEnvironment) {
         return IcebergRESTCatalog.getInstance(icebergProperties, hdfsEnvironment);
-    }
-
-    /**
-     * Get hdfs file format in StarRocks use iceberg file format.
-     *
-     * @param format
-     * @return RemoteFileInputFormat
-     */
-    public static RemoteFileInputFormat getHdfsFileFormat(FileFormat format) {
-        switch (format) {
-            case ORC:
-                return RemoteFileInputFormat.ORC;
-            case PARQUET:
-                return RemoteFileInputFormat.PARQUET;
-            default:
-                throw new StarRocksIcebergException(
-                        "Unexpected file format: " + format.toString());
-        }
     }
 
     /**
@@ -239,26 +210,6 @@ public class IcebergUtil {
         return convertToSRTable(icebergTable, properties);
     }
 
-    public static List<String> getIdentityPartitionNames(org.apache.iceberg.Table icebergTable) {
-        List<String> partitionNames = Lists.newArrayList();
-        TableScan tableScan = icebergTable.newScan();
-        List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
-        if (icebergTable.spec().isUnpartitioned()) {
-            return partitionNames;
-        }
-
-        if (icebergTable.spec().fields().stream()
-                .anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
-            return partitionNames;
-        }
-
-        for (FileScanTask fileScanTask : tasks) {
-            StructLike partition = fileScanTask.file().partition();
-            partitionNames.add(convertIcebergPartitionToPartitionName(icebergTable.spec(), partition));
-        }
-        return partitionNames;
-    }
-
     static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {
         int filePartitionFields = partition.size();
         StringBuilder sb = new StringBuilder();
@@ -320,7 +271,7 @@ public class IcebergUtil {
                     field -> {
                         Type srType;
                         try {
-                            srType = convertColumnType(field.type());
+                            srType = fromIcebergType(field.type());
                         } catch (InternalError | Exception e) {
                             LOG.error("Failed to convert iceberg type {}", field.type().toString(), e);
                             srType = Type.UNKNOWN_TYPE;
@@ -336,96 +287,7 @@ public class IcebergUtil {
         }
     }
 
-    public static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {
-        if (icebergType == null) {
-            return Type.NULL;
-        }
-
-        PrimitiveType primitiveType;
-
-        switch (icebergType.typeId()) {
-            case BOOLEAN:
-                primitiveType = PrimitiveType.BOOLEAN;
-                break;
-            case INTEGER:
-                primitiveType = PrimitiveType.INT;
-                break;
-            case LONG:
-                primitiveType = PrimitiveType.BIGINT;
-                break;
-            case FLOAT:
-                primitiveType = PrimitiveType.FLOAT;
-                break;
-            case DOUBLE:
-                primitiveType = PrimitiveType.DOUBLE;
-                break;
-            case DATE:
-                primitiveType = PrimitiveType.DATE;
-                break;
-            case TIMESTAMP:
-                primitiveType = PrimitiveType.DATETIME;
-                break;
-            case STRING:
-            case UUID:
-                return ScalarType.createDefaultExternalTableString();
-            case DECIMAL:
-                int precision = ((Types.DecimalType) icebergType).precision();
-                int scale = ((Types.DecimalType) icebergType).scale();
-                return ScalarType.createUnifiedDecimalType(precision, scale);
-            case LIST:
-                Type type = convertToArrayType(icebergType);
-                if (type.isArrayType()) {
-                    return type;
-                } else {
-                    return Type.UNKNOWN_TYPE;
-                }
-            case MAP:
-                Type mapType = convertToMapType(icebergType);
-                if (mapType.isMapType()) {
-                    return mapType;
-                } else {
-                    return Type.UNKNOWN_TYPE;
-                }
-            case STRUCT:
-                List<Types.NestedField> fields = icebergType.asStructType().fields();
-                Preconditions.checkArgument(fields.size() > 0);
-                ArrayList<StructField> structFields = new ArrayList<>(fields.size());
-                for (Types.NestedField field : fields) {
-                    String fieldName = field.name();
-                    Type fieldType = convertColumnType(field.type());
-                    if (fieldType.isUnknown()) {
-                        return Type.UNKNOWN_TYPE;
-                    }
-                    structFields.add(new StructField(fieldName, fieldType));
-                }
-                return new StructType(structFields);
-            case TIME:
-            case FIXED:
-            case BINARY:
-            default:
-                primitiveType = PrimitiveType.UNKNOWN_TYPE;
-        }
-        return ScalarType.createType(primitiveType);
-    }
-
     public static Database convertToSRDatabase(String dbName) {
         return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName);
-    }
-
-    private static ArrayType convertToArrayType(org.apache.iceberg.types.Type icebergType) {
-        return new ArrayType(convertColumnType(icebergType.asNestedType().asListType().elementType()));
-    }
-
-    private static Type convertToMapType(org.apache.iceberg.types.Type icebergType) {
-        Type keyType = convertColumnType(icebergType.asMapType().keyType());
-        // iceberg support complex type as key type, but sr is not supported now
-        if (keyType.isComplexType() || keyType.isUnknown()) {
-            return Type.UNKNOWN_TYPE;
-        }
-        Type valueType = convertColumnType(icebergType.asMapType().valueType());
-        if (valueType.isUnknown()) {
-            return Type.UNKNOWN_TYPE;
-        }
-        return new MapType(keyType, valueType);
     }
 }

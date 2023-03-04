@@ -584,7 +584,7 @@ public class GlobalStateMgr {
             RunMode.detectRunMode();
         }
 
-        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+        if (RunMode.allowCreateLakeTable()) {
             this.starOSAgent = new StarOSAgent();
         }
 
@@ -987,7 +987,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable() && !starOSAgent.init(null)) {
+        if (RunMode.allowCreateLakeTable() && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -1186,7 +1186,7 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
-        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+        if (RunMode.allowCreateLakeTable()) {
             // register service to starMgr
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
@@ -1253,7 +1253,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
         taskRunStateSynchronizer.start();
 
-        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+        if (RunMode.allowCreateLakeTable()) {
             shardDeleter.start();
         }
     }
@@ -1275,7 +1275,7 @@ public class GlobalStateMgr {
 
         // domain resolver
         domainResolver.start();
-        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+        if (RunMode.allowCreateLakeTable()) {
             compactionManager.start();
         }
         configRefreshDaemon.start();
@@ -2605,12 +2605,8 @@ public class GlobalStateMgr {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(icebergTable.getDb()).append("\",\n");
-            sb.append("\"table\" = \"").append(icebergTable.getTable()).append("\",\n");
-            String maxTotalBytes = icebergTable.getFileIOMaxTotalBytes();
-            if (!Strings.isNullOrEmpty(maxTotalBytes)) {
-                sb.append("\"fileIO.cache.max-total-bytes\" = \"").append(maxTotalBytes).append("\",\n");
-            }
+            sb.append("\"database\" = \"").append(icebergTable.getRemoteDbName()).append("\",\n");
+            sb.append("\"table\" = \"").append(icebergTable.getRemoteTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == TableType.JDBC) {

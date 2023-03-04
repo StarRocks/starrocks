@@ -20,11 +20,11 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionValue;
@@ -215,7 +215,7 @@ public class ListPartitionInfo extends PartitionInfo {
         String replicationNumStr = table.getTableProperty()
                 .getProperties().get(PROPERTIES_REPLICATION_NUM);
         short tableReplicationNum = replicationNumStr == null ?
-                FeConstants.default_replication_num : Short.parseShort(replicationNumStr);
+                RunMode.defaultReplicationNum() : Short.parseShort(replicationNumStr);
 
         StringBuilder sb = new StringBuilder();
         sb.append("PARTITION BY LIST(");
