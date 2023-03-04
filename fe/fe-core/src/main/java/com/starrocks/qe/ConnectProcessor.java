@@ -107,7 +107,7 @@ public class ConnectProcessor {
             String[] parts = identifier.trim().split("\\s+");
             if (parts.length == 2) {
                 if (parts[0].equalsIgnoreCase("catalog")) {
-                    ctx.getGlobalStateMgr().changeCatalogDb(ctx, parts[1] + ".");
+                    ctx.getGlobalStateMgr().changeCatalog(ctx, parts[1]);
                 } else if (parts[0].equalsIgnoreCase("warehouse")) {
                     ctx.getGlobalStateMgr().changeWarehouse(ctx, parts[1]);
                 } else {

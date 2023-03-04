@@ -992,7 +992,7 @@ public class StmtExecutor {
         UseCatalogStmt useCatalogStmt = (UseCatalogStmt) parsedStmt;
         try {
             String catalogName = useCatalogStmt.getCatalogName();
-            context.getGlobalStateMgr().changeCatalogDb(context, catalogName + ".");
+            context.getGlobalStateMgr().changeCatalog(context, catalogName);
         } catch (Exception e) {
             context.getState().setError(e.getMessage());
             return;

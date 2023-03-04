@@ -52,20 +52,20 @@ public class GlobalStateMgrTest {
             }
         };
 
-        GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "default_catalog.");
+        GlobalStateMgr.getCurrentState().changeCatalog(ctx, "default_catalog");
         Assertions.assertEquals("default_catalog", ctx.getCurrentCatalog());
         Assertions.assertEquals("", ctx.getDatabase());
 
-        GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "hive_catalog.");
+        GlobalStateMgr.getCurrentState().changeCatalog(ctx, "hive_catalog");
         Assertions.assertEquals("hive_catalog", ctx.getCurrentCatalog());
         Assertions.assertEquals("", ctx.getDatabase());
 
         Assertions.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "nonexistent_catalog.");
+            GlobalStateMgr.getCurrentState().changeCatalog(ctx, "nonexistent_catalog");
         });
 
         Assertions.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, ".");
+            GlobalStateMgr.getCurrentState().changeCatalog(ctx, "");
         });
     }
 
