@@ -22,6 +22,15 @@
 
 namespace starrocks {
 
+TypeDescriptor create_array_type(const LogicalType& child_type) {
+    TypeDescriptor t;
+    t.type = TYPE_ARRAY;
+    t.children.resize(1);
+    t.children[0].type = child_type;
+    t.children[0].len = child_type == TYPE_VARCHAR ? 10 : child_type == TYPE_CHAR ? 10 : -1;
+    return t;
+}
+
 PARALLEL_TEST(MapFunctionsTest, test_map) {
     TypeDescriptor input_keys_type;
     input_keys_type.type = LogicalType::TYPE_ARRAY;
@@ -317,6 +326,131 @@ PARALLEL_TEST(MapFunctionsTest, test_map_function) {
     EXPECT_EQ(44, result_values->get(1).get_array()[0].get_int32());
     EXPECT_EQ(55, result_values->get(1).get_array()[1].get_int32());
     EXPECT_EQ(66, result_values->get(1).get_array()[2].get_int32());
+}
+
+PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
+    TypeDescriptor type_map_int_int;
+    type_map_int_int.type = LogicalType::TYPE_MAP;
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+
+    auto map_column_nullable = ColumnHelper::create_column(type_map_int_int, true);
+    {
+        //   [1->44, 2->55, 4->66]
+        //   [2->77, 3->88]
+        //   [3 -> NULL]
+        //   []
+        //   NULL
+        DatumMap map1;
+        map1[(int32_t)1] = (int32_t)44;
+        map1[(int32_t)2] = (int32_t)55;
+        map1[(int32_t)4] = (int32_t)66;
+        map_column_nullable->append_datum(map1);
+
+        DatumMap map2;
+        map2[(int32_t)2] = (int32_t)77;
+        map2[(int32_t)3] = (int32_t)88;
+        map_column_nullable->append_datum(map2);
+
+        DatumMap map3;
+        map3[(int32_t)3] = Datum();
+        map_column_nullable->append_datum(map3);
+
+        // {} empty
+        map_column_nullable->append_datum(DatumMap());
+        // NULL
+        map_column_nullable->append_datum(Datum{});
+    }
+
+    auto map_column_not_nullable = ColumnHelper::create_column(type_map_int_int, false);
+    {
+        //   [1->44, 2->55, 4->66]
+        //   [2->77, 3->88]
+        //   [3 -> NULL]
+        //   []
+        //   []
+        DatumMap map1;
+        map1[(int32_t)1] = (int32_t)44;
+        map1[(int32_t)2] = (int32_t)55;
+        map1[(int32_t)4] = (int32_t)66;
+        map_column_not_nullable->append_datum(map1);
+
+        DatumMap map2;
+        map2[(int32_t)2] = (int32_t)77;
+        map2[(int32_t)3] = (int32_t)88;
+        map_column_not_nullable->append_datum(map2);
+
+        DatumMap map3;
+        map3[(int32_t)3] = Datum();
+        map_column_not_nullable->append_datum(map3);
+
+        // {} empty
+        map_column_not_nullable->append_datum(DatumMap());
+        map_column_not_nullable->append_datum(DatumMap());
+    }
+
+    TypeDescriptor TYPE_ARRAY_BOOLEAN = create_array_type(TYPE_BOOLEAN);
+
+    // [null, true, false]
+    // []
+    // [false]
+    // [NULL]
+    // [true]
+    auto bool_array_not_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+    bool_array_not_nullable->append_datum(DatumArray{Datum(), true, false});
+    bool_array_not_nullable->append_datum(DatumArray{});
+    bool_array_not_nullable->append_datum(DatumArray{false});
+    bool_array_not_nullable->append_datum(DatumArray{Datum()});
+    bool_array_not_nullable->append_datum(DatumArray{true});
+
+    // [null, true, false]
+    // NULL
+    // [false]
+    // [null]
+    // [false, null]
+    auto bool_array_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    bool_array_nullable->append_datum(DatumArray{Datum(), true, false});
+    bool_array_nullable->append_datum(Datum{});
+    bool_array_nullable->append_datum(DatumArray{false});
+    bool_array_nullable->append_datum(DatumArray{Datum()});
+    bool_array_nullable->append_datum(DatumArray{false, Datum()});
+
+    {
+        auto result = MapFunctions::map_filter(nullptr, {map_column_nullable, bool_array_not_nullable}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "[{2:55}, {}, {}, {}, NULL]");
+    }
+    {
+        auto result = MapFunctions::map_filter(nullptr, {map_column_nullable, bool_array_nullable}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "[{2:55}, {}, {}, {}, NULL]");
+    }
+    {
+        auto result = MapFunctions::map_filter(nullptr, {map_column_not_nullable, bool_array_not_nullable}).value();
+        EXPECT_FALSE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "{2:55}, {}, {}, {}, {}");
+    }
+    {
+        auto result = MapFunctions::map_filter(nullptr, {map_column_not_nullable, bool_array_nullable}).value();
+        EXPECT_FALSE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "{2:55}, {}, {}, {}, {}");
+    }
+    auto only_null_column = ColumnHelper::create_const_null_column(1);
+    {
+        auto result = MapFunctions::map_filter(nullptr, {map_column_nullable, only_null_column}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "[{}, {}, {}, {}, NULL]");
+    }
+    {
+        auto result = MapFunctions::map_filter(nullptr, {map_column_not_nullable, only_null_column}).value();
+        EXPECT_FALSE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "{}, {}, {}, {}, {}");
+    }
+    {
+        auto result = MapFunctions::map_filter(nullptr, {only_null_column, only_null_column}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "CONST: NULL Size : 1");
+    }
 }
 
 } // namespace starrocks

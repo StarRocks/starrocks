@@ -184,8 +184,6 @@ TEST_F(MapApplyExprTest, test_map_int_int) {
     type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
     type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
 
-    TypeDescriptor type_int(LogicalType::TYPE_INT);
-
     auto column = ColumnHelper::create_column(type_map_int_int, true);
 
     DatumMap map1;
@@ -250,7 +248,7 @@ TEST_F(MapApplyExprTest, test_map_int_int) {
     //   NULL
     //
     // Query:
-    //   select array_map((k,v)->(k is null, v + a), map)
+    //   select map_apply((k,v)->(k is null, v + a), map)
     //
     // Outputs: "[{0:45,0:56,0:67}, {0:78,0:89}, {0:NULL}, {}, NULL]"
 
@@ -284,8 +282,6 @@ TEST_F(MapApplyExprTest, test_map_varchar_int) {
 
     TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
     type_varchar.len = 10;
-
-    TypeDescriptor type_int(LogicalType::TYPE_INT);
 
     auto column = ColumnHelper::create_column(type_map_varchar_int, false);
 
@@ -354,7 +350,7 @@ TEST_F(MapApplyExprTest, test_map_varchar_int) {
     //   []
     //
     // Query:
-    //   select c0[3]
+    //   select map_apply((k,v)->(k is null, v + a), map)
     //
     // Outputs: {0:12,0:23,0:34}, {0:45,0:56,0:67}, {0:78,0:89}, {0:100}, {}
     {
