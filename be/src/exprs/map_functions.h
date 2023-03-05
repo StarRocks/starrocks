@@ -35,6 +35,12 @@ public:
     DEFINE_VECTORIZED_FN(map_keys);
 
     DEFINE_VECTORIZED_FN(map_values);
+
+    DEFINE_VECTORIZED_FN(map_filter);
+
+private:
+    static void _filter_map_items(const MapColumn* src_column, const ColumnPtr raw_filter, MapColumn* dest_column,
+                                  NullColumn* dest_null_map);
 };
 
 } // namespace starrocks

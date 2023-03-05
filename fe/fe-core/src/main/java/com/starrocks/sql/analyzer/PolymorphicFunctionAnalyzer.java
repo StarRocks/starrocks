@@ -144,6 +144,14 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class MapFilterDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            MapType mapType = (MapType) types[0];
+            return new MapType(mapType.getKeyType(), mapType.getValueType());
+        }
+    }
+
     private static class MapFromArraysDeduce implements java.util.function.Function<Type[], Type> {
         @Override
         public Type apply(Type[] types) {
@@ -176,6 +184,7 @@ public class PolymorphicFunctionAnalyzer {
             .put("map_from_arrays", new MapFromArraysDeduce())
             .put("row", new RowDeduce())
             .put("map_apply", new MapApplyDeduce())
+            .put("map_filter", new MapFilterDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
