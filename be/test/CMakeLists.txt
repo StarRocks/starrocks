@@ -95,7 +95,7 @@ set(EXEC_FILES
         ./exprs/in_predicate_test.cpp
         ./exprs/is_null_predicate_test.cpp
         ./exprs/json_functions_test.cpp
-        ./exprs/lambda_function_expr_test.cpp
+        ./exprs/lambda_array_expr_test.cpp
         ./exprs/lambda_map_expr_test.cpp
         ./exprs/like_test.cpp
         ./exprs/map_element_expr_test.cpp
