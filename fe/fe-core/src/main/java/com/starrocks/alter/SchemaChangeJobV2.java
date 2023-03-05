@@ -44,7 +44,6 @@ import com.google.common.collect.Table;
 import com.google.common.collect.Table.Cell;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotDescriptor;
@@ -511,9 +510,16 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                     cloneExpr = Expr.analyzeAndCastFold(cloneExpr);
 
-                    Expr mcExpr = new CastExpr(column.getType(), cloneExpr);
+                    if (column.getType().matchesType(cloneExpr.getType())) {
+                        try {
+                            cloneExpr.castTo(column.getType());
+                        } catch (AnalysisException e) {
+                            LOG.warn("Illege Expression for Materialized Column");
+                            throw new AlterCancelException(e.getMessage());
+                        }
+                    }
 
-                    mcExprs.put(column.getName(), mcExpr);
+                    mcExprs.put(column.getName(), cloneExpr);
                 }
             }
 

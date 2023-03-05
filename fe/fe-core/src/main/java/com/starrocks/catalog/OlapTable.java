@@ -1603,28 +1603,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     @Override
     public List<Column> getBaseSchema() {
-        return getBaseSchemaWithoutMaterializedColumns();
-    }
-
-    public List<Column> getBaseSchemaWithoutMaterializedColumns() {
-        List<Column> schema = Lists.newArrayList(getSchemaByIndexId(baseIndexId));
-
-        List<Integer> removeColumnIds = Lists.newArrayList();
-        for (int i = 0; i < schema.size(); ++i) {
-            if (schema.get(i).isMaterializedColumn()) {
-                removeColumnIds.add(i);
-            }
-        }
-
-        if (removeColumnIds.size() == 0) {
-            return getSchemaByIndexId(baseIndexId);
-        }
-
-        for (Integer id : removeColumnIds) {
-            schema.remove(id.intValue());
-        }
-
-        return schema;
+        return getSchemaByIndexId(baseIndexId);
     }
 
     public Column getBaseColumn(String columnName) {
