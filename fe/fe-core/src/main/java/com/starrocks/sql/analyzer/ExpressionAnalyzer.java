@@ -137,7 +137,25 @@ public class ExpressionAnalyzer {
         return false;
     }
 
+<<<<<<< HEAD
     private Expr rewriteHighOrderFunction(Expr expr) {
+=======
+    private boolean isMapHighOrderFunction(Expr expr) {
+        if (expr instanceof FunctionCallExpr) {
+            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_FILTER) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isHighOrderFunction(Expr expr) {
+        return isArrayHighOrderFunction(expr) || isMapHighOrderFunction(expr);
+    }
+
+    private void rewriteHighOrderFunction(Expr expr, Visitor visitor, Scope scope) {
+>>>>>>> d34ab7aa7 ([Feature] implement map_filter (#17787))
         Preconditions.checkState(expr instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
         if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)
@@ -150,7 +168,7 @@ public class ExpressionAnalyzer {
             functionCallExpr.clearChildren();
             functionCallExpr.addChild(arr1);
             functionCallExpr.addChild(arrayMap);
-            return arrayMap;
+            visitor.visit(arrayMap, scope);
         } else if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)
                 && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
             // array_sortby(lambda_func_expr, arr1...) -> array_sortby(arr1, array_map(lambda_func_expr, arr1...))
@@ -161,9 +179,21 @@ public class ExpressionAnalyzer {
             functionCallExpr.addChild(arr1);
             functionCallExpr.addChild(arrayMap);
             functionCallExpr.setType(arr1.getType());
-            return arrayMap;
+            visitor.visit(arrayMap, scope);
+        } else if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_FILTER)
+                && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
+            // map_filter((k,v)->(k,expr),map) -> map_filter(map, map_values(map_apply((k,v)->(k,expr),map)))
+            FunctionCallExpr mapApply = new FunctionCallExpr(FunctionSet.MAP_APPLY,
+                    Lists.newArrayList(functionCallExpr.getChildren()));
+            Expr map = functionCallExpr.getChild(1);
+            visitor.visit(mapApply, scope);
+
+            FunctionCallExpr mapValues = new FunctionCallExpr(FunctionSet.MAP_VALUES, Lists.newArrayList(mapApply));
+            visitor.visit(mapValues, scope);
+            functionCallExpr.clearChildren();
+            functionCallExpr.addChild(map);
+            functionCallExpr.addChild(mapValues);
         }
-        return null;
     }
 
     // only high-order functions can use lambda functions.
@@ -187,9 +217,41 @@ public class ExpressionAnalyzer {
             }
             expression.setChild(0, last);
         }
+<<<<<<< HEAD
         // the first child is lambdaFunction, following input arrays
         for (int i = 1; i < childSize; ++i) {
             Expr expr = expression.getChild(i);
+=======
+        if (isArrayHighOrderFunction(expression)) {
+            // the first child is lambdaFunction, following input arrays
+            for (int i = 1; i < childSize; ++i) {
+                Expr expr = expression.getChild(i);
+                bottomUpAnalyze(visitor, expr, scope);
+                if (expr instanceof NullLiteral) {
+                    expr.setType(Type.ARRAY_INT); // Let it have item type.
+                }
+                if (!expr.getType().isArrayType()) {
+                    throw new SemanticException(i + "th lambda input should be arrays.");
+                }
+                Type itemType = ((ArrayType) expr.getType()).getItemType();
+                scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+            }
+        } else {
+            Preconditions.checkState(expression instanceof FunctionCallExpr);
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expression;
+            // map_apply(func, map)
+            if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_APPLY) &&
+                    !(expression.getChild(0).getChild(0) instanceof MapExpr)) {
+                throw new SemanticException("The right part of map lambda function (" +
+                        expression.getChild(0).toSql() + ") should have key and value arguments");
+            }
+            if (expression.getChild(0).getChildren().size() != 3) {
+                throw new SemanticException("The left part of map lambda function (" +
+                        expression.getChild(0).toSql() + ") should have 2 arguments, but there are "
+                        + (expression.getChild(0).getChildren().size() - 1) + " arguments");
+            }
+            Expr expr = expression.getChild(1);
+>>>>>>> d34ab7aa7 ([Feature] implement map_filter (#17787))
             bottomUpAnalyze(visitor, expr, scope);
             if (expr instanceof NullLiteral) {
                 expr.setType(Type.ARRAY_INT); // Let it have item type.
@@ -197,19 +259,32 @@ public class ExpressionAnalyzer {
             if (!expr.getType().isArrayType()) {
                 throw new SemanticException(i + "th lambda input should be arrays.");
             }
+<<<<<<< HEAD
             Type itemType = ((ArrayType) expr.getType()).getItemType();
             if (itemType == Type.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),
                 // rather than a common columnRef, so change its type here.
                 itemType = Type.BOOLEAN;
             }
             scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+=======
+            Type keyType = ((MapType) expr.getType()).getKeyType();
+            Type valueType = ((MapType) expr.getType()).getValueType();
+            scope.putLambdaInput(new PlaceHolderExpr(-1, true, keyType));
+            scope.putLambdaInput(new PlaceHolderExpr(-2, true, valueType));
+            // lambda functions should be rewritten before visited
+            if ((functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_FILTER))) {
+                // (k,v) -> expr => (k,v) -> (k,expr)
+                Expr lambdaFunc = functionCallExpr.getChild(0);
+                LambdaArgument larg = (LambdaArgument) lambdaFunc.getChild(1);
+                Expr slotRef = new SlotRef(null, larg.getName(), larg.getName());
+                lambdaFunc.setChild(0, new MapExpr(Type.ANY_MAP, Lists.newArrayList(slotRef,
+                        lambdaFunc.getChild(0))));
+            }
+>>>>>>> d34ab7aa7 ([Feature] implement map_filter (#17787))
         }
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
-        Expr res = rewriteHighOrderFunction(expression);
-        if (res != null) {
-            visitor.visit(res, scope);
-        }
+        rewriteHighOrderFunction(expression, visitor, scope);
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
@@ -927,6 +1002,80 @@ public class ExpressionAnalyzer {
             return null;
         }
 
+<<<<<<< HEAD
+=======
+        private void checkFunction(String fnName, FunctionCallExpr node) {
+            switch (fnName) {
+                case FunctionSet.TIME_SLICE:
+                case FunctionSet.DATE_SLICE:
+                    if (!(node.getChild(1) instanceof IntLiteral)) {
+                        throw new SemanticException(
+                                fnName + " requires second parameter must be a constant interval");
+                    }
+                    if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
+                        throw new SemanticException(
+                                fnName + " requires second parameter must be greater than 0");
+                    }
+                    break;
+                case FunctionSet.ARRAY_FILTER:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions.");
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be an array or a lambda function.");
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException("The second input of " + fnName +
+                                " should be an array or a lambda function.");
+                    }
+                    // force the second array be of Type.ARRAY_BOOLEAN
+                    if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
+                        throw new SemanticException("The second input of array_filter " +
+                                node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
+                    }
+                    break;
+                case FunctionSet.ARRAY_SORTBY:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions.");
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be an array or a lambda function.");
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException("The second input of " + fnName +
+                                " should be an array or a lambda function.");
+                    }
+                    break;
+                case FunctionSet.ARRAY_CONCAT:
+                    if (node.getChildren().size() < 2) {
+                        throw new SemanticException(fnName + " should have at least two inputs");
+                    }
+                    break;
+                case FunctionSet.MAP_FILTER:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 inputs, " +
+                                "but there are just " + node.getChildren().size() + " inputs.");
+                    }
+                    if (!node.getChild(0).getType().isMapType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be a map or a lambda function.");
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException("The second input of " + fnName +
+                                " should be a array or a lambda function.");
+                    }
+                    // force the second array be of Type.ARRAY_BOOLEAN
+                    if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
+                        throw new SemanticException("The second input of map_filter " +
+                                node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
+                    }
+                    break;
+            }
+        }
+
+>>>>>>> d34ab7aa7 ([Feature] implement map_filter (#17787))
         private Function getStrToDateFunction(FunctionCallExpr node, Type[] argumentTypes) {
             /*
              * @TODO: Determine the return type of this function
