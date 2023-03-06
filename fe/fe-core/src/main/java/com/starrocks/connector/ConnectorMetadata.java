@@ -107,6 +107,10 @@ public interface ConnectorMetadata {
         return Lists.newArrayList();
     }
 
+    default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
+        return Lists.newArrayList();
+    }
+
     /**
      * Get statistics for the table.
      * @param session optimizer context

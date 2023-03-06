@@ -16,6 +16,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -146,5 +147,26 @@ public class BaseTableInfo {
         } else {
             return Joiner.on(".").join(catalogName, dbName, tableIdentifier);
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof BaseTableInfo)) {
+            return false;
+        }
+        BaseTableInfo that = (BaseTableInfo) o;
+        return dbId == that.dbId && tableId == that.tableId &&
+                Objects.equal(catalogName, that.catalogName) &&
+                Objects.equal(dbName, that.dbName) &&
+                Objects.equal(tableIdentifier, that.tableIdentifier) &&
+                Objects.equal(tableName, that.tableName);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(catalogName, dbId, tableId, dbName, tableIdentifier, tableName);
     }
 }

@@ -15,6 +15,8 @@
 
 package com.starrocks.connector.hive;
 
+import com.starrocks.connector.PartitionInfo;
+
 import java.util.Map;
 import java.util.Objects;
 
@@ -23,12 +25,14 @@ import java.util.Objects;
  * such as in the cbo and building scan range stage. The purpose of caching partition instance
  * is to reduce repeated calls to the hive metastore rpc interface at each stage.
  */
-public class Partition {
+public class Partition implements PartitionInfo {
     private final Map<String, String> parameters;
     private final RemoteFileInputFormat inputFormat;
     private final TextFileFormatDesc textFileFormatDesc;
     private final String fullPath;
     private final boolean isSplittable;
+
+    public static final String TRANSIENT_LAST_DDL_TIME = "transient_lastDdlTime";
 
     public Partition(Map<String, String> parameters,
                      RemoteFileInputFormat inputFormat,
@@ -60,6 +64,11 @@ public class Partition {
 
     public boolean isSplittable() {
         return isSplittable;
+    }
+
+    @Override
+    public long getModifiedTime() {
+        return Long.parseLong(parameters.get(TRANSIENT_LAST_DDL_TIME));
     }
 
     @Override
