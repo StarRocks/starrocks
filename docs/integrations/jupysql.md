@@ -101,7 +101,6 @@ top_artist.bar()
 
 We can note we now have a new bar plot without any extra code.
 
-
 We hope you enjoyed this guide, now you can run SQL directly from your notebook via Jupysql (by ploomber).
 This adds lots of possibilities around StarRocks for Data scientists and Engineers.
 In case you got stuck or need any support, please reach out to us via slack. 
