@@ -1130,7 +1130,6 @@ public class MvRewriteOptimizationTest {
         String plan10 = getFragmentPlan(query10);
         PlanTestBase.assertContains(plan10, "agg_join_mv_4");
 
-        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String query11 = "select count(*) from emps";
         String plan11 = getFragmentPlan(query11);
         PlanTestBase.assertContains(plan11, "agg_join_mv_4");
@@ -1140,7 +1139,6 @@ public class MvRewriteOptimizationTest {
         // column prune
         Assert.assertFalse(scanOperators11.get(0).getColRefToColumnMetaMap().keySet().toString().contains("deptno"));
         dropMv("test", "agg_join_mv_4");
-        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
 
         createAndRefreshMv("test", "agg_join_mv_5", "create materialized view agg_join_mv_5" +
                 " distributed by hash(`deptno`) as SELECT deptno, count(1) as num from emps group by deptno");

@@ -116,11 +116,9 @@ public class DecimalTypeTest extends PlanTestBase {
 
     @Test
     public void testCountDecimalV3Literal() throws Exception {
-        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String sql = "select count( - - cast(89 AS DECIMAL )) from t0";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("output: count(89)"));
-        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
 
         sql = "select max( - - cast(89 AS DECIMAL )) from t0";
         plan = getFragmentPlan(sql);
