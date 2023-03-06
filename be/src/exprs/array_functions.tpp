@@ -1098,16 +1098,16 @@ public:
 
         auto* offsets_ptr = offsets->get_data().data();
         auto* null_ptr = null_cols->get_data().data();
-        const size_t num_array = offsets->size() - 1;
+        const size_t rows = offsets->size() - 1;
 
-        result_col->reserve(num_array);
+        result_col->reserve(rows);
         auto result_ptr = down_cast<RunTimeColumnType<ResultType>*>(result_col);
 
-        for (size_t i = 0; i < num_array; i++) {
+        for (size_t i = 0; i < rows; i++) {
             size_t offset = offsets_ptr[i];
             size_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
 
-            if (array_size <= 0) {
+            if (array_size <= 0 || null_ptr[i] == 1) {
                 result_ptr->append_default();
                 null_ptr[i] = 1;
                 continue;
@@ -1186,9 +1186,9 @@ public:
         auto* elements_data = down_cast<const RunTimeColumnType<ElementType>*>(elements)->get_data().data();
         auto* offsets_ptr = offsets->get_data().data();
         auto* null_ptr = null_cols->get_data().data();
-        const int64_t num_array = offsets->size() - 1;
+        const int64_t rows = offsets->size() - 1;
 
-        result_col->reserve(num_array);
+        result_col->reserve(rows);
         auto result_ptr = down_cast<RunTimeColumnType<ResultType>*>(result_col);
 
         using ResultCppType = RunTimeCppType<ResultType>;
@@ -1197,22 +1197,24 @@ public:
             scale = down_cast<const RunTimeColumnType<ElementType>*>(elements)->scale();
         }
 
-        for (size_t i = 0; i < num_array; i++) {
+        for (size_t i = 0; i < rows; i++) {
             size_t offset = offsets_ptr[i];
             int64_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
             RunTimeCppType<ResultType> sum{};
 
             bool has_data = false;
-            for (size_t j = 0; j < array_size; j++) {
-                if constexpr (HasNull) {
-                    if (elements_nulls[offset + j] != 0) {
-                        continue;
+            if (null_ptr[i] != 1) {
+                for (size_t j = 0; j < array_size; j++) {
+                    if constexpr (HasNull) {
+                        if (elements_nulls[offset + j] != 0) {
+                            continue;
+                        }
                     }
-                }
 
-                has_data = true;
-                auto& value = elements_data[offset + j];
-                sum += value;
+                    has_data = true;
+                    auto& value = elements_data[offset + j];
+                    sum += value;
+                }
             }
 
             if (has_data) {
@@ -1317,9 +1319,8 @@ private:
             array_col = down_cast<ArrayColumn*>(nullable->data_column().get());
             array_null = NullColumn::create(*nullable->null_column());
         } else {
-            array_null = NullColumn::create();
-            array_null->resize(array_column->size());
             array_col = down_cast<ArrayColumn*>(array_column.get());
+            array_null = NullColumn::create(array_column->size(), 0);
         }
 
         const UInt32Column& offsets = array_col->offsets();
