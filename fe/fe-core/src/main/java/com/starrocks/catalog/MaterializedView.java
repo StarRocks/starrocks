@@ -18,6 +18,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
@@ -45,6 +46,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -65,7 +67,6 @@ import java.util.stream.Collectors;
  */
 public class MaterializedView extends OlapTable implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(MaterializedView.class);
-
 
     public enum RefreshType {
         SYNC,
@@ -111,6 +112,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         @SerializedName("baseTableVisibleVersionMap")
         private final Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap;
 
+        @SerializedName("baseTableInfoVisibleVersionMap")
+        private final Map<BaseTableInfo, Map<String, BasePartitionInfo>> baseTableInfoVisibleVersionMap;
+
         @SerializedName(value = "defineStartTime")
         private boolean defineStartTime;
 
@@ -125,6 +129,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newHashMap();
+            this.baseTableInfoVisibleVersionMap = Maps.newHashMap();
             this.defineStartTime = false;
             this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
             this.step = 0;
@@ -133,6 +138,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         public Map<Long, Map<String, BasePartitionInfo>> getBaseTableVisibleVersionMap() {
             return baseTableVisibleVersionMap;
+        }
+
+        public Map<BaseTableInfo, Map<String, BasePartitionInfo>> getBaseTableInfoVisibleVersionMap() {
+            return baseTableInfoVisibleVersionMap;
         }
 
         public boolean isDefineStartTime() {
@@ -323,13 +332,25 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     public Set<String> getUpdatedPartitionNamesOfTable(Table base) {
         return getUpdatedPartitionNamesOfTable(base, false);
     }
-    public Set<String> getUpdatedPartitionNamesOfTable(Table base, boolean withMv) {
-        if (!base.isLocalTable()) {
-            // TODO(ywb): support external table refresh according to partition later
-            return Sets.newHashSet();
-        }
 
-        OlapTable baseTable = (OlapTable) base;
+    public static SlotRef getPartitionSlotRef(MaterializedView materializedView) {
+        List<SlotRef> slotRefs = com.clearspring.analytics.util.Lists.newArrayList();
+        Expr partitionExpr = getPartitionExpr(materializedView);
+        partitionExpr.collect(SlotRef.class, slotRefs);
+        // if partitionExpr is FunctionCallExpr, get first SlotRef
+        Preconditions.checkState(slotRefs.size() == 1);
+        return slotRefs.get(0);
+    }
+
+    public static Expr getPartitionExpr(MaterializedView materializedView) {
+        ExpressionRangePartitionInfo expressionRangePartitionInfo =
+                ((ExpressionRangePartitionInfo) materializedView.getPartitionInfo());
+        // currently, mv only supports one expression
+        Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
+        return materializedView.getPartitionRefTableExprs().get(0);
+    }
+
+    public Set<String> getUpdatedPartitionNamesOfOlapTable(OlapTable baseTable) {
         Map<String, BasePartitionInfo> baseTableVisibleVersionMap = getRefreshScheme()
                 .getAsyncRefreshContext()
                 .getBaseTableVisibleVersionMap()
@@ -358,11 +379,79 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 result.add(basePartitionName);
             }
         }
-        if (withMv && baseTable.isMaterializedView()) {
-            Set<String> partitionNames = ((MaterializedView) baseTable).getPartitionNamesToRefreshForMv();
-            result.addAll(partitionNames);
+        return result;
+    }
+
+    public Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable)  {
+        if (!baseTable.isHiveTable()) {
+            // Only support hive table now
+            return null;
+        }
+        Set<String> result = Sets.newHashSet();
+        Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
+                PartitionUtil.getPartitionNameWithPartitionInfo(baseTable);
+
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
+                continue;
+            }
+            Map<String, BasePartitionInfo> baseTableInfoVisibleVersionMap = getRefreshScheme()
+                    .getAsyncRefreshContext()
+                    .getBaseTableInfoVisibleVersionMap()
+                    .computeIfAbsent(baseTableInfo, k -> Maps.newHashMap());
+
+            // check whether there are partitions added
+            for (String partitionName : partitionNameWithPartition.keySet()) {
+                if (!baseTableInfoVisibleVersionMap.containsKey(partitionName)) {
+                    result.add(partitionName);
+                }
+            }
+
+            for (Map.Entry<String, BasePartitionInfo> versionEntry : baseTableInfoVisibleVersionMap.entrySet()) {
+                String basePartitionName = versionEntry.getKey();
+                if (!partitionNameWithPartition.containsKey(basePartitionName)) {
+                    // partitions deleted
+                    result.addAll(partitionNameWithPartition.keySet());
+                    return result;
+                }
+                long basePartitionVersion = partitionNameWithPartition.get(basePartitionName).getModifiedTime();
+
+                BasePartitionInfo basePartitionInfo = versionEntry.getValue();
+                if (basePartitionInfo == null || basePartitionVersion != basePartitionInfo.getVersion()) {
+                    result.add(basePartitionName);
+                }
+            }
         }
         return result;
+    }
+
+    public Set<String> getUpdatedPartitionNamesOfTable(Table base, boolean withMv) {
+        if (base.isLocalTable()) {
+            Set<String> result = Sets.newHashSet();
+            OlapTable baseTable = (OlapTable) base;
+            result.addAll(getUpdatedPartitionNamesOfOlapTable(baseTable));
+            if (withMv && baseTable.isMaterializedView()) {
+                Set<String> partitionNames = ((MaterializedView) baseTable).getPartitionNamesToRefreshForMv();
+                result.addAll(partitionNames);
+            }
+            return result;
+        } else {
+            Set<String> updatePartitionNames = getUpdatedPartitionNamesOfExternalTable(base);
+            Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn();
+            if (partitionTableAndColumn == null) {
+                return updatePartitionNames;
+            }
+            if (!base.getTableIdentifier().equals(partitionTableAndColumn.first.getTableIdentifier())) {
+                return updatePartitionNames;
+            }
+            try {
+                return PartitionUtil.getMVPartitionName(base, partitionTableAndColumn.second,
+                        Lists.newArrayList(updatePartitionNames));
+            } catch (AnalysisException e) {
+                LOG.warn("Mv {}'s base table {} get partition name fail", name, base.name, e);
+                return null;
+            }
+        }
     }
 
     @Override
@@ -551,7 +640,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
             if (asyncRefreshContext.isDefineStartTime()) {
                 sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
-                                .format(DateUtils.DATE_TIME_FORMATTER))
+                        .format(DateUtils.DATE_TIME_FORMATTER))
                         .append("\")");
             }
             if (asyncRefreshContext.getTimeUnit() != null) {
@@ -592,21 +681,24 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         // auto refresh partitions limit
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
                     .append("\" = \"");
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)).append("\"");
         }
 
         // partition refresh number
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
                     .append("\" = \"");
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)).append("\"");
         }
 
         // excluded trigger tables
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
                     .append("\" = \"");
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)).append("\"");
         }
@@ -702,7 +794,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                     }
                 }
                 Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
-                if (!partitionNames.isEmpty()) {
+                if (CollectionUtils.isNotEmpty(partitionNames)) {
                     return getPartitionNames();
                 }
             }
@@ -739,7 +831,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 continue;
             }
             Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
-            if (!partitionNames.isEmpty()) {
+            if (CollectionUtils.isNotEmpty(partitionNames)) {
                 return getPartitionNames();
             }
         }
@@ -769,6 +861,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 .generatePartitionRefMap(mvPartitionMap, basePartitionMap);
 
         Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(partitionTable, true);
+        if (baseChangedPartitionNames == null) {
+            return mvToBaseNameRef.keySet();
+        }
         if (partitionExpr instanceof SlotRef) {
             for (String basePartitionName : baseChangedPartitionNames) {
                 needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(basePartitionName));

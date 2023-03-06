@@ -419,6 +419,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return createCompound(CompoundPredicate.Operator.AND, conjuncts);
     }
 
+    public static Expr compoundOr(Collection<Expr> conjuncts) {
+        return createCompound(CompoundPredicate.Operator.OR, conjuncts);
+    }
+
     // Build a compound tree by bottom up
     //
     // Example: compoundType.OR
