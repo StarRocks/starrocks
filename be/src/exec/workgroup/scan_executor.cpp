@@ -59,7 +59,7 @@ void ScanExecutor::worker_thread() {
             SCOPED_RAW_TIMER(&time_spent_ns);
             task.work_function();
         }
-        _task_queue->update_statistics(task.workgroup, time_spent_ns);
+        _task_queue->update_statistics(task, time_spent_ns);
     }
 }
 
