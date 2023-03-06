@@ -58,6 +58,7 @@
     + [Scale in and out](./administration/Scale_up_down.md)
     + [Backup and restore](./administration/Backup_and_restore.md)
     + [Monitor and alert](./administration/Monitor_and_Alert.md)
+    + [Manage audit logs within StarRocks via Audit Loader](./administration/audit_loader.md)
     + [Manage a cluster](./administration/Cluster_administration.md)
     + [Enable FQDN access](./administration/enable_fqdn.md)
     + [Configure a time zone](./administration/timezone.md)
