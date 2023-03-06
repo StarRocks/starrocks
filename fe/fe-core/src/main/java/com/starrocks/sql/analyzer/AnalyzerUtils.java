@@ -313,7 +313,10 @@ public class AnalyzerUtils {
     }
 
     private static class TableCollector extends AstTraverser<Void, Void> {
-        protected final Map<TableName, Table> tables;
+        protected Map<TableName, Table> tables;
+
+        public TableCollector() {
+        }
 
         public TableCollector(Map<TableName, Table> dbs) {
             this.tables = dbs;
@@ -387,6 +390,10 @@ public class AnalyzerUtils {
         return nonOlapTables.isEmpty();
     }
 
+    public static void copyOlapTable(StatementBase statementBase, Set<OlapTable> olapTables) {
+        new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
+    }
+
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
@@ -418,9 +425,28 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            Table table = node.getTable();
-            if (!table.isOlapTable()) {
-                tables.put(node.getResolveTableName(), table);
+            if (!node.getTable().isOlapTable() && tables.isEmpty()) {
+                tables.put(node.getName(), node.getTable());
+            }
+            return null;
+        }
+    }
+
+    private static class OlapTableCollector extends TableCollector {
+        Set<OlapTable> olapTables;
+
+        public OlapTableCollector(Set<OlapTable> tables) {
+            this.olapTables = tables;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            if (node.getTable().isOlapTable()) {
+                OlapTable table = (OlapTable) node.getTable();
+                olapTables.add(table);
+                // Only copy the necessary olap table meta to avoid the lock when plan query
+                OlapTable copied = table.copyOnlyForQuery();
+                node.setTable(copied);
             }
             return null;
         }
@@ -587,7 +613,10 @@ public class AnalyzerUtils {
     }
 
     public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
-            List<String> partitionValues, long interval, String granularity, Type firstPartitionColumnType)
+                                                                                           List<String> partitionValues,
+                                                                                           long interval,
+                                                                                           String granularity,
+                                                                                           Type firstPartitionColumnType)
             throws AnalysisException {
         Map<String, AddPartitionClause> result = Maps.newHashMap();
         String partitionPrefix = "p";

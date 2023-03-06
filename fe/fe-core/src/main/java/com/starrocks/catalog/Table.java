@@ -143,7 +143,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     // not serialized field
     // record all materialized views based on this Table
     @SerializedName(value = "mvs")
-    private Set<MvId> relatedMaterializedViews;
+    protected Set<MvId> relatedMaterializedViews;
 
     public Table(TableType type) {
         this.type = type;

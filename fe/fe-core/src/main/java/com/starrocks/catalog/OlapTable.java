@@ -114,6 +114,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
@@ -213,6 +214,12 @@ public class OlapTable extends Table {
     // then binlog is available
     protected long binlogTxnId = -1;
 
+    // Record the alter, schema change, MV update time
+    public final AtomicLong lastSchemaUpdateTime = new AtomicLong(-1);
+    // Record the start and end time for data load version update phase
+    public final AtomicLong lastVersionUpdateStartTime = new AtomicLong(-1);
+    public final AtomicLong lastVersionUpdateEndTime = new AtomicLong(0);
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -272,6 +279,35 @@ public class OlapTable extends Table {
         this.indexes = indexes;
 
         this.tableProperty = null;
+    }
+
+    // Only Copy necessary metadata for query.
+    // We don't do deep copy, because which is very expensive;
+    public OlapTable copyOnlyForQuery() {
+        OlapTable olapTable = new OlapTable();
+        olapTable.id = this.id;
+        olapTable.name = this.name;
+        olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
+        olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
+        olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);
+        olapTable.state = this.state;
+        olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
+        olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
+        olapTable.keysType = this.keysType;
+        olapTable.partitionInfo = new PartitionInfo();
+        if (this.partitionInfo instanceof RangePartitionInfo) {
+            olapTable.partitionInfo = new RangePartitionInfo((RangePartitionInfo) this.partitionInfo);
+        } else if (this.partitionInfo instanceof SinglePartitionInfo) {
+            olapTable.partitionInfo = this.partitionInfo;
+        }
+        olapTable.defaultDistributionInfo = this.defaultDistributionInfo;
+        olapTable.idToPartition = Maps.newHashMap(this.idToPartition);
+        olapTable.nameToPartition = Maps.newHashMap(this.nameToPartition);
+        olapTable.baseIndexId = this.baseIndexId;
+        if (this.tableProperty != null) {
+            olapTable.tableProperty = this.tableProperty.copy();
+        }
+        return olapTable;
     }
 
     public BinlogConfig getCurBinlogConfig() {
