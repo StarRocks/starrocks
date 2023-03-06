@@ -423,10 +423,10 @@ EXCHANGE GATHER
 [sql]
 select count(*) from (select v1, row_number() over (order by v2, v3) from t0) t
 [result]
-AGGREGATE ([GLOBAL] aggregate [{5: count=sum(5: count)}] group by [[]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{5: count=count(5: count)}] group by [[]] having [null]
     EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{5: count=sum(10: count_v1)}] group by [[]] having [null]
-            META SCAN (columns{10})
+        AGGREGATE ([LOCAL] aggregate [{5: count=count()}] group by [[]] having [null]
+            SCAN (columns[1: v1] predicate[null])
 [end]
 
 [sql]

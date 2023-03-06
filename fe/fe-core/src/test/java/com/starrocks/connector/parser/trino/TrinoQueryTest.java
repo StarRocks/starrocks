@@ -576,22 +576,10 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "output: count(1: v1)");
 
         sql = "select count(*) from t0";
-        assertPlanContains(sql, "  1:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(count_v1)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  0:MetaScan\n" +
-                "     Table: t0\n" +
-                "     <id 5> : count_v1");
+        assertPlanContains(sql, "output: count(*)");
 
         sql = "select count(1) from t0";
-        assertPlanContains(sql, "  1:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(count_v1)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  0:MetaScan\n" +
-                "     Table: t0\n" +
-                "     <id 5> : count_v1");
+        assertPlanContains(sql, "output: count(1)");
 
         sql = "select count(distinct v1) from t0";
         assertPlanContains(sql, "output: multi_distinct_count(1: v1)");

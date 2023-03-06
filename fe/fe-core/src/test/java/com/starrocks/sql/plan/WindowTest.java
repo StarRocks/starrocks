@@ -62,10 +62,8 @@ public class WindowTest extends PlanTestBase {
     public void testPruneEmptyWindow() throws Exception {
         String sql = "select count(*) from( select avg(t1g) over(partition by t1a) from test_all_type ) r";
         assertLogicalPlanContains(sql,
-                "AGGREGATE ([GLOBAL] aggregate [{12: count=sum(12: count)}] group by [[]] having [null]\n" +
-                        "    EXCHANGE GATHER\n" +
-                        "        AGGREGATE ([LOCAL] aggregate [{12: count=sum(17: count_t1b)}] group by [[]] having [null]\n" +
-                        "            META SCAN (columns{17})");
+                "AGGREGATE ([GLOBAL] aggregate [{12: count=count()}] group by [[]] having [null]\n" +
+                        "    SCAN (columns[2: t1b] predicate[null])");
     }
 
     @Test

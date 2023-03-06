@@ -1813,6 +1813,7 @@ public class AggregateTest extends PlanTestBase {
 
     @Test
     public void testSimpleAggRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
         // normal case
         String sql = "select min(t1b),max(t1b),min(id_datetime),count(t1b),count(t1c) from test_all_type_not_null";
         String plan = getFragmentPlan(sql);
@@ -1899,6 +1900,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
