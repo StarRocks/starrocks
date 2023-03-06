@@ -244,7 +244,7 @@ Operator 花费的时间比例越大，其对应卡片的颜色就越深。您�
 
 ### 确认数据是否倾斜
 
-点击占用时间占比较大的运营商卡片，查看其 `MaxTime` 和 `MinTime` 指标。通常，`MaxTime` 和 `MinTime` 之间如果存在明显差异，则表示数据存在倾斜。
+点击占用时间占比较大的 Operator 卡片，查看其 `MaxTime` 和 `MinTime` 指标。通常，`MaxTime` 和 `MinTime` 之间如果存在明显差异，则表示数据存在倾斜。
 
 ![img](../assets/profile-7.png)
 
@@ -310,6 +310,8 @@ Exchange Operator 的耗时由两部分组成：CPU 时间和网络时间。网�
 
 示例：
 
-从 Pipeline Profile 中可以看到 `ExecutionWallTime` 大约为 55 毫秒。但是，所有 Operator 的总耗时却不足 10 毫秒，明显小于 ExecutionWallTime。
+从 Pipeline Profile 中可以看到 `ExecutionWallTime` 大约为 463 毫秒。但是，所有 Operator 的总耗时却不足 20 毫秒，明显小于 `ExecutionWallTime`。
+
+![img](../assets/profile-16.png)
 
 ![img](../assets/profile-15.png)
