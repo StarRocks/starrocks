@@ -689,6 +689,10 @@ int OlapScanNode::estimated_max_concurrent_chunks() const {
     // limit scan memory usage not greater than 1/4 query limit
     int concurrency = std::max<int>(query_limit * config::scan_use_query_mem_ratio / chunk_mem_usage, 1);
 
+    if (_olap_scan_node.__isset.max_parallel_scan_instance_num && _olap_scan_node.max_parallel_scan_instance_num >= 1) {
+        concurrency = std::min<int>(concurrency, _olap_scan_node.max_parallel_scan_instance_num);
+    }
+
     return concurrency;
 }
 
