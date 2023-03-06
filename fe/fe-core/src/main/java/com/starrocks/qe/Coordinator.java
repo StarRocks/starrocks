@@ -1339,7 +1339,9 @@ public class Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
-        connectContext.getState().setError(cancelReason.toString());
+        if (connectContext.getState().getErrorMessage().isEmpty()) {
+            connectContext.getState().setError(cancelReason.toString());
+        }
         if (null != receiver) {
             receiver.cancel();
         }
