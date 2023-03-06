@@ -18,6 +18,7 @@
 
 #include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 // TODO: implements cache-relation method
@@ -41,6 +42,7 @@ public:
 
 private:
     bool _is_finished = false;
+    ChunkPipelineAccumulator _accumulator;
     std::shared_ptr<SortedStreamingAggregator> _aggregator;
 };
 

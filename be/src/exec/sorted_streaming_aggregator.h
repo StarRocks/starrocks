@@ -28,7 +28,7 @@ public:
     ~SortedStreamingAggregator() override;
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) override;
-    Status streaming_compute_agg_state(size_t chunk_size);
+    StatusOr<ChunkPtr> streaming_compute_agg_state(size_t chunk_size);
 
     StatusOr<ChunkPtr> pull_eos_chunk();
 
