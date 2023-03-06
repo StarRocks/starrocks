@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.optimizer.PlanContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
@@ -284,6 +285,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     // Maintenance plan for this MV
     private transient ExecPlan maintenancePlan;
+
+    // mv plan rewrite
+    private PlanContext planContext;
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -960,5 +964,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setMaintenancePlan(ExecPlan maintenancePlan) {
         this.maintenancePlan = maintenancePlan;
+    }
+
+    public PlanContext getPlanContext() {
+        return planContext;
+    }
+
+    public void setPlanContext(PlanContext planContext) {
+        this.planContext = planContext;
     }
 }

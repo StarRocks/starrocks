@@ -47,30 +47,28 @@ import java.util.stream.Collectors;
 public class MaterializedViewOptimizer {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewOptimizer.class);
 
-    private List<ColumnRefOperator> outputExpressions;
-
     public OptExpression optimize(MaterializedView mv,
-                                  ColumnRefFactory columnRefFactory,
                                   ConnectContext connectContext,
                                   Set<String> mvPartitionNamesToRefresh) {
-        String mvSql = mv.getViewDefineSql();
-        Pair<OptExpression, LogicalPlan> plans = MvUtils.getRuleOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
-        if (plans == null) {
-            return null;
+        PlanContext planContext = mv.getPlanContext();
+        if (planContext == null) {
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            String mvSql = mv.getViewDefineSql();
+            Pair<OptExpression, LogicalPlan> plans = MvUtils.getRuleOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
+            if (plans == null) {
+                return null;
+            }
+            OptExpression mvPlan = plans.first;
+            planContext = new PlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
+            mv.setPlanContext(planContext);
         }
-        outputExpressions = plans.second.getOutputColumn();
-        OptExpression mvPlan = plans.first;
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !mvPartitionNamesToRefresh.isEmpty()) {
-            boolean ret = updateScanWithPartitionRange(mv, mvPlan, mvPartitionNamesToRefresh);
+            boolean ret = updateScanWithPartitionRange(mv, planContext.getPlan(), mvPartitionNamesToRefresh);
             if (!ret) {
                 return null;
             }
         }
-        return mvPlan;
-    }
-
-    public List<ColumnRefOperator> getOutputExpressions() {
-        return outputExpressions;
+        return planContext.getPlan();
     }
 
     // try to get partial partition predicates of partitioned mv.
