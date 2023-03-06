@@ -16,12 +16,11 @@
 
 #include "column/datum.h"
 #include "storage/types.h"
+
 namespace starrocks {
 
-Status datum_from_string(Datum* dst, LogicalType type, const std::string& str, MemPool* mem_pool);
 Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str, MemPool* mem_pool);
 
-std::string datum_to_string(const Datum& datum, LogicalType type);
 std::string datum_to_string(TypeInfo* type_info, const Datum& datum);
 
 } // namespace starrocks

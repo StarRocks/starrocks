@@ -151,8 +151,12 @@ bool MemChunkAllocator::allocate(size_t size, MemChunk* chunk) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
     DeferOp op([&] {
         if (ret) {
-            _mem_tracker->release(chunk->size);
-            prev_tracker->consume(chunk->size);
+            if (LIKELY(_mem_tracker != nullptr)) {
+                _mem_tracker->release(chunk->size);
+            }
+            if (LIKELY(prev_tracker != nullptr)) {
+                prev_tracker->consume(chunk->size);
+            }
         }
         tls_thread_status.set_mem_tracker(prev_tracker);
     });
@@ -205,8 +209,12 @@ void MemChunkAllocator::free(const MemChunk& chunk) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
     DeferOp op([&] {
         int64_t chunk_size = chunk.size;
-        prev_tracker->release(chunk_size);
-        _mem_tracker->consume(chunk_size);
+        if (LIKELY(prev_tracker != nullptr)) {
+            prev_tracker->release(chunk_size);
+        }
+        if (LIKELY(_mem_tracker != nullptr)) {
+            _mem_tracker->consume(chunk_size);
+        }
         tls_thread_status.set_mem_tracker(prev_tracker);
     });
 #endif
