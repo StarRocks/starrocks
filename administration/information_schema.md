@@ -86,6 +86,6 @@ StarRocks 优化了 `information_schema` 中以下表提供的元数据信息：
 | PARTITION_KEY    | 表的分区键。                                                 |
 | DISTRIBUTE_KEY   | 表的分桶键。                                                 |
 | DISTRIBUTE_TYPE  | 表的分桶方式。                                               |
-| DISTRUBTE_BUCKET | 表的分桶数。                                                 |
+| DISTRIBUTE_BUCKET | 表的分桶数。                                                 |
 | SORT_KEY         | 表的排序键。                                                 |
 | PROPERTIES       | 表的属性。                                                   |
