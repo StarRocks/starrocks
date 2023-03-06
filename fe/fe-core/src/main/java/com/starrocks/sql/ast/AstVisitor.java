@@ -113,6 +113,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitShowDatabasesStatement(ShowDbStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -302,10 +306,6 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
