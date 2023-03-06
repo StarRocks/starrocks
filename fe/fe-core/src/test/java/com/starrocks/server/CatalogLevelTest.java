@@ -15,11 +15,15 @@
 
 package com.starrocks.server;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveMetastoreTest;
-import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.hive.HiveTableOperations;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
@@ -29,12 +33,8 @@ import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.iceberg.Schema;
-import org.apache.iceberg.types.Types;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import static org.apache.iceberg.types.Types.NestedField.optional;
 
 public class CatalogLevelTest {
     HiveMetaClient metaClient = new HiveMetastoreTest.MockedHiveMetaClient();
@@ -47,7 +47,8 @@ public class CatalogLevelTest {
 
     @Test
     public void testQueryExternalCatalogInDefaultCatalog(@Mocked MetadataMgr metadataMgr) throws Exception {
-        String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\"," +
+                " \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
         StarRocksAssert starRocksAssert = new StarRocksAssert();
         starRocksAssert.withCatalog(createCatalog);
 
@@ -79,16 +80,11 @@ public class CatalogLevelTest {
         Configuration conf = new Configuration();
         conf.set(HiveConf.ConfVars.METASTOREURIS.varname, "thrift://127.0.0.1:9083");
 
-        new Expectations() {
-            {
-                hiveTableOperations.current().schema();
-                result = new Schema(optional(1, "col1", Types.LongType.get()));
-            }
-        };
-
         org.apache.iceberg.Table tbl = new org.apache.iceberg.BaseTable(hiveTableOperations, "iceberg_table");
-        com.starrocks.catalog.Table icebergTable = IcebergUtil.convertHiveCatalogToSRTable(tbl, "thrift://127.0.0.1:9083",
-                "iceberg_catalog", "iceberg_db", "iceberg_table");
+        com.starrocks.catalog.Table icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
+                "resource_name", "iceberg_db", "iceberg_table",
+                Lists.newArrayList(new Column("col1", Type.LARGEINT)), tbl, Maps.newHashMap());
+
         GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
         new Expectations(metadataMgr) {
             {
@@ -103,6 +99,5 @@ public class CatalogLevelTest {
         String sql1 = "select col1 from iceberg_catalog.iceberg_db.iceberg_table";
 
         AnalyzeTestUtil.analyzeSuccess(sql1);
-
     }
 }

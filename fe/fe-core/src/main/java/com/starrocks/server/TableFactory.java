@@ -35,6 +35,7 @@ import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
+import org.apache.iceberg.types.Types;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -90,7 +91,7 @@ public class TableFactory {
         }
         HiveTable oHiveTable = (HiveTable) table;
 
-        validateColumnType(columns, oHiveTable, "hive");
+        validateHiveColumnType(columns, oHiveTable);
 
         HiveTable.Builder tableBuilder = HiveTable.builder()
                 .setId(tableId)
@@ -133,7 +134,7 @@ public class TableFactory {
                     + " from the resource " + properties.get(RESOURCE));
         }
 
-        validateColumnType(columns, oIcebergTable, "iceberg");
+        validateIcebergColumnType(columns, oIcebergTable);
 
         IcebergTable.Builder tableBuilder = IcebergTable.builder()
                 .setId(tableId)
@@ -231,11 +232,11 @@ public class TableFactory {
         return fileTable;
     }
 
-    private static void validateColumnType(List<Column> columns, Table oTable, String type) throws DdlException {
+    private static void validateHiveColumnType(List<Column> columns, Table oTable) throws DdlException {
         for (Column column : columns) {
             Column oColumn = oTable.getColumn(column.getName());
             if (oColumn == null) {
-                throw new DdlException("column [" + column.getName() + "] not exists in " + type);
+                throw new DdlException("column [" + column.getName() + "] not exists in hive");
             }
 
             if (oColumn.getType() == Type.UNKNOWN_TYPE) {
@@ -244,14 +245,33 @@ public class TableFactory {
 
             if (!ColumnTypeConverter.validateColumnType(column.getType(), oColumn.getType()) &&
                     !FeConstants.runningUnitTest) {
-                throw new DdlException("can not convert " + type + " external table column type [" + column.getType() + "] " +
+                throw new DdlException("can not convert hive external table column type [" + column.getType() + "] " +
                         "to correct type [" + oColumn.getType() + "]");
             }
         }
+    }
 
-        for (String partName : oTable.getPartitionColumnNames()) {
-            if (!columns.stream().map(Column::getName).collect(Collectors.toList()).contains(partName)) {
-                throw new DdlException("partition column [" + partName + "] must exist in column list");
+    private static void validateIcebergColumnType(List<Column> columns, IcebergTable oTable) throws DdlException {
+        for (Column column : columns) {
+            Map<String, Types.NestedField> icebergColumns = oTable.getNativeTable().schema().columns().stream()
+                    .collect(Collectors.toMap(Types.NestedField::name, field -> field));
+            if (!icebergColumns.containsKey(column.getName())) {
+                throw new DdlException("column [" + column.getName() + "] not exists in iceberg");
+            }
+
+            Column oColumn = oTable.getColumn(column.getName());
+            if (oColumn.getType() == Type.UNKNOWN_TYPE) {
+                throw new DdlException("Column type convert failed on column: " + column.getName());
+            }
+
+            if (!ColumnTypeConverter.validateColumnType(column.getType(), oColumn.getType()) &&
+                    !FeConstants.runningUnitTest) {
+                throw new DdlException("can not convert iceberg external table column type [" + column.getType() + "] " +
+                        "to correct type [" + oColumn.getType() + "]");
+            }
+
+            if (!column.isAllowNull()) {
+                throw new DdlException("iceberg extern table not support no-nullable column: [" + column.getName() + "]");
             }
         }
     }
