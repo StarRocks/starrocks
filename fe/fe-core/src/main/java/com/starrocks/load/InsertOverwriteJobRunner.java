@@ -317,6 +317,8 @@ public class InsertOverwriteJobRunner {
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                         InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getTmpPartitionIds());
                 GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
+
+                targetTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
             }
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",
