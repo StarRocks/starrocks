@@ -70,7 +70,6 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
@@ -2607,48 +2606,22 @@ public class LocalMetastore implements ConnectorMetadata {
         LOG.info("successfully create table[{}-{}]", stmt.getTableName(), hiveTable.getId());
     }
 
-    private void createFileTable(Database db, CreateTableStmt stmt) throws DdlException {
-        Table fileTable = TableFactory.createTable(stmt, Table.TableType.FILE);
-        registerTable(db, fileTable, stmt);
-        LOG.info("successfully create table[{}-{}]", stmt.getTableName(), fileTable.getId());
-    }
-
     private void createIcebergTable(Database db, CreateTableStmt stmt) throws DdlException {
-        String tableName = stmt.getTableName();
-        List<Column> columns = stmt.getColumns();
-        long tableId = getNextId();
-        IcebergTable icebergTable = new IcebergTable(tableId, tableName, columns, stmt.getProperties());
-        if (!Strings.isNullOrEmpty(stmt.getComment())) {
-            icebergTable.setComment(stmt.getComment());
-        }
-
-        // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-        }
-        try {
-            if (getDb(db.getId()) == null) {
-                throw new DdlException("database has been dropped when creating table");
-            }
-            if (!db.createTableWithLock(icebergTable, false)) {
-                if (!stmt.isSetIfNotExists()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
-                } else {
-                    LOG.info("create table[{}] which already exists", tableName);
-                    return;
-                }
-            }
-        } finally {
-            unlock();
-        }
-
-        LOG.info("successfully create table[{}-{}]", tableName, tableId);
+        Table icebergTable = TableFactory.createTable(stmt, Table.TableType.ICEBERG);
+        registerTable(db, icebergTable, stmt);
+        LOG.info("successfully create table[{}-{}]", stmt.getTableName(), icebergTable.getId());
     }
 
     private void createHudiTable(Database db, CreateTableStmt stmt) throws DdlException {
         Table hudiTable = TableFactory.createTable(stmt, Table.TableType.HUDI);
         registerTable(db, hudiTable, stmt);
         LOG.info("successfully create table[{}-{}]", stmt.getTableName(), hudiTable.getId());
+    }
+
+    private void createFileTable(Database db, CreateTableStmt stmt) throws DdlException {
+        Table fileTable = TableFactory.createTable(stmt, Table.TableType.FILE);
+        registerTable(db, fileTable, stmt);
+        LOG.info("successfully create table[{}-{}]", stmt.getTableName(), fileTable.getId());
     }
 
     private void createJDBCTable(Database db, CreateTableStmt stmt) throws DdlException {

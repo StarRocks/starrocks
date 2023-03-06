@@ -136,7 +136,6 @@ import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
-import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
@@ -357,7 +356,6 @@ public class GlobalStateMgr {
     private Daemon timePrinter;
     private EsRepository esRepository;  // it is a daemon, so add it here
     private StarRocksRepository starRocksRepository;
-    private IcebergRepository icebergRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
     private ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
 
@@ -629,7 +627,6 @@ public class GlobalStateMgr {
 
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
-        this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
 
@@ -2943,10 +2940,6 @@ public class GlobalStateMgr {
 
     public StarRocksRepository getStarRocksRepository() {
         return this.starRocksRepository;
-    }
-
-    public IcebergRepository getIcebergRepository() {
-        return this.icebergRepository;
     }
 
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
