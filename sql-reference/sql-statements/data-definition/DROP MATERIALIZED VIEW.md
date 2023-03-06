@@ -27,29 +27,29 @@ DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
 
 1. 查看当前数据库中存在的物化视图。
 
-```Plain
-MySQL > SHOW MATERIALIZED VIEW\G
-*************************** 1. row ***************************
-           id: 470740
-         name: order_mv1
-database_name: default_cluster:sr_hub
-         text: SELECT `sr_hub`.`orders`.`dt` AS `dt`, `sr_hub`.`orders`.`order_id` AS `order_id`, `sr_hub`.`orders`.`user_id` AS `user_id`, sum(`sr_hub`.`orders`.`cnt`) AS `total_cnt`, sum(`sr_hub`.`orders`.`revenue`) AS `total_revenue`, count(`sr_hub`.`orders`.`state`) AS `state_count` FROM `sr_hub`.`orders` GROUP BY `sr_hub`.`orders`.`dt`, `sr_hub`.`orders`.`order_id`, `sr_hub`.`orders`.`user_id`
-         rows: 0
-1 rows in set (0.00 sec)
-```
+    ```Plain
+    MySQL > SHOW MATERIALIZED VIEW\G
+    *************************** 1. row ***************************
+              id: 470740
+            name: order_mv1
+    database_name: default_cluster:sr_hub
+            text: SELECT `sr_hub`.`orders`.`dt` AS `dt`, `sr_hub`.`orders`.`order_id` AS `order_id`, `sr_hub`.`orders`.`user_id` AS `user_id`, sum(`sr_hub`.`orders`.`cnt`) AS `total_cnt`, sum(`sr_hub`.`orders`.`revenue`) AS `total_revenue`, count(`sr_hub`.`orders`.`state`) AS `state_count` FROM `sr_hub`.`orders` GROUP BY `sr_hub`.`orders`.`dt`, `sr_hub`.`orders`.`order_id`, `sr_hub`.`orders`.`user_id`
+            rows: 0
+    1 rows in set (0.00 sec)
+    ```
 
-1. 删除物化视图 `order_mv1`。
+2. 删除物化视图 `order_mv1`。
 
-```Plain
-DROP MATERIALIZED VIEW order_mv1;
-```
+    ```Plain
+    DROP MATERIALIZED VIEW order_mv1;
+    ```
 
-1. 删除后重新查看当前数据库中存在的物化视图将不会显示该物化视图。
+3. 删除后重新查看当前数据库中存在的物化视图将不会显示该物化视图。
 
-```Plain
-MySQL > SHOW MATERIALIZED VIEW;
-Empty set (0.01 sec)
-```
+    ```Plain
+    MySQL > SHOW MATERIALIZED VIEW;
+    Empty set (0.01 sec)
+    ```
 
 示例二：删除不存在的物化视图
 
