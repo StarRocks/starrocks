@@ -132,7 +132,4 @@ public class ChangeCatalogDBTest {
             GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "hive_catalog.nonexistent_db");
         });
     }
-
-    @AfterAll
-    public static void teardown() {}
 }
