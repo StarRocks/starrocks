@@ -2005,9 +2005,15 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                 Substitute("get_applied_rowsets failed, tablet updates is in error state: tablet:$0 $1",
                            _tablet.tablet_id(), _error_msg));
     }
+<<<<<<< HEAD
     // TODO(cbl): optimize: following code lock _lock twice, should make it just lock once
     RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 60000));
     std::lock_guard rl(_lock);
+=======
+    std::unique_lock<std::mutex> ul(_lock);
+    // wait for version timeout 55s, should smaller than exec_plan_fragment rpc timeout(60s)
+    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000, ul));
+>>>>>>> faa1078c8 ([BugFix] make wait for version timeout smaller than exec_plan_fragment rpc timeout (#18838))
     if (_edit_version_infos.empty()) {
         string msg = Substitute("tablet deleted when get_applied_rowsets tablet:$0", _tablet.tablet_id());
         LOG(WARNING) << msg;
