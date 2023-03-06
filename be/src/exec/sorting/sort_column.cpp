@@ -143,7 +143,7 @@ public:
     }
 
 private:
-    const bool& _cancel;
+    const std::atomic<bool>& _cancel;
     const SortDesc& _sort_desc;
     SmallPermutation& _permutation;
     Tie& _tie;
