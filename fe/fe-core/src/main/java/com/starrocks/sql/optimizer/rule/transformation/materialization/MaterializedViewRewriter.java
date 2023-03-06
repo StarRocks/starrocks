@@ -110,7 +110,25 @@ public class MaterializedViewRewriter {
 
     private boolean isMVApplicable(OptExpression mvExpression,
                                    List<Table> queryTables,
-                                   List<Table> mvTables) {
+                                   List<Table> mvTables,
+                                   MatchMode matchMode,
+                                   OptExpression queryExpression) {
+        // Only care MatchMode.COMPLETE and VIEW_DELTA here, QUERY_DELTA also can be supported
+        // because optimizer will match MV's pattern which is subset of query opt tree
+        // from top-down iteration.
+        if (matchMode == MatchMode.COMPLETE) {
+            if (!isJoinMatch(queryExpression, mvExpression, queryTables, mvTables)) {
+                return false;
+            }
+        } else if (matchMode == MatchMode.VIEW_DELTA) {
+            // only consider query with most common tables to optimize performance
+            if (!queryTables.containsAll(materializationContext.getCommonTables())) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+
         if (!isValidPlan(mvExpression)) {
             return false;
         }
@@ -126,11 +144,13 @@ public class MaterializedViewRewriter {
                                        PredicateSplit queryPredicateSplit) {
         final OptExpression queryExpression = materializationContext.getQueryExpression();
         final OptExpression mvExpression = materializationContext.getMvExpression();
-        final List<Table> queryTables = MvUtils.getAllTables(queryExpression);
+        final List<Table> queryTables = materializationContext.getQueryTables();
         final List<Table> mvTables = MvUtils.getAllTables(mvExpression);
 
+        MatchMode matchMode = getMatchMode(queryTables, mvTables);
+
         // Check whether mv can be applicable for the query.
-        if (!isMVApplicable(mvExpression, queryTables, mvTables)) {
+        if (!isMVApplicable(mvExpression, queryTables, mvTables, matchMode, queryExpression)) {
             return Lists.newArrayList();
         }
 
@@ -154,25 +174,15 @@ public class MaterializedViewRewriter {
         }
         final PredicateSplit mvPredicateSplit = PredicateSplit.splitPredicate(mvPredicate);
 
-        // Only care MatchMode.COMPLETE and VIEW_DELTA here, QUERY_DELTA also can be supported
-        // because optimizer will match MV's pattern which is subset of query opt tree
-        // from top-down iteration.
-        MatchMode matchMode = getMatchMode(queryTables, mvTables);
         Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns = ArrayListMultimap.create();
         Map<Table, Set<Integer>> compensationRelations = Maps.newHashMap();
-        if (matchMode == MatchMode.COMPLETE) {
-            if (!isJoinMatch(queryExpression, mvExpression, queryTables, mvTables)) {
-                return Lists.newArrayList();
-            }
-        } else if (matchMode == MatchMode.VIEW_DELTA) {
+        if (matchMode == MatchMode.VIEW_DELTA) {
             ScalarOperator viewEqualPredicate = mvPredicateSplit.getEqualPredicates();
             EquivalenceClasses viewEquivalenceClasses = createEquivalenceClasses(viewEqualPredicate);
             if (!compensateViewDelta(viewEquivalenceClasses, queryExpression, mvExpression,
                     materializationContext.getQueryRefFactory(), compensationJoinColumns, compensationRelations)) {
                 return Lists.newArrayList();
             }
-        } else {
-            return Lists.newArrayList();
         }
 
         final Map<Integer, Map<String, ColumnRefOperator>> queryRelationIdToColumns =
@@ -218,6 +228,7 @@ public class MaterializedViewRewriter {
             if (rewrittenExpression == null) {
                 continue;
             }
+            materializationContext.getOptimizerContext().updateUsedMv(queryTables, materializationContext.getMv());
             results.add(rewrittenExpression);
         }
 

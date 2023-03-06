@@ -49,13 +49,19 @@ public class MaterializationContext {
 
     private Set<ColumnRefOperator> originQueryColumns;
 
+    // tables both in query and mv
+    private final List<Table> commonTables;
+
+    private List<Table> queryTables;
+
     public MaterializationContext(MaterializedView mv,
                                   OptExpression mvExpression,
                                   ColumnRefFactory queryColumnRefFactory,
                                   ColumnRefFactory mvColumnRefFactory,
                                   Set<String> mvPartitionNamesToRefresh,
                                   List<Table> baseTables,
-                                  Set<ColumnRefOperator> originQueryColumns) {
+                                  Set<ColumnRefOperator> originQueryColumns,
+                                  List<Table> commonTables) {
         this.mv = mv;
         this.mvExpression = mvExpression;
         this.queryRefFactory = queryColumnRefFactory;
@@ -63,6 +69,7 @@ public class MaterializationContext {
         this.mvPartitionNamesToRefresh = mvPartitionNamesToRefresh;
         this.baseTables = baseTables;
         this.originQueryColumns = originQueryColumns;
+        this.commonTables = commonTables;
     }
 
     public MaterializedView getMv() {
@@ -131,5 +138,17 @@ public class MaterializationContext {
 
     public Set<ColumnRefOperator> getOriginQueryColumns() {
         return originQueryColumns;
+    }
+
+    public List<Table> getCommonTables() {
+        return commonTables;
+    }
+
+    public List<Table> getQueryTables() {
+        return queryTables;
+    }
+
+    public void setQueryTables(List<Table> queryTables) {
+        this.queryTables = queryTables;
     }
 }
