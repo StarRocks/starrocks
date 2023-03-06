@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.server;
+package com.starrocks.catalog;
 
-import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -26,7 +28,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-public class GlobalStateMgrTest {
+public class ChangeCatalogDBTest {
     private static ConnectContext ctx;
 
     @BeforeAll
