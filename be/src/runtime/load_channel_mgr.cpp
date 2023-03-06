@@ -38,6 +38,7 @@
 
 #include "common/closure_guard.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
 #include "util/starrocks_metrics.h"
@@ -103,8 +104,8 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
             int64_t job_timeout_s = calc_job_timeout_s(timeout_in_req_s);
             auto job_mem_tracker = std::make_unique<MemTracker>(job_max_memory, load_id.to_string(), _mem_tracker);
 
-            channel.reset(new LoadChannel(this, load_id, request.txn_trace_parent(), job_timeout_s,
-                                          std::move(job_mem_tracker)));
+            channel.reset(new LoadChannel(this, ExecEnv::GetInstance()->lake_tablet_manager(), load_id,
+                                          request.txn_trace_parent(), job_timeout_s, std::move(job_mem_tracker)));
             _load_channels.insert({load_id, channel});
         } else {
             response->mutable_status()->set_status_code(TStatusCode::MEM_LIMIT_EXCEEDED);
