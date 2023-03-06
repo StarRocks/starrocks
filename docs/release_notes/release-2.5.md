@@ -128,4 +128,3 @@ The following bugs are fixed:
 ### Upgrade Notes
 
 - You can upgrade your cluster to 2.5.0 from 2.0.x, 2.1.x, 2.2.x, 2.3.x, or 2.4.x. However, if you need to perform a rollback, we recommend that you roll back only to 2.4.x.
-- If you have a partitioned table that uses LIST partitioning, you must delete this table before the upgrade.
