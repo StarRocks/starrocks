@@ -96,7 +96,9 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
         std::shared_lock l(_mtx);
         auto it = _shards.find(id);
         if (it == _shards.end()) {
-            return absl::InternalError(fmt::format("failed to get shardinfo {}", id));
+            // unlock the lock and try best to build the filesystem with remote rpc call
+            l.unlock();
+            return build_filesystem_on_demand(id, conf);
         }
         if (it->second.fs) {
             return it->second.fs;
@@ -108,98 +110,113 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
         auto shard_iter = _shards.find(id);
         // could be possibly shards removed or fs get created during unlock-lock
         if (shard_iter == _shards.end()) {
-            return absl::InternalError(fmt::format("failed to get shardinfo {}", id));
+            // unlock the lock and try best to build the filesystem with remote rpc call
+            l.unlock();
+            return build_filesystem_on_demand(id, conf);
         }
         if (shard_iter->second.fs) {
             return shard_iter->second.fs;
         }
-        fslib::Configuration localconf;
-        ShardInfo& info = shard_iter->second.shard_info;
-
-        // FIXME: currently the cache root dir is set from be.conf, could be changed in future
-        std::string cache_dir = config::starlet_cache_dir;
-        auto cache_info = info.cache_info;
-        bool cache_enabled = cache_info.enable_cache() && !cache_dir.empty();
-
-        std::string scheme = "file://";
-        switch (info.path_info.fs_info().fs_type()) {
-        case staros::FileStoreType::S3:
-            scheme = "s3://";
-            {
-                auto& s3_info = info.path_info.fs_info().s3_fs_info();
-                if (!info.path_info.full_path().empty()) {
-                    localconf[fslib::kSysRoot] = info.path_info.full_path();
-                }
-                if (!s3_info.bucket().empty()) {
-                    localconf[fslib::kS3Bucket] = s3_info.bucket();
-                }
-                if (!s3_info.region().empty()) {
-                    localconf[fslib::kS3Region] = s3_info.region();
-                }
-                if (!s3_info.endpoint().empty()) {
-                    localconf[fslib::kS3OverrideEndpoint] = s3_info.endpoint();
-                }
-                if (s3_info.has_credential()) {
-                    auto credential = s3_info.credential();
-                    if (credential.has_default_credential()) {
-                        localconf[fslib::kS3CredentialType] = "default";
-                    } else if (credential.has_simple_credential()) {
-                        localconf[fslib::kS3CredentialType] = "simple";
-                        auto simple_credential = credential.simple_credential();
-                        localconf[fslib::kS3CredentialSimpleAccessKeyId] = simple_credential.access_key();
-                        localconf[fslib::kS3CredentialSimpleAccessKeySecret] = simple_credential.access_key_secret();
-                    } else if (credential.has_profile_credential()) {
-                        localconf[fslib::kS3CredentialType] = "instance_profile";
-                    } else if (credential.has_assume_role_credential()) {
-                        localconf[fslib::kS3CredentialType] = "assume_role";
-                        auto role_credential = credential.assume_role_credential();
-                        localconf[fslib::kS3CredentialAssumeRoleArn] = role_credential.iam_role_arn();
-                        localconf[fslib::kS3CredentialAssumeRoleExternalId] = role_credential.external_id();
-                    } else {
-                        localconf[fslib::kS3CredentialType] = "default";
-                    }
-                }
-            }
-            break;
-        case staros::FileStoreType::HDFS:
-            scheme = "hdfs://";
-            localconf[fslib::kSysRoot] = info.path_info.full_path();
-            break;
-        default:
-            return absl::InvalidArgumentError("Unknown shard storage scheme!");
+        auto fs_or = build_filesystem_from_shard_info(shard_iter->second.shard_info, conf);
+        if (!fs_or.ok()) {
+            return fs_or.status();
         }
-
-        if (cache_enabled) {
-            const static std::string conf_prefix("cachefs.");
-
-            scheme = "cachefs://";
-            // rebuild configuration for cachefs
-            Configuration tmp;
-            tmp.swap(localconf);
-            for (auto& iter : tmp) {
-                localconf[conf_prefix + iter.first] = iter.second;
-            }
-            localconf[fslib::kSysRoot] = "/";
-            // original fs sys.root as cachefs persistent uri
-            localconf[fslib::kCacheFsPersistUri] = tmp[fslib::kSysRoot];
-            // use persistent uri as identifier to maximize sharing of cache data
-            localconf[fslib::kCacheFsIdentifier] = tmp[fslib::kSysRoot];
-            localconf[fslib::kCacheFsTtlSecs] = absl::StrFormat("%ld", cache_info.ttl_seconds());
-            if (cache_info.async_write_back()) {
-                localconf[fslib::kCacheFsAsyncWriteBack] = "true";
-            }
-
-            // set environ variable to cachefs directory
-            setenv(fslib::kFslibCacheDir.c_str(), cache_dir.c_str(), 0 /*overwrite*/);
-        }
-
-        auto fs = new_shared_filesystem(scheme, localconf);
-        if (!fs.ok()) {
-            return fs.status();
-        }
-        shard_iter->second.fs = std::move(fs).value();
+        shard_iter->second.fs = std::move(fs_or).value();
         return shard_iter->second.fs;
     }
+}
+
+absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
+                                                                                            const Configuration& conf) {
+    // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
+    auto info_or = g_worker->get_shard_info(id);
+    if (!info_or.ok()) {
+        return info_or.status();
+    }
+    return build_filesystem_from_shard_info(info_or.value(), conf);
+}
+
+absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_from_shard_info(
+        const ShardInfo& info, const Configuration& conf) {
+    fslib::Configuration localconf;
+
+    // FIXME: currently the cache root dir is set from be.conf, could be changed in future
+    std::string cache_dir = config::starlet_cache_dir;
+    auto cache_info = info.cache_info;
+    bool cache_enabled = cache_info.enable_cache() && !cache_dir.empty();
+
+    std::string scheme = "file://";
+    switch (info.path_info.fs_info().fs_type()) {
+    case staros::FileStoreType::S3:
+        scheme = "s3://";
+        {
+            auto& s3_info = info.path_info.fs_info().s3_fs_info();
+            if (!info.path_info.full_path().empty()) {
+                localconf[fslib::kSysRoot] = info.path_info.full_path();
+            }
+            if (!s3_info.bucket().empty()) {
+                localconf[fslib::kS3Bucket] = s3_info.bucket();
+            }
+            if (!s3_info.region().empty()) {
+                localconf[fslib::kS3Region] = s3_info.region();
+            }
+            if (!s3_info.endpoint().empty()) {
+                localconf[fslib::kS3OverrideEndpoint] = s3_info.endpoint();
+            }
+            if (s3_info.has_credential()) {
+                auto credential = s3_info.credential();
+                if (credential.has_default_credential()) {
+                    localconf[fslib::kS3CredentialType] = "default";
+                } else if (credential.has_simple_credential()) {
+                    localconf[fslib::kS3CredentialType] = "simple";
+                    auto simple_credential = credential.simple_credential();
+                    localconf[fslib::kS3CredentialSimpleAccessKeyId] = simple_credential.access_key();
+                    localconf[fslib::kS3CredentialSimpleAccessKeySecret] = simple_credential.access_key_secret();
+                } else if (credential.has_profile_credential()) {
+                    localconf[fslib::kS3CredentialType] = "instance_profile";
+                } else if (credential.has_assume_role_credential()) {
+                    localconf[fslib::kS3CredentialType] = "assume_role";
+                    auto role_credential = credential.assume_role_credential();
+                    localconf[fslib::kS3CredentialAssumeRoleArn] = role_credential.iam_role_arn();
+                    localconf[fslib::kS3CredentialAssumeRoleExternalId] = role_credential.external_id();
+                } else {
+                    localconf[fslib::kS3CredentialType] = "default";
+                }
+            }
+        }
+        break;
+    case staros::FileStoreType::HDFS:
+        scheme = "hdfs://";
+        localconf[fslib::kSysRoot] = info.path_info.full_path();
+        break;
+    default:
+        return absl::InvalidArgumentError("Unknown shard storage scheme!");
+    }
+
+    if (cache_enabled) {
+        const static std::string conf_prefix("cachefs.");
+
+        scheme = "cachefs://";
+        // rebuild configuration for cachefs
+        Configuration tmp;
+        tmp.swap(localconf);
+        for (auto& iter : tmp) {
+            localconf[conf_prefix + iter.first] = iter.second;
+        }
+        localconf[fslib::kSysRoot] = "/";
+        // original fs sys.root as cachefs persistent uri
+        localconf[fslib::kCacheFsPersistUri] = tmp[fslib::kSysRoot];
+        // use persistent uri as identifier to maximize sharing of cache data
+        localconf[fslib::kCacheFsIdentifier] = tmp[fslib::kSysRoot];
+        localconf[fslib::kCacheFsTtlSecs] = absl::StrFormat("%ld", cache_info.ttl_seconds());
+        if (cache_info.async_write_back()) {
+            localconf[fslib::kCacheFsAsyncWriteBack] = "true";
+        }
+
+        // set environ variable to cachefs directory
+        setenv(fslib::kFslibCacheDir.c_str(), cache_dir.c_str(), 0 /*overwrite*/);
+    }
+    return new_shared_filesystem(scheme, localconf);
 }
 
 absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shared_filesystem(
@@ -215,7 +232,7 @@ absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shar
     CacheKey key(sha256.hex());
 
     // Lookup LRU cache
-    std::shared_ptr<FileSystem> fs;
+    std::shared_ptr<fslib::FileSystem> fs;
     auto handle = _fs_cache->lookup(key);
     if (handle != nullptr) {
         auto value = static_cast<CacheValue*>(_fs_cache->value(handle));
