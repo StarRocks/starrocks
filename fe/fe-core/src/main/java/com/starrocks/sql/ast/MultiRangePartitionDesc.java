@@ -90,7 +90,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         if (firstPartitionColumnType.isDateType()) {
             return buildDateTypePartition(firstPartitionColumnType, properties);
         } else if (firstPartitionColumnType.isIntegerType()) {
-            return buildNumberTypePartition(properties);
+            return buildNumberTypePartition();
         } else {
             throw new AnalysisException("Unsupported batch partition build type:" + firstPartitionColumnType + ".");
         }
@@ -290,8 +290,9 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             PartitionValue upperPartitionValue = new PartitionValue(beginTime.format(outputDateFormat));
             PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(Lists.newArrayList(lowerPartitionValue),
                     Lists.newArrayList(upperPartitionValue));
+            // properties is from table, do not use in new SingleRangePartitionDesc.
             SingleRangePartitionDesc singleRangePartitionDesc = new SingleRangePartitionDesc(false,
-                    partitionName, partitionKeyDesc, properties);
+                    partitionName, partitionKeyDesc, null);
             singleRangePartitionDescs.add(singleRangePartitionDesc);
 
             currentLoopNum++;
@@ -302,8 +303,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         return singleRangePartitionDescs;
     }
 
-    private List<SingleRangePartitionDesc> buildNumberTypePartition(Map<String, String> properties)
-            throws AnalysisException {
+    private List<SingleRangePartitionDesc> buildNumberTypePartition() throws AnalysisException {
         if (this.getTimeUnit() != null) {
             throw new AnalysisException("Batch build partition EVERY is date type " +
                     "but START or END does not type match.");
@@ -333,8 +333,9 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             PartitionValue upperPartitionValue = new PartitionValue(Long.toString(beginNum));
             PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(Lists.newArrayList(lowerPartitionValue),
                     Lists.newArrayList(upperPartitionValue));
+            // properties is from table, do not use in new SingleRangePartitionDesc.
             SingleRangePartitionDesc singleRangePartitionDesc = new SingleRangePartitionDesc(false,
-                    partitionName, partitionKeyDesc, properties);
+                    partitionName, partitionKeyDesc, null);
             singleRangePartitionDescs.add(singleRangePartitionDesc);
 
             currentLoopNum++;
