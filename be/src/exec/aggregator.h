@@ -464,7 +464,7 @@ protected:
     void end_pending_reset_state() { _is_pending_reset_state = false; }
     bool is_pending_reset_state() { return _is_pending_reset_state; }
 
-    void _reset_groupby_exprs();
+    void _reset_exprs();
     Status _evaluate_group_by_exprs(Chunk* chunk);
 
     // Choose different agg hash map/set by different group by column's count, type, nullable
