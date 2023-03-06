@@ -35,7 +35,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
@@ -125,8 +124,6 @@ import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
-import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -145,7 +142,6 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.connector.iceberg.cost.IcebergTableStatisticCalculator.getTableStatistics;
 import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.buildFrom;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
@@ -284,13 +280,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         if (context.getStatistics() == null) {
-            List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
-            org.apache.iceberg.Table icebergTbl = ((IcebergTable) table).getNativeTable();
-            Types.StructType schema = icebergTbl.schema().asStruct();
-            ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
-                    new ScalarOperatorToIcebergExpr.IcebergContext(schema);
-            Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(predicates, icebergContext);
-            Statistics stats = getTableStatistics(icebergPredicate, icebergTbl, colRefToColumnMetaMap);
+            String catalogName = ((IcebergTable) table).getCatalogName();
+            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, colRefToColumnMetaMap, null, node.getPredicate());
             context.setStatistics(stats);
         }
 

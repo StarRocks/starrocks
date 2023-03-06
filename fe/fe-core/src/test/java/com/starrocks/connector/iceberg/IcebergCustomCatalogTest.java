@@ -55,9 +55,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.connector.iceberg.IcebergUtil.convertToSRDatabase;
-import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergCustomCatalog;
-
 public class IcebergCustomCatalogTest {
 
     @Test
@@ -73,14 +70,15 @@ public class IcebergCustomCatalogTest {
 
         String catalogImpl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(catalogImpl, icebergProperties, hdfsEnvironment);
+        IcebergCatalog customCatalog = (IcebergCustomTestingCatalog) CatalogLoader.custom(
+                "glue_native_catalog", new Configuration(), icebergProperties, catalogImpl)
+                .loadCatalog();
         Assert.assertEquals(IcebergCatalogType.CUSTOM_CATALOG, customCatalog.getIcebergCatalogType());
     }
 
     @Test
     public void testLoadTable(@Mocked IcebergCustomTestingCatalog customTestingCatalog) {
-        TableIdentifier identifier = IcebergUtil.getIcebergTableIdentifier("db", "table");
+        TableIdentifier identifier = TableIdentifier.of("db", "table");
         new Expectations() {
             {
                 customTestingCatalog.loadTable(identifier);
@@ -101,7 +99,7 @@ public class IcebergCustomCatalogTest {
         String catalogImpl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(catalogImpl, icebergProperties, hdfsEnvironment);
+        IcebergCatalog customCatalog = new IcebergCustomTestingCatalog();
         Table table = customCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
     }
@@ -125,11 +123,7 @@ public class IcebergCustomCatalogTest {
             }
         };
 
-        String catalogImpl = IcebergCustomTestingCatalog.class.getName();
-        Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-        IcebergCustomTestingCatalog icebergCustomCatalog = (IcebergCustomTestingCatalog) getIcebergCustomCatalog(
-                catalogImpl, icebergProperties, hdfsEnvironment);
+        IcebergCustomTestingCatalog icebergCustomCatalog = new IcebergCustomTestingCatalog();
         List<String> dbs = icebergCustomCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
@@ -152,7 +146,7 @@ public class IcebergCustomCatalogTest {
 
         @Override
         public Table loadTable(IcebergTable table) throws StarRocksIcebergException {
-            TableIdentifier tableId = IcebergUtil.getIcebergTableIdentifier(table);
+            TableIdentifier tableId = TableIdentifier.of(table.getRemoteDbName(), table.getRemoteTableName());
             return loadTable(tableId, null, null);
         }
 
@@ -238,7 +232,7 @@ public class IcebergCustomCatalogTest {
             if (db == null || db.getName() == null) {
                 throw new TException("Hive db " + dbName + " doesn't exist");
             }
-            return convertToSRDatabase(dbName);
+            return new Database(1, dbName);
         }
 
         @Override

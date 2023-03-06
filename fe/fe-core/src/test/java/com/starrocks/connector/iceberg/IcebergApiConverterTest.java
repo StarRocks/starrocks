@@ -21,32 +21,22 @@ import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.types.Types;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
-import static com.starrocks.connector.iceberg.IcebergUtil.convertIcebergPartitionToPartitionName;
+import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
 
-public class IcebergUtilTest {
-
-    @Test
-    public void testGetIcebergTableIdentifier() {
-        TableIdentifier identifier = IcebergUtil.getIcebergTableIdentifier("database", "table");
-        Assert.assertTrue(identifier.toString().equals("database.table"));
-    }
+public class IcebergApiConverterTest {
 
     @Test
     public void testGetHdfsFileFormat() {
@@ -55,14 +45,6 @@ public class IcebergUtilTest {
         Assert.assertThrows("Unexpected file format: %s", StarRocksIcebergException.class, () -> {
             IcebergApiConverter.getHdfsFileFormat(FileFormat.AVRO);
         });
-    }
-
-    @Test
-    public void testGetIcebergHiveCatalog() {
-        Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-        IcebergCatalog catalog = IcebergUtil.getIcebergHiveCatalog("thrift://test:9030", icebergProperties, hdfsEnvironment);
-        Assert.assertTrue(catalog instanceof IcebergHiveCatalog);
     }
 
     @Test
