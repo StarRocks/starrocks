@@ -5,8 +5,8 @@
 + [StarRocks](/introduction/StarRocks_intro.md)
 + 产品简介
   + [什么是 StarRocks](/introduction/what_is_starrocks.md)
-  + [系统架构](/introduction/system_architecture.md)
-  + [产品特性](/introduction/features.md)
+  + [系统架构](/introduction/Architecture.md)
+  + [产品特性](/introduction/Features.md)
 + 快速开始
   + [手动部署 StarRocks](/quick_start/Deploy.md)
   + [创建表](/quick_start/Create_table.md)
