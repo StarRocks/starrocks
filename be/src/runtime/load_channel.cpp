@@ -58,9 +58,11 @@
 
 namespace starrocks {
 
-LoadChannel::LoadChannel(LoadChannelMgr* mgr, const UniqueId& load_id, const std::string& txn_trace_parent,
-                         int64_t timeout_s, std::unique_ptr<MemTracker> mem_tracker)
+LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, const UniqueId& load_id,
+                         const std::string& txn_trace_parent, int64_t timeout_s,
+                         std::unique_ptr<MemTracker> mem_tracker)
         : _load_mgr(mgr),
+          _lake_tablet_mgr(lake_tablet_mgr),
           _load_id(load_id),
           _timeout_s(timeout_s),
           _has_chunk_meta(false),
@@ -103,8 +105,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
         if (it == _tablets_channels.end()) {
             TabletsChannelKey key(request.id(), index_id);
             if (is_lake_tablet) {
-                auto tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
-                channel = new_lake_tablets_channel(this, tablet_mgr, key, _mem_tracker.get());
+                channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get());
             } else {
                 channel = new_local_tablets_channel(this, key, _mem_tracker.get());
             }
@@ -112,7 +113,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
                 _tablets_channels.insert({index_id, std::move(channel)});
             }
         } else if (request.is_incremental()) {
-            auto local_tablets_channel = down_cast<LocalTabletsChannel*>(it->second.get());
+            auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(it->second.get());
             if (local_tablets_channel) {
                 size_t i = 0;
                 while (local_tablets_channel->num_ref_senders() != 0) {
@@ -140,6 +141,8 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
                 if (st.ok()) {
                     st = local_tablets_channel->incremental_open(request, _schema);
                 }
+            } else {
+                st = Status::NotSupported("incremental open not supported by this tablets channel");
             }
         }
     }
@@ -220,7 +223,7 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
         response->mutable_status()->add_error_msgs("cannot find the tablets channel associated with the index id");
         return;
     }
-    auto local_tablets_channel = down_cast<LocalTabletsChannel*>(channel.get());
+    auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(channel.get());
     if (local_tablets_channel == nullptr) {
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
         response->mutable_status()->add_error_msgs("channel is not local tablets channel.");
@@ -250,10 +253,12 @@ void LoadChannel::abort() {
 void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids) {
     auto channel = get_tablets_channel(index_id);
     if (channel != nullptr) {
-        auto local_tablets_channel = down_cast<LocalTabletsChannel*>(channel.get());
+        auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(channel.get());
         if (local_tablets_channel != nullptr) {
             local_tablets_channel->incr_num_ref_senders();
             local_tablets_channel->abort(tablet_ids);
+        } else {
+            channel->abort();
         }
     }
 }
@@ -275,6 +280,8 @@ std::shared_ptr<TabletsChannel> LoadChannel::get_tablets_channel(int64_t index_i
         auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(it->second.get());
         if (local_tablets_channel) {
             local_tablets_channel->incr_num_ref_senders();
+        } else {
+            // nothing to do
         }
         return it->second;
     } else {
