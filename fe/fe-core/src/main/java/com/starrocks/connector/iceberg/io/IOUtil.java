@@ -36,7 +36,9 @@ package com.starrocks.connector.iceberg.io;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
+import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
 
 import java.io.EOFException;
@@ -50,6 +52,7 @@ public class IOUtil {
     public static final String FILE_SIMPLIFIED_PREFIX = "file:/";
     public static final String EMPTY_STRING = "";
     public static final String SLASH_STRING = "/";
+    public static final Configuration DEFAULT_CONF = new Configuration();
 
     public static SecureRandom rand = new SecureRandom();
 
@@ -88,16 +91,20 @@ public class IOUtil {
 
     public static OutputFile getTmpOutputFile(String localDir, String path) {
         String newPath = remoteToLocalTmpFilePath(localDir, path);
-        return HadoopOutputFile.fromLocation(newPath, new Configuration());
+        return HadoopOutputFile.fromLocation(newPath, DEFAULT_CONF);
     }
 
     public static OutputFile getOutputFile(Path path) {
-        return HadoopOutputFile.fromPath(path, new Configuration());
+        return HadoopOutputFile.fromPath(path, DEFAULT_CONF);
+    }
+
+    public static InputFile getInputFile(Path path) {
+        return HadoopInputFile.fromPath(path, DEFAULT_CONF);
     }
 
     public static OutputFile getOutputFile(String localDir, String path) {
         Path newPath = new Path(remoteToLocalFilePath(localDir, path));
-        return HadoopOutputFile.fromPath(newPath, new Configuration());
+        return HadoopOutputFile.fromPath(newPath, DEFAULT_CONF);
     }
 
     public static String localFileToRemote(Path localFile, String localDir) {
