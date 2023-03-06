@@ -317,19 +317,8 @@ public class InsertOverwriteJobRunner {
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                         InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getTmpPartitionIds());
                 GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
-<<<<<<< HEAD
-=======
-
-                try {
-                    GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(targetTable,
-                            true /* isJoin */, null /* expectGroupId */);
-                } catch (DdlException e) {
-                    // log an error if update colocation info failed, insert overwrite already succeeded
-                    LOG.error("table {} update colocation info failed after insert overwrite, {}.", tableId, e.getMessage());
-                }
 
                 targetTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
->>>>>>> 3d58a20a0 ([BugFix] Use conflict detection + shallow copy to avoid db lock when query plan (#18608))
             }
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",
