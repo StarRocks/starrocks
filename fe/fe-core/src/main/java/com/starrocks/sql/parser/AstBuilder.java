@@ -405,8 +405,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitUseCatalogStatement(StarRocksParser.UseCatalogStatementContext context) {
-        StringLiteral literal = (StringLiteral) visit(context.string());
-        return new UseCatalogStmt(literal.getValue());
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String catalogName = identifier.getValue();
+        return new UseCatalogStmt(catalogName);
     }
 
     @Override
