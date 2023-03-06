@@ -38,4 +38,7 @@ class ScanExecutor;
 struct RunningQueryToken;
 using RunningQueryTokenPtr = std::unique_ptr<RunningQueryToken>;
 
+struct ScanTask;
+struct ScanTaskGroup;
+
 } // namespace starrocks::workgroup

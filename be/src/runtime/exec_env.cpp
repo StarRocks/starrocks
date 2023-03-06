@@ -242,8 +242,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&connector_scan_worker_thread_pool_without_workgroup));
     _connector_scan_executor_without_workgroup = new workgroup::ScanExecutor(
-            std::move(connector_scan_worker_thread_pool_without_workgroup),
-            std::make_unique<workgroup::PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
+            std::move(connector_scan_worker_thread_pool_without_workgroup), workgroup::create_scan_task_queue());
     _connector_scan_executor_without_workgroup->initialize(connector_num_io_threads);
 
     std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_with_workgroup;
@@ -293,9 +292,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&scan_worker_thread_pool_without_workgroup));
-    _scan_executor_without_workgroup = new workgroup::ScanExecutor(
-            std::move(scan_worker_thread_pool_without_workgroup),
-            std::make_unique<workgroup::PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
+    _scan_executor_without_workgroup = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_without_workgroup),
+                                                                   workgroup::create_scan_task_queue());
     _scan_executor_without_workgroup->initialize(num_io_threads);
 
     std::unique_ptr<ThreadPool> scan_worker_thread_pool_with_workgroup;
