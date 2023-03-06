@@ -22,10 +22,10 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.thrift.TTabletType;
 
@@ -58,7 +58,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         this.properties = properties;
 
         this.partitionDataProperty = DataProperty.getInferredDefaultDataProperty();
-        this.replicationNum = FeConstants.default_replication_num;
+        this.replicationNum = RunMode.defaultReplicationNum();
     }
 
     public boolean isSetIfNotExists() {
@@ -133,7 +133,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         Preconditions.checkNotNull(partitionDataProperty);
 
         // analyze replication num
-        replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, FeConstants.default_replication_num);
+        replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, RunMode.defaultReplicationNum());
         if (replicationNum == null) {
             throw new AnalysisException("Invalid replication number: " + replicationNum);
         }
