@@ -486,7 +486,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             LakeTable table = (db != null) ? db.getTable(tableId) : null;
             if (table != null) {
                 try {
-                    GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo((OlapTable) table);
+                    GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo((OlapTable) table,
+                            true /* isJoin */, null /* expectGroupId */);
                 } catch (DdlException e) {
                     // log an error if update colocation info failed, schema change already succeeded
                     LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
