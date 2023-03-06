@@ -529,15 +529,12 @@ bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size
 }
 
 Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i) {
-    {
-        SCOPED_TIMER(_agg_stat->expr_release_timer);
-        for (size_t j = 0; j < agg_expr_ctxs.size(); j++) {
-            _agg_input_columns[i][j] = nullptr;
-        }
-    }
-
     SCOPED_TIMER(_agg_stat->expr_compute_timer);
     for (size_t j = 0; j < agg_expr_ctxs.size(); j++) {
+        // _agg_input_raw_columns[i][j] != nullptr means this column has been evaluated
+        if (_agg_input_raw_columns[i][j] != nullptr) {
+            continue;
+        }
         // For simplicity and don't change the overall processing flow,
         // We handle const column as normal data column
         // TODO(kks): improve const column aggregate later
@@ -677,7 +674,7 @@ void Aggregator::process_limit(ChunkPtr* chunk) {
 
 Status Aggregator::evaluate_groupby_exprs(Chunk* chunk) {
     _set_passthrough(chunk->owner_info().is_passthrough());
-    _reset_groupby_exprs();
+    _reset_exprs();
     return _evaluate_group_by_exprs(chunk);
 }
 
@@ -693,6 +690,7 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
     size_t num_rows = input_chunk->num_rows();
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < _group_by_columns.size(); i++) {
+        DCHECK_EQ(num_rows, _group_by_columns[i]->size());
         // materialize group by const columns
         if (_group_by_columns[i]->is_constant()) {
             auto res =
@@ -867,10 +865,17 @@ ChunkPtr Aggregator::_build_output_chunk(const Columns& group_by_columns, const 
     return result_chunk;
 }
 
-void Aggregator::_reset_groupby_exprs() {
+void Aggregator::_reset_exprs() {
     SCOPED_TIMER(_agg_stat->expr_release_timer);
     for (auto& _group_by_column : _group_by_columns) {
         _group_by_column = nullptr;
+    }
+
+    for (size_t i = 0; i < _agg_input_columns.size(); i++) {
+        for (size_t j = 0; j < _agg_input_columns[i].size(); j++) {
+            _agg_input_columns[i][j] = nullptr;
+            _agg_input_raw_columns[i][j] = nullptr;
+        }
     }
 }
 
