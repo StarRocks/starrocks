@@ -61,7 +61,7 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
             projection = ScalarOperatorsReuse.rewriteProjectionOrLambdaExpr(projection,
                     context.getOptimizerContext().getColumnRefFactory(), false);
 
-            if (projection.needReuseLambdaExpr()) {
+            if (projection.needReuseLambdaDependentExpr()) {
                 // rewrite lambda functions with lambda arguments
                 rewriteLambdaFunction(projection.getCommonSubOperatorMap(),
                         context.getOptimizerContext().getColumnRefFactory());
