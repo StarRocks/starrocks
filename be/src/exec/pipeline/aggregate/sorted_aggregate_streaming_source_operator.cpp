@@ -57,9 +57,6 @@ StatusOr<vectorized::ChunkPtr> SortedAggregateStreamingSourceOperator::pull_chun
     vectorized::ChunkPtr chunk;
     if (!_aggregator->is_chunk_buffer_empty()) {
         chunk = _aggregator->poll_chunk_buffer();
-    } else {
-        ASSIGN_OR_RETURN(chunk, _aggregator->pull_eos_chunk());
-        _aggregator->set_ht_eos();
     }
     if (chunk == nullptr) {
         return chunk;

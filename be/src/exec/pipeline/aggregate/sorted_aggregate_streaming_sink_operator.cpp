@@ -16,7 +16,12 @@ SortedAggregateStreamingSinkOperator::SortedAggregateStreamingSinkOperator(
 
 Status SortedAggregateStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+<<<<<<< HEAD
     RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get(), _mem_tracker.get()));
+=======
+    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    _accumulator.set_max_size(state->chunk_size());
+>>>>>>> c8590d207 ([Enhancement] add accumulator for sorted streaming aggregator (#18842))
     return _aggregator->open(state);
 }
 
@@ -31,7 +36,13 @@ bool SortedAggregateStreamingSinkOperator::is_finished() const {
 
 Status SortedAggregateStreamingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
-
+    ASSIGN_OR_RETURN(auto res, _aggregator->pull_eos_chunk());
+    DCHECK(_accumulator.need_input());
+    _accumulator.push(std::move(res));
+    _accumulator.finalize();
+    auto accumulated = std::move(_accumulator.pull());
+    _aggregator->offer_chunk_to_buffer(accumulated);
+    _aggregator->set_ht_eos();
     _aggregator->sink_complete();
     return Status::OK();
 }
@@ -45,8 +56,24 @@ Status SortedAggregateStreamingSinkOperator::push_chunk(RuntimeState* state, con
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
+<<<<<<< HEAD
     RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
     _aggregator->streaming_compute_agg_state(chunk_size);
+=======
+    RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
+    RETURN_IF_ERROR(_aggregator->evaluate_agg_fn_exprs(chunk.get()));
+    ASSIGN_OR_RETURN(auto res, _aggregator->streaming_compute_agg_state(chunk_size));
+    DCHECK(_accumulator.need_input());
+    if (!res->is_empty()) {
+        _accumulator.push(std::move(res));
+    }
+    if (_accumulator.has_output()) {
+        auto accumulated = std::move(_accumulator.pull());
+        _aggregator->offer_chunk_to_buffer(accumulated);
+    }
+    DCHECK(_accumulator.need_input());
+
+>>>>>>> c8590d207 ([Enhancement] add accumulator for sorted streaming aggregator (#18842))
     return Status::OK();
 }
 

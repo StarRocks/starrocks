@@ -5,7 +5,11 @@
 #include <memory>
 
 #include "exec/pipeline/operator.h"
+<<<<<<< HEAD
 #include "exec/vectorized/aggregator.h"
+=======
+#include "storage/chunk_helper.h"
+>>>>>>> c8590d207 ([Enhancement] add accumulator for sorted streaming aggregator (#18842))
 
 namespace starrocks::pipeline {
 // TODO: implements cache-relation method
@@ -29,6 +33,7 @@ public:
 
 private:
     bool _is_finished = false;
+    ChunkPipelineAccumulator _accumulator;
     std::shared_ptr<SortedStreamingAggregator> _aggregator;
 };
 
