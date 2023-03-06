@@ -97,7 +97,10 @@ public class PrivilegeManager {
     // set by load() to distinguish brand-new environment with upgraded environment
     private boolean isLoaded = false;
 
-    // only when deserialized
+    protected Map<Long, RolePrivilegeCollection> roleIdToPrivilegeCollection;
+    private final ReentrantReadWriteLock roleLock;
+
+    // only used in deserialization
     protected PrivilegeManager() {
         roleNameToId = new HashMap<>();
         userToPrivilegeCollection = new HashMap<>();
@@ -105,9 +108,6 @@ public class PrivilegeManager {
         userLock = new ReentrantReadWriteLock();
         roleLock = new ReentrantReadWriteLock();
     }
-
-    protected Map<Long, RolePrivilegeCollection> roleIdToPrivilegeCollection;
-    private final ReentrantReadWriteLock roleLock;
 
     public PrivilegeManager(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
         this.globalStateMgr = globalStateMgr;
@@ -207,7 +207,8 @@ public class PrivilegeManager {
     }
 
     // called by initBuiltinRolesAndUsers()
-    private void initPrivilegeCollections(PrivilegeCollection collection, ObjectType objectType, List<PrivilegeType> actionList,
+    private void initPrivilegeCollections(PrivilegeCollection collection, ObjectType objectType,
+                                          List<PrivilegeType> actionList,
                                           List<String> tokens, boolean isGrant) throws PrivilegeException {
         List<PEntryObject> object;
         if (tokens != null) {
@@ -220,7 +221,8 @@ public class PrivilegeManager {
 
     // called by initBuiltinRolesAndUsers()
     private void initPrivilegeCollectionAllObjects(
-            PrivilegeCollection collection, ObjectType objectType, List<PrivilegeType> actionList) throws PrivilegeException {
+            PrivilegeCollection collection, ObjectType objectType, List<PrivilegeType> actionList)
+            throws PrivilegeException {
         List<PEntryObject> objects = new ArrayList<>();
         switch (objectType) {
             case TABLE:
