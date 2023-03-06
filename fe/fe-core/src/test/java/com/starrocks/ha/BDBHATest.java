@@ -48,15 +48,15 @@ public class BDBHATest {
         BDBEnvironment environment = journal.getBdbEnvironment();
 
         // add two followers
-        GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, "host1", 9010);
+        GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
         Assert.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-        GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, "host2", 9010);
+        GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.4", 9010);
         Assert.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         // one joined successfully
-        new Frontend(FrontendNodeType.FOLLOWER, "node1", "host2", 9010)
+        new Frontend(FrontendNodeType.FOLLOWER, "node1", "192.168.2.4", 9010)
                 .handleHbResponse(new FrontendHbResponse("n1", 8030, 9050,
                                 1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1"),
                         false);
@@ -64,7 +64,7 @@ public class BDBHATest {
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         // the other one is dropped
-        GlobalStateMgr.getCurrentState().dropFrontend(FrontendNodeType.FOLLOWER, "host1", 9010);
+        GlobalStateMgr.getCurrentState().dropFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
 
         Assert.assertEquals(0,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
