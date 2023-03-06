@@ -312,11 +312,18 @@ public class InsertOverwriteJobRunner {
                     invertedIndex.markTabletForceDelete(tabletId);
                 }
 
-                GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(targetTable);
-
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                         InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getTmpPartitionIds());
                 GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
+
+                try {
+                    GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(targetTable,
+                            true /* isJoin */, null /* expectGroupId */);
+                } catch (DdlException e) {
+                    // log an error if update colocation info failed, insert overwrite already succeeded
+                    LOG.error("table {} update colocation info failed after insert overwrite, {}.", tableId, e.getMessage());
+                }
+
             }
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",
