@@ -14,6 +14,7 @@ import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
@@ -46,7 +47,7 @@ public class MetadataMgr {
         this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
     }
 
-    protected Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+    public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);
         } else {
@@ -160,6 +161,20 @@ public class MetadataMgr {
             }
         }
         return ImmutableList.copyOf(files.build());
+    }
+
+    public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        ImmutableList.Builder<PartitionInfo> partitions = ImmutableList.builder();
+        if (connectorMetadata.isPresent()) {
+            try {
+                connectorMetadata.get().getPartitions(table, partitionNames).forEach(partitions::add);
+            } catch (Exception e) {
+                LOG.error("Failed to get partitions on catalog [{}], table [{}]", catalogName, table, e);
+                throw e;
+            }
+        }
+        return partitions.build();
     }
 
     public void dropTable(String catalogName, String dbName, String tblName) {
