@@ -46,6 +46,7 @@ struct AcquireDirOptions {
 // DirManager is used to manage all spill-available directories,
 // BlockManager should rely on DirManager to decide which directory to put Block in.
 // DirManager is thread-safe.
+class DirManager {
 public:
 DirManager() = default;
 ~DirManager() = default;
