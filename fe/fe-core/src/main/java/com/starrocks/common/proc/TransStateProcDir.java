@@ -36,6 +36,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -45,14 +46,24 @@ public class TransStateProcDir implements ProcDirInterface {
             .add("State").add("Number")
             .build();
 
-    private long dbId;
+    private final String dbIdOrName;
+    private long dbId = -1;
 
-    public TransStateProcDir(Long dbId) {
-        this.dbId = dbId;
+    public TransStateProcDir(String dbIdOrName) {
+        this.dbIdOrName = dbIdOrName;
     }
 
     @Override
     public ProcResult fetchResult() throws AnalysisException {
+        try {
+            dbId = Long.parseLong(dbIdOrName);
+        } catch (NumberFormatException e) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbIdOrName);
+            if (db == null) {
+                throw new AnalysisException("Unknown database id or name \"" + dbIdOrName + "\"");
+            }
+            dbId = db.getId();
+        }
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
