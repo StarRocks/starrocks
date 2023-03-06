@@ -324,6 +324,7 @@ public class InsertOverwriteJobRunner {
                     LOG.error("table {} update colocation info failed after insert overwrite, {}.", tableId, e.getMessage());
                 }
 
+                targetTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
             }
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",
