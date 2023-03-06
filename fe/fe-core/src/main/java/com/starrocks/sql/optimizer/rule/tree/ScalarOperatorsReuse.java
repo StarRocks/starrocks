@@ -263,10 +263,10 @@ public class ScalarOperatorsReuse {
 
         // isLambdaDependent means whether an expression is dependent on outer lambda arguments,
         // it works when not reuse lambda-dependent sub expressions. For example, select array_length(a), array_sum(a)
-        // from (select array_map(x->2x+1+2x, array) as a from t)A; when reuseLambdaDependentExpr is
-        // false, the 2x+1 is lambda dependent, but array_map(x->2x+1+2x, array) isn't,
-        // so 2x+1 can't be reused, array_map(x->2x+1+2x, array) can be reused.
-        // 2x+1 can be reused when reuseLambdaDependentExpr is true.
+        // from (select array_map(x->2*x+1+2*x, array) as a from t)A; when reuseLambdaDependentExpr is
+        // false, the 2*x is lambda dependent, but array_map(x->2*x+1+2*x, array) isn't,
+        // so 2*x can't be reused, array_map(x->2*x+1+2*x, array) can be reused.
+        // 2*x can be reused within the array_map when reuseLambdaDependentExpr is true.
         private boolean isLambdaDependent;
 
         private final boolean reuseLambdaDependentExpr;
