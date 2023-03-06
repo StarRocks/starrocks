@@ -82,28 +82,26 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     @Override
-    public ProcNodeInterface lookup(String tableIdStr) throws AnalysisException {
+    public ProcNodeInterface lookup(String tableIdOrName) throws AnalysisException {
         Preconditions.checkNotNull(db);
-        if (Strings.isNullOrEmpty(tableIdStr)) {
-            throw new AnalysisException("TableIdStr is null");
+        if (Strings.isNullOrEmpty(tableIdOrName)) {
+            throw new AnalysisException("table id or name is null or empty");
         }
 
-        long tableId = -1L;
-        try {
-            tableId = Long.parseLong(tableIdStr);
-        } catch (NumberFormatException e) {
-            throw new AnalysisException("Invalid table id format: " + tableIdStr);
-        }
-
-        Table table = null;
+        Table table;
         db.readLock();
         try {
-            table = db.getTable(tableId);
+            try {
+                table = db.getTable(Long.parseLong(tableIdOrName));
+            } catch (NumberFormatException e) {
+                table = db.getTable(tableIdOrName);
+            }
         } finally {
             db.readUnlock();
         }
+
         if (table == null) {
-            throw new AnalysisException("Table[" + tableId + "] does not exist");
+            throw new AnalysisException("unknown table id or name \"" + tableIdOrName + "\"");
         }
 
         return new TableProcDir(db, table);
