@@ -267,6 +267,15 @@ public class CreateTableTest {
                                 + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
                                 + "properties('replication_num' = '1', 'replicated_storage' = 'FALSE');"));
 
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Unknown properties: {wrong_key=value}",
+                        () -> createTable("create table test.atbl13 (k1 int, k2 int) duplicate key(k1)\n"
+                                + "distributed by hash(k2) buckets 1\n"
+                                + "properties('replication_num' = '1', 'wrong_key' = 'value'); "));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Unknown properties: {wrong_key=value}",
+                () -> createTable("create table test.atbl14 (k1 int, k2 int, k3 float) duplicate key(k1)\n"
+                        + "partition by range(k1) (partition p1 values less than(\"10\") ('wrong_key' = 'value'))\n"
+                        + "distributed by hash(k2) buckets 1 properties('replication_num' = '1'); "));
     }
 
     @Test

@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.DataProperty;
@@ -32,10 +31,8 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TTabletType;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class SingleItemListPartitionDesc extends PartitionDesc {
@@ -43,7 +40,7 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
     private final boolean ifNotExists;
     private final String partitionName;
     private final List<String> values;
-    private final Map<String, String> partitionProperties;
+    private final Map<String, String> properties;
     private DataProperty partitionDataProperty;
     private Short replicationNum;
     private Boolean isInMemory;
@@ -52,23 +49,23 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
     private List<ColumnDef> columnDefList;
 
     public SingleItemListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
-                                       Map<String, String> partitionProperties) {
-        this(ifNotExists, partitionName, values, partitionProperties, NodePosition.ZERO);
+                                       Map<String, String> properties) {
+        this(ifNotExists, partitionName, values, properties, NodePosition.ZERO);
     }
 
     public SingleItemListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
-                                       Map<String, String> partitionProperties, NodePosition pos) {
+                                       Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.type = PartitionType.LIST;
         this.ifNotExists = ifNotExists;
         this.partitionName = partitionName;
         this.values = values;
-        this.partitionProperties = partitionProperties;
+        this.properties = properties;
     }
 
     @Override
     public Map<String, String> getProperties() {
-        return this.partitionProperties;
+        return this.properties;
     }
 
     @Override
@@ -136,41 +133,42 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
     }
 
     private void analyzeProperties(Map<String, String> tableProperties) throws AnalysisException {
-        // copy one. because ProperAnalyzer will remove entry after analyze
-        Map<String, String> copiedTableProperties = Optional.ofNullable(tableProperties)
-                .map(properties -> Maps.newHashMap(properties))
-                .orElseGet(() -> new HashMap<>());
-        Map<String, String> copiedPartitionProperties = Optional.ofNullable(this.partitionProperties)
-                .map(properties -> Maps.newHashMap(properties))
-                .orElseGet(() -> new HashMap<>());
-
+        Map<String, String> partitionAndTableProperties = Maps.newHashMap();
         // The priority of the partition attribute is higher than that of the table
-        Map<String, String> allProperties = new HashMap<>();
-        copiedTableProperties.forEach((k, v) -> allProperties.put(k, v));
-        copiedPartitionProperties.forEach((k, v) -> allProperties.put(k, v));
+        if (tableProperties != null) {
+            partitionAndTableProperties.putAll(tableProperties);
+        }
+        if (properties != null) {
+            partitionAndTableProperties.putAll(properties);
+        }
 
         // analyze data property
-        this.partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(allProperties,
+        this.partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(partitionAndTableProperties,
                 DataProperty.getInferredDefaultDataProperty());
 
         // analyze replication num
-        this.replicationNum =
-                PropertyAnalyzer.analyzeReplicationNum(allProperties, RunMode.defaultReplicationNum());
+        this.replicationNum = PropertyAnalyzer
+                .analyzeReplicationNum(partitionAndTableProperties, RunMode.defaultReplicationNum());
 
         // analyze version info
-        this.versionInfo = PropertyAnalyzer.analyzeVersionInfo(allProperties);
+        this.versionInfo = PropertyAnalyzer.analyzeVersionInfo(partitionAndTableProperties);
 
         // analyze in memory
-        this.isInMemory =
-                PropertyAnalyzer.analyzeBooleanProp(allProperties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
+        this.isInMemory = PropertyAnalyzer
+                .analyzeBooleanProp(partitionAndTableProperties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
 
         // analyze tabletType
-        this.tabletType = PropertyAnalyzer.analyzeTabletType(allProperties);
+        this.tabletType = PropertyAnalyzer.analyzeTabletType(partitionAndTableProperties);
 
-        // check unknown properties
-        if (copiedTableProperties.isEmpty() && !allProperties.isEmpty()) {
-            Joiner.MapJoiner mapJoiner = Joiner.on(", ").withKeyValueSeparator(" = ");
-            throw new AnalysisException("Unknown properties: " + mapJoiner.join(allProperties));
+        if (properties != null) {
+            // check unknown properties
+            Sets.SetView<String> intersection =
+                    Sets.intersection(partitionAndTableProperties.keySet(), properties.keySet());
+            if (!intersection.isEmpty()) {
+                Map<String, String> unknownProperties = Maps.newHashMap();
+                intersection.stream().forEach(x -> unknownProperties.put(x, properties.get(x)));
+                throw new AnalysisException("Unknown properties: " + unknownProperties);
+            }
         }
     }
 
@@ -181,9 +179,9 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
         sb.append(this.values.stream().map(value -> "\'" + value + "\'")
                 .collect(Collectors.joining(",")));
         sb.append(")");
-        if (partitionProperties != null && !partitionProperties.isEmpty()) {
+        if (properties != null && !properties.isEmpty()) {
             sb.append(" (");
-            sb.append(new PrintableMap(partitionProperties, "=", true, false));
+            sb.append(new PrintableMap(properties, "=", true, false));
             sb.append(")");
         }
         return sb.toString();
