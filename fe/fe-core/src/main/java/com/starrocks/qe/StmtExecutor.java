@@ -989,8 +989,7 @@ public class StmtExecutor {
     private void handleUseCatalogStmt() throws AnalysisException {
         UseCatalogStmt useCatalogStmt = (UseCatalogStmt) parsedStmt;
         try {
-            String catalogName = useCatalogStmt.getCatalogName();
-            context.getGlobalStateMgr().changeCatalog(context, catalogName);
+            context.getGlobalStateMgr().changeCatalog(context, useCatalogStmt.getCatalogName());
         } catch (Exception e) {
             context.getState().setError(e.getMessage());
             return;
