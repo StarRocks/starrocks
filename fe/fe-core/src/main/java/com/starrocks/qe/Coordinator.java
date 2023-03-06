@@ -1401,6 +1401,12 @@ public class Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
+<<<<<<< HEAD
+=======
+        if (connectContext.getState().getErrorMessage().isEmpty()) {
+            connectContext.getState().setError(cancelReason.toString());
+        }
+>>>>>>> 35999ff35 ([BugFix] Fix cancel rewrite acutally error message (#18938))
         if (null != receiver) {
             receiver.cancel();
         }
