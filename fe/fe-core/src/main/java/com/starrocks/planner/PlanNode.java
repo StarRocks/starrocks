@@ -45,7 +45,6 @@ import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
@@ -558,8 +557,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     protected void computeStats(Analyzer analyzer) {
         avgRowSize = 0.0F;
         for (TupleId tid : tupleIds) {
-            TupleDescriptor desc = analyzer.getTupleDesc(tid);
-            avgRowSize += desc.getAvgSerializedSize();
+            avgRowSize += 4;
         }
         if (!children.isEmpty()) {
             numNodes = getChild(0).numNodes;
