@@ -227,8 +227,10 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select c0, c2[1] + array[1,2,3][1] as v, sum(c2[1]) from test_array group by c0, v order by v";
         assertPlanContains(sql, "1:Project\n" +
                 "  |  <slot 1> : 1: c0\n" +
-                "  |  <slot 4> : CAST(3: c2[1] AS BIGINT) + CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT)\n" +
-                "  |  <slot 5> : 3: c2[1]");
+                "  |  <slot 4> : CAST(7: expr AS BIGINT) + CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT)\n" +
+                "  |  <slot 5> : 7: expr\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 7> : 3: c2[1]");
     }
 
     @Test
