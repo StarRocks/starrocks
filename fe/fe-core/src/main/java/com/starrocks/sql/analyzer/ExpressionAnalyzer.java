@@ -232,11 +232,11 @@ public class ExpressionAnalyzer {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expression;
             // map_apply(func, map)
             if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
-                    if (!(expression.getChild(0).getChild(0) instanceof MapExpr)) {
-                        throw new SemanticException("The right part of map lambda function (" +
-                                expression.getChild(0).toSql() + ") should have key and value arguments",
-                                expression.getChild(0).getPos());
-                    }
+                if (!(expression.getChild(0).getChild(0) instanceof MapExpr)) {
+                    throw new SemanticException("The right part of map lambda function (" +
+                            expression.getChild(0).toSql() + ") should have key and value arguments",
+                            expression.getChild(0).getPos());
+                }
             } else {
                 if (expression.getChild(0).getChild(0) instanceof MapExpr) {
                     throw new SemanticException("The right part of map lambda function (" +
