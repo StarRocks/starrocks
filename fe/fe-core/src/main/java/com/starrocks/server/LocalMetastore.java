@@ -2106,19 +2106,37 @@ public class LocalMetastore implements ConnectorMetadata {
         if (stmt.isExternal()) {
             table = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
-        } else {
+        } else if (stmt.isOlapEngine()) {
             if (distributionInfo.getBucketNum() == 0 || Config.enable_auto_tablet_distribution) {
                 int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
                 distributionInfo.setBucketNum(bucketNum);
             }
 
-            if (stmt.isOlapEngine() && RunMode.allowCreateLakeTable()) {
+            RunMode runMode = RunMode.getCurrentRunMode();
+            String volume = (properties != null) ? properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME) : null;
+
+            if ("local".equalsIgnoreCase(volume)) {
+                table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+            } else if ("default".equalsIgnoreCase(volume)) {
+                table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+                setLakeStorageInfo(table, properties);
+            } else if (!Strings.isNullOrEmpty(volume)) {
+                throw new DdlException("Unknown storage volume \"" + volume + "\"");
+            } else if (runMode == RunMode.SHARED_DATA) {
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
                 setLakeStorageInfo(table, properties);
             } else {
-                Preconditions.checkState(stmt.isOlapEngine());
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }
+
+            if (table.isLakeTable() && !runMode.isAllowCreateLakeTable())  {
+                throw new DdlException("Cannot create table with persistent volume in current run mode \"" + runMode + "\"");
+            }
+            if (table.isOlapTable() && !runMode.isAllowCreateOlapTable()) {
+                throw new DdlException("Cannot create table without persistent volume in current run mode \"" + runMode + "\"");
+            }
+        } else {
+            throw new DdlException("Unrecognized engine \"" + stmt.getEngineName() + "\"");
         }
 
         table.setComment(stmt.getComment());
