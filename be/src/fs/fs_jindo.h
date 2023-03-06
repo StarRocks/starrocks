@@ -107,9 +107,7 @@ public:
                                                                        const std::string& path) override;
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
-                                                                  const std::string& path) override {
-        return Status::NotSupported("JindoFileSystem::new_sequential_file");
-    }
+                                                                  const std::string& path) override;
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override {
         return Status::NotSupported("JindoFileSystem::new_writable_file");

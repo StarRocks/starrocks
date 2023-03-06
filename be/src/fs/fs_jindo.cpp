@@ -192,6 +192,18 @@ StatusOr<std::unique_ptr<RandomAccessFile>> JindoFileSystem::new_random_access_f
     return std::make_unique<RandomAccessFile>(std::move(input_stream), path);
 }
 
+StatusOr<std::unique_ptr<SequentialFile>> JindoFileSystem::new_sequential_file(const SequentialFileOptions& opts,
+                                                                               const std::string& path) {
+    S3URI uri;
+    if (!uri.parse(path)) {
+        return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", path));
+    }
+
+    ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri))
+    auto input_stream = std::make_shared<io::JindoInputStream>(std::move(client), path);
+    return std::make_unique<SequentialFile>(std::move(input_stream), path);
+}
+
 std::unique_ptr<FileSystem> new_fs_jindo(const FSOptions& options) {
     return std::make_unique<JindoFileSystem>(options);
 }
