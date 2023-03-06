@@ -80,17 +80,10 @@ public class TransDbProcDir implements ProcDirInterface {
     }
 
     @Override
-    public ProcNodeInterface lookup(String dbIdStr) throws AnalysisException {
-        if (Strings.isNullOrEmpty(dbIdStr)) {
+    public ProcNodeInterface lookup(String dbIdOrName) throws AnalysisException {
+        if (Strings.isNullOrEmpty(dbIdOrName)) {
             throw new AnalysisException("Db id is null");
         }
-        long dbId = -1L;
-        try {
-            dbId = Long.valueOf(dbIdStr);
-        } catch (NumberFormatException e) {
-            throw new AnalysisException("Invalid db id format: " + dbIdStr);
-        }
-
-        return new TransStateProcDir(dbId);
+        return new TransStateProcDir(dbIdOrName);
     }
 }
