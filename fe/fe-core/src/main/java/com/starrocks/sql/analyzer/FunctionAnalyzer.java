@@ -173,9 +173,6 @@ public class FunctionAnalyzer {
             if (fnParams.isDistinct()) {
                 throw new SemanticException("array_agg does not support DISTINCT");
             }
-            if (arg.getType().isDecimalV3()) {
-                throw new SemanticException("array_agg does not support DecimalV3");
-            }
         }
 
         if (fnName.getFunction().equals(FunctionSet.ARRAYS_OVERLAP)) {
