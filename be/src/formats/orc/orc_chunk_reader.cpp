@@ -17,6 +17,8 @@
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/literal.h"
 #include "formats/orc/orc_mapping.h"
+#include "fs/fs.h"
+#include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
