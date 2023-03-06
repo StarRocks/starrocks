@@ -10,6 +10,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.UtFrameUtils;
 import jersey.repackaged.com.google.common.collect.Lists;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
@@ -132,6 +133,22 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         OlapTable tus = (OlapTable) globalStateMgr.getDb("stats").getTable("tunique_stats");
         new ArrayList<>(tus.getPartitions()).get(0).updateVisibleVersion(2);
         setTableStatistics(tps, 20000000);
+
+        starRocksAssert.withTable("CREATE TABLE `tcount` (\n" +
+                "  `v1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `count` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        OlapTable tcount = (OlapTable) globalStateMgr.getDb("stats").getTable("tcount");
+        new ArrayList<>(tcount.getPartitions()).get(0).updateVisibleVersion(2);
+        setTableStatistics(tcount, 20000000);
     }
 
     @Test
@@ -142,7 +159,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
-        Assert.assertEquals(5, jobs.size());
+        Assert.assertEquals(6, jobs.size());
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertTrue("[pk, v1, v2][v1, v2, v3, v4, v5][v4, v5, v6][v1, v2, v3, v4, v5]".contains(
@@ -420,5 +437,33 @@ public class StatisticsCollectJobTest extends PlanTestBase {
 
         collectSqlList = collectJob.buildCollectSQLList(1);
         Assert.assertEquals(50, collectSqlList.size());
+    }
+
+    @Test
+    public void testCount() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getDb("stats");
+        OlapTable olapTable = (OlapTable) db.getTable("tcount");
+        long dbid = db.getId();
+
+        SampleStatisticsCollectJob sampleStatisticsCollectJob = new SampleStatisticsCollectJob(
+                db, olapTable, Lists.newArrayList("v1", "count"),
+                StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap());
+
+        String sql = Deencapsulation.invoke(sampleStatisticsCollectJob, "buildSampleInsertSQL",
+                dbid, olapTable.getId(), Lists.newArrayList("v1", "count"), 100L);
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+        
+        FullStatisticsCollectJob fullStatisticsCollectJob = new FullStatisticsCollectJob(
+                db, olapTable,
+                olapTable.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList()),
+                Lists.newArrayList("v1", "count"),
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap());
+        sql = Deencapsulation.invoke(fullStatisticsCollectJob, "buildCollectFullStatisticSQL",
+                db, olapTable, olapTable.getPartition("tcount"),
+                "count");
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
     }
 }
