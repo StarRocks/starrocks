@@ -98,8 +98,10 @@ public class ArrayTypeTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
-                "  |  <slot 4> : 3: v3[1] + CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT)\n" +
-                "  |  <slot 5> : 3: v3[1]\n"));
+                "  |  <slot 4> : 7: expr + CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT)\n" +
+                "  |  <slot 5> : 7: expr\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 7> : 3: v3[1]"));
     }
 
     @Test
