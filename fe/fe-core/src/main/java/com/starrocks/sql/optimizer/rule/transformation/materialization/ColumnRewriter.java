@@ -126,17 +126,11 @@ public class ColumnRewriter {
                     LOG.warn("no columns for relation id:{}", targetRelationId);
                     return null;
                 }
-                boolean found = false;
                 for (ColumnRefOperator dstColumnRef : relationColumns) {
                     if (columnRef.getName().equals(dstColumnRef.getName())) {
                         result = dstColumnRef;
-                        found = true;
                         break;
                     }
-                }
-                if (!found) {
-                    LOG.warn("can not find column ref id:{} name:{} in target relation:{}",
-                            columnRef.getId(), columnRef.getName(), targetRelationId);
                 }
             }
             if (enableEquivalenceClassesRewrite && equivalenceClasses != null) {
