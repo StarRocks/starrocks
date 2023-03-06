@@ -13,11 +13,13 @@
 // limitations under the License.
 
 
-package com.starrocks.connector.iceberg;
+package com.starrocks.connector.iceberg.rest;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.iceberg.IcebergCatalog;
+import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
@@ -28,26 +30,11 @@ import org.apache.thrift.TException;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static com.starrocks.connector.iceberg.IcebergUtil.convertToSRDatabase;
+import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
 
 public class IcebergRESTCatalog extends RESTCatalog implements IcebergCatalog {
-
-    private static final ConcurrentHashMap<String, IcebergRESTCatalog> REST_URI_TO_CATALOG =
-            new ConcurrentHashMap<>();
-
-    public static synchronized IcebergRESTCatalog getInstance(Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
-        String uri = properties.get(CatalogProperties.URI);
-        return REST_URI_TO_CATALOG.computeIfAbsent(
-            uri,
-            key ->
-                (IcebergRESTCatalog) CatalogLoader.rest(
-                    String.format("rest-%s", uri), hdfsEnvironment.getConfiguration(), properties
-                ).loadCatalog()
-        );
-    }
 
     @Override
     public IcebergCatalogType getIcebergCatalogType() {
@@ -76,7 +63,7 @@ public class IcebergRESTCatalog extends RESTCatalog implements IcebergCatalog {
         if (!super.namespaceExists(Namespace.of(dbName))) {
             throw new TException("Iceberg db " + dbName + " doesn't exist");
         }
-        return convertToSRDatabase(dbName);
+        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName);
     }
 
     @Override

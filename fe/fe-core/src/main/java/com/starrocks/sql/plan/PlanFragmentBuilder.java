@@ -1040,7 +1040,7 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
 
-                icebergScanNode.preProcessIcebergPredicate(predicates);
+                icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
                 icebergScanNode.setupScanRangeLocations();
                 //set slot for equality delete file
                 icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
