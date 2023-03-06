@@ -189,6 +189,37 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(_max_executor_threads);
 
+<<<<<<< HEAD
+=======
+    int connector_num_io_threads =
+            config::pipeline_connector_scan_thread_num_per_cpu * std::thread::hardware_concurrency();
+    CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
+
+    std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_without_workgroup;
+    RETURN_IF_ERROR(ThreadPoolBuilder("con_scan_io")
+                            .set_min_threads(0)
+                            .set_max_threads(connector_num_io_threads)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&connector_scan_worker_thread_pool_without_workgroup));
+    _connector_scan_executor_without_workgroup = new workgroup::ScanExecutor(
+            std::move(connector_scan_worker_thread_pool_without_workgroup), workgroup::create_scan_task_queue());
+    _connector_scan_executor_without_workgroup->initialize(connector_num_io_threads);
+
+    std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_with_workgroup;
+    RETURN_IF_ERROR(ThreadPoolBuilder("con_wg_scan_io")
+                            .set_min_threads(0)
+                            .set_max_threads(connector_num_io_threads)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&connector_scan_worker_thread_pool_with_workgroup));
+    _connector_scan_executor_with_workgroup =
+            new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool_with_workgroup),
+                                        std::make_unique<workgroup::WorkGroupScanTaskQueue>(
+                                                workgroup::WorkGroupScanTaskQueue::SchedEntityType::CONNECTOR));
+    _connector_scan_executor_with_workgroup->initialize(connector_num_io_threads);
+
+>>>>>>> 5670c10a0 ([Enhancement] Add MultiLevelFeedScanTaskQueue (#18893))
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
     _master_info = new TMasterInfo();
@@ -225,11 +256,31 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_threads(num_io_threads)
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+<<<<<<< HEAD
                             .build(&scan_worker_thread_pool));
     _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool),
                                                  std::make_unique<workgroup::WorkGroupScanTaskQueue>(
                                                          workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
     _scan_executor->initialize(num_io_threads);
+=======
+                            .build(&scan_worker_thread_pool_without_workgroup));
+    _scan_executor_without_workgroup = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_without_workgroup),
+                                                                   workgroup::create_scan_task_queue());
+    _scan_executor_without_workgroup->initialize(num_io_threads);
+
+    std::unique_ptr<ThreadPool> scan_worker_thread_pool_with_workgroup;
+    RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_scan_io")
+                            .set_min_threads(0)
+                            .set_max_threads(num_io_threads)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&scan_worker_thread_pool_with_workgroup));
+    _scan_executor_with_workgroup =
+            new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_with_workgroup),
+                                        std::make_unique<workgroup::WorkGroupScanTaskQueue>(
+                                                workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
+    _scan_executor_with_workgroup->initialize(num_io_threads);
+>>>>>>> 5670c10a0 ([Enhancement] Add MultiLevelFeedScanTaskQueue (#18893))
 
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     if (!store_paths.empty()) {

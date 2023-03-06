@@ -292,10 +292,27 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                         DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
                         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 
+<<<<<<< HEAD
                         auto& chunk_source = _chunk_sources[chunk_source_index];
                         int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
                         int64_t prev_scan_rows = chunk_source->get_scan_rows();
                         int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
+=======
+    workgroup::ScanTask task;
+    task.workgroup = _workgroup.get();
+    // TODO: consider more factors, such as scan bytes and i/o time.
+    task.priority = OlapScanNode::compute_priority(_submit_task_counter->value());
+    task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
+    const auto io_task_start_nano = MonotonicNanos();
+    task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
+                          io_task_start_nano]() {
+        if (auto sp = wp.lock()) {
+            // set driver_id/query_id/fragment_instance_id to thread local
+            // driver_id will be used in some Expr such as regex_replace
+            SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+            SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(this);
+>>>>>>> 5670c10a0 ([Enhancement] Add MultiLevelFeedScanTaskQueue (#18893))
 
                         // Read chunk
                         Status status = chunk_source->buffer_next_batch_chunks_blocking_for_workgroup(
@@ -304,6 +321,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                             _set_scan_status(status);
                         }
 
+<<<<<<< HEAD
                         int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
                         _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                                   chunk_source->get_scan_rows() - prev_scan_rows,
@@ -315,6 +333,30 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             offer_task_success = ExecEnv::GetInstance()->hdfs_scan_executor()->submit(std::move(task));
         } else {
             offer_task_success = ExecEnv::GetInstance()->scan_executor()->submit(std::move(task));
+=======
+            DeferOp timer_defer([chunk_source]() {
+                COUNTER_SET(chunk_source->scan_timer(),
+                            chunk_source->io_task_wait_timer()->value() + chunk_source->io_task_exec_timer()->value());
+            });
+            COUNTER_UPDATE(chunk_source->io_task_wait_timer(), MonotonicNanos() - io_task_start_nano);
+
+            int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
+            int64_t prev_scan_rows = chunk_source->get_scan_rows();
+            int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
+            auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
+            if (!status.ok() && !status.is_end_of_file()) {
+                _set_scan_status(status);
+            }
+
+            int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
+            _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
+                                      chunk_source->get_scan_rows() - prev_scan_rows,
+                                      chunk_source->get_scan_bytes() - prev_scan_bytes);
+
+            QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
+            // make clang happy
+            (void)query_trace_ctx;
+>>>>>>> 5670c10a0 ([Enhancement] Add MultiLevelFeedScanTaskQueue (#18893))
         }
     } else {
         PriorityThreadPool::Task task;
@@ -420,10 +462,17 @@ void ScanOperator::set_query_ctx(const QueryContextPtr& query_ctx) {
 
 // ========== ScanOperatorFactory ==========
 
+<<<<<<< HEAD
 ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node, ChunkBufferLimiterPtr buffer_limiter)
         : SourceOperatorFactory(id, scan_node->name(), scan_node->id()),
           _scan_node(scan_node),
           _buffer_limiter(std::move(buffer_limiter)) {}
+=======
+ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
+        : SourceOperatorFactory(id, scan_node->name(), scan_node->id()),
+          _scan_node(scan_node),
+          _scan_task_group(std::make_shared<workgroup::ScanTaskGroup>()) {}
+>>>>>>> 5670c10a0 ([Enhancement] Add MultiLevelFeedScanTaskQueue (#18893))
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
