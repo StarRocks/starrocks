@@ -899,6 +899,10 @@ public class GlobalStateMgr {
         return connectorTblMetaInfoMgr;
     }
 
+    public ConnectorTableMetadataProcessor getConnectorTableMetadataProcessor() {
+        return connectorTableMetadataProcessor;
+    }
+
     // Use tryLock to avoid potential dead lock
     public boolean tryLock(boolean mustLock) {
         while (true) {
