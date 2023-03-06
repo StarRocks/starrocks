@@ -165,8 +165,17 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
 
+<<<<<<< HEAD
+=======
+    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+
+    std::shared_ptr<workgroup::ScanTaskGroup> scan_task_group() const { return _scan_task_group; }
+
+>>>>>>> 5670c10a0 ([Enhancement] Add MultiLevelFeedScanTaskQueue (#18893))
 protected:
     ScanNode* const _scan_node;
+
+    std::shared_ptr<workgroup::ScanTaskGroup> _scan_task_group;
 };
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,
