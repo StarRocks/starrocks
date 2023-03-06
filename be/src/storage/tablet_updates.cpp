@@ -2378,7 +2378,8 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                                     _tablet.tablet_id(), _error_msg));
     }
     std::unique_lock<std::mutex> ul(_lock);
-    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 60000, ul));
+    // wait for version timeout 55s, should smaller than exec_plan_fragment rpc timeout(60s)
+    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000, ul));
     if (_edit_version_infos.empty()) {
         string msg = strings::Substitute("tablet deleted when get_applied_rowsets tablet:$0", _tablet.tablet_id());
         LOG(WARNING) << msg;
