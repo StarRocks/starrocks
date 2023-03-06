@@ -130,6 +130,31 @@ inline bool is_binary_type(LogicalType type) {
     }
 }
 
+inline bool is_scalar_field_type(LogicalType type) {
+    switch (type) {
+    case TYPE_STRUCT:
+    case TYPE_ARRAY:
+    case TYPE_MAP:
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+        return false;
+    default:
+        return true;
+    }
+}
+
+inline bool is_complex_metric_type(LogicalType type) {
+    switch (type) {
+    case TYPE_OBJECT:
+    case TYPE_PERCENTILE:
+    case TYPE_HLL:
+        return true;
+    default:
+        return false;
+    }
+}
+
 inline bool is_enumeration_type(LogicalType type) {
     switch (type) {
     case TYPE_TINYINT:
