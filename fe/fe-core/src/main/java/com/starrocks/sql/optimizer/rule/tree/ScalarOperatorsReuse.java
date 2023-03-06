@@ -306,24 +306,9 @@ public class ScalarOperatorsReuse {
 
         @Override
         public Integer visitLambdaFunctionOperator(LambdaFunctionOperator scalarOperator, Void context) {
-<<<<<<< HEAD
-            if (reuseLambda) {
-                // handle x-> 2*x+2*x, we need to reuse 2*x, the reuse scope is only lambda exprs
-                return collectCommonOperatorsByDepth(scalarOperator.getLambdaExpr().accept(this, null),
-                        scalarOperator);
-            } else {
-                // for select a+b, array_map(x-> 2*x+2*x > a+b, [1])
-                // reuse a+b, a and b are both real columns, the reuse scope is all exprs
-                if (scalarOperator.getUsedColumns().cardinality() > 0) {
-                    return collectLambdaExprOperator(scalarOperator.getLambdaExpr());
-                }
-            }
-            return 1;
-=======
             // a lambda function like  x->x+1 can't be reused anymore, so directly visit its lambda expression.
             hasLambdaFunction = true;
             return visit(scalarOperator.getLambdaExpr(), context);
->>>>>>> 9466b6dc0 ([BugFix] fix bugs from reusing common expressions with nested high-order functions (#18330))
         }
 
         @Override
