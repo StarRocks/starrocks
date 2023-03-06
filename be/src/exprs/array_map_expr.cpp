@@ -47,7 +47,9 @@ inline bool offsets_equal(const UInt32Column::Ptr& array1, const UInt32Column::P
 // The result of lambda expressions do not change the offsets of the current array and the null map.
 // NOTE the return column must be of the return type.
 StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
+    // keep ColumnPtr refs
     std::vector<ColumnPtr> inputs;
+    std::vector<ColumnPtr> input_elements;
     NullColumnPtr input_null_map = nullptr;
     std::shared_ptr<ArrayColumn> input_array = nullptr;
     // for many valid arguments:
@@ -64,6 +66,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         }
         // no optimization for const columns.
         child_col = ColumnHelper::unpack_and_duplicate_const_column(child_col->size(), child_col);
+        inputs.emplace_back(child_col);
 
         auto column = child_col;
         if (child_col->is_nullable()) {
@@ -89,7 +92,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
                 throw std::runtime_error("Input array element's size is not equal in array_map().");
             }
         }
-        inputs.push_back(cur_array->elements_column());
+        input_elements.push_back(cur_array->elements_column());
     }
 
     ColumnPtr column = nullptr;
@@ -103,9 +106,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         std::vector<SlotId> arguments_ids;
         auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
         int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
-        DCHECK(argument_num == inputs.size());
+        DCHECK(argument_num == input_elements.size());
         for (int i = 0; i < argument_num; ++i) {
-            cur_chunk->append_column(inputs[i], arguments_ids[i]); // column ref
+            cur_chunk->append_column(input_elements[i], arguments_ids[i]); // column ref
         }
         // put captured columns into the new chunk aligning with the first array's offsets
         std::vector<SlotId> slot_ids;
