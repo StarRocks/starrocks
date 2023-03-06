@@ -781,7 +781,6 @@ public class OlapTable extends Table {
         }
 
         AgentBatchTask batchTask = new AgentBatchTask();
-        ;
 
         for (long backendId : fullBackendId) {
             DropAutoIncrementMapTask dropAutoIncrementMapTask = new DropAutoIncrementMapTask(backendId, this.id,
@@ -790,7 +789,7 @@ public class OlapTable extends Table {
         }
 
         if (batchTask.getTaskNum() > 0) {
-            MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<Long, Long>(batchTask.getTaskNum());
+            MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<>(batchTask.getTaskNum());
             for (AgentTask task : batchTask.getAllTasks()) {
                 latch.addMark(task.getBackendId(), -1L);
                 ((DropAutoIncrementMapTask) task).setLatch(latch);
@@ -799,7 +798,7 @@ public class OlapTable extends Table {
             AgentTaskExecutor.submit(batchTask);
 
             // estimate timeout, at most 10 min
-            long timeout = 1L * 60L * 1000L;
+            long timeout = 60L * 1000L;
             boolean ok = false;
             try {
                 LOG.info("begin to send drop auto increment map tasks to BE, total {} tasks. timeout: {}",
@@ -813,7 +812,6 @@ public class OlapTable extends Table {
                 LOG.warn("drop auto increment map tasks failed");
             }
 
-            return;
         }
     }
 
@@ -823,7 +821,12 @@ public class OlapTable extends Table {
         Map<String, Range<PartitionKey>> rangePartitionMap = Maps.newHashMap();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
             Long partitionId = partitionEntry.getKey();
-            rangePartitionMap.put(partitionEntry.getValue().getName(), rangePartitionInfo.getRange(partitionId));
+            String partitionName = partitionEntry.getValue().getName();
+            // FE and BE at the same time ignore the hidden partition at the same time
+            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                continue;
+            }
+            rangePartitionMap.put(partitionName, rangePartitionInfo.getRange(partitionId));
         }
         return rangePartitionMap;
     }
