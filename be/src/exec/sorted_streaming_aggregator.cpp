@@ -276,9 +276,9 @@ Status SortedStreamingAggregator::prepare(RuntimeState* state, ObjectPool* pool,
     return Status::OK();
 }
 
-Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size) {
+StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size) {
     if (chunk_size == 0) {
-        return Status::OK();
+        return std::make_shared<Chunk>();
     }
 
     _tmp_agg_states.resize(chunk_size);
@@ -324,9 +324,6 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
     RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selected_size, selector, res_group_by_columns));
     auto result_chunk = _build_output_chunk(res_group_by_columns, agg_result_columns, use_intermediate);
 
-    // TODO merge small chunk
-    this->offer_chunk_to_buffer(result_chunk);
-
     // prepare for next
     for (size_t i = 0; i < _last_columns.size(); ++i) {
         // last column should never be the same column with new input column
@@ -337,7 +334,8 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
     _last_state = _tmp_agg_states[chunk_size - 1];
     DCHECK(!_group_by_columns[0]->empty());
     DCHECK(!_last_columns[0]->empty());
-    return Status::OK();
+
+    return result_chunk;
 }
 
 Status SortedStreamingAggregator::_compute_group_by(size_t chunk_size) {
