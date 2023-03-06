@@ -60,6 +60,13 @@ public:
     std::shared_ptr<ScanTaskGroup> task_group = nullptr;
 };
 
+/// There are three types of ScanTaskQueue:
+/// - WorkGroupScanTaskQueue, which is a two-level queue.
+///   - The first level selects the workgroup with the shortest execution time.
+///   - The second level selects an appropriate task using either PriorityScanTaskQueue or MultiLevelFeedScanTaskQueue.
+/// - PriorityScanTaskQueue, which prioritizes scan tasks with lower committed times.
+/// - MultiLevelFeedScanTaskQueue, which prioritizes scan tasks with shorter execution time.
+///   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
 class ScanTaskQueue {
 public:
     ScanTaskQueue() = default;

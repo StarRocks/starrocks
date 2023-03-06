@@ -691,11 +691,17 @@ CONF_Int64(pipeline_sink_brpc_dop, "64");
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 CONF_mBool(pipeline_print_profile, "false");
 
-// The arguments of pipeline_driver_queue.
+// The arguments of multilevel feedback pipeline_driver_queue. It prioritizes small queries over larger ones,
+// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
 CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");
 CONF_Double(pipeline_driver_queue_ratio_of_adjacent_queue, "1.2");
-// 0 is PriorityScanTaskQueue, 1 is MultiLevelFeedScanTaskQueue.
+// 0 represents PriorityScanTaskQueue (by default), while 1 represents MultiLevelFeedScanTaskQueue.
+// - PriorityScanTaskQueue prioritizes scan tasks with lower committed times.
+// - MultiLevelFeedScanTaskQueue prioritizes scan tasks with shorter execution time.
+//   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
 CONF_Int64(pipeline_scan_queue_mode, "0");
+// The arguments of MultiLevelFeedScanTaskQueue. It prioritizes small queries over larger ones,
+// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
 CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
 CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
 
