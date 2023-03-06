@@ -39,7 +39,7 @@ public abstract class RunMode {
         } else if (SHARED_DATA.getName().equalsIgnoreCase(runMode)) {
             currentRunMode = SHARED_DATA;
         } else if (HYBRID.getName().equalsIgnoreCase(runMode)) {
-            LOG.warn("The run mode \"{}\" is not production ready, should only be used in test environment", HYBRID);
+            LOG.warn("!!!The run mode \"{}\" is not production-ready and may be removed in the future!!!", HYBRID);
             currentRunMode = HYBRID;
         } else {
             LOG.error("Invalid run_mode \"{}\". The candidates are \"{}\" and \"{}\"", runMode, SHARED_NOTHING, SHARED_DATA);
