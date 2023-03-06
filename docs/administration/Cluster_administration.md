@@ -117,7 +117,7 @@ StarRocks can perform a rolling upgrade, which allows you to first upgrade the B
 > | v2.2.x | Can be upgraded from v2.1.x and v2.0.x | Set <code>ignore_unknown_log_id</code> to <code>true</code> before downgrading. | Yes |
 > | v2.3.x | Can be upgraded from v2.2.x, v2.1.x, and v2.0.x | We do not recommend downgrading across major versions. Set <code>ignore_unknown_log_id</code> to <code>true</code> before downgrading. | No |
 > | v2.4.x | Can be upgraded from v2.3.x, v2.2.x, v2.1.x, and v2.0.x | We do not recommend downgrading across major versions. Switch to IP address access before downgrading if you enabled [FQDN access](../administration/enable_fqdn.md). | No |
-> | v2.5.x | Can be upgraded from v2.4.x, v2.3.x, v2.2.x, v2.1.x, and v2.0.x | We do not recommend downgrading across major versions. If you have a partitioned table that uses LIST partitioning, you must delete this table before the upgrade. | Yes |
+> | v2.5.x | Can be upgraded from v2.4.x, v2.3.x, v2.2.x, v2.1.x, and v2.0.x | We do not recommend downgrading across major versions. | Yes |
 
 ### Before you begin
 
