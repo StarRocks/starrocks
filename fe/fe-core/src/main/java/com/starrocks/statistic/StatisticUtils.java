@@ -47,6 +47,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.StringJoiner;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
@@ -287,5 +288,17 @@ public class StatisticUtils {
             result = left * right;
         }
         return result;
+    }
+
+    public static String quoting(String ... parts) {
+        StringJoiner joiner = new StringJoiner(".");
+        for (String part : parts) {
+            joiner.add(quoting(part));
+        }
+        return joiner.toString();
+    }
+
+    public static String quoting(String identifier) {
+        return "`" + identifier + "`";
     }
 }
