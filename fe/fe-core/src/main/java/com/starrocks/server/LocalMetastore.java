@@ -1375,7 +1375,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 // update partition info
                 updatePartitionInfo(partitionInfo, partitionMap, existPartitionNameSet, addPartitionClause, olapTable);
 
-                colocateTableIndex.updateLakeTableColocationInfo(olapTable);
+                colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */, null /* expectGroupId */);
 
                 // add partition log
                 addPartitionLog(db, olapTable, partitionDescs, addPartitionClause, partitionInfo, partitionList,
@@ -4709,7 +4709,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // replace
             truncateTableInternal(olapTable, newPartitions, truncateEntireTable, false);
 
-            colocateTableIndex.updateLakeTableColocationInfo(olapTable);
+            colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */, null /* expectGroupId */);
 
             // write edit log
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,

@@ -989,21 +989,27 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    public void updateLakeTableColocationInfo(OlapTable olapTable) throws DdlException {
+    public void updateLakeTableColocationInfo(OlapTable olapTable, boolean isJoin,
+            GroupId expectGroupId) throws DdlException {
         if (olapTable == null || !olapTable.isLakeTable()) { // skip non-lake table
             return;
         }
 
         writeLock();
         try {
-            if (!table2Group.containsKey(olapTable.getId())) { // skip non-colocate table
-                return;
+            GroupId groupId = expectGroupId;
+            if (expectGroupId == null) {
+                if (!table2Group.containsKey(olapTable.getId())) { // skip non-colocate table
+                    return;
+                }
+                groupId = table2Group.get(olapTable.getId());
             }
 
-            GroupId groupId = table2Group.get(olapTable.getId());
             LakeTable ltbl = (LakeTable) olapTable;
             List<Long> shardGroupIds = ltbl.getShardGroupIds();
-            GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, true /* isJoin */);
+            LOG.info("update meta group id {}, table {}, shard groups: {}, join: {}",
+                    groupId.grpId, olapTable.getId(), shardGroupIds, isJoin);
+            GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, isJoin);
         } finally {
             writeUnlock();
         }
