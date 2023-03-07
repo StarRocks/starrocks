@@ -480,6 +480,7 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
         this->data(state).is_null = false;
+        this->data(state).has_value = 0;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -493,16 +494,17 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
         }
 
         // only calculate once
-        if (this->data(state).count != 0 && (!this->data(state).is_null || !ignoreNulls)) {
+        if (this->data(state).has_value && (!this->data(state).is_null || !ignoreNulls)) {
             return;
         }
-
-        this->data(state).count++;
 
         size_t value_index =
                 !ignoreNulls ? frame_start : ColumnHelper::find_nonnull(columns[0], frame_start, frame_end);
         if (value_index == frame_end || columns[0]->is_null(value_index)) {
             this->data(state).is_null = true;
+            if (!ignoreNulls) {
+                this->data(state).has_value = true;
+            }
         } else {
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
             const auto* column = down_cast<const BinaryColumn*>(data_column);
@@ -510,6 +512,7 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
             const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
             this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
             this->data(state).is_null = false;
+            this->data(state).has_value = true;
         }
     }
 
@@ -527,7 +530,8 @@ class LastValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
         : public WindowFunction<LastValueState<PT, ignoreNulls>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
-        this->data(state).is_null = ignoreNulls;
+        this->data(state).is_null = false;
+        this->data(state).has_value = false;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -543,9 +547,15 @@ class LastValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const auto* column = down_cast<const BinaryColumn*>(data_column);
         if (value_index == frame_end || columns[0]->is_null(value_index)) {
-            this->data(state).is_null = true;
+            if (ignoreNulls) {
+                this->data(state).is_null = (!this->data(state).has_value);
+            } else {
+                this->data(state).is_null = true;
+                this->data(state).has_value = true;
+            }
         } else {
             this->data(state).is_null = false;
+            this->data(state).has_value = true;
             Slice slice = column->get_slice(value_index);
             const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
             this->data(state).buffer.clear();
