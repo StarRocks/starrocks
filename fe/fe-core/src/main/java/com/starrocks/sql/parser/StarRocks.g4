@@ -379,7 +379,7 @@ fromRollup
     ;
 
 createTableAsSelectStatement
-    : CREATE TABLE (IF NOT EXISTS)? qualifiedName
+    : explainDesc? CREATE TABLE (IF NOT EXISTS)? qualifiedName
         ('(' identifier (',' identifier)* ')')?
         keyDesc?
         comment?

@@ -843,10 +843,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         ((StringLiteral) visit(context.comment().string())).getStringValue());
 
         List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
+        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+        if (context.explainDesc() != null) {
+            queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
+        }
         return new CreateTableAsSelectStmt(
                 createTableStmt,
                 columns == null ? null : columns.stream().map(Identifier::getValue).collect(toList()),
-                (QueryStatement) visit(context.queryStatement()),
+                queryStatement,
                 createPos(context));
     }
 

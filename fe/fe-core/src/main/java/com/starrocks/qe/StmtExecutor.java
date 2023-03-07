@@ -579,16 +579,19 @@ public class StmtExecutor {
         try {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
-            handleDMLStmt(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
+            handleDMLStmt(execPlan, insertStmt);
             if (context.getSessionVariable().isEnableProfile()) {
                 writeProfile(beginTimeInNanoSecond);
             }
             if (context.getState().getStateType() == MysqlStateType.ERR) {
-                ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
+                createTableAsSelectStmt.dropTable(context);
+            }
+            if (insertStmt.isExplain()) {
+                createTableAsSelectStmt.dropTable(context);
             }
         } catch (Throwable t) {
             LOG.warn("handle create table as select stmt fail", t);
-            ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
+            createTableAsSelectStmt.dropTable(context);
             throw t;
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
