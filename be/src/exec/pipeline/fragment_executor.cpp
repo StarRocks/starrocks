@@ -611,7 +611,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         int64_t prepare_pipeline_driver_time = 0;
 
         int64_t process_mem_bytes = ExecEnv::GetInstance()->process_mem_tracker()->consumption();
-        size_t num_query_ctxs = ExecEnv::GetInstance()->query_context_mgr()->size();
+        size_t num_process_drivers = ExecEnv::GetInstance()->driver_limiter()->num_total_drivers();
     } profiler;
 
     DeferOp defer([this, &request, &prepare_success, &profiler]() {
@@ -640,8 +640,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
             auto* process_mem_counter = ADD_COUNTER(profile, "InitialProcessMem", TUnit::BYTES);
             COUNTER_SET(process_mem_counter, profiler.process_mem_bytes);
-            auto* num_query_ctxs_counter = ADD_COUNTER(profile, "InitialQueryContextCount", TUnit::UNIT);
-            COUNTER_SET(num_query_ctxs_counter, static_cast<int64_t>(profiler.num_query_ctxs));
+            auto* num_process_drivers_counter = ADD_COUNTER(profile, "InitialProcessDriverCount", TUnit::UNIT);
+            COUNTER_SET(num_process_drivers_counter, static_cast<int64_t>(profiler.num_process_drivers));
         } else {
             _fail_cleanup();
         }
