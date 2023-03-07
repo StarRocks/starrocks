@@ -4,7 +4,9 @@ package com.starrocks.sql.optimizer.operator.logical;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyticWindow;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -20,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class LogicalWindowOperator extends LogicalOperator {
     private final ImmutableMap<ColumnRefOperator, CallOperator> windowCall;
@@ -71,6 +74,18 @@ public class LogicalWindowOperator extends LogicalOperator {
             columns.union(expressionContext.getChildLogicalProperty(0).getOutputColumns());
             return columns;
         }
+    }
+
+    public boolean canPushDownAgg() {
+        //TODO(by satanson): support AVG and COUNT in future
+        Set<String> supportWindowFun = Sets.newHashSet(FunctionSet.SUM);
+        AnalyticWindow window = this.getAnalyticWindow();
+        return window == null || window.getType().equals(AnalyticWindow.Type.RANGE) &&
+                !window.getLeftBoundary().getType().equals(AnalyticWindow.BoundaryType.PRECEDING) &&
+                !window.getRightBoundary().getType().equals(AnalyticWindow.BoundaryType.FOLLOWING) &&
+                this.getWindowCall().values().stream()
+                        .allMatch(call -> !call.isDistinct() && supportWindowFun.contains(call.getFnName()) &&
+                                call.getChild(0).isColumnRef());
     }
 
     @Override
