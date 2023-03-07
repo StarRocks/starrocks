@@ -638,9 +638,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                     ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_pipeline_driver_timer, profiler.prepare_runtime_state_time);
 
-            auto* process_mem_counter = ADD_COUNTER(profile, "ProcessMemAtBeginning", TUnit::BYTES);
+            auto* process_mem_counter = ADD_COUNTER(profile, "InitialProcessMem", TUnit::BYTES);
             COUNTER_SET(process_mem_counter, profiler.process_mem_bytes);
-            auto* num_query_ctxs_counter = ADD_COUNTER(profile, "NumQueryCtxsAtBeginning", TUnit::UNIT);
+            auto* num_query_ctxs_counter = ADD_COUNTER(profile, "InitialQueryContextCount", TUnit::UNIT);
             COUNTER_SET(num_query_ctxs_counter, static_cast<int64_t>(profiler.num_query_ctxs));
         } else {
             _fail_cleanup();
