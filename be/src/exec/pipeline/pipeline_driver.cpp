@@ -191,7 +191,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::update_peak_driver_queue_size_counter(size_t new_value) {
-    _peak_driver_queue_size_counter->set(new_value);
+    if (_peak_driver_queue_size_counter != nullptr) {
+        _peak_driver_queue_size_counter->set(new_value);
+    }
 }
 
 static inline bool is_multilane(pipeline::OperatorPtr& op) {
