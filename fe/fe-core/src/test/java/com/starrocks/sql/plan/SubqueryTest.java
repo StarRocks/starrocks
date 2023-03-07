@@ -1785,7 +1785,7 @@ public class SubqueryTest extends PlanTestBase {
     @Test
     public void testNestSubquery() throws Exception {
         String sql = "select * from t0 where exists (select * from t1 where t0.v1 in (select v7 from t2));";
-        assertExceptionMessage(sql, "Unsupported complex nested in-subquery");
+        assertExceptionMessage(sql, "Getting analyzing error. Detail message: Unsupported complex nested in-subquery.");
 
         sql = "select * from t0 where exists (select * from t1 where t0.v1 = (select v7 from t2));";
         String plan = getFragmentPlan(sql);

@@ -328,7 +328,8 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql(sql1);
             Assert.fail("should throw error");
         } catch (Exception e) {
-            Assert.assertEquals("Unsupported query_type: 'mv'", e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: Unsupported query_type: 'mv'.",
+                    e.getMessage());
         }
 
     }

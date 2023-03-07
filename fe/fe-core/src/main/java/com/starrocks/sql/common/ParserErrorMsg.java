@@ -24,13 +24,13 @@ public interface ParserErrorMsg {
     @BaseMessage("from line {0}, column {1} to line {2}, column {3}")
     String nodePositionRange(int a0, int a1, int a2, int a3);
 
-    @BaseMessage("No viable statement for input ''{0}'', please check the SQL Reference")
+    @BaseMessage("No viable statement for input ''{0}''")
     String noViableStatement(String a0);
 
-    @BaseMessage("Input ''{0}'' is not valid at this position, please check the SQL Reference")
+    @BaseMessage("Input ''{0}'' is not valid at this position")
     String inputMismatch(String a0);
 
-    @BaseMessage("Input ''{0}'' is valid only for ''{1}'', please check the SQL Reference")
+    @BaseMessage("Input ''{0}'' is valid only for ''{1}''")
     String failedPredicate(String a0, String a1);
 
     @BaseMessage("Statement exceeds maximum length limit, please consider modify ''parse_tokens_limit'' session variable")
@@ -119,5 +119,58 @@ public interface ParserErrorMsg {
 
 
     // --------- error in analyzing phase ---------
+    @BaseMessage("Invalid {0} id format ''{1}''")
+    String invalidIdFormat(String a0, String a1);
 
+    @BaseMessage("Invalid {0} value ''{1}''")
+    String invalidPropertyValue(String a0, String a1);
+
+    @BaseMessage("Unsupported properties ''{0}''")
+    String unsupportedProps(String a0);
+
+    @BaseMessage("Missing necessary properties ''{0}''")
+    String missingProps(String a0);
+
+    @BaseMessage("No database selected")
+    String noDbSelected();
+
+    @BaseMessage("No catalog selected")
+    String noCatalogSelected();
+
+    @BaseMessage("Unsupported operation on {0}")
+    String unsupportedOpWithInfo(String a0);
+
+    @BaseMessage("Unsupported predicates. Where clause can only be ''{0}''")
+    String invalidWhereExpr(String a0);
+
+
+    @BaseMessage("''{0}'' must be an aggregate expression or appear in GROUP BY clause")
+    String shouldBeAggFunc(String a0);
+
+    @BaseMessage("Exist must have exact one subquery")
+    String canOnlyOneExistSub();
+
+    @BaseMessage("Unsupported nest {0} inside aggregation")
+    String unsupportedNestAgg(String a0);
+
+    @BaseMessage("The arguments of GROUPING must be expressions referenced by GROUP BY")
+    String argsCanOnlyFromGroupBy();
+
+    @BaseMessage("Session's db ''{0}'' not equals label's db ''{1}''")
+    String dbNameNotMatch(String a0, String a1);
+
+    @BaseMessage("{0} host or port is wrong. {1}")
+    String invalidHostOrPort(String a0, String a1);
+
+    @BaseMessage("Column definition is wrong. {0}")
+    String invalidColumnDef(String a0);
+
+    @BaseMessage("Column position is wrong. {0}")
+    String invalidColumnPos(String a0);
+
+    @BaseMessage("Field ''{0}'' is not null but doesn't have a default value")
+    String withOutDefaultVal(String a0);
+
+    @BaseMessage("Invalid column name format ''{0}''")
+    String invalidColFormat(String a0);
 }

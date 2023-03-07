@@ -22,6 +22,8 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UseDbStmt;
 
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+
 /**
  * This is a basic analyzer for some database statements, currently used by
  * `use database`, `recover database`, and `show create database`, mainly to
@@ -59,7 +61,7 @@ public class BasicDbStmtAnalyzer {
             String result = currentCatalogName;
             if (currentCatalogName == null) {
                 if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
-                    throw new SemanticException("No catalog selected");
+                    throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
                 }
                 result = context.getCurrentCatalog();
             }
