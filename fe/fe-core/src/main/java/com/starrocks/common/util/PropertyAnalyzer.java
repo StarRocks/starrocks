@@ -63,6 +63,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.Property;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -654,6 +655,14 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_TYPE)) {
             type = properties.get(PROPERTIES_TYPE);
             properties.remove(PROPERTIES_TYPE);
+        }
+        return type;
+    }
+
+    public static String analyzeType(Property property) {
+        String type = null;
+        if (PROPERTIES_TYPE.equals(property.getKey())) {
+            type = property.getValue();
         }
         return type;
     }

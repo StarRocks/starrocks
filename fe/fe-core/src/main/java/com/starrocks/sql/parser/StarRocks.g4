@@ -566,7 +566,7 @@ adminCancelRepairTableStatement
     ;
 
 adminCheckTabletsStatement
-    : ADMIN CHECK tabletList properties
+    : ADMIN CHECK tabletList PROPERTIES '('property')'
     ;
 
 killStatement

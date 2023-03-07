@@ -36,17 +36,17 @@ public class AnalyzeAggregateTest {
         analyzeFail("select v1 from t0 where abs(sum(v2)) = 2;",
                 "WHERE clause cannot contain aggregations");
         analyzeFail("select sum(v1) from t0 order by sum(max(v2) over ())",
-                "Cannot nest window function inside aggregation");
+                "Unsupported nest window function inside aggregation.");
         analyzeFail("select sum(v1) from t0 order by sum(abs(max(v2) over ()))",
-                "Cannot nest window function inside aggregation");
+                "Unsupported nest window function inside aggregation.");
         analyzeFail("select sum(v1) from t0 order by sum(max(v2))",
-                "Cannot nest aggregations inside aggregation");
+                "Unsupported nest window function inside aggregation.");
         analyzeFail("select sum(v1) from t0 order by sum(abs(max(v2)))",
-                "Cannot nest aggregations inside aggregation");
+                "Unsupported nest window function inside aggregation.");
         analyzeFail("select sum(max(v2)) from t0",
-                "Cannot nest aggregations inside aggregation");
+                "Unsupported nest window function inside aggregation.");
         analyzeFail("select sum(1 + max(v2)) from t0",
-                "Cannot nest aggregations inside aggregation");
+                "Unsupported nest window function inside aggregation.");
 
         analyzeFail("select v1 from t0 group by v1,cast(v2 as int) having cast(v2 as boolean)",
                 "must be an aggregate expression or appear in GROUP BY clause");
@@ -79,7 +79,7 @@ public class AnalyzeAggregateTest {
 
         //The arguments to GROUPING must be expressions referenced by GROUP BY
         analyzeFail("select grouping(v3) from t0 group by grouping sets((v1), (v2))",
-                "The arguments to GROUPING must be expressions referenced by GROUP BY");
+                "The arguments of GROUPING must be expressions referenced by GROUP BY");
 
         //Grouping operations are not allowed in order by
         analyzeFail("select v1 from t0 group by v1 order by grouping(v1)",

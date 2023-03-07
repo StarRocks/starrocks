@@ -38,6 +38,8 @@ import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+
 public class DropStmtAnalyzer {
     private static final Logger LOG = LogManager.getLogger(DropStmtAnalyzer.class);
 
@@ -99,7 +101,7 @@ public class DropStmtAnalyzer {
         public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
             if (Strings.isNullOrEmpty(statement.getCatalogName())) {
                 if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
-                    throw new SemanticException("No catalog selected");
+                    throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
                 }
                 statement.setCatalogName(context.getCurrentCatalog());
             }

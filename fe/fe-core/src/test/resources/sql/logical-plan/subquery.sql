@@ -172,7 +172,7 @@ logical project (col)
 [sql]
 select * from t0 where v1 in (select sum(v4) from t1 where v2= v4);
 [except]
-Unsupported correlated in predicate subquery with grouping or aggregation
+Getting analyzing error. Detail message: Unsupported correlated in predicate subquery with grouping or aggregation.
 [end]
 
 [sql]

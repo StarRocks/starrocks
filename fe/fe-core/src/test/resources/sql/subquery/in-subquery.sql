@@ -936,19 +936,19 @@ LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5 AND 3: v3 = 6: v
 [sql]
 select * from t0 where (v1, v2) IN (select t1.v4, t1.v5 from t1 WHERE t1.v6 = t0.v3 AND t1.v5 > 10) OR v3 > 10
 [except]
-Multi-column IN subquery not supported anywhere except conjuncts of the WHERE clause
+Getting analyzing error. Detail message: Multi-column IN subquery not supported anywhere except conjuncts of the WHERE clause.
 [end]
 
 [sql]
 select (v1, v2) IN (select t1.v4, t1.v5 from t1) from t0
 [except]
-Multi-column IN subquery not supported anywhere except conjuncts of the WHERE clause
+Getting analyzing error. Detail message: Multi-column IN subquery not supported anywhere except conjuncts of the WHERE clause.
 [end]
 
 [sql]
 select * from t0 where (v1, v2) NOT IN (select t1.v4, t1.v5 from t1 WHERE t1.v6 = t0.v3 AND t1.v5 > 10) OR v3 > 10
 [except]
-Multi-column IN subquery not supported anywhere except conjuncts of the WHERE clause
+Getting analyzing error. Detail message: Multi-column IN subquery not supported anywhere except conjuncts of the WHERE clause.
 [end]
 
 [sql]
@@ -963,7 +963,7 @@ LEFT SEMI JOIN (join-predicate [15: cast = 16: cast AND 6: t1f = 17: cast] post-
 [sql]
 select * from tarray where (v1, v3) IN (select v4, v5 from t1)
 [except]
-HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate
+Getting analyzing error from line 1, column 27 to line 1, column 61. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.
 [end]
 
 [sql]
@@ -978,13 +978,13 @@ LEFT SEMI JOIN (join-predicate [9: add = 7: expr AND 10: add = 5: v5] post-join-
 [sql]
 select t0.v1 from t0 where (v1, v2) IN (select t1.v4, t1.v5, t1.v5 from t1)
 [except]
-subquery must return the same number of columns as provided by the IN predicate
+Getting analyzing error from line 1, column 27 to line 1, column 74. Detail message: subquery must return the same number of columns as provided by the IN predicate.
 [end]
 
 [sql]
 select 1 from t0 where (v1, v2) IN (select v_int, v_json from tjson)
 [except]
-InPredicate of JSON, Map, Struct types is not supported
+Getting analyzing error. Detail message: InPredicate of JSON, Map, Struct types is not supported.
 [end]
 
 [sql]

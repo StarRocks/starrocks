@@ -80,6 +80,6 @@ public class ModifyBrokerClauseTest {
     @Test
     public void testNormal() throws Exception {
         analyzeFail("ALTER SYSTEM ADD BROKER `` \"127.0.0.1:8000\"", "Broker's name can't be empty.");
-        analyzeFail("ALTER SYSTEM ADD BROKER `broker1` \"127.0.0.1\"", "broker host or port is wrong!");
+        analyzeFail("ALTER SYSTEM ADD BROKER `broker1` \"127.0.0.1\"", "BROKER host or port is wrong.");
     }
 }

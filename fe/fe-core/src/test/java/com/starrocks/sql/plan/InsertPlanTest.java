@@ -348,7 +348,8 @@ public class InsertPlanTest extends PlanTestBase {
         try {
             getInsertExecPlan(sql);
         } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().equals("Column has no default value, column=k5"));
+            Assert.assertTrue(e.getMessage(), e.getMessage().equals("Getting analyzing error. Detail message: " +
+                    "Column has no default value, column=k5."));
         }
 
         sql = "insert into duplicate_table_with_default(K1,k2,k3) " +

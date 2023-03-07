@@ -135,7 +135,8 @@ public class SqlWithIdUtilsTest {
             starRocksAssert.dropDatabase("test");
             SqlWithIdUtils.decode(encode, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(), "Can not find db id: " + test.getId());
+            Assert.assertEquals(e.getMessage(), "Getting analyzing error. Detail message: Can not find db id: "
+                    + test.getId() + ".");
         } finally {
             starRocksAssert.withDatabase("test").useDatabase("test")
                     .withTable("CREATE TABLE test.tbl1\n" +
@@ -179,7 +180,8 @@ public class SqlWithIdUtilsTest {
             starRocksAssert.dropTable("tbl1");
             SqlWithIdUtils.decode(encode, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(), "Can not find table id: " + tbl1.getId() + " in db: test");
+            Assert.assertEquals(e.getMessage(), "Getting analyzing error. Detail message: Can not find table id: "
+                    + tbl1.getId() + " in db: test.");
         } finally {
             starRocksAssert.useDatabase("test")
                     .withTable("CREATE TABLE test.tbl1\n" +
