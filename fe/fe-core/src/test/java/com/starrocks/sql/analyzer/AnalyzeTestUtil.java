@@ -314,7 +314,7 @@ public class AnalyzeTestUtil {
             Assert.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException e) {
             if (!exceptMessage.equals("")) {
-                Assert.assertTrue(e.getMessage().contains(exceptMessage));
+                Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }
         } catch (Exception e) {
             Assert.fail("analyze exception");

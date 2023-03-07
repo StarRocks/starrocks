@@ -109,21 +109,25 @@ public class RefreshMaterializedViewTest {
             sql = "REFRESH MATERIALIZED VIEW test.mv_to_refresh PARTITION START('2022-02-03') END ('2022-02-25') FORCE;";
             statement = (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Not support refresh by partition for single partition mv.", e.getMessage());
+            Assert.assertEquals("Getting analyzing error from line 1, column 26 to line 1, column 31. " +
+                    "Detail message: Not support refresh by partition for single partition mv.", e.getMessage());
         }
 
         try {
             sql = "REFRESH MATERIALIZED VIEW test.mv2_to_refresh PARTITION START('2022-02-03') END ('2020-02-25') FORCE;";
             statement = (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Batch build partition start date should less than end date.", e.getMessage());
+            Assert.assertEquals("Getting analyzing error from line 1, column 56 to line 1, column 93. " +
+                    "Detail message: Batch build partition start date should less than end date.", e.getMessage());
         }
 
         try {
             sql = "REFRESH MATERIALIZED VIEW test.mv2_to_refresh PARTITION START('dhdfghg') END ('2020-02-25') FORCE;";
             statement = (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Batch build partition EVERY is date type but START or END does not type match.", e.getMessage());
+            Assert.assertEquals("Getting analyzing error from line 1, column 56 to line 1, column 90. " +
+                    "Detail message: Batch build partition EVERY is date type but START or END does not type match.",
+                    e.getMessage());
         }
     }
 

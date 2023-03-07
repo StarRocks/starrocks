@@ -185,7 +185,8 @@ public class MaterializedViewAnalyzer {
             // check query relation is select relation
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation) &&
                     !(queryStatement.getQueryRelation() instanceof SetOperationRelation)) {
-                throw new SemanticException("Materialized view query statement only support select or set operation");
+                throw new SemanticException("Materialized view query statement only support select or set operation",
+                        queryStatement.getQueryRelation().getPos());
             }
 
             List<SelectRelation> selectRelations =
@@ -217,7 +218,8 @@ public class MaterializedViewAnalyzer {
             List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
-                throw new SemanticException("Can not find database:" + statement.getTableName().getDb());
+                throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
+                        statement.getTableName().getPos());
             }
             if (tableNameTableMap.isEmpty()) {
                 throw new SemanticException("Can not find base table in query statement");
@@ -226,16 +228,17 @@ public class MaterializedViewAnalyzer {
                 Preconditions.checkState(table != null, "Materialized view base table is null");
                 if (!isSupportBasedOnTable(table)) {
                     throw new SemanticException("Create materialized view do not support the table type: " +
-                            table.getType());
+                            table.getType(), tableNameInfo.getPos());
                 }
                 if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
                     throw new SemanticException(
-                            "Create materialized view from inactive materialized view: " + table.getName());
+                            "Create materialized view from inactive materialized view: " + table.getName(),
+                            tableNameInfo.getPos());
                 }
                 if (isExternalTableFromResource(table)) {
                     throw new SemanticException(
                             "Only supports creating materialized views based on the external table " +
-                                    "which created by catalog");
+                                    "which created by catalog", tableNameInfo.getPos());
                 }
                 Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
                         tableNameInfo.getDb());
@@ -347,7 +350,7 @@ public class MaterializedViewAnalyzer {
             if (expr instanceof FunctionCallExpr) {
                 if (((FunctionCallExpr) expr).isNondeterministicBuiltinFnName()) {
                     throw new SemanticException("Materialized view query statement select item " +
-                            expr.toSql() + " not supported nondeterministic function");
+                            expr.toSql() + " not supported nondeterministic function", expr.getPos());
                 }
             }
             ArrayList<Expr> children = expr.getChildren();
@@ -410,7 +413,7 @@ public class MaterializedViewAnalyzer {
             SlotRef slotRef = getSlotRef(expressionPartitionDesc.getExpr());
             if (slotRef.getTblNameWithoutAnalyzed() != null) {
                 throw new SemanticException("Materialized view partition exp: "
-                        + slotRef.toSql() + " must related to column");
+                        + slotRef.toSql() + " must related to column", expressionPartitionDesc.getExpr().getPos());
             }
             int columnId = 0;
             for (Column column : columns) {
@@ -441,7 +444,7 @@ public class MaterializedViewAnalyzer {
                 if (!(refExpr instanceof SlotRef)) {
                     throw new SemanticException("Materialized view partition function " +
                             functionCallExpr.getFnName().getFunction() +
-                            " must related with column");
+                            " must related with column", functionCallExpr.getPos());
                 }
                 SlotRef slotRef = getSlotRef(functionCallExpr);
                 slotRef.setType(partitionColumn.getType());
@@ -460,7 +463,7 @@ public class MaterializedViewAnalyzer {
                     statement.setPartitionRefTableExpr(refExpr);
                 } else {
                     throw new SemanticException(
-                            "Materialized view partition function must related with column");
+                            "Materialized view partition function must related with column", expressionPartitionDesc.getPos());
                 }
             }
         }
@@ -474,11 +477,11 @@ public class MaterializedViewAnalyzer {
                         PartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
                 if (checkPartitionFunction == null) {
                     throw new SemanticException("Materialized view partition function " +
-                            functionName + " is not support");
+                            functionName + " is not support", functionCallExpr.getPos());
                 }
                 if (!checkPartitionFunction.check(functionCallExpr)) {
                     throw new SemanticException("Materialized view partition function " +
-                            functionName + " check failed");
+                            functionName + " check failed", functionCallExpr.getPos());
                 }
             }
         }
@@ -654,11 +657,11 @@ public class MaterializedViewAnalyzer {
             final String newMvName = statement.getNewMvName();
             if (newMvName != null) {
                 if (statement.getMvName().getTbl().equals(newMvName)) {
-                    throw new SemanticException("Same materialized view name %s", newMvName);
+                    throw new SemanticException("Same materialized view name " + newMvName, statement.getMvName().getPos());
                 }
             } else if (refreshSchemeDesc != null) {
                 if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
-                    throw new SemanticException("Unsupported change to SYNC refresh type");
+                    throw new SemanticException("Unsupported change to SYNC refresh type", refreshSchemeDesc.getPos());
                 }
                 if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
                     AsyncRefreshSchemeDesc async = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
@@ -666,15 +669,15 @@ public class MaterializedViewAnalyzer {
                     if (intervalLiteral != null) {
                         long step = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
                         if (step <= 0) {
-                            throw new SemanticException("Unsupported negative or zero step value: %s", step);
+                            throw new SemanticException("Unsupported negative or zero step value: " + step, async.getPos());
                         }
                         final String unit = intervalLiteral.getUnitIdentifier().getDescription().toUpperCase();
                         try {
                             RefreshTimeUnit.valueOf(unit);
                         } catch (IllegalArgumentException e) {
-                            throw new SemanticException(
-                                    "Unsupported interval unit: %s, only timeunit %s are supported.", unit,
+                            String msg = String.format("Unsupported interval unit: %s, only timeunit %s are supported", unit,
                                     Arrays.asList(RefreshTimeUnit.values()));
+                            throw new SemanticException(msg, intervalLiteral.getUnitIdentifier().getPos());
                         }
                     }
                 }
@@ -682,14 +685,14 @@ public class MaterializedViewAnalyzer {
                 TableName mvName = statement.getMvName();
                 Database db = context.getGlobalStateMgr().getDb(mvName.getDb());
                 if (db == null) {
-                    throw new SemanticException("Can not find database:" + mvName.getDb());
+                    throw new SemanticException("Can not find database:" + mvName.getDb(), mvName.getPos());
                 }
                 OlapTable table = (OlapTable) db.getTable(mvName.getTbl());
                 if (table == null) {
-                    throw new SemanticException("Can not find materialized view:" + mvName.getTbl());
+                    throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
                 }
                 if (!(table instanceof MaterializedView)) {
-                    throw new SemanticException(mvName.getTbl() + " is not async materialized view");
+                    throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
                 }
             } else {
                 throw new SemanticException("Unsupported modification for materialized view");
@@ -704,23 +707,23 @@ public class MaterializedViewAnalyzer {
             TableName mvName = statement.getMvName();
             Database db = context.getGlobalStateMgr().getDb(mvName.getDb());
             if (db == null) {
-                throw new SemanticException("Can not find database:" + mvName.getDb());
+                throw new SemanticException("Can not find database:" + mvName.getDb(), mvName.getPos());
             }
             OlapTable table = (OlapTable) db.getTable(mvName.getTbl());
             if (table == null) {
-                throw new SemanticException("Can not find materialized view:" + mvName.getTbl());
+                throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
             }
             Preconditions.checkState(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
             if (!mv.isActive()) {
                 throw new SemanticException(
-                        "Refresh materialized view failed because " + mv.getName() + " is not active.");
+                        "Refresh materialized view failed because " + mv.getName() + " is not active", mvName.getPos());
             }
             if (statement.getPartitionRangeDesc() == null) {
                 return null;
             }
             if (!(table.getPartitionInfo() instanceof RangePartitionInfo)) {
-                throw new SemanticException("Not support refresh by partition for single partition mv.");
+                throw new SemanticException("Not support refresh by partition for single partition mv", mvName.getPos());
             }
             Column partitionColumn =
                     ((RangePartitionInfo) table.getPartitionInfo()).getPartitionColumns().get(0);
@@ -730,7 +733,7 @@ public class MaterializedViewAnalyzer {
                 validateNumberTypePartition(statement.getPartitionRangeDesc());
             } else {
                 throw new SemanticException(
-                        "Unsupported batch partition build type:" + partitionColumn.getType() + ".");
+                        "Unsupported batch partition build type:" + partitionColumn.getType());
             }
             return null;
         }
@@ -746,10 +749,11 @@ public class MaterializedViewAnalyzer {
                 endNum = Long.parseLong(end);
             } catch (NumberFormatException ex) {
                 throw new SemanticException("Batch build partition EVERY is number type " +
-                        "but START or END does not type match.");
+                        "but START or END does not type match", partitionRangeDesc.getPos());
             }
             if (startNum >= endNum) {
-                throw new SemanticException("Batch build partition start value should less then end value.");
+                throw new SemanticException("Batch build partition start value should less then end value",
+                        partitionRangeDesc.getPos());
             }
         }
 
@@ -768,10 +772,11 @@ public class MaterializedViewAnalyzer {
                 endTime = DateUtils.parseStringWithDefaultHSM(end, endDateTimeFormat);
             } catch (Exception ex) {
                 throw new SemanticException("Batch build partition EVERY is date type " +
-                        "but START or END does not type match.");
+                        "but START or END does not type match", partitionRangeDesc.getPos());
             }
             if (!startTime.isBefore(endTime)) {
-                throw new SemanticException("Batch build partition start date should less than end date.");
+                throw new SemanticException("Batch build partition start date should less than end date",
+                        partitionRangeDesc.getPos());
             }
         }
 
@@ -812,7 +817,7 @@ public class MaterializedViewAnalyzer {
                 String fmt = ((StringLiteral) fnExpr.getChild(0)).getValue();
                 if (fmt.equalsIgnoreCase("week")) {
                     throw new SemanticException("The function date_trunc used by the materialized view for partition" +
-                            " does not support week formatting");
+                            " does not support week formatting", expr.getPos());
                 }
                 SlotRef slotRef = (SlotRef) fnExpr.getChild(1);
                 PrimitiveType primitiveType = slotRef.getType().getPrimitiveType();

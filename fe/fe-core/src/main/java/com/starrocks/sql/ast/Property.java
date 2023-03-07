@@ -14,8 +14,12 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
+import java.util.Objects;
 
 public class Property implements ParseNode {
     private final String key;
@@ -41,8 +45,38 @@ public class Property implements ParseNode {
         return value;
     }
 
+    public Map<String, String> getMap() {
+        Map<String, String> map = Maps.newHashMap();
+        map.put(key, value);
+        return map;
+    }
+
+    public boolean containsKey(String key) {
+        return key.equals(this.key);
+    }
+
     @Override
     public NodePosition getPos() {
         return pos;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(key);
+    }
+
+    // only compare keys in properties
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        Property that = (Property) o;
+        return Objects.equals(this.key, that.key);
     }
 }

@@ -43,7 +43,8 @@ public class AnalyzeInsertTest {
 
         analyzeSuccess("insert into tarray(v1,v4) values (1,[NULL,9223372036854775808])");
 
-        analyzeFail("insert into t0 values (170141183460469231731687303715884105728)", "Number Overflow. literal");
+        analyzeFail("insert into t0 values (170141183460469231731687303715884105728)",
+                "Numeric overflow 170141183460469231731687303715884105728.");
 
         analyzeFail("insert into tall(ta) values(min('x'))", "Values clause cannot contain aggregations");
         analyzeFail("insert into tall(ta) values(case min('x') when 'x' then 'x' end)",

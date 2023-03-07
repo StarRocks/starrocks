@@ -567,7 +567,8 @@ public class SetTest extends PlanTestBase {
             setExecutor.execute();
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Scalar subquery should output one column", e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: Scalar subquery should output one column.",
+                    e.getMessage());
         }
     }
 }

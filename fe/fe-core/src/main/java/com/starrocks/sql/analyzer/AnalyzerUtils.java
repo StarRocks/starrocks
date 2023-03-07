@@ -102,7 +102,7 @@ public class AnalyzerUtils {
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof FunctionCallExpr &&
                 arg.getFn() instanceof AggregateFunction, functions);
         if (!functions.isEmpty()) {
-            throw new SemanticException("%s clause cannot contain aggregations", clause);
+            throw new SemanticException(clause + " clause cannot contain aggregations", expression.getPos());
         }
     }
 
@@ -110,7 +110,7 @@ public class AnalyzerUtils {
         List<AnalyticExpr> functions = Lists.newArrayList();
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof AnalyticExpr, functions);
         if (!functions.isEmpty()) {
-            throw new SemanticException("%s clause cannot contain window function", clause);
+            throw new SemanticException(clause + " clause cannot contain window function", expression.getPos());
         }
     }
 
@@ -118,7 +118,7 @@ public class AnalyzerUtils {
         List<GroupingFunctionCallExpr> calls = Lists.newArrayList();
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof GroupingFunctionCallExpr, calls);
         if (!calls.isEmpty()) {
-            throw new SemanticException("%s clause cannot contain grouping", clause);
+            throw new SemanticException(clause + " clause cannot contain grouping", expression.getPos());
         }
     }
 
@@ -126,7 +126,7 @@ public class AnalyzerUtils {
         List<Subquery> calls = Lists.newArrayList();
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof Subquery, calls);
         if (!calls.isEmpty()) {
-            throw new SemanticException("%s clause cannot contain subquery", clause);
+            throw new SemanticException(clause + " clause cannot contain subquery", expression.getPos());
         }
     }
 

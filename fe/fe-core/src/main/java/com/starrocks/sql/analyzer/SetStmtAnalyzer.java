@@ -193,10 +193,10 @@ public class SetStmtAnalyzer {
         try {
             long num = Long.parseLong(value);
             if (min != null && num < min) {
-                throw new SemanticException(String.format("%s must be equal or greater than %d.", field, min));
+                throw new SemanticException(String.format("%s must be equal or greater than %d", field, min));
             }
             if (max != null && num > max) {
-                throw new SemanticException(String.format("%s must be equal or smaller than %d.", field, max));
+                throw new SemanticException(String.format("%s must be equal or smaller than %d", field, max));
             }
         } catch (NumberFormatException ex) {
             throw new SemanticException(field + " is not a number");
@@ -207,7 +207,7 @@ public class SetStmtAnalyzer {
         try {
             TTabletInternalParallelMode.valueOf(val.toUpperCase());
         } catch (Exception ignored) {
-            throw new SemanticException("Invalid tablet_internal_parallel_mode, now we support {auto, force_split}.");
+            throw new SemanticException("Invalid tablet_internal_parallel_mode, now we support {auto, force_split}");
         }
     }
 

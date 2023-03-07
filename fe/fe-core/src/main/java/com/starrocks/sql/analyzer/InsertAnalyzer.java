@@ -81,18 +81,19 @@ public class InsertAnalyzer {
 
             if (targetPartitionNames != null) {
                 if (targetPartitionNames.getPartitionNames().isEmpty()) {
-                    throw new SemanticException("No partition specified in partition lists");
+                    throw new SemanticException("No partition specified in partition lists",
+                            targetPartitionNames.getPos());
                 }
 
                 for (String partitionName : targetPartitionNames.getPartitionNames()) {
                     if (Strings.isNullOrEmpty(partitionName)) {
-                        throw new SemanticException("there are empty partition name");
+                        throw new SemanticException("there are empty partition name", targetPartitionNames.getPos());
                     }
 
                     Partition partition = olapTable.getPartition(partitionName, targetPartitionNames.isTemp());
                     if (partition == null) {
                         throw new SemanticException("Unknown partition '%s' in table '%s'", partitionName,
-                                olapTable.getName());
+                                olapTable.getName(), targetPartitionNames.getPos());
                     }
                     targetPartitionIds.add(partition.getId());
                 }

@@ -1315,7 +1315,7 @@ public class PlanTestBase {
                             pair = UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
                         } catch (Exception ex) {
                             if (!exceptString.toString().isEmpty()) {
-                                Assert.assertEquals(ex.getMessage(), exceptString.toString());
+                                Assert.assertEquals(exceptString.toString(), ex.getMessage());
                                 continue;
                             }
                             Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
