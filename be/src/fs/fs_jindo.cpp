@@ -135,18 +135,21 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSO
         jdo_setOption(jdo_options, kv.first.c_str(), kv.second.c_str());
     }
 
-    if (!uri.endpoint().empty()) {
-        jdo_setOption(jdo_options, OSS_ENDPOINT_KEY, uri.endpoint().c_str());
-    }
-
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
     if (hdfs_properties != nullptr) {
+        if (hdfs_properties->__isset.end_point) {
+            jdo_setOption(jdo_options, OSS_ENDPOINT_KEY, hdfs_properties->end_point.c_str());
+        }
         if (hdfs_properties->__isset.access_key) {
             jdo_setOption(jdo_options, OSS_ACCESS_KEY_ID, hdfs_properties->access_key.c_str());
         }
         if (hdfs_properties->__isset.secret_key) {
             jdo_setOption(jdo_options, OSS_ACCESS_KEY_SECRET, hdfs_properties->secret_key.c_str());
         }
+    }
+
+    if (!uri.endpoint().empty()) {
+        jdo_setOption(jdo_options, OSS_ENDPOINT_KEY, uri.endpoint().c_str());
     }
 
     std::string uri_prefix = uri.scheme() + "://" + uri.bucket();
