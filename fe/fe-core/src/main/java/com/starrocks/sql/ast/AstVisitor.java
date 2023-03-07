@@ -309,6 +309,17 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+<<<<<<< HEAD
+=======
+    public R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSetCatalogStatement(SetCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+>>>>>>> bd7d02eee ([Enhancement] Support set current catalog by its name (#19103))
     // ------------------------------------------- DML Statement -------------------------------------------------------
 
     public R visitInsertStatement(InsertStmt statement, C context) {

@@ -3271,8 +3271,13 @@ public class GlobalStateMgr {
             ctx.setCurrentCatalog(newCatalogName);
         }
 
+<<<<<<< HEAD
         if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
             LOG.debug("Unknown catalog '%s' and db '%s'", ctx.getCurrentCatalog(), dbName);
+=======
+        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
+            LOG.debug("Unknown catalog {} and db {}", ctx.getCurrentCatalog(), dbName);
+>>>>>>> bd7d02eee ([Enhancement] Support set current catalog by its name (#19103))
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 

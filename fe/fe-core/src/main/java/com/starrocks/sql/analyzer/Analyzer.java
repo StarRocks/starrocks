@@ -96,6 +96,7 @@ import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
@@ -416,6 +417,21 @@ public class Analyzer {
             return null;
         }
 
+<<<<<<< HEAD
+=======
+        @Override
+        public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+            CatalogAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
+            CatalogAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+>>>>>>> bd7d02eee ([Enhancement] Support set current catalog by its name (#19103))
         // ---------------------------------------- Warehouse Statement -----------------------------------------------------
         @Override
         public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {

@@ -20,6 +20,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 
@@ -80,5 +81,35 @@ public class CatalogAnalyzer {
 
             return null;
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+            if (Strings.isNullOrEmpty(statement.getCatalogParts())) {
+                throw new SemanticException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.");
+            }
+
+            String[] splitParts = statement.getCatalogParts().split(WHITESPACE);
+            if (!splitParts[0].equalsIgnoreCase(CATALOG) || splitParts.length != 2) {
+                throw new SemanticException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.");
+            }
+
+            FeNameFormat.checkCatalogName(splitParts[1]);
+            statement.setCatalogName(splitParts[1]);
+
+            return null;
+        }
+
+        @Override
+        public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
+            if (Strings.isNullOrEmpty(statement.getCatalogName())) {
+                throw new SemanticException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.");
+            }
+
+            FeNameFormat.checkCatalogName(statement.getCatalogName());
+            return null;
+        }
+>>>>>>> bd7d02eee ([Enhancement] Support set current catalog by its name (#19103))
     }
 }
