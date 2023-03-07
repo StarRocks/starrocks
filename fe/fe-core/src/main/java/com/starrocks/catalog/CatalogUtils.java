@@ -239,20 +239,13 @@ public class CatalogUtils {
 
     public static void maskProperties(Map<String, String> properties) {
         // aws.s3.access_key -> ******
-        if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ACCESS_KEY)) {
-            properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, "******");
-        }
+        properties.computeIfPresent(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, (k, v) -> "******");
         // aws.s3.secret_key -> ******
-        if (properties.containsKey(CloudConfigurationConstants.AWS_S3_SECRET_KEY)) {
-            properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, "******");
-        }
+        properties.computeIfPresent(CloudConfigurationConstants.AWS_S3_SECRET_KEY, (k, v) -> "******");
         // aws.glue.access_key -> ******
-        if (properties.containsKey(CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY)) {
-            properties.put(CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY, "******");
-        }
+        properties.computeIfPresent(CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY, (k, v) -> "******");
         // aws.glue.secret_key -> ******
-        if (properties.containsKey(CloudConfigurationConstants.AWS_GLUE_SECRET_KEY)) {
-            properties.put(CloudConfigurationConstants.AWS_GLUE_SECRET_KEY, "******");
-        }
+        properties.computeIfPresent(CloudConfigurationConstants.AWS_GLUE_SECRET_KEY, (k, v) -> "******");
+
     }
 }
