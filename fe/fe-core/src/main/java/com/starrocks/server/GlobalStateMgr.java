@@ -3277,7 +3277,7 @@ public class GlobalStateMgr {
             dbName = parts[1];
         }
 
-        if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
+        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
             LOG.debug("Unknown catalog {} and db {}", ctx.getCurrentCatalog(), dbName);
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }

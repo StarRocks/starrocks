@@ -118,6 +118,7 @@ import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
@@ -481,6 +482,8 @@ public class StmtExecutor {
                 handleSetWarehouseStmt();
             } else if (parsedStmt instanceof UseCatalogStmt) {
                 handleUseCatalogStmt();
+            } else if (parsedStmt instanceof SetCatalogStmt) {
+                handleSetCatalogStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
                 if (execPlanBuildByNewPlanner) {
                     handleCreateTableAsSelectStmt(beginTimeInNanoSecond);
@@ -990,6 +993,18 @@ public class StmtExecutor {
         UseCatalogStmt useCatalogStmt = (UseCatalogStmt) parsedStmt;
         try {
             String catalogName = useCatalogStmt.getCatalogName();
+            context.getGlobalStateMgr().changeCatalog(context, catalogName);
+        } catch (Exception e) {
+            context.getState().setError(e.getMessage());
+            return;
+        }
+        context.getState().setOk();
+    }
+
+    private void handleSetCatalogStmt() throws AnalysisException {
+        SetCatalogStmt setCatalogStmt = (SetCatalogStmt) parsedStmt;
+        try {
+            String catalogName = setCatalogStmt.getCatalogName();
             context.getGlobalStateMgr().changeCatalog(context, catalogName);
         } catch (Exception e) {
             context.getState().setError(e.getMessage());
