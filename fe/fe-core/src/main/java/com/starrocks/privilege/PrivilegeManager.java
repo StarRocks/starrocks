@@ -1583,17 +1583,4 @@ public class PrivilegeManager {
         roleNameToId.put(collection.getName(), roleId);
         LOG.info("upgrade role {}[{}]", collection.getName(), roleId);
     }
-
-    public void upgradeUserRoleUnlock(UserIdentity user, long... roleIds) {
-        UserPrivilegeCollection collection = userToPrivilegeCollection.get(user);
-        for (long roleId : roleIds) {
-            collection.grantRole(roleId);
-        }
-    }
-
-    // This function only change data in parent roles
-    // Child role will be updated as a whole by upgradeRoleInitPrivilegeUnlock
-    public void upgradeParentRoleRelationUnlock(long parentRoleId, long subRoleId) {
-        roleIdToPrivilegeCollection.get(parentRoleId).addSubRole(subRoleId);
-    }
 }

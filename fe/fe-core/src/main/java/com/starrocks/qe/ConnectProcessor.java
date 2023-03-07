@@ -598,6 +598,8 @@ public class ConnectProcessor {
         if (request.isSetUser_roles()) {
             List<Long> roleIds = request.getUser_roles().getRole_id_list();
             ctx.setCurrentRoleIds(new HashSet<>(roleIds));
+        } else {
+            ctx.setCurrentRoleIds(new HashSet<>());
         }
 
         if (request.isSetIsLastStmt()) {
