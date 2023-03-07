@@ -34,7 +34,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             "SELECT $tableId, $partitionId, '$columnName', $dbId," +
                     " '$dbName.$tableName', '$partitionName'," +
                     " COUNT(1), $dataSize, $countDistinctFunction, $countNullFunction, $maxFunction, $minFunction, NOW() "
-                    + "FROM $dbName.$tableName partition $partitionName";
+                    + "FROM `$dbName`.`$tableName` partition `$partitionName`";
 
     private final List<Long> partitionIdList;
 
