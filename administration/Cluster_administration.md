@@ -169,7 +169,7 @@ sh bin/stop_cn.sh
 > |2.2.x|可以从2.0.x 或 2.1.x 升级|回滚需要配置 <code>ignore_unknown_log_id</code> 为 <code>true</code>。|是|
 > |2.3.x|可以从2.0.x、2.1.x 或 2.2.x 升级|不建议跨版本回滚。回滚需要配置 <code>ignore_unknown_log_id</code> 为 <code>true</code>。|否|
 > |2.4.x|可以从2.0.x、2.1.x、2.2.x 或 2.3.x 升级|不建议跨版本回滚。如果您开启了 [FQDN 访问](../administration/enable_fqdn.md)，需先将集群修改为 IP 地址访问。|否|
-> |2.5.x|可以从2.0.x、2.1.x、2.2.x、2.3.x 或 2.4.x 升级|不建议跨版本回滚。如果您系统内有 LIST 分区表，需要先删除再回滚。|是|
+> |2.5.x|可以从2.0.x、2.1.x、2.2.x、2.3.x 或 2.4.x 升级|不建议跨版本回滚。|是|
 
 ### 下载安装文件
 
