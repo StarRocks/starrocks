@@ -36,8 +36,8 @@ namespace starrocks {
 // Sort a column by permtuation
 class ColumnSorter final : public ColumnVisitorAdapter<ColumnSorter> {
 public:
-    explicit ColumnSorter(const bool& cancel, const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
-                          std::pair<int, int> range, bool build_tie)
+    explicit ColumnSorter(const std::atomic<bool>& cancel, const SortDesc& sort_desc, SmallPermutation& permutation,
+                          Tie& tie, std::pair<int, int> range, bool build_tie)
             : ColumnVisitorAdapter(this),
               _cancel(cancel),
               _sort_desc(sort_desc),
@@ -143,7 +143,7 @@ public:
     }
 
 private:
-    const bool& _cancel;
+    const std::atomic<bool>& _cancel;
     const SortDesc& _sort_desc;
     SmallPermutation& _permutation;
     Tie& _tie;
@@ -392,13 +392,13 @@ private:
     size_t _pruned_limit; // The pruned limit during partial sorting
 };
 
-Status sort_and_tie_column(const bool cancel, const ColumnPtr& column, const SortDesc& sort_desc,
+Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
     return column->accept(&column_sorter);
 }
 
-Status sort_and_tie_column(const bool cancel, ColumnPtr& column, const SortDesc& sort_desc,
+Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
     if (column->is_nullable() && !column->is_constant()) {
         ColumnHelper::as_column<NullableColumn>(column)->fill_null_with_default();
@@ -407,7 +407,7 @@ Status sort_and_tie_column(const bool cancel, ColumnPtr& column, const SortDesc&
     return column->accept(&column_sorter);
 }
 
-Status sort_and_tie_columns(const bool cancel, const Columns& columns, const SortDescs& sort_desc,
+Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
                             Permutation* permutation) {
     if (columns.size() < 1) {
         return Status::OK();
@@ -429,7 +429,7 @@ Status sort_and_tie_columns(const bool cancel, const Columns& columns, const Sor
     return Status::OK();
 }
 
-Status stable_sort_and_tie_columns(const bool cancel, const Columns& columns, const SortDescs& sort_desc,
+Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
                                    SmallPermutation* small_perm) {
     if (columns.size() < 1) {
         return Status::OK();
@@ -451,7 +451,7 @@ Status stable_sort_and_tie_columns(const bool cancel, const Columns& columns, co
         int range_first = ti.range_first, range_last = ti.range_last;
         if (range_last - range_first > 1) {
             ::pdqsort(
-                    cancel, small_perm->begin() + range_first, small_perm->begin() + range_last,
+                    small_perm->begin() + range_first, small_perm->begin() + range_last,
                     [](SmallPermuteItem lhs, SmallPermuteItem rhs) { return lhs.index_in_chunk < rhs.index_in_chunk; });
         }
     }
