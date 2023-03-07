@@ -128,7 +128,7 @@ public abstract class StatisticsCollectJob {
             if (isSample) {
                 return "IFNULL(SUM(CHAR_LENGTH(`column_key`) * t1.count), 0)";
             } else {
-                return "IFNULL(SUM(CHAR_LENGTH(`" + column.getName() + "`)), 0)";
+                return "IFNULL(SUM(CHAR_LENGTH(" + StatisticUtils.quoting(column.getName()) + ")), 0)";
             }
         }
 
