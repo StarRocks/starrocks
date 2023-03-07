@@ -114,14 +114,14 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             cur_chunk->append_column(captured->replicate(input_array->offsets_column()->get_data()), id);
         }
         if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
-            column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
+            ASSIGN_OR_RETURN(column, context->evaluate(_children[0], cur_chunk.get()));
             column = ColumnHelper::align_return_type(column, type().children[0], cur_chunk->num_rows(), true);
         } else { // split large chunks into small ones to avoid too large or various batch_size
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             accumulator.push(std::move(cur_chunk));
             accumulator.finalize();
             while (auto tmp_chunk = accumulator.pull()) {
-                auto tmp_col = EVALUATE_NULL_IF_ERROR(context, _children[0], tmp_chunk.get());
+                ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
                 tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows(), true);
                 if (column == nullptr) {
                     column = tmp_col;
