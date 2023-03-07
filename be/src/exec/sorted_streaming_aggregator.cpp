@@ -276,7 +276,7 @@ Status SortedStreamingAggregator::prepare(RuntimeState* state, ObjectPool* pool,
     return Status::OK();
 }
 
-StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size, bool is_update) {
+StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size, bool is_update_phase) {
     if (chunk_size == 0) {
         return std::make_shared<Chunk>();
     }
@@ -293,7 +293,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
 
     RETURN_IF_ERROR(_compute_group_by(chunk_size));
 
-    RETURN_IF_ERROR(_update_states(chunk_size, is_update));
+    RETURN_IF_ERROR(_update_states(chunk_size, is_update_phase));
 
     // selector[i] == 0 means selected
     std::vector<uint8_t> selector(chunk_size);
@@ -334,7 +334,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
     _last_state = _tmp_agg_states[chunk_size - 1];
     DCHECK(!_group_by_columns[0]->empty());
     DCHECK(!_last_columns[0]->empty());
-    
+
     return result_chunk;
 }
 

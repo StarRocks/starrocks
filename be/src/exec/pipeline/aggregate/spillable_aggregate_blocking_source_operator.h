@@ -45,7 +45,7 @@ private:
     StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
 
     bool _is_finished = false;
-    mutable bool _streaming_aggregator_empty = false;
+    bool _has_last_chunk = true;
     SortedStreamingAggregatorPtr _aggregator = nullptr;
 };
 

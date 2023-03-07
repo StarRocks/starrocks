@@ -36,7 +36,7 @@ bool SpillableAggregateBlockingSourceOperator::has_output() const {
         return true;
     }
     // has eos chunk
-    if (_aggregator->is_spilled_eos() && !_streaming_aggregator_empty) {
+    if (_aggregator->is_spilled_eos() && _has_last_chunk) {
         return true;
     }
     return false;
@@ -49,8 +49,7 @@ bool SpillableAggregateBlockingSourceOperator::is_finished() const {
     if (!_aggregator->spiller()->spilled()) {
         return AggregateBlockingSourceOperator::is_finished();
     }
-    return AggregateBlockingSourceOperator::is_finished() && _aggregator->is_spilled_eos() &&
-           _streaming_aggregator_empty;
+    return AggregateBlockingSourceOperator::is_finished() && _aggregator->is_spilled_eos() && !_has_last_chunk;
 }
 
 Status SpillableAggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
@@ -89,7 +88,7 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
         ASSIGN_OR_RETURN(res, _aggregator->streaming_compute_agg_state(chunk->num_rows(), false));
 
     } else {
-        _streaming_aggregator_empty = true;
+        _has_last_chunk = false;
         ASSIGN_OR_RETURN(res, _aggregator->pull_eos_chunk());
     }
 
