@@ -253,7 +253,8 @@ public class VariableMgrTest {
                 SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
                 Assert.fail("No exception throws.");
             } catch (Exception e) {
-                Assert.assertEquals(e.getMessage(), "exec_mem_limit must be equal or greater than 2097152.");
+                Assert.assertEquals("Getting analyzing error. Detail message: exec_mem_limit must be equal " +
+                        "or greater than 2097152.", e.getMessage());
             }
         }
     }
