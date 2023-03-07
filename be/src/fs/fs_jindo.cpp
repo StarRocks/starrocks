@@ -82,12 +82,31 @@ std::string JindoSdkConfig::trim(const std::string &s) {
 }
 
 bool JindoClientFactory::option_equals(const JdoOptions_t& left, const JdoOptions_t& right) {
-    std::string l(jdo_getOption(left, OSS_ENDPOINT_KEY, "x"));
-    std::string r(jdo_getOption(right, OSS_ENDPOINT_KEY, "y"));
-    return l == r;
+    std::string left_endpoint(jdo_getOption(left, OSS_ENDPOINT_KEY, "x"));
+    std::string right_endpoint(jdo_getOption(right, OSS_ENDPOINT_KEY, "y"));
+    std::string left_ak_id(jdo_getOption(left, OSS_ACCESS_KEY_ID, "x"));
+    std::string right_ak_id(jdo_getOption(right, OSS_ACCESS_KEY_ID, "y"));
+    std::string left_ak_secret(jdo_getOption(left, OSS_ACCESS_KEY_SECRET, "x"));
+    std::string right_ak_secret(jdo_getOption(right, OSS_ACCESS_KEY_SECRET, "y"));
+    return left_endpoint == right_endpoint && left_ak_id == right_ak_id && left_ak_secret == right_ak_secret;
 }
 
-JindoClientFactory::JindoClientFactory() : _rand((int)::time(nullptr)) {}
+JindoClientFactory::JindoClientFactory() : _rand((int)::time(nullptr)) {
+    std::lock_guard l(_lock);
+    std::string jindosdk_conf_path = getenv("STARROCKS_HOME");
+    jindosdk_conf_path.append("/conf/jindosdk.cfg");
+    if (std::filesystem::exists(jindosdk_conf_path)) {
+        std::shared_ptr<JindoSdkConfig> jindo_sdk_config;
+        jindo_sdk_config = std::make_shared<JindoSdkConfig>();
+        jindo_sdk_config->loadConfig(jindosdk_conf_path);
+        _jindo_config_map = jindo_sdk_config->get_configs();
+    } else {
+        LOG(INFO) << "Jindo config file not found, SDK will be initialized from be.conf";
+        _jindo_config_map[OSS_ENDPOINT_KEY] = config::object_storage_endpoint;
+        _jindo_config_map[OSS_ACCESS_KEY_ID] = config::object_storage_access_key_id;
+        _jindo_config_map[OSS_ACCESS_KEY_SECRET] = config::object_storage_secret_access_key;
+    }
+}
 
 StatusOr<std::string> JindoClientFactory::get_local_user() {
     uid_t euid;
@@ -110,29 +129,26 @@ StatusOr<std::string> JindoClientFactory::get_local_user() {
     return username;
 }
 
-StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri) {
+StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSOptions& opts) {
     std::lock_guard l(_lock);
 
     auto jdo_options = jdo_createOptions();
-
-    std::string jindosdk_conf_path = getenv("STARROCKS_HOME");
-    jindosdk_conf_path.append("/conf/jindosdk.cfg");
-
-    if (!std::filesystem::exists(jindosdk_conf_path)) {
-        std::string msg = "File not found: " + jindosdk_conf_path;
-        return Status::IOError(msg);
-    }
-    std::shared_ptr<JindoSdkConfig> jindo_sdk_config;
-    jindo_sdk_config = std::make_shared<JindoSdkConfig>();
-    jindo_sdk_config->loadConfig(jindosdk_conf_path);
-
-    auto& configMap = jindo_sdk_config->get_configs();
-    for (auto& kv : configMap) {
+    for (auto& kv : _jindo_config_map) {
         jdo_setOption(jdo_options, kv.first.c_str(), kv.second.c_str());
     }
 
     if (!uri.endpoint().empty()) {
         jdo_setOption(jdo_options, OSS_ENDPOINT_KEY, uri.endpoint().c_str());
+    }
+
+    const THdfsProperties* hdfs_properties = opts.hdfs_properties();
+    if (hdfs_properties != nullptr) {
+        if (hdfs_properties->__isset.access_key) {
+            jdo_setOption(jdo_options, OSS_ACCESS_KEY_ID, hdfs_properties->access_key.c_str());
+        }
+        if (hdfs_properties->__isset.secret_key) {
+            jdo_setOption(jdo_options, OSS_ACCESS_KEY_SECRET, hdfs_properties->secret_key.c_str());
+        }
     }
 
     std::string uri_prefix = uri.scheme() + "://" + uri.bucket();
@@ -187,7 +203,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> JindoFileSystem::new_random_access_f
         return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", path));
     }
 
-    ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri))
+    ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
     auto input_stream = std::make_shared<io::JindoInputStream>(std::move(client), path);
     return std::make_unique<RandomAccessFile>(std::move(input_stream), path);
 }
@@ -199,7 +215,7 @@ StatusOr<std::unique_ptr<SequentialFile>> JindoFileSystem::new_sequential_file(c
         return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", path));
     }
 
-    ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri))
+    ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
     auto input_stream = std::make_shared<io::JindoInputStream>(std::move(client), path);
     return std::make_unique<SequentialFile>(std::move(input_stream), path);
 }

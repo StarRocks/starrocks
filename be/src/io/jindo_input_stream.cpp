@@ -48,11 +48,12 @@ StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
         bytes_read += bytes;
         bytes_to_read -= bytes;
     }
+    // relax check exception due to the wrong params from CSV scanner
     if (bytes_read < count) {
-        std::string msg = fmt::format("Failed to read the file {}, offset = {}, length = {}， bytes last read = {}",
-                                      _file_path, _offset + bytes_read, bytes_to_read, bytes);
-        LOG(ERROR) << msg;
-        return Status::IOError(msg);
+        std::string msg = fmt::format("No enough data to read from the file {}, current offset = {}, bytes_read = {},"
+                                      "bytes_to_read = {}, bytes last read = {}",
+                                      _file_path, _offset + bytes_read, bytes_read, bytes_to_read, bytes);
+        LOG(WARNING) << msg;
     }
     return bytes_read;
 }

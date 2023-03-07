@@ -72,11 +72,13 @@ public:
 
     bool option_equals(const JdoOptions_t& left, const JdoOptions_t& right);
     StatusOr<std::string> get_local_user();
-    StatusOr<JdoSystem_t> new_client(const S3URI& uri);
+    StatusOr<JdoSystem_t> new_client(const S3URI& uri, const FSOptions& opts);
 
 private:
     JindoClientFactory();
 
+    static constexpr const char* OSS_ACCESS_KEY_ID = "fs.oss.accessKeyId";
+    static constexpr const char* OSS_ACCESS_KEY_SECRET = "fs.oss.accessKeySecret";
     static constexpr const char* OSS_ENDPOINT_KEY = "fs.oss.endpoint";
     static constexpr int MAX_CLIENTS_ITEMS = 8;
 
@@ -86,6 +88,8 @@ private:
     JdoOptions_t _configs[MAX_CLIENTS_ITEMS];
     JdoSystem_t _clients[MAX_CLIENTS_ITEMS];
     Random _rand;
+
+    HashMap _jindo_config_map;
 };
 
 class JindoFileSystem : public FileSystem {
