@@ -94,7 +94,7 @@ public class LogicalFileScanOperator extends LogicalScanOperator {
         public LogicalFileScanOperator.Builder withOperator(LogicalFileScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.predicates = scanOperator.predicates;
+            this.predicates = scanOperator.predicates.clone();
             return this;
         }
     }
