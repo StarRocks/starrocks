@@ -214,7 +214,7 @@ struct AggregatorParams {
 
     void init();
 
-    ChunkUniquePtr empty_result_chunk(bool is_serialize_fmt, const TupleDescriptor& desc);
+    ChunkUniquePtr create_result_chunk(bool is_serialize_fmt, const TupleDescriptor& desc);
 };
 using AggregatorParamsPtr = std::shared_ptr<AggregatorParams>;
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);

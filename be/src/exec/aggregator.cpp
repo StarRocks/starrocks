@@ -144,7 +144,7 @@ void AggregatorParams::init() {
     VLOG_ROW << "has_nullable_key " << has_nullable_key;
 }
 
-ChunkUniquePtr AggregatorParams::empty_result_chunk(bool is_serialize_fmt, const TupleDescriptor& desc) {
+ChunkUniquePtr AggregatorParams::create_result_chunk(bool is_serialize_fmt, const TupleDescriptor& desc) {
     auto result_chunk = std::make_unique<Chunk>();
 
     const auto& slots = desc.slots();

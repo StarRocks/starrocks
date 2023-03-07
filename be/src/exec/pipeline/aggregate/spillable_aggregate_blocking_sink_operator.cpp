@@ -116,7 +116,7 @@ Status SpillableAggregateBlockingSinkOperatorFactory::prepare(RuntimeState* stat
     _spill_options->chunk_builder = [&, state]() {
         auto intermediate_tuple_id = _aggregator_factory->aggregator_param()->intermediate_tuple_id;
         auto desc = state->desc_tbl().get_tuple_descriptor(intermediate_tuple_id);
-        return _aggregator_factory->aggregator_param()->empty_result_chunk(true, *desc);
+        return _aggregator_factory->aggregator_param()->create_result_chunk(true, *desc);
     };
     _spill_options->path_provider_factory = spill_manager->provider(fmt::format("agg-spill-{}", _plan_node_id));
 
