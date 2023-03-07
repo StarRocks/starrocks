@@ -122,13 +122,13 @@ public class IcebergMetadata implements ConnectorMetadata {
         IcebergCatalogType nativeType = icebergCatalog.getIcebergCatalogType();
 
         if (nativeType != HIVE_CATALOG && nativeType != REST_CATALOG && nativeType != GLUE_CATALOG) {
-            throw new StarRocksIcebergException(
+            throw new StarRocksConnectorException(
                     "Do not support get partitions from catalog type: " + nativeType);
         }
 
         if (icebergTable.spec().fields().stream()
                 .anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
-            throw new StarRocksIcebergException(
+            throw new StarRocksConnectorException(
                     "Do not support get partitions from No-Identity partition transform now");
         }
 
