@@ -246,20 +246,23 @@ public class CreateTableTest {
                                 + "properties('replication_num' = '1', 'compression' = 'xxx');"));
 
         ExceptionChecker
-                .expectThrowsWithMsg(IllegalArgumentException.class, "The AUTO_INCREMENT column must be BIGINT",
+                .expectThrowsWithMsg(AnalysisException.class, "Getting analyzing error from line 1, " +
+                                "column 24 to line 1, column 33. Detail message: The AUTO_INCREMENT column must be BIGINT.",
                         () -> createTable("create table test.atbl9(col1 int AUTO_INCREMENT, col2 varchar(10)) \n"
                                 + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
                                 + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
 
         ExceptionChecker
-                .expectThrowsWithMsg(AnalysisException.class, "AUTO_INCREMENT column col1 must be NOT NULL",
+                .expectThrowsWithMsg(AnalysisException.class, "Getting syntax error at line 1, column 25. " +
+                                "Detail message: AUTO_INCREMENT column col1 must be NOT NULL.",
                         () -> createTable("create table test.atbl10(col1 bigint NULL AUTO_INCREMENT, col2 varchar(10)) \n"
                                 + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
                                 + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
 
         ExceptionChecker
-                .expectThrowsWithMsg(IllegalArgumentException.class,
-                        "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement",
+                .expectThrowsWithMsg(AnalysisException.class,
+                        "Getting analyzing error from line 1, column 53 to line 1, column 65. Detail message: " +
+                                "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
                         () -> createTable("create table test.atbl11(col1 bigint AUTO_INCREMENT, col2 bigint AUTO_INCREMENT) \n"
                                 + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
                                 + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));

@@ -99,12 +99,12 @@ public class ExportStmtAnalyzer {
 
             if (brokerDesc.hasBroker()) {
                 if (!mgr.getBrokerMgr().containsBroker(brokerDesc.getName())) {
-                    throw new SemanticException("broker " + brokerDesc.getName() + " does not exist");
+                    throw new SemanticException("broker " + brokerDesc.getName() + " does not exist", brokerDesc.getPos());
                 }
 
                 FsBroker broker = mgr.getBrokerMgr().getAnyBroker(brokerDesc.getName());
                 if (broker == null) {
-                    throw new SemanticException("failed to get alive broker");
+                    throw new SemanticException("failed to get alive broker", brokerDesc.getPos());
                 }
             }
             // check properties

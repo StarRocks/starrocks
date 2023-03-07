@@ -604,8 +604,9 @@ public class MaterializedViewTest {
         String createMvSql = "create materialized view mv1 as select p_partkey, p_name, length(p_brand) from part_with_mv;";
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, createMvSql);
         stmtExecutor.execute();
-        Assert.assertEquals("Materialized view does not support this function:length(`test`.`part_with_mv`.`p_brand`)," +
-                " supported functions are: [min, max, hll_union, percentile_union, count, sum, bitmap_union]",
+        Assert.assertEquals("Getting analyzing error. Detail message: Materialized view does not support " +
+                        "this function:length(`test`.`part_with_mv`.`p_brand`), supported functions are: " +
+                        "[min, max, hll_union, percentile_union, count, sum, bitmap_union].",
                 connectContext.getState().getErrorMessage());
     }
 

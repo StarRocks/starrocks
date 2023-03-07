@@ -75,7 +75,8 @@ public class PseudoClusterAlterTest {
                     System.out.println(insertSql);
                     cluster.runSql("test", insertSql);
                 } catch (Exception e) {
-                    if (e.getMessage().startsWith("Column count doesn't match value count")) {
+                    if (e.getMessage().startsWith("Getting analyzing error. " +
+                            "Detail message: Column count doesn't match value count.")) {
                         // alter succeed, another column added, so error expected, stop insert
                         break;
                     }

@@ -345,9 +345,10 @@ public class DecimalV3FunctionAnalyzer {
         }
 
         if (fn == null) {
-            throw new SemanticException("No matching function with signature: %s(%s).", fnName,
+            String msg = String.format("No matching function with signature: %s(%s).", fnName,
                     node.getParams().isStar() ? "*" : Joiner.on(", ")
                             .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+            throw new SemanticException(msg, node.getPos());
         }
 
         if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_FUNCTION.contains(fnName)) {

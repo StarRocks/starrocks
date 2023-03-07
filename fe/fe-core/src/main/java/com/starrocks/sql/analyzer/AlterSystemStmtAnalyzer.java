@@ -36,6 +36,7 @@ import org.apache.commons.validator.routines.InetAddressValidator;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterSystemStmtAnalyzer {
 
@@ -50,7 +51,7 @@ public class AlterSystemStmtAnalyzer {
                     stmt.getHostPortPairs().add(pair);
                 }
             } catch (AnalysisException e) {
-                throw new SemanticException("frontend host or port is wrong!");
+                throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("FRONTEND", e.getMessage()));
             }
         }
     }
@@ -69,7 +70,7 @@ public class AlterSystemStmtAnalyzer {
                 }
                 Preconditions.checkState(!computeNodeClause.getHostPortPairs().isEmpty());
             } catch (AnalysisException e) {
-                throw new SemanticException("compute node host or port is wrong!");
+                throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("COMPUTE NODE", e.getMessage()));
             }
             return null;
         }
@@ -83,7 +84,7 @@ public class AlterSystemStmtAnalyzer {
                 }
                 Preconditions.checkState(!backendClause.getHostPortPairs().isEmpty());
             } catch (AnalysisException e) {
-                throw new SemanticException("backend host or port is wrong!");
+                throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("BACKEND", e.getMessage()));
             }
             return null;
         }
@@ -96,7 +97,7 @@ public class AlterSystemStmtAnalyzer {
                 frontendClause.setPort(pair.second);
                 Preconditions.checkState(!Strings.isNullOrEmpty(frontendClause.getHost()));
             } catch (AnalysisException e) {
-                throw new SemanticException("frontend host or port is wrong!");
+                throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("FRONTEND", e.getMessage()));
             }
             return null;
         }
@@ -149,7 +150,7 @@ public class AlterSystemStmtAnalyzer {
                     Preconditions.checkState(!clause.getHostPortPairs().isEmpty());
                 }
             } catch (AnalysisException e) {
-                throw new SemanticException("broker host or port is wrong!");
+                throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("BROKER", e.getMessage()));
             }
             return null;
         }
