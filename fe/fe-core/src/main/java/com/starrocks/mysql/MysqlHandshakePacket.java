@@ -35,13 +35,16 @@
 package com.starrocks.mysql;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.lang.reflect.Method;
+import java.util.Map;
 
 // MySQL protocol handshake packet.
 public class MysqlHandshakePacket extends MysqlPacket {
@@ -135,8 +138,9 @@ public class MysqlHandshakePacket extends MysqlPacket {
         serializer.writeInt1(0);
     }
 
+    @Deprecated
     // If user use kerberos for authentication, fe need to resend the handshake request.
-    public void buildKrb5AuthRequest(MysqlSerializer serializer, String remoteIp, String user) throws Exception {
+    public void buildKrb5AuthRequestDeprecated(MysqlSerializer serializer, String remoteIp, String user) throws Exception {
         Password password = GlobalStateMgr.getCurrentState().getAuth().getUserPrivTable()
                 .getPasswordByApproximate(user, remoteIp);
         if (password == null) {
@@ -146,8 +150,23 @@ public class MysqlHandshakePacket extends MysqlPacket {
         }
 
         String userRealm = password.getUserForAuthPlugin();
-        // TODO(yiming): support kerberos in new RBAC privilege framework later
         Class<?> authClazz = GlobalStateMgr.getCurrentState().getAuth().getAuthClazz();
+        Method method = authClazz.getMethod("buildKrb5HandshakeRequest", String.class, String.class);
+        byte[] packet = (byte[]) method.invoke(null, Config.authentication_kerberos_service_principal, userRealm);
+        serializer.writeBytes(packet);
+    }
+
+    // If user use kerberos for authentication, fe need to resend the handshake request.
+    public void buildKrb5AuthRequest(MysqlSerializer serializer, String remoteIp, String user) throws Exception {
+        Map.Entry<UserIdentity, UserAuthenticationInfo>  authenticationInfo =
+                GlobalStateMgr.getCurrentState().getAuthenticationManager().getBestMatchedUserIdentity(user, remoteIp);
+        if (authenticationInfo == null) {
+            String msg = String.format("Can not find kerberos authentication with [user: %s, remoteIp: %s].", user, remoteIp);
+            LOG.error(msg);
+            throw new Exception(msg);
+        }
+        String userRealm = authenticationInfo.getValue().getTextForAuthPlugin();
+        Class<?> authClazz = GlobalStateMgr.getCurrentState().getAuthenticationManager().getAuthClazz();
         Method method = authClazz.getMethod("buildKrb5HandshakeRequest", String.class, String.class);
         byte[] packet = (byte[]) method.invoke(null, Config.authentication_kerberos_service_principal, userRealm);
         serializer.writeBytes(packet);
