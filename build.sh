@@ -138,7 +138,10 @@ if [ -e /proc/cpuinfo ] ; then
     fi
 fi
 
-if [[ -z ${WITH_BLOCK_CACHE} ]]; then
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    # force turn off block cache on arm platform
+    WITH_BLOCK_CACHE=OFF
+elif [[ -z ${WITH_BLOCK_CACHE} ]]; then
     WITH_BLOCK_CACHE=OFF
 fi
 
