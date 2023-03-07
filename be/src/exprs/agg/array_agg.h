@@ -45,7 +45,12 @@ struct ArrayAggAggregateState {
     }
     ~ArrayAggAggregateState() {
         if (data_columns != nullptr) {
+            for (auto& col : *data_columns) {
+                col.reset();
+            }
             data_columns->clear();
+            delete data_columns;
+            data_columns = nullptr;
         }
     }
     // using pointer rather than vector to avoid variadic size
@@ -102,6 +107,7 @@ public:
         }
     }
 
+    // the struct and array aren't be null, consist from several columns
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         auto& input_columns = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column))->fields();
         for (auto i = 0; i < input_columns.size(); ++i) {
@@ -137,7 +143,7 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        DCHECK(to->is_array());
+        DCHECK(to->is_nullable() || to->is_array());
         auto& state_impl = this->data(state);
         auto elem_size = (*state_impl.data_columns)[0]->size();
         auto res = (*state_impl.data_columns)[0];
@@ -170,15 +176,19 @@ public:
                                      ColumnPtr* dst) const override {
         auto columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(dst->get()))->fields_column();
         if (dst->get()->is_nullable()) {
-            down_cast<NullableColumn*>(dst->get())->null_column_data().emplace_back(0);
+            for (size_t i = 0; i < chunk_size; i++) {
+                down_cast<NullableColumn*>(dst->get())->null_column_data().emplace_back(0);
+            }
         }
         for (auto j = 0; j < columns.size(); ++j) {
             auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[j].get()));
             if (columns[j].get()->is_nullable()) {
-                down_cast<NullableColumn*>(columns[j].get())->null_column_data().emplace_back(0);
+                for (size_t i = 0; i < chunk_size; i++) {
+                    down_cast<NullableColumn*>(columns[j].get())->null_column_data().emplace_back(0);
+                }
             }
-            auto element_column = array_col->elements_column();
-            auto offsets = array_col->offsets_column()->get_data();
+            auto& element_column = array_col->elements_column();
+            auto& offsets = array_col->offsets_column()->get_data();
             for (size_t i = 0; i < chunk_size; i++) {
                 element_column->append_datum(src[j]->get(i));
                 offsets.emplace_back(offsets.back() + 1);

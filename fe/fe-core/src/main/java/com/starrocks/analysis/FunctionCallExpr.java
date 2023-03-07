@@ -228,9 +228,11 @@ public class FunctionCallExpr extends Expr {
         return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnName.equals(o.fnName)
                 && fnParams.isDistinct() == o.fnParams.isDistinct()
                 && fnParams.isStar() == o.fnParams.isStar()
-                && nondeterministicId.equals(o.nondeterministicId);
+                && nondeterministicId.equals(o.nondeterministicId)
+                && fnParams.getOrderByElements().equals(o.fnParams.getOrderByElements());
     }
 
+    // TODO: process order by
     @Override
     public String toSqlImpl() {
         StringBuilder sb = new StringBuilder();

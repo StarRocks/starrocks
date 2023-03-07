@@ -114,6 +114,10 @@ public:
 
     std::vector<bool> get_is_asc_order() { return _is_asc_order; }
     std::vector<bool> get_nulls_first() { return _nulls_first; }
+    // for tests
+    void set_is_asc_order(const std::vector<bool>& order) { _is_asc_order = order; }
+    void set_nulls_first(const std::vector<bool>& nulls) { _nulls_first = nulls; }
+
     // Returns _constant_columns size
     int get_num_constant_columns() const;
 
