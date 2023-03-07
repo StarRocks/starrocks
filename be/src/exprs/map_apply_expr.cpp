@@ -38,8 +38,9 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
     std::vector<ColumnPtr> input_columns;
     NullColumnPtr input_null_map = nullptr;
     MapColumn* input_map = nullptr;
+    ColumnPtr input_map_ptr_ref = nullptr; // hold shared_ptr to avoid early deleted.
     // step 1: get input columns from map(key_col, value_col)
-    for (int i = 1; i < _children.size(); ++i) {
+    for (int i = 1; i < _children.size(); ++i) { // currently only 2 children, may be more in the future
         ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], chunk);
         // the column is a null literal.
         if (child_col->only_null()) {
@@ -68,6 +69,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
 
         if (input_map == nullptr) {
             input_map = cur_map;
+            input_map_ptr_ref = data_column;
         } else {
             if (UNLIKELY(!ColumnHelper::offsets_equal(cur_map->offsets_column(), input_map->offsets_column()))) {
                 return Status::InternalError("Input map element's size are not equal in map_apply().");

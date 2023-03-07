@@ -38,11 +38,10 @@ ArrayMapExpr::ArrayMapExpr(TypeDescriptor type) : Expr(std::move(type), false) {
 // The result of lambda expressions do not change the offsets of the current array and the null map.
 // NOTE the return column must be of the return type.
 StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
-    // keep ColumnPtr refs
-    std::vector<ColumnPtr> inputs;
     std::vector<ColumnPtr> input_elements;
     NullColumnPtr input_null_map = nullptr;
     ArrayColumn* input_array = nullptr;
+    ColumnPtr input_array_ptr_ref = nullptr; // hold shared_ptr to avoid early deleted.
     // for many valid arguments:
     // if one of them is a null literal, the result is a null literal;
     // if one of them is only null, then results are null;
@@ -57,7 +56,6 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         }
         // no optimization for const columns.
         child_col = ColumnHelper::unpack_and_duplicate_const_column(child_col->size(), child_col);
-        inputs.emplace_back(child_col);
 
         auto column = child_col;
         if (child_col->is_nullable()) {
@@ -79,6 +77,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
 
         if (input_array == nullptr) {
             input_array = cur_array;
+            input_array_ptr_ref = column;
         } else {
             if (UNLIKELY(!ColumnHelper::offsets_equal(cur_array->offsets_column(), input_array->offsets_column()))) {
                 return Status::InternalError("Input array element's size is not equal in array_map().");
