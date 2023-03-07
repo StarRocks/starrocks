@@ -170,6 +170,9 @@ public class IcebergTableStatisticCalculator {
             Map<Integer, Object> current,
             Map<Integer, Object> newStats,
             Predicate<Integer> predicate) {
+        if (!icebergFileStats.hasValidColumnMetrics()) {
+            return;
+        }
         for (PartitionField field : partitionFields) {
             int id = field.sourceId();
             if (icebergFileStats.getCorruptedStats().contains(id)) {
