@@ -119,11 +119,20 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
                                      ToStringFromUnixMicros(GetCurrentTimeMicros()).c_str(), print_id(query_id).c_str(),
                                      print_id(fragment_instance_id).c_str(), exception_name.c_str(),
                                      get_stack_trace().c_str());
+            bool print_to_stderr = false;
+            if (exception_name == "std::bad_alloc") {
+                // to avoid recursively throw std::bad_alloc exception.
+                print_to_stderr = true;
+            }
 #ifdef BE_TEST
             // tests check message from stderr.
-            std::cerr << stack << std::endl;
+            print_to_stderr = true;
 #endif
-            LOG(WARNING) << stack;
+            if (print_to_stderr) {
+                std::cerr << stack << std::endl;
+            } else {
+                LOG(WARNING) << stack;
+            }
         }
     }
     // call the real __cxa_throw():
