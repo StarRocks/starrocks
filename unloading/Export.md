@@ -4,19 +4,18 @@
 
 ## 背景信息
 
-在 StarRocks v2.4 及以前版本，Broker Load 需要借助 Broker 访问外部存储系统。您在导出数据时需要通过 `WITH BROKER "<broker_name>"` 来指定使用哪组 Broker 组。Broker 是一个独立的无状态服务，封装了文件系统接口。通过 Broker，StarRocks 能够访问和读取外部存储系统上的数据文件，并利用自身的计算资源对数据文件中的数据进行预处理和导入。
+在 v2.4 及以前版本，StarRocks 在使用 EXPORT 导出数据时需要借助 Broker 才能访问外部存储系统，称为“有 Broker 的导出”。导出语句中需要通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。Broker 是一个独立的无状态服务，封装了文件系统接口，能够帮助 StarRocks 将数据导出到外部存储系统。
 
-自 StarRocks v2.5 起，Broker Load 不再需要借助 Broker 即可访问外部存储系统。您在导出数据时不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。
+自 v2.5 起，StarRocks 在使用 EXPORT 导出数据时不需要借助 Broker 即可访问外部存储系统，称为“无 Broker 的导出”。导出语句中也不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。
+
+需要注意的是，无 Broker 的导出在数据源为 HDFS 的某些场景下会受限，这时您可以继续执行有 Broker 的导出，包括：
+
+- 在配置了多 HDFS 集群时，您需要为每一个 HDFS 集群部署一个独立的 Broker。
+- 在配置了单 HDFS 集群、但是多 Kerberos 用户时，您只需要部署一个独立的 Broker。
 
 > **说明**
 >
-> 无 Broker 进程的导出在某些场景下会受限。比如如果您配置了多 HDFS 集群或多 Kerberos 用户时，不支持无 Broker 进程的导出。这种情况下，您需要继续通过 Broker 执行导出。
-
-如果您需要通过 Brokers 来执行导出，则必须确保您的 StarRocks 集群中已部署 Broker。
-
-您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。
-
-本文档假设您的 StarRocks 集群中已部署一组名为“mybroker”的 Broker。
+> 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。
 
 ## 注意事项
 

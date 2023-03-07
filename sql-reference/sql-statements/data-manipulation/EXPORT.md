@@ -58,7 +58,7 @@ WITH BROKER
 
 - `WITH BROKER`
 
-  在 StarRocks v2.4 及以前版本，用于指定 Broker 的名称，格式为 `WITH BROKER "<broker_name>"`。自 StarRocks v2.5 起，只保留 `WITH BROKER` 关键字，不再需要提供 `broker_name`。
+  在 v2.4 及以前版本，您需要在导出语句中通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。自 v2.5 起，您不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。参见[从 使用 EXPORT 导出数据 > 背景信息](../../../unloading/Export.md#背景信息)。
 
 - `broker_properties`
 
