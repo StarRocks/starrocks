@@ -190,10 +190,10 @@ public class IcebergFileStats {
 
     public static Map<Integer, Object> toMap(Map<Integer, Type.PrimitiveType> idToTypeMapping,
                                              Map<Integer, ByteBuffer> idToMetricMap) {
-        if (idToMetricMap == null) {
-            return null;
-        }
         ImmutableMap.Builder<Integer, Object> map = ImmutableMap.builder();
+        if (idToMetricMap == null) {
+            return map.build();
+        }
         idToMetricMap.forEach((id, value) -> {
             // SR on Iceberg only support primitive type now, idToTypeMapping do not contains the corresponding id
             // for complex types like struct, map etc.
