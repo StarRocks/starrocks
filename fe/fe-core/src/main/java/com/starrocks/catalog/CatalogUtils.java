@@ -21,6 +21,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -234,5 +235,24 @@ public class CatalogUtils {
             bucketNum = Math.min(backendNum, 48);
         }
         return bucketNum;
+    }
+
+    public static void maskProperties(Map<String, String> properties) {
+        // aws.s3.access_key -> ******
+        if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ACCESS_KEY)) {
+            properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, "******");
+        }
+        // aws.s3.secret_key -> ******
+        if (properties.containsKey(CloudConfigurationConstants.AWS_S3_SECRET_KEY)) {
+            properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, "******");
+        }
+        // aws.glue.access_key -> ******
+        if (properties.containsKey(CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY)) {
+            properties.put(CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY, "******");
+        }
+        // aws.glue.secret_key -> ******
+        if (properties.containsKey(CloudConfigurationConstants.AWS_GLUE_SECRET_KEY)) {
+            properties.put(CloudConfigurationConstants.AWS_GLUE_SECRET_KEY, "******");
+        }
     }
 }

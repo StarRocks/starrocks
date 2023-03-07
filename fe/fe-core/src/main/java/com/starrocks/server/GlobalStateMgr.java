@@ -59,6 +59,7 @@ import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.CatalogIdGenerator;
 import com.starrocks.catalog.CatalogRecycleBin;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Column;
@@ -2580,11 +2581,13 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
+            Map<String, String> fileProperties = fileTable.getFileProperties();
+            CatalogUtils.maskProperties(fileProperties);
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
             sb.append("\nPROPERTIES (\n");
-            sb.append(new PrintableMap<>(fileTable.getFileProperties(), " = ", true, true, false).toString());
+            sb.append(new PrintableMap<>(fileProperties, " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
             HudiTable hudiTable = (HudiTable) table;

@@ -52,6 +52,7 @@ import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
@@ -2456,9 +2457,11 @@ public class ShowExecutor {
         if (comment != null) {
             createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
         }
+        Map<String, String> config = catalog.getConfig();
+        CatalogUtils.maskProperties(config);
         // Properties
         createCatalogSql.append("PROPERTIES (")
-                .append(new PrintableMap<>(catalog.getConfig(), " = ", true, true))
+                .append(new PrintableMap<>(config, " = ", true, true))
                 .append("\n)");
         rows.add(Lists.newArrayList(catalogName, createCatalogSql.toString()));
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
