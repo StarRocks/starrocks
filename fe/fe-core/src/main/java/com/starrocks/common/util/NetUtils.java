@@ -21,6 +21,7 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.base.Strings;
 import com.starrocks.common.Pair;
 import org.apache.commons.validator.routines.InetAddressValidator;
 
@@ -76,11 +77,11 @@ public class NetUtils {
         } else {
             // ipOrFqdn is fqdn
             ip = InetAddress.getByName(host).getHostAddress();
-            if (null == ip || ip.equals("")) {
+            if (Strings.isNullOrEmpty(ip)) {
                 throw new UnknownHostException("got a wrong ip");
             }
             fqdn = host;
         }
-        return new Pair<String, String>(ip, fqdn);
+        return new Pair<>(ip, fqdn);
     }
 }
