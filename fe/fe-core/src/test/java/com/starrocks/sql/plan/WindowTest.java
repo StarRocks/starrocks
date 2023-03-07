@@ -29,12 +29,16 @@ public class WindowTest extends PlanTestBase {
 
         sql = "select lag(id_decimal, 1, 10000) over(partition by t1c) from test_all_type;";
         plan = getThriftPlan(sql);
-        String expectSlice = "fn:TFunction(name:TFunctionName(function_name:lag), binary_type:BUILTIN," +
-                " arg_types:[TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL64," +
-                " precision:10, scale:2))])], ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
-                "scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))]), has_var_args:false, " +
-                "signature:lag(DECIMAL64(10,2))";
-        Assert.assertTrue(plan.contains(expectSlice));
+        String expectSlice = "fn:TFunction(name:TFunctionName(function_name:lag), binary_type:BUILTIN, " +
+                "arg_types:[" +
+                "TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))]), " +
+                "TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
+                "TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))])], " +
+                "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
+                "scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))]), " +
+                "has_var_args:false, signature:lag(DECIMAL64(10,2), BIGINT, DECIMAL64(10,2))";
+        System.out.println(expectSlice);
+        Assert.assertTrue(plan, plan.contains(expectSlice));
 
         sql = "select lag(null, 1,1) OVER () from t0";
         plan = getFragmentPlan(sql);

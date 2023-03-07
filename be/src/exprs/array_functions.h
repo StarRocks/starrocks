@@ -36,37 +36,10 @@ public:
         return ArrayDistinct<type>::process(context, columns);
     }
 
-#define APPLY_COMMONE_TYPES_FOR_ARRAY(M)      \
-    M(boolean, LogicalType::TYPE_BOOLEAN)     \
-    M(tinyint, LogicalType::TYPE_TINYINT)     \
-    M(smallint, LogicalType::TYPE_SMALLINT)   \
-    M(int, LogicalType::TYPE_INT)             \
-    M(bigint, LogicalType::TYPE_BIGINT)       \
-    M(largeint, LogicalType::TYPE_LARGEINT)   \
-    M(float, LogicalType::TYPE_FLOAT)         \
-    M(double, LogicalType::TYPE_DOUBLE)       \
-    M(varchar, LogicalType::TYPE_VARCHAR)     \
-    M(char, LogicalType::TYPE_CHAR)           \
-    M(decimalv2, LogicalType::TYPE_DECIMALV2) \
-    M(datetime, LogicalType::TYPE_DATETIME)   \
-    M(date, LogicalType::TYPE_DATE)
-
-#define DEFINE_ARRAY_DIFFERENCE_FN(NAME, LT)                                                               \
-    static StatusOr<ColumnPtr> array_difference_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayDifference<LT>::process(context, columns);                                             \
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_difference(FunctionContext* context, const Columns& columns) {
+        return ArrayDifference<type>::process(context, columns);
     }
-
-    DEFINE_ARRAY_DIFFERENCE_FN(boolean, LogicalType::TYPE_BOOLEAN)
-    DEFINE_ARRAY_DIFFERENCE_FN(tinyint, LogicalType::TYPE_TINYINT)
-    DEFINE_ARRAY_DIFFERENCE_FN(smallint, LogicalType::TYPE_SMALLINT)
-    DEFINE_ARRAY_DIFFERENCE_FN(int, LogicalType::TYPE_INT)
-    DEFINE_ARRAY_DIFFERENCE_FN(bigint, LogicalType::TYPE_BIGINT)
-    DEFINE_ARRAY_DIFFERENCE_FN(largeint, LogicalType::TYPE_LARGEINT)
-    DEFINE_ARRAY_DIFFERENCE_FN(float, LogicalType::TYPE_FLOAT)
-    DEFINE_ARRAY_DIFFERENCE_FN(double, LogicalType::TYPE_DOUBLE)
-    DEFINE_ARRAY_DIFFERENCE_FN(decimalv2, LogicalType::TYPE_DECIMALV2)
-
-#undef DEFINE_ARRAY_DIFFERENCE_FN
 
     DEFINE_VECTORIZED_FN(array_slice);
 
@@ -85,13 +58,10 @@ public:
         return ArraySort<type>::process(context, columns);
     }
 
-#define DEFINE_ARRAY_SORTBY_FN(NAME, LT)                                                               \
-    static StatusOr<ColumnPtr> array_sortby_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArraySortBy<LT>::process(context, columns);                                             \
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_sortby(FunctionContext* context, const Columns& columns) {
+        return ArraySortBy<type>::process(context, columns);
     }
-    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SORTBY_FN)
-    DEFINE_ARRAY_SORTBY_FN(json, LogicalType::TYPE_JSON)
-#undef DEFINE_ARRAY_SORTBY_FN
 
     template <LogicalType type>
     static StatusOr<ColumnPtr> array_reverse(FunctionContext* context, const Columns& columns) {
@@ -104,22 +74,22 @@ public:
 
     template <LogicalType type>
     static StatusOr<ColumnPtr> array_sum(FunctionContext* context, const Columns& columns) {
-        return ArrayArithmetic::template array_arithmetic<type, ArithmeticType::SUM>(columns);
+        return ArrayArithmetic::template array_sum<type>(context, columns);
     }
 
     template <LogicalType type>
     static StatusOr<ColumnPtr> array_avg(FunctionContext* context, const Columns& columns) {
-        return ArrayArithmetic::template array_arithmetic<type, ArithmeticType::AVG>(columns);
+        return ArrayArithmetic::template array_avg<type>(context, columns);
     }
 
     template <LogicalType type>
     static StatusOr<ColumnPtr> array_min(FunctionContext* context, const Columns& columns) {
-        return ArrayArithmetic::template array_arithmetic<type, ArithmeticType::MIN>(columns);
+        return ArrayArithmetic::template array_min<type>(context, columns);
     }
 
     template <LogicalType type>
     static StatusOr<ColumnPtr> array_max(FunctionContext* context, const Columns& columns) {
-        return ArrayArithmetic::template array_arithmetic<type, ArithmeticType::MAX>(columns);
+        return ArrayArithmetic::template array_max<type>(context, columns);
     }
 
     DEFINE_VECTORIZED_FN(concat);

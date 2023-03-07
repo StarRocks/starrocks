@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
@@ -48,7 +49,7 @@ public class PolymorphicFunctionAnalyzer {
         if (t2.isNull()) {
             return t1;
         }
-        if (t1.isFixedPointType() && t2.isFixedPointType()) {
+        if (t1.isScalarType() && t2.isScalarType()) {
             Type commonType = Type.getCommonType(t1, t2);
             return commonType.isValid() ? commonType : null;
         }
@@ -252,21 +253,26 @@ public class PolymorphicFunctionAnalyzer {
         Type[] declTypes = fn.getArgs();
         Function resolvedFunction;
         long numPseudoArgs = Arrays.stream(declTypes).filter(Type::isPseudoType).count();
+        // resolve single pseudo type parameter, example: int array_length(ANY_ARRAY)
         if (!retType.isPseudoType() && numPseudoArgs == 1) {
             resolvedFunction = resolveByReplacingInputs(fn, paramTypes);
             if (resolvedFunction != null) {
                 return resolvedFunction;
             }
         }
+        // deduce by special function
         // TODO: refactor resolve arg types, some from L254, others from L262.
         resolvedFunction = resolveByDeducingReturnType(fn, paramTypes);
         if (resolvedFunction != null) {
             return resolvedFunction;
         }
 
-        Type[] realTypes = Arrays.copyOf(declTypes, declTypes.length);
-        ArrayType typeArray = null;
-        Type typeElement = null;
+        // common deduce
+        ArrayType typeArray;
+        Type typeElement;
+
+        List<Type> allRealElementType = Lists.newArrayList();
+
         for (int i = 0; i < declTypes.length; i++) {
             Type declType = declTypes[i];
             Type realType = paramTypes[i];
@@ -274,59 +280,42 @@ public class PolymorphicFunctionAnalyzer {
                 if (realType.isNull()) {
                     continue;
                 }
-                if (typeArray == null) {
-                    typeArray = (ArrayType) realType;
-                } else if ((typeArray = (ArrayType) getSuperType(typeArray, realType)) == null) {
-                    LOGGER.warn("could not determine polymorphic type because input has non-match types");
-                    return null;
-                }
+                Preconditions.checkState(realType.isArrayType());
+                allRealElementType.add(((ArrayType) realType).getItemType());
             } else if (declType instanceof AnyElementType) {
                 if (realType.isNull()) {
                     continue;
                 }
-                if (typeElement == null) {
-                    typeElement = realType;
-                } else if ((typeElement = getSuperType(typeElement, realType)) == null) {
+                allRealElementType.add(realType);
+            }
+        }
+
+        if (!allRealElementType.isEmpty()) {
+            Type commonType = allRealElementType.get(0);
+            for (Type type : allRealElementType) {
+                commonType = getSuperType(commonType, type);
+                if (commonType == null) {
                     LOGGER.warn("could not determine polymorphic type because input has non-match types");
                     return null;
                 }
-            } else if (declType.matchesType(realType) || Type.canCastTo(realType, declType)) { // non-pseudo types
-                continue;
-            } else {
-                LOGGER.warn("has unhandled pseudo type '{}'", declType);
-                return null;
             }
-        }
 
-        if (typeArray != null && typeElement != null) {
-            typeArray = (ArrayType) getSuperType(typeArray, new ArrayType(typeElement));
-            if (typeArray == null) {
-                LOGGER.warn("could not determine polymorphic type because has non-match types");
-                return null;
-            }
-            typeElement = typeArray.getItemType();
-        } else if (typeArray != null) {
-            typeElement = typeArray.getItemType();
-        } else if (typeElement != null) {
-            typeArray = new ArrayType(typeElement);
+            typeArray = new ArrayType(commonType);
+            typeElement = commonType;
         } else {
             typeElement = Type.NULL;
             typeArray = new ArrayType(Type.NULL);
-        }
-
-        if (!typeArray.getItemType().matchesType(typeElement)) {
-            LOGGER.warn("could not determine polymorphic type because has non-match types");
-            return null;
         }
 
         if (retType instanceof AnyArrayType) {
             retType = typeArray;
         } else if (retType instanceof AnyElementType) {
             retType = typeElement;
-        } else if (!(fn instanceof TableFunction)) { //TableFunction don't use retType
-            assert !retType.isPseudoType();
+        } else {
+            Preconditions.checkState(fn instanceof TableFunction || !retType.isPseudoType());
         }
 
+        Type[] realTypes = new Type[declTypes.length];
         for (int i = 0; i < declTypes.length; i++) {
             if (declTypes[i] instanceof AnyArrayType) {
                 realTypes[i] = typeArray;

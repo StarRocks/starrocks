@@ -232,6 +232,20 @@ T decimal_div_integer(const T& dividend, const T& divisor, int dividend_scale) {
     return quotient;
 }
 
+template <typename T>
+T decimal_sub(const T& lhs, const T& rhs, int scale) {
+    // compute adjust_scale_factor
+    auto [_1, _2, adjust_scale] = compute_decimal_result_type<T, SubOp>(scale, scale);
+    T adjust_scale_factor = get_scale_factor<T>(adjust_scale);
+    // scale lhs up by adjust_scale
+    T scaled_lhs = 0;
+    DecimalV3Cast::to_decimal<T, T, T, true, false>(lhs, adjust_scale_factor, &scaled_lhs);
+    // compute the delta
+    T delta = 0;
+    DecimalV3Arithmetics<T, false>::sub(scaled_lhs, rhs, &delta);
+    return delta;
+}
+
 class Decimal128P38S9 {
 public:
     using Type = int128_t;
