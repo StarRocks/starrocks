@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.sql.parser.NodePosition;
 
 /*
   Set catalog specified by catalog name
@@ -27,8 +26,7 @@ import com.starrocks.sql.parser.NodePosition;
 public class SetCatalogStmt extends StatementBase {
     private final String catalogName;
 
-    public SetCatalogStmt(String catalogName, NodePosition pos) {
-        super(pos);
+    public SetCatalogStmt(String catalogName) {
         this.catalogName = catalogName;
     }
 
