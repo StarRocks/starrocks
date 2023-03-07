@@ -22,7 +22,7 @@ import java.util.Map;
 public class CachingHiveMetastoreConf {
     private final long cacheTtlSec;
     private final long cacheRefreshIntervalSec;
-    private final long cacheMaxNum = 100000;
+    private long cacheMaxNum = 1000000;
     private final int perQueryCacheMaxNum = 10000;
     private final int cacheRefreshThreadMaxNum = 20;
 
@@ -35,6 +35,7 @@ public class CachingHiveMetastoreConf {
                 String.valueOf(Config.hive_meta_cache_refresh_interval_s)));
         this.enableListNamesCache = Boolean.parseBoolean(conf.getOrDefault("enable_cache_list_names",
                 "false"));
+        this.cacheMaxNum = Long.parseLong(conf.getOrDefault("metastore_cache_max_num", String.valueOf(cacheMaxNum)));
     }
 
     public long getCacheTtlSec() {
