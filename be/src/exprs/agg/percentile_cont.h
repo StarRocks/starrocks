@@ -101,7 +101,7 @@ public:
         memcpy(bytes.data() + old_size + sizeof(double), &items_size, sizeof(size_t));
         memcpy(bytes.data() + old_size + sizeof(double) + sizeof(size_t), this->data(state).items.data(),
                items_size * sizeof(InputCppType));
-        pdqsort(false, reinterpret_cast<InputCppType*>(bytes.data() + old_size + sizeof(double) + sizeof(size_t)),
+        pdqsort(reinterpret_cast<InputCppType*>(bytes.data() + old_size + sizeof(double) + sizeof(size_t)),
                 reinterpret_cast<InputCppType*>(bytes.data() + old_size + sizeof(double) + sizeof(size_t) +
                                                 items_size * sizeof(InputCppType)));
 
@@ -111,7 +111,7 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         using CppType = RunTimeCppType<LT>;
         std::vector<CppType> new_vector = this->data(state).items;
-        pdqsort(false, new_vector.begin(), new_vector.end());
+        pdqsort(new_vector.begin(), new_vector.end());
         const double& rate = this->data(state).rate;
 
         ResultColumnType* column = down_cast<ResultColumnType*>(to);

@@ -22,6 +22,7 @@ applications, and to alter it and redistribute it freely, subject to the followi
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <functional>
 #include <iterator>
@@ -465,13 +466,8 @@ inline Iter partition_left(Iter begin, Iter end, Compare comp) {
 }
 
 template <class Iter, class Compare, bool Branchless>
-inline void pdqsort_loop(const bool& is_canceled, Iter begin, Iter end, Compare comp, int bad_allowed,
-                         bool leftmost = true) {
+inline void pdqsort_loop(Iter begin, Iter end, Compare comp, int bad_allowed, bool leftmost = true) {
     typedef typename std::iterator_traits<Iter>::difference_type diff_t;
-
-    if (UNLIKELY(is_canceled)) {
-        return;
-    }
 
     // Use a while loop for tail recursion elimination.
     while (true) {
@@ -560,7 +556,7 @@ inline void pdqsort_loop(const bool& is_canceled, Iter begin, Iter end, Compare 
 
         // Sort the left partition first using recursion and do tail recursion elimination for
         // the right-hand partition.
-        pdqsort_loop<Iter, Compare, Branchless>(is_canceled, begin, pivot_pos, comp, bad_allowed, leftmost);
+        pdqsort_loop<Iter, Compare, Branchless>(begin, pivot_pos, comp, bad_allowed, leftmost);
         begin = pivot_pos + 1;
         leftmost = false;
     }
@@ -568,37 +564,35 @@ inline void pdqsort_loop(const bool& is_canceled, Iter begin, Iter end, Compare 
 } // namespace pdqsort_detail
 
 template <class Iter, class Compare>
-inline void pdqsort(const bool& is_cancelled, Iter begin, Iter end, Compare comp) {
+inline void pdqsort(Iter begin, Iter end, Compare comp) {
     if (begin == end) return;
 
 #if __cplusplus >= 201103L
     pdqsort_detail::pdqsort_loop<Iter, Compare,
                                  pdqsort_detail::is_default_compare<typename std::decay<Compare>::type>::value &&
                                          std::is_arithmetic<typename std::iterator_traits<Iter>::value_type>::value>(
-            is_cancelled, begin, end, comp, pdqsort_detail::log2(end - begin));
+            begin, end, comp, pdqsort_detail::log2(end - begin));
 #else
-    pdqsort_detail::pdqsort_loop<Iter, Compare, false>(is_canceled, begin, end, comp,
-                                                       pdqsort_detail::log2(end - begin));
+    pdqsort_detail::pdqsort_loop<Iter, Compare, false>(begin, end, comp, pdqsort_detail::log2(end - begin));
 #endif
 }
 
 template <class Iter>
-inline void pdqsort(const bool& is_cancelled, Iter begin, Iter end) {
+inline void pdqsort(Iter begin, Iter end) {
     typedef typename std::iterator_traits<Iter>::value_type T;
-    pdqsort(is_cancelled, begin, end, std::less<T>());
+    pdqsort(begin, end, std::less<T>());
 }
 
 template <class Iter, class Compare>
-inline void pdqsort_branchless(const bool& is_cancelled, Iter begin, Iter end, Compare comp) {
+inline void pdqsort_branchless(Iter begin, Iter end, Compare comp) {
     if (begin == end) return;
-    pdqsort_detail::pdqsort_loop<Iter, Compare, true>(is_cancelled, begin, end, comp,
-                                                      pdqsort_detail::log2(end - begin));
+    pdqsort_detail::pdqsort_loop<Iter, Compare, true>(begin, end, comp, pdqsort_detail::log2(end - begin));
 }
 
 template <class Iter>
-inline void pdqsort_branchless(const bool& is_cancelled, Iter begin, Iter end) {
+inline void pdqsort_branchless(Iter begin, Iter end) {
     typedef typename std::iterator_traits<Iter>::value_type T;
-    pdqsort_branchless(is_cancelled, begin, end, std::less<T>());
+    pdqsort_branchless(begin, end, std::less<T>());
 }
 
 #undef PDQSORT_PREFER_MOVE
