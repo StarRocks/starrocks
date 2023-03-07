@@ -85,7 +85,7 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         public LogicalIcebergScanOperator.Builder withOperator(LogicalIcebergScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.predicates = scanOperator.predicates;
+            this.predicates = scanOperator.predicates.clone();
             return this;
         }
     }
