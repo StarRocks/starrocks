@@ -28,8 +28,7 @@ PROPERTIES(
     "dynamic_partition.start" = "-3",
     "dynamic_partition.end" = "3",
     "dynamic_partition.prefix" = "p",
-    "dynamic_partition.buckets" = "32",
-    "dynamic_partition.history_partition_num" = "0"
+    "dynamic_partition.buckets" = "32"
 );
 ```
 
@@ -44,7 +43,6 @@ PROPERTIES(
 | dynamic_partition.end   | 是   | 提前创建的分区数量，取值范围为正整数。根据 `dynamic_partition.time_unit` 属性的不同，以当天（周/月）为基准，提前创建对应范围的分区。                                                                                                                                                                                                                                    |
 | dynamic_partition.prefix | 否   | 动态分区的前缀名，默认值为 `p`。                                                                                                                                                                                                                                                                                                    |
 | dynamic_partition.buckets | 否   | 动态分区的分桶数量。默认与 BUCKETS 保留字指定的分桶数量、或者 StarRocks 自动设置的分桶数量保持一致。                                                                                                                                                                                                                                                          |
-| dynamic_partition.history_partition_num | 否   | 动态分区的创建历史分区的个数，默认值为 `0`。当值>0时会提前创建历史分区。                                                                                                                                                                                                                                                                               |
 
 **动态分区相关 FE 配置项：**
 
