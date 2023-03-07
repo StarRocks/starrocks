@@ -76,7 +76,8 @@ public class RefreshMaterializedViewStatementTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Can not find materialized view:no_exists", e.getMessage());
+            Assert.assertEquals("Getting analyzing error at line 1, column 26. Detail message: " +
+                    "Can not find materialized view:no_exists.", e.getMessage());
         }
     }
 

@@ -240,6 +240,7 @@ import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.Property;
+import com.starrocks.sql.ast.PropertySet;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -1796,23 +1797,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAdminSetConfigStatement(StarRocksParser.AdminSetConfigStatementContext context) {
-        Map<String, String> configs = new HashMap<>();
-        Property property = (Property) visitProperty(context.property());
-        String configKey = property.getKey();
-        String configValue = property.getValue();
-        configs.put(configKey, configValue);
-        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs, createPos(context));
+        Property config = (Property) visitProperty(context.property());
+        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, config, createPos(context));
     }
 
     @Override
     public ParseNode visitAdminSetReplicaStatusStatement(
             StarRocksParser.AdminSetReplicaStatusStatementContext context) {
-        Map<String, String> properties = new HashMap<>();
         List<Property> propertyList = visit(context.properties().property(), Property.class);
-        for (Property property : propertyList) {
-            properties.put(property.getKey(), property.getValue());
-        }
-        return new AdminSetReplicaStatusStmt(properties, createPos(context));
+        return new AdminSetReplicaStatusStmt(new PropertySet(propertyList, createPos(context.properties())),
+                createPos(context));
     }
 
     @Override
@@ -1901,14 +1895,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             tabletIds = context.tabletList().INTEGER_VALUE().stream().map(ParseTree::getText)
                     .map(Long::parseLong).collect(toList());
         }
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-        return new AdminCheckTabletsStmt(tabletIds, properties, createPos(context));
+        return new AdminCheckTabletsStmt(tabletIds, (Property) visitProperty(context.property()), createPos(context));
     }
 
     @Override
@@ -5087,9 +5074,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             // Note: val is positive, because we do not recognize minus character in 'IntegerLiteral'
             // -2^63 will be recognized as large int(__int128)
             if (intLiteral.compareTo(LONG_MAX) <= 0) {
-                return new IntLiteral(intLiteral.longValue());
+                return new IntLiteral(intLiteral.longValue(), pos);
             } else if (intLiteral.compareTo(LARGEINT_MAX_ABS) <= 0) {
-                return new LargeIntLiteral(intLiteral.toString());
+                return new LargeIntLiteral(intLiteral.toString(), pos);
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.numOverflow(context.getText()), pos);
             }

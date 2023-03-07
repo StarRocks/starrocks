@@ -45,7 +45,7 @@ class ParserTest {
             fail("sql should fail to parse.");
         } catch (Exception e) {
             assertContains(e.getMessage(), "Getting syntax error at line 1, column 14. " +
-                    "Detail message: Input 'tbl' is not valid at this position, please check the SQL Reference.");
+                    "Detail message: Input 'tbl' is not valid at this position.");
         }
     }
 

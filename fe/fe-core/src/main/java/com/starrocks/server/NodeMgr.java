@@ -85,7 +85,6 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -1098,10 +1097,7 @@ public class NodeMgr {
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
-        Map<String, String> configs = stmt.getConfigs();
-        Preconditions.checkState(configs.size() == 1);
-
-        setFrontendConfig(configs);
+        setFrontendConfig(stmt.getConfig().getMap());
 
         List<Frontend> allFrontends = getFrontends(null);
         int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
@@ -1113,8 +1109,8 @@ public class NodeMgr {
             }
 
             TSetConfigRequest request = new TSetConfigRequest();
-            request.setKeys(new ArrayList<>(configs.keySet()));
-            request.setValues(new ArrayList<>(configs.values()));
+            request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
+            request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
             try {
                 TSetConfigResponse response = FrontendServiceProxy
                         .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),

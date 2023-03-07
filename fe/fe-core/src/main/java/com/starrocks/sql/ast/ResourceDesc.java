@@ -43,7 +43,6 @@ public class ResourceDesc implements ParseNode {
 
     protected NodePosition pos;
 
-
     public ResourceDesc(String name, Map<String, String> properties) {
         this(name, properties, NodePosition.ZERO);
     }

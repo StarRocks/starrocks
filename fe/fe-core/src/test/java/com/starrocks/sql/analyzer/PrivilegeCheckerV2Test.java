@@ -2597,7 +2597,8 @@ public class PrivilegeCheckerV2Test {
                     "revoke root from root", starRocksAssert.getCtx()), starRocksAssert.getCtx());
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Can not revoke root role from root user", e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: Can not revoke root role from root user.",
+                    e.getMessage());
         }
 
         ctxToTestUser();
@@ -2606,7 +2607,8 @@ public class PrivilegeCheckerV2Test {
                     "grant root to role r1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Can not grant root or cluster_admin role except root user", e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: Can not grant root or cluster_admin role " +
+                    "except root user.", e.getMessage());
         }
 
         try {
@@ -2614,7 +2616,8 @@ public class PrivilegeCheckerV2Test {
                     "grant cluster_admin to role r1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Can not grant root or cluster_admin role except root user", e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: Can not grant root or cluster_admin " +
+                    "role except root user.", e.getMessage());
         }
 
         sql = "drop role r1";
@@ -2654,7 +2657,8 @@ public class PrivilegeCheckerV2Test {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertEquals(e.getMessage(),
-                    "Access denied; you need (at least one of) the GRANT privilege(s) for this operation");
+                    "Getting analyzing error. Detail message: Access denied; " +
+                            "you need (at least one of) the GRANT privilege(s) for this operation.");
         }
 
         sql = "drop user u1";

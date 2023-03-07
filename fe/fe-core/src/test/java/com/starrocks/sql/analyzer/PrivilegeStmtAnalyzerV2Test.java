@@ -477,7 +477,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Getting syntax error at line 1, column 35. " +
-                    "Detail message: Input 'tables' is not valid at this position, please check the SQL Reference."));
+                    "Detail message: Input 'tables' is not valid at this position."));
         }
 
         sql = "revoke select on ALL tables IN ALL tables from test_user";
@@ -618,7 +618,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Getting syntax error at line 1, column 34. " +
-                    "Detail message: Input 'views' is not valid at this position, please check the SQL Reference."));
+                    "Detail message: Input 'views' is not valid at this position."));
         }
 
         sql = "revoke select on ALL views IN ALL views from test_user";
