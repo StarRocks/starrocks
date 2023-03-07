@@ -65,6 +65,13 @@ Status OlapSchemaScanContext::_prepare_params(RuntimeState* state) {
         _param->thread_id = _tnode.schema_scan_node.thread_id;
     }
 
+    if (_tnode.schema_scan_node.__isset.job_id) {
+        _param->job_id = _tnode.schema_scan_node.job_id;
+    }
+    if (_tnode.schema_scan_node.__isset.label) {
+        _param->label = _obj_pool.add(new std::string(_tnode.schema_scan_node.label));
+    }
+
     // only for no predicate and limit parameter is set
     if (_tnode.conjuncts.empty() && _tnode.limit > 0) {
         _param->without_db_table = true;
