@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -53,11 +54,13 @@ import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryOptions;
+import com.starrocks.thrift.TUserRoles;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 
 public class LeaderOpExecutor {
     private static final Logger LOG = LogManager.getLogger(LeaderOpExecutor.class);
@@ -151,6 +154,12 @@ public class LeaderOpExecutor {
         params.setStmt_id(ctx.getStmtId());
         params.setEnableStrictMode(ctx.getSessionVariable().getEnableInsertStrict());
         params.setCurrent_user_ident(ctx.getCurrentUserIdentity().toThrift());
+
+        TUserRoles currentRoles = new TUserRoles();
+        Preconditions.checkState(ctx.getCurrentRoleIds() != null);
+        currentRoles.setRole_id_list(new ArrayList<>(ctx.getCurrentRoleIds()));
+        params.setUser_roles(currentRoles);
+
         params.setIsLastStmt(ctx.getIsLastStmt());
 
         TQueryOptions queryOptions = new TQueryOptions();
