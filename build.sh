@@ -120,8 +120,16 @@ if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
     USE_SSE4_2=OFF
 fi
 
+<<<<<<< HEAD
 if [[ -z ${WITH_BLOCK_CACHE} ]]; then
 	WITH_BLOCK_CACHE=ON
+=======
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    # force turn off block cache on arm platform
+    WITH_BLOCK_CACHE=OFF
+elif [[ -z ${WITH_BLOCK_CACHE} ]]; then
+    WITH_BLOCK_CACHE=OFF
+>>>>>>> 9441456cc ([Tool] disable block_cache on arm build (#18160))
 fi
 
 if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
