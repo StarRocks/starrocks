@@ -46,6 +46,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSchemaScanNode;
@@ -196,12 +197,14 @@ public class SchemaScanNode extends ScanNode {
                 if (beScanRanges == null) {
                     beScanRanges = Lists.newArrayList();
                 }
-                TScanRangeLocations locations = new TScanRangeLocations();
+                TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
                 TScanRangeLocation location = new TScanRangeLocation();
                 location.setBackend_id(be.getId());
                 location.setServer(new TNetworkAddress(be.getHost(), be.getBePort()));
-                locations.addToLocations(location);
-                beScanRanges.add(locations);
+                scanRangeLocations.addToLocations(location);
+                TScanRange scanRange = new TScanRange();
+                scanRangeLocations.setScan_range(scanRange);
+                beScanRanges.add(scanRangeLocations);
             }
         }
     }
