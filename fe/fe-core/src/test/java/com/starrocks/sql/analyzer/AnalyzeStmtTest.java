@@ -30,6 +30,8 @@ import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -43,6 +45,7 @@ import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.StatisticSQLBuilder;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -52,6 +55,7 @@ import org.junit.Test;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Pattern;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
@@ -184,7 +188,7 @@ public class AnalyzeStmtTest {
     }
 
     @Test
-    public void testStatisticsSqlBuilder() {
+    public void testStatisticsSqlBuilder() throws Exception {
         Database database = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) database.getTable("t0");
         System.out.println(table.getPartitions());
@@ -222,17 +226,19 @@ public class AnalyzeStmtTest {
                 Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap());
+        List<String> sqls = collectJob.buildCollectSQLList(2).get(0);
 
         Assert.assertEquals(String.format("SELECT %d, %d, 'v1', %d, 'test.t0', 't0', " +
                         "COUNT(1), COUNT(1) * 8, IFNULL(hll_raw(`v1`), hll_empty()), COUNT(1) - COUNT(`v1`), " +
-                        "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM test.t0 partition t0",
-                        table.getId(), partition.getId(), database.getId()),
-                collectJob.buildCollectSQLList(2).get(0).get(0));
+                        "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM `test`.`t0` partition `t0`",
+                        table.getId(), partition.getId(), database.getId()), sqls.get(0));
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sqls.get(0), getConnectContext());
         Assert.assertEquals(String.format("SELECT %d, %d, 'v2', %d, 'test.t0', 't0', " +
                         "COUNT(1), COUNT(1) * 8, IFNULL(hll_raw(`v2`), hll_empty()), COUNT(1) - COUNT(`v2`), " +
-                        "IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() FROM test.t0 partition t0",
-                        table.getId(), partition.getId(), database.getId()),
-                collectJob.buildCollectSQLList(2).get(0).get(1));
+                        "IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() FROM `test`.`t0` partition `t0`",
+                        table.getId(), partition.getId(), database.getId()), sqls.get(1));
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sqls.get(1), getConnectContext());
+
     }
 
     @Test
@@ -369,5 +375,20 @@ public class AnalyzeStmtTest {
         String content = StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
                 Lists.newArrayList(kk1, kk2));
         Assert.assertTrue(Pattern.matches(pattern, content));
+    }
+
+    @Test
+    public void testQueryDict() throws Exception {
+        String column = "case";
+        String catalogName = "default_catalog";
+        String dbName = "select";
+        String tblName = "insert";
+        String sql = "select cast(" + 1 + " as Int), " +
+                "cast(" + 2 + " as bigint), " +
+                "dict_merge(" +  StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+                " from " + StatisticUtils.quoting(catalogName, dbName, tblName) + " [_META_]";
+        QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, getConnectContext());
+        Assert.assertEquals("select.insert",
+                ((SelectRelation) stmt.getQueryRelation()).getRelation().getResolveTableName().toString());
     }
 }
