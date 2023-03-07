@@ -70,7 +70,6 @@ public class TableFunction extends Function {
         defaultColumnNames = other.defaultColumnNames;
         tableFnReturnTypes = other.tableFnReturnTypes;
         symbolName = other.symbolName;
-
     }
 
     public static void initBuiltins(FunctionSet functionSet) {

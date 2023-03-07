@@ -30,7 +30,6 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.common.TypeManager;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -57,7 +56,7 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.MAX).add(FunctionSet.MIN)
                     .add(FunctionSet.LEAD).add(FunctionSet.LAG)
                     .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE)
-                    .add(FunctionSet.ANY_VALUE).add(FunctionSet.ARRAY_AGG)
+                    .add(FunctionSet.ANY_VALUE)
                     .add(FunctionSet.HISTOGRAM).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
@@ -78,81 +77,41 @@ public class DecimalV3FunctionAnalyzer {
             new ImmutableSortedSet.Builder<>(String::compareTo).add(FunctionSet.SUM)
                     .add(FunctionSet.MULTI_DISTINCT_SUM).build();
 
-    public static final Set<String> DECIMAL_AGG_FUNCTION =
-            new ImmutableSortedSet.Builder<>(String::compareTo)
-                    .addAll(DECIMAL_AGG_FUNCTION_SAME_TYPE)
-                    .addAll(DECIMAL_AGG_FUNCTION_WIDER_TYPE).build();
+    private static final ScalarType DECIMAL128P38S0 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
 
-    // For decimal32/64/128 types, scale and precision of returnType depends on argTypes'
-    public static Type normalizeDecimalArgTypes(final Type[] argTypes, String fnName) {
+    // For decimal32/64/128 types, normalize argType's scale and precision
+    private static Type[] normalizeDecimalArgTypes(final Type[] argTypes, String fnName) {
         if (argTypes == null || argTypes.length == 0) {
-            return Type.INVALID;
-        }
-
-        if (FunctionSet.HISTOGRAM.equals(fnName)) {
-            return Type.VARCHAR;
-        }
-
-        if (FunctionSet.MAX_BY.equals(fnName)) {
-            if (argTypes[0].isDecimalV3()) {
-                return ScalarType.createDecimalV3Type(argTypes[0].getPrimitiveType(),
-                        argTypes[0].getPrecision(),
-                        ((ScalarType) argTypes[0]).getScalarScale());
-            } else {
-                return argTypes[0];
-            }
-        }
-
-        if (DECIMAL_UNARY_FUNCTION_SET.contains(fnName)) {
-            return FunctionSet.MONEY_FORMAT.equals(fnName) ? Type.VARCHAR : argTypes[0];
-        }
-
-        if (DECIMAL_AGG_FUNCTION_SAME_TYPE.contains(fnName)) {
-            return argTypes[0];
-        }
-
-        if (DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName)) {
-            Type argType = argTypes[0];
-            if (!argType.isDecimalV3()) {
-                return ScalarType.INVALID;
-            }
-            ScalarType argScalarType = (ScalarType) argType;
-            int precision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
-            int scale = argScalarType.getScalarScale();
-            // TODO(by satanson): Maybe accumulating narrower decimal types to wider decimal types directly w/o
-            //  casting the narrower type to the wider type is sound and efficient.
-            return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
-        }
-
-        if (FunctionSet.DECIMAL_ROUND_FUNCTIONS.contains(fnName)) {
-            return argTypes[0].isDecimalV3() ?
-                    ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, argTypes[0].getPrecision(),
-                            ((ScalarType) argTypes[0]).getScalarScale()) : Type.DEFAULT_DECIMAL128;
+            return argTypes;
         }
 
         if (DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName) || fnName.equalsIgnoreCase(FunctionSet.IF)) {
             int commonTypeStartIdx = fnName.equalsIgnoreCase("if") ? 1 : 0;
             if (Arrays.stream(argTypes, commonTypeStartIdx, argTypes.length).noneMatch(Type::isDecimalV3)) {
-                return Type.INVALID;
+                return argTypes;
             }
             Type commonType = Type.getCommonType(argTypes, commonTypeStartIdx, argTypes.length);
-            if (commonType.isDecimalV3()) {
-                Arrays.fill(argTypes, commonTypeStartIdx, argTypes.length, commonType);
-            }
-            return commonType;
+            Type[] newArgType = new Type[argTypes.length];
+            newArgType[0] = argTypes[0];
+            Arrays.fill(newArgType, commonTypeStartIdx, argTypes.length, commonType);
+            return newArgType;
         }
 
-        if (FunctionSet.ARRAY_INTERSECT.equalsIgnoreCase(fnName)) {
+        if (FunctionSet.ARRAY_INTERSECT.equalsIgnoreCase(fnName) || FunctionSet.ARRAY_CONCAT.equalsIgnoreCase(fnName)) {
             Type[] childTypes = Arrays.stream(argTypes).map(a -> ((ArrayType) a).getItemType()).toArray(Type[]::new);
             Preconditions.checkState(Arrays.stream(childTypes).anyMatch(Type::isDecimalV3));
             Type commonType = new ArrayType(Type.getCommonType(childTypes, 0, childTypes.length));
-            if (commonType.isDecimalV3()) {
-                Arrays.fill(argTypes, commonType);
-            }
-            return commonType;
+            return Arrays.stream(argTypes).map(t -> commonType).toArray(Type[]::new);
         }
 
-        return Type.INVALID;
+        if (FunctionSet.ARRAYS_OVERLAP.equalsIgnoreCase(fnName)) {
+            Preconditions.checkState(argTypes.length == 2);
+            Type[] childTypes = Arrays.stream(argTypes).map(a -> ((ArrayType) a).getItemType()).toArray(Type[]::new);
+            ArrayType commonType = new ArrayType(Type.getAssignmentCompatibleType(childTypes[0], childTypes[1], false));
+            return new Type[] {commonType, commonType};
+        }
+
+        return argTypes;
     }
 
     public static Function getFunctionOfRound(FunctionCallExpr node, Function fn, List<Type> argumentTypes) {
@@ -182,19 +141,14 @@ public class DecimalV3FunctionAnalyzer {
             final int expectedScale = (int) ((IntLiteral) secondArg).getValue();
 
             // If scale expand, we use the maximum precision as the result's precision
+            // Invalid expectedScale, modify it to lower bounder
+            // Scale reduce
             if (expectedScale > originalScale) {
                 // truncate(0.1, 10000) is treated as truncate(0.1, 38), type of result is decimal128(38, 38)
-                if (expectedScale > PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128)) {
-                    returnScale = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
-                } else {
-                    returnScale = expectedScale;
-                }
-            } else if (expectedScale < 0) {
-                // Invalid expectedScale, modify it to lower bounder
-                returnScale = 0;
+                returnScale =
+                        Math.min(expectedScale, PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128));
             } else {
-                // Scale reduce
-                returnScale = expectedScale;
+                returnScale = Math.max(expectedScale, 0);
             }
             returnType = ScalarType.createType(returnPrimitiveType, -1, returnPrecision, returnScale);
         } else if (Expr.containsSlotRef(secondArg)) {
@@ -226,10 +180,9 @@ public class DecimalV3FunctionAnalyzer {
                 returnType = fn.getReturnType();
             } else if (fn.functionName().equals(FunctionSet.AVG)) {
                 // avg on decimal complies with Snowflake-style
-                ScalarType decimal128p38s0 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
                 final ArithmeticExpr.TypeTriple triple =
                         ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.DIVIDE, (ScalarType) argType,
-                                decimal128p38s0);
+                                DECIMAL128P38S0);
                 returnType = triple.returnType;
             } else if (DECIMAL_AGG_VARIANCE_STDDEV_TYPE.contains(fn.functionName())) {
                 returnType = argType;
@@ -242,16 +195,14 @@ public class DecimalV3FunctionAnalyzer {
                 }
             }
         }
-        AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), Arrays.asList(argType), returnType,
-                fn.getIntermediateType(), fn.hasVarArgs());
 
-        newFn.setFunctionId(fn.getFunctionId());
-        newFn.setChecksum(fn.getChecksum());
-        newFn.setBinaryType(fn.getBinaryType());
-        newFn.setHasVarArgs(fn.hasVarArgs());
-        newFn.setId(fn.getId());
-        newFn.setUserVisible(fn.isUserVisible());
-        newFn.setisAnalyticFn(fn.isAnalyticFn());
+        Type[] decimalTypes = new Type[fn.getNumArgs()];
+        Arrays.fill(decimalTypes, argType);
+        Type[] args = replaceArgDecimalType(fn.getArgs(), decimalTypes);
+
+        AggregateFunction newFn = (AggregateFunction) fn.copy();
+        newFn.setArgsType(args);
+        newFn.setRetType(returnType);
         return newFn;
     }
 
@@ -337,7 +288,7 @@ public class DecimalV3FunctionAnalyzer {
         }
 
         // modify search argument types
-        Type commonType = DecimalV3FunctionAnalyzer.normalizeDecimalArgTypes(argumentTypes, fnName);
+        argumentTypes = normalizeDecimalArgTypes(argumentTypes, fnName);
         Function fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         if (fn == null) {
@@ -351,88 +302,166 @@ public class DecimalV3FunctionAnalyzer {
             throw new SemanticException(msg, node.getPos());
         }
 
-        if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_FUNCTION.contains(fnName)) {
-            Type argType = node.getChild(0).getType();
-            // stddev/variance always use decimal128(38,9) to computing result.
-            if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_VARIANCE_STDDEV_TYPE
-                    .contains(fnName) && argType.isDecimalV3()) {
-                argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
-                node.setChild(0, TypeManager.addCastExpr(node.getChild(0), argType));
-            }
-            fn = DecimalV3FunctionAnalyzer
-                    .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
-        } else if (DecimalV3FunctionAnalyzer.DECIMAL_UNARY_FUNCTION_SET.contains(fnName) ||
-                DecimalV3FunctionAnalyzer.DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName) ||
-                FunctionSet.IF.equals(fnName) || FunctionSet.MAX_BY.equals(fnName)) {
-            // DecimalV3 types in resolved fn's argument should be converted into commonType so that right CastExprs
-            // are interpolated into FunctionCallExpr's children whose type does match the corresponding argType of fn.
-            List<Type> argTypes;
-            if (FunctionSet.MONEY_FORMAT.equals(fnName)) {
-                argTypes = Arrays.asList(argumentTypes);
-            } else {
-                argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
-                        .collect(Collectors.toList());
+        Function newFn = fn;
+        if (DECIMAL_AGG_FUNCTION_SAME_TYPE.contains(fnName) || DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName)) {
+            Type commonType = Type.INVALID;
+            if (FunctionSet.HISTOGRAM.equals(fnName)) {
+                commonType = Type.VARCHAR;
+            } else if (DECIMAL_AGG_FUNCTION_SAME_TYPE.contains(fnName)) {
+                commonType = argumentTypes[0];
+            } else if (DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName) && argumentTypes[0].isDecimalV3()) {
+                ScalarType argScalarType = (ScalarType) argumentTypes[0];
+                int precision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+                int scale = argScalarType.getScalarScale();
+                // TODO(by satanson): Maybe accumulating narrower decimal types to wider decimal types directly w/o
+                //  casting the narrower type to the wider type is sound and efficient.
+                commonType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
             }
 
+            Type argType = node.getChild(0).getType();
+            // stddev/variance always use decimal128(38,9) to computing result.
+            if (DECIMAL_AGG_VARIANCE_STDDEV_TYPE.contains(fnName) && argType.isDecimalV3()) {
+                argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
+            }
+            newFn = DecimalV3FunctionAnalyzer
+                    .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
+        } else if (FunctionSet.MAX_BY.equals(fnName)) {
+            Type returnType = fn.getReturnType();
+            // Decimal v3 function return type maybe need change
+            ScalarType firstType = (ScalarType) argumentTypes[0];
+            Type commonType = firstType;
+            if (firstType.isDecimalV3()) {
+                commonType = ScalarType.createDecimalV3Type(firstType.getPrimitiveType(),
+                        firstType.getPrecision(), firstType.getScalarScale());
+            }
+            if (returnType.isDecimalV3() && commonType.isValid()) {
+                returnType = commonType;
+            }
+            Preconditions.checkState(fn instanceof AggregateFunction);
+
+            Type[] argTypes = replaceArgDecimalType(fn.getArgs(), argumentTypes);
+            newFn = fn.copy();
+            newFn.setArgsType(argTypes);
+            newFn.setRetType(returnType);
+            ((AggregateFunction) newFn).setIntermediateType(Type.VARCHAR);
+        } else if (DECIMAL_UNARY_FUNCTION_SET.contains(fnName)) {
+            Type commonType = argumentTypes[0];
             Type returnType = fn.getReturnType();
             // Decimal v3 function return type maybe need change
             if (returnType.isDecimalV3() && commonType.isValid()) {
                 returnType = commonType;
             }
 
-            if (FunctionSet.MAX_BY.equals(fnName)) {
-                AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), Arrays.asList(argumentTypes),
-                        returnType, Type.VARCHAR, fn.hasVarArgs());
-                newFn.setFunctionId(fn.getFunctionId());
-                newFn.setChecksum(fn.getChecksum());
-                newFn.setBinaryType(fn.getBinaryType());
-                newFn.setHasVarArgs(fn.hasVarArgs());
-                newFn.setId(fn.getId());
-                newFn.setUserVisible(fn.isUserVisible());
-                newFn.setisAnalyticFn(true);
-                fn = newFn;
-                return fn;
+            Type[] argTypes = replaceArgDecimalType(fn.getArgs(), argumentTypes);
+            newFn = fn.copy();
+            newFn.setArgsType(argTypes);
+            newFn.setRetType(returnType);
+        } else if (DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName) || FunctionSet.IF.equals(fnName)) {
+            int commonTypeStartIdx = fnName.equalsIgnoreCase("if") ? 1 : 0;
+            Type commonType = argumentTypes[commonTypeStartIdx];
+            Type returnType = fn.getReturnType();
+            // Decimal v3 function return type maybe need change
+            if (returnType.isDecimalV3() && commonType.isValid()) {
+                returnType = commonType;
             }
 
-            ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), argTypes, returnType,
-                    fn.getLocation(), ((ScalarFunction) fn).getSymbolName(),
-                    ((ScalarFunction) fn).getPrepareFnSymbol(),
-                    ((ScalarFunction) fn).getCloseFnSymbol());
-            newFn.setFunctionId(fn.getFunctionId());
-            newFn.setChecksum(fn.getChecksum());
-            newFn.setBinaryType(fn.getBinaryType());
-            newFn.setHasVarArgs(fn.hasVarArgs());
-            newFn.setId(fn.getId());
-            newFn.setUserVisible(fn.isUserVisible());
-
-            fn = newFn;
+            Type[] argTypes = replaceArgDecimalType(fn.getArgs(), argumentTypes);
+            newFn = fn.copy();
+            newFn.setRetType(returnType);
+            newFn.setArgsType(argTypes);
         } else if (FunctionSet.DECIMAL_ROUND_FUNCTIONS.contains(fnName)) {
             // Decimal version of truncate/round/round_up_to may change the scale, we need to calculate the scale of the return type
             // And we need to downgrade to double version if second param is neither int literal nor SlotRef expression
+            Type commonType = argumentTypes[0].isDecimalV3() ?
+                    ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, argumentTypes[0].getPrecision(),
+                            ((ScalarType) argumentTypes[0]).getScalarScale()) : Type.DEFAULT_DECIMAL128;
             List<Type> argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
                     .collect(Collectors.toList());
-            fn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, fn, argTypes);
+            newFn = getFunctionOfRound(node, fn, argTypes);
         } else if (FunctionSet.ARRAY_DECIMAL_FUNCTIONS.contains(fnName)) {
-            fn = getArrayDecimalFunction(fn, argumentTypes, commonType);
+            newFn = getArrayDecimalFunction(fn, argumentTypes);
         }
-        return fn;
+
+        if (newFn != null) {
+            Preconditions.checkState(newFn.getNumArgs() == fn.getNumArgs());
+        }
+        return newFn;
     }
 
-    private static Function getArrayDecimalFunction(Function fn, Type[] argumentTypes, Type commonType) {
+    private static Type[] replaceArgDecimalType(Type[] originTypes, Type[] normalizedTypes) {
+        Preconditions.checkState(originTypes.length <= normalizedTypes.length);
+        Type[] result = new Type[originTypes.length];
+        for (int i = 0; i < originTypes.length; i++) {
+            if (originTypes[i].isDecimalV3()) {
+                result[i] = normalizedTypes[i];
+            } else {
+                result[i] = originTypes[i];
+            }
+        }
+        return result;
+    }
+
+    private static Function getArrayDecimalFunction(Function fn, Type[] argumentTypes) {
+        Function newFn = fn.copy();
+        Preconditions.checkState(argumentTypes.length > 0);
         switch (fn.functionName()) {
             case FunctionSet.ARRAY_DISTINCT:
             case FunctionSet.ARRAY_SORT:
             case FunctionSet.REVERSE:
-                Preconditions.checkState(argumentTypes.length > 0);
-                fn = fn.copy();
-                fn.setArgsType(argumentTypes);
-                fn.setRetType(argumentTypes[0]);
-                return fn;
             case FunctionSet.ARRAY_INTERSECT:
-                fn = fn.copy();
-                fn.setArgsType(Arrays.stream(argumentTypes).map(a -> commonType).toArray(Type[]::new));
-                fn.setRetType(commonType);
-                return fn;
+            case FunctionSet.ARRAY_CONCAT: {
+                newFn.setArgsType(new Type[] {argumentTypes[0]});
+                newFn.setRetType(argumentTypes[0]);
+                return newFn;
+            }
+            case FunctionSet.ARRAY_MAX:
+            case FunctionSet.ARRAY_MIN: {
+                Type decimalType = ((ArrayType) argumentTypes[0]).getItemType();
+                newFn.setArgsType(argumentTypes);
+                newFn.setRetType(decimalType);
+                return newFn;
+            }
+            case FunctionSet.ARRAY_SUM:
+            case FunctionSet.ARRAY_AVG: {
+                ScalarType decimalType = (ScalarType) ((ArrayType) argumentTypes[0]).getItemType();
+                int precision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+                int scale = decimalType.getScalarScale();
+                ScalarType retType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+                if (FunctionSet.ARRAY_AVG.equals(fn.functionName())) {
+                    // avg on decimal complies with Snowflake-style
+                    ArithmeticExpr.TypeTriple triple =
+                            ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.DIVIDE, decimalType,
+                                    DECIMAL128P38S0);
+                    retType = triple.returnType;
+                    Preconditions.checkState(PrimitiveType.DECIMAL128.equals(retType.getPrimitiveType()));
+                    newFn.setArgsType(argumentTypes);
+                } else if (FunctionSet.ARRAY_SUM.equals(fn.functionName()) && retType.getScalarScale() > 18) {
+                    retType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18);
+                    newFn.setArgsType(new Type[] {new ArrayType(retType)});
+                }
+                newFn.setRetType(retType);
+                return newFn;
+            }
+            case FunctionSet.ARRAY_DIFFERENCE: {
+                ScalarType decimalType = (ScalarType) ((ArrayType) argumentTypes[0]).getItemType();
+                ArithmeticExpr.TypeTriple triple =
+                        ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.SUBTRACT, decimalType,
+                                decimalType);
+                newFn.setArgsType(argumentTypes);
+                newFn.setRetType(new ArrayType(triple.returnType));
+                return newFn;
+            }
+            case FunctionSet.ARRAYS_OVERLAP: {
+                newFn.setArgsType(argumentTypes);
+                return newFn;
+            }
+            case FunctionSet.ARRAY_AGG: {
+                Type returnType = new ArrayType(argumentTypes[0]);
+                newFn.setArgsType(argumentTypes);
+                newFn.setRetType(returnType);
+                ((AggregateFunction) newFn).setIntermediateType(returnType);
+                return newFn;
+            }
             default:
                 return fn;
         }

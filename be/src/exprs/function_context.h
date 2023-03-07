@@ -45,6 +45,7 @@ public:
 
         /// Only valid if type == TYPE_FIXED_BUFFER || type == TYPE_VARCHAR
         int len = 0;
+        std::vector<TypeDesc> children;
     };
 
     enum FunctionStateScope {

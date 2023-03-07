@@ -171,7 +171,6 @@ public class AggregateFunction extends Function {
         isAggregateFn = other.isAggregateFn;
         returnsNonNullOnEmpty = other.returnsNonNullOnEmpty;
         symbolName = other.symbolName;
-
     }
 
     public String getSymbolName() {
@@ -235,6 +234,10 @@ public class AggregateFunction extends Function {
         public AggregateFunctionBuilder symbolName(String symbolName) {
             this.symbolName = symbolName;
             return this;
+        }
+
+        public void setIntermediateType(Type intermediateType) {
+            this.intermediateType = intermediateType;
         }
 
         public AggregateFunction build() {

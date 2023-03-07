@@ -185,4 +185,31 @@ public class DecimalTypeTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "PREDICATES: 4: c_1_3 <= 1000");
     }
+
+
+    @Test
+    public void testArrayAggDecimal() throws Exception {
+        int stage = connectContext.getSessionVariable().getNewPlannerAggStage();
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        try {
+            String sql = "select array_agg(c_0_0) from tab0";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "array_agg[([16: array_agg, ARRAY<DECIMAL128(26,2)>, true]); " +
+                    "args: DECIMAL128; result: ARRAY<DECIMAL128(26,2)>;");
+            assertContains(plan, "array_agg[([1: c_0_0, DECIMAL128(26,2), false]); " +
+                    "args: DECIMAL128; result: ARRAY<DECIMAL128(26,2)>;");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+        }
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        try {
+            String sql = "select array_agg(c_0_0) from tab0";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "array_agg[([1: c_0_0, DECIMAL128(26,2), false]); " +
+                    "args: DECIMAL128; result: ARRAY<DECIMAL128(26,2)>;");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+        }
+    }
 }

@@ -279,7 +279,7 @@ public class ExpressionAnalyzer {
         visitor.visit(expression, scope);
     }
 
-    static class Visitor extends AstVisitor<Void, Scope> {
+    public static class Visitor extends AstVisitor<Void, Scope> {
         private static final List<String> ADD_DATE_FUNCTIONS = Lists.newArrayList(FunctionSet.DATE_ADD,
                 FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
         private static final List<String> SUB_DATE_FUNCTIONS =
