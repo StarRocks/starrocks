@@ -22,7 +22,7 @@ import java.util.Map;
 public class CachingRemoteFileConf {
     private final long cacheTtlSec;
     private final long cacheRefreshIntervalSec;
-    private final long cacheMaxSize = 100000L;
+    private long cacheMaxSize = 1000000L;
     private final int perQueryCacheMaxSize = 10000;
 
     public CachingRemoteFileConf(Map<String, String> conf) {
@@ -30,6 +30,7 @@ public class CachingRemoteFileConf {
                 String.valueOf(Config.remote_file_cache_ttl_s)));
         this.cacheRefreshIntervalSec = Long.parseLong(conf.getOrDefault("remote_file_cache_refresh_interval_sec",
                 String.valueOf(Config.remote_file_cache_refresh_interval_s)));
+        this.cacheMaxSize = Long.parseLong(conf.getOrDefault("remote_file_cache_max_num", String.valueOf(cacheMaxSize)));
     }
 
     public long getCacheTtlSec() {
