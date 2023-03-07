@@ -31,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.starrocks.connector.RemoteFileOperations.HMS_PARTITIONS_REMOTE_FILES;
 import static com.starrocks.connector.hive.HiveMetastoreOperations.BACKGROUND_THREAD_NAME_PREFIX;
 
 /**
@@ -145,7 +146,13 @@ public class PlannerProfile {
         if (ctx != null) {
             p = ctx.getPlannerProfile();
         }
-        p.customProperties.put(name, value);
+        if (name.equals(HMS_PARTITIONS_REMOTE_FILES) && p.customProperties.containsKey(HMS_PARTITIONS_REMOTE_FILES)) {
+            int currentSize = Integer.parseInt(p.customProperties.get(HMS_PARTITIONS_REMOTE_FILES));
+            int addedSize = Integer.parseInt(value);
+            p.customProperties.put(name, String.valueOf(currentSize + addedSize));
+        } else {
+            p.customProperties.put(name, value);
+        }
 
         String threadName = Thread.currentThread().getName();
         if (threadName.startsWith(BACKGROUND_THREAD_NAME_PREFIX)) {
