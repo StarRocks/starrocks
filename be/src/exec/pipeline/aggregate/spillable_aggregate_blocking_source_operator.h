@@ -19,6 +19,7 @@
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 #include "exec/sorted_streaming_aggregator.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 class SpillableAggregateBlockingSourceOperator final : public AggregateBlockingSourceOperator {
@@ -46,6 +47,7 @@ private:
 
     bool _is_finished = false;
     bool _has_last_chunk = true;
+    ChunkPipelineAccumulator _accumulator;
     SortedStreamingAggregatorPtr _aggregator = nullptr;
 };
 

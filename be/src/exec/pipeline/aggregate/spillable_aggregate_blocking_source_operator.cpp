@@ -28,6 +28,7 @@ bool SpillableAggregateBlockingSourceOperator::has_output() const {
     if (AggregateBlockingSourceOperator::has_output()) {
         return true;
     }
+
     if (!_aggregator->spiller()->spilled()) {
         return false;
     }
@@ -65,14 +66,17 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::pull_chunk(RuntimeS
 
     ASSIGN_OR_RETURN(auto res, _pull_spilled_chunk(state));
 
-    const int64_t old_size = res->num_rows();
-    RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_aggregator->conjunct_ctxs(), res.get()));
-    _aggregator->update_num_rows_returned(-(old_size - static_cast<int64_t>(res->num_rows())));
+    if (res != nullptr) {
+        const int64_t old_size = res->num_rows();
+        RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_aggregator->conjunct_ctxs(), res.get()));
+        _aggregator->update_num_rows_returned(-(old_size - static_cast<int64_t>(res->num_rows())));
+    }
 
     return res;
 }
 
 StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk(RuntimeState* state) {
+    DCHECK(_accumulator.need_input());
     ChunkPtr res;
     if (!_aggregator->is_spilled_eos()) {
         auto executor = _aggregator->spill_channel()->io_executor();
@@ -86,13 +90,21 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
         RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
         RETURN_IF_ERROR(_aggregator->evaluate_agg_fn_exprs(chunk.get(), true));
         ASSIGN_OR_RETURN(res, _aggregator->streaming_compute_agg_state(chunk->num_rows(), false));
+        _accumulator.push(std::move(res));
 
     } else {
         _has_last_chunk = false;
         ASSIGN_OR_RETURN(res, _aggregator->pull_eos_chunk());
+        _accumulator.push(std::move(res));
+        _accumulator.finalize();
     }
 
-    return res;
+    if (_accumulator.has_output()) {
+        auto accumulated = std::move(_accumulator.pull());
+        return accumulated;
+    }
+
+    return nullptr;
 }
 
 } // namespace starrocks::pipeline
