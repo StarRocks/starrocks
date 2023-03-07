@@ -41,7 +41,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
     ColumnPtr input_map_ptr_ref = nullptr; // hold shared_ptr to avoid early deleted.
     // step 1: get input columns from map(key_col, value_col)
     for (int i = 1; i < _children.size(); ++i) { // currently only 2 children, may be more in the future
-        ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], chunk);
+        ASSIGN_OR_RETURN(auto child_col, context->evaluate(_children[i], chunk));
         // the column is a null literal.
         if (child_col->only_null()) {
             return ColumnHelper::align_return_type(child_col, type(), chunk->num_rows(), true);
