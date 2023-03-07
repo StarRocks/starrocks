@@ -224,7 +224,8 @@ public class AuthenticationManagerTest {
             SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
             Assert.fail();
         } catch (AnalysisException e) {
-            Assert.assertEquals("Role test_r3 is not granted to 'test_u3'@'%'", e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: Role test_r3 is not granted to 'test_u3'@'%'.",
+                    e.getMessage());
         }
 
         sql = "alter user test_u3 default role NONE";

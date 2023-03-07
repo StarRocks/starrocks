@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -22,6 +23,11 @@ public class SubqueryRelation extends QueryRelation {
     private final QueryStatement queryStatement;
 
     public SubqueryRelation(QueryStatement queryStatement) {
+        this(queryStatement, queryStatement.getPos());
+    }
+
+    public SubqueryRelation(QueryStatement queryStatement, NodePosition pos) {
+        super(pos);
         this.queryStatement = queryStatement;
         QueryRelation queryRelation = this.queryStatement.getQueryRelation();
         // The order by is meaningless in subquery

@@ -93,9 +93,9 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 
 | Parameter         | Required | Description                                                  |
 | ----------------- | -------- | ------------------------------------------------------------ |
-| jsonpaths         | No       | The names of the fields that you want to load from the JSON data file. The value of this parameter is in JSON format. Stream Load supports loading JSON data in one of the following modes:<ul><li>Simple mode: You do not need to specify the `jsonpaths` parameter. This mode is suitable when the JSON data is in a simple structure and can be mapped onto the StarRocks table data without complex data conversions. The JSON data must be an object as indicated by curly brackets `{}`, such as `{"category": 1, "author": 2, "price": "3"}`. In this example, `category`, `author`, and `price` are field names, and these fields can be mapped by name onto the columns `category`, `author`, and `price` of the StarRocks table.</li><li>Strict mode: You need to specify the `jsonpaths` parameter. This mode is suitable when the JSON data is in a complex structure and can be mapped onto the StarRocks table data only after complex data conversions. For more information, see the "[Load JSON data using strict mode](#load-json-data-using-strict-mode)" section of this topic.</li></ul> |
+| jsonpaths         | No       | The names of the keys that you want to load from the JSON data file. You need to specify this parameter only when you load JSON data by using the matched mode. The value of this parameter is in JSON format. See [Configure column mapping for JSON data loading](#configure-column-mapping-for-json-data-loading). </li></ul> |
 | strip_outer_array | No       | Specifies whether to strip the outermost array structure. Valid values: `true` and `false`. Default value: `false`.<br/>In real-world business scenarios, the JSON data may have an outermost array structure as indicated by a pair of square brackets `[]`. In this situation, we recommend that you set this parameter to `true`, so StarRocks removes the outermost square brackets `[]` and loads each inner array as a separate data record. If you set this parameter to `false`, StarRocks parses the entire JSON data file into one array and loads the array as a single data record.<br/>For example, the JSON data is `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`. If you set this parameter to `true`,  `{"category" : 1, "author" : 2}` and `{"category" : 3, "author" : 4}` are parsed into separate data records that are loaded into separate StarRocks table rows. |
-| json_root         | No       | The root element of the JSON data that you want to load from the JSON data file. This parameter is valid only when you load JSON data by using the strict mode. The value of this parameter is a valid JsonPath string. By default, the value of this parameter is empty, indicating that all data of the JSON data file will be loaded. For more information, see the "[Load JSON data using strict mode with root element specified](#load-json-data-using-strict-mode-with-root-element-specified)" section of this topic. |
+| json_root         | No       | The root element of the JSON data that you want to load from the JSON data file. You need to specify this parameter only when you load JSON data by using the matched mode. The value of this parameter is a valid JsonPath string. By default, the value of this parameter is empty, indicating that all data of the JSON data file will be loaded. For more information, see the "[Load JSON data using matched mode with root element specified](#load-json-data-using-matched-mode-with-root-element-specified)" section of this topic. |
 | ignore_json_size  | No       | Specifies whether to check the size of the JSON body in the HTTP request.<br/>**NOTE**<br/>By default, the size of the JSON body in an HTTP request cannot exceed 100 MB. If the JSON body exceeds 100 MB in size, an error "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." is reported. To prevent this error, you can add `"ignore_json_size:true"` in the HTTP request header to instruct StarRocks not to check the JSON body size. |
 
 When you load JSON data, also note that the size per JSON object cannot exceed 4 GB. If an individual JSON object in the JSON data file exceeds 4 GB in size, an error "This parser can't support a document that big." is reported.
@@ -132,30 +132,37 @@ The following table describes the optional parameters.
 
 ### Configure column mapping for CSV data loading
 
-When you load CSV data, you can configure column mapping between the data file and the StarRocks table by using only the `columns` parameter. If the columns of the data file can be mapped in sequence onto the columns of the StarRocks table, you do not need to specify the `columns` parameter. Otherwise, you must specify the `columns` parameter, as shown in the following two use cases:
+If the columns of the data file can be mapped one on one in sequence to the columns of the StarRocks table, you do not need to configure the column mapping between the data file and the StarRocks table.
 
-- The columns of the data file can be mapped one on one onto the columns of the StarRocks table, and the data does not need to be computed by functions before it is loaded into the StarRocks table columns.
+If the columns of the data file cannot be mapped one on one in sequence to the columns of the StarRocks table, you need to use the `columns` parameter to configure the column mapping between the data file and the StarRocks table. This includes the following two use cases:
 
-  In the `columns` parameter, you need to input the names of the StarRocks table columns in the same sequence as how the data file columns are arranged. 
+- **Same number of columns but different column sequence.** **Also, the data from the data file does not need to be computed by functions before it is loaded into the matching StarRocks table columns.**
 
-  For example, the StarRocks table consists of three columns, which are `col1`, `col2`, and `col3` in sequence, and the data file also consists of three columns, which can be mapped onto the StarRocks table columns `col3`, `col2`, and `col1`. In this case, you need to specify `"columns: col3, col2, col1"`.
+  In the `columns` parameter, you need to specify the names of the StarRocks table columns in the same sequence as how the data file columns are arranged.
 
-- The columns of the data file cannot be mapped one on one onto the columns of the StarRocks table, and the data needs to be computed by functions before it is loaded into the mapping StarRocks table columns.
+  For example, the StarRocks table consists of three columns, which are `col1`, `col2`, and `col3` in sequence, and the data file also consists of three columns, which can be mapped to the StarRocks table columns `col3`, `col2`, and `col1` in sequence. In this case, you need to specify `"columns: col3, col2, col1"`.
 
-  In the `columns` parameter, you need to input the names of the StarRocks table columns in the same sequence as how the data file columns are arranged, and you also need to specify the functions you want to use to compute the data. Two examples are as follows:
+- **Different number of columns and different column sequence. Also, the data from the data file needs to be computed by functions before it is loaded into the matching StarRocks table columns.**
 
-  - The StarRocks table consists of three columns, which are `col1`, `col2`, and `col3` in sequence. The data file consists of four columns, among which the first three columns can be mapped in sequence onto the StarRocks table columns `col1`, `col2`, and `col3` and the fourth column cannot be mapped onto any of the StarRocks table columns. In this case, you need to temporarily specify a name for the fourth column of the data file, and the temporary name must be different from any of the StarRocks table column names. For example, you can specify `"columns: col1, col2, col3, temp"`, in which the fourth column of the data file is temporarily named `temp`. 
+  In the `columns` parameter, you need to specify the names of the StarRocks table columns in the same sequence as how the data file columns are arranged and specify the functions you want to use to compute the data. Two examples are as follows:
+
+  - The StarRocks table consists of three columns, which are `col1`, `col2`, and `col3` in sequence. The data file consists of four columns, among which the first three columns can be mapped in sequence to the StarRocks table columns `col1`, `col2`, and `col3` and the fourth column cannot be mapped to any of the StarRocks table columns. In this case, you need to temporarily specify a name for the fourth column of the data file, and the temporary name must be different from any of the StarRocks table column names. For example, you can specify `"columns: col1, col2, col3, temp"`, in which the fourth column of the data file is temporarily named `temp`.
   - The StarRocks table consists of three columns, which are `year`, `month`, and `day` in sequence. The data file consists of only one column that accommodates date and time values in `yyyy-mm-dd hh:mm:ss` format. In this case, you can specify `"columns: col, year = year(col), month=month(col), day=day(col)"`, in which `col` is the temporary name of the data file column and the functions `year = year(col)`, `month=month(col)`, and `day=day(col)` are used to extract data from the data file column `col` and loads the data into the mapping StarRocks table columns. For example, `year = year(col)` is used to extract the `yyyy` data from the data file column `col` and loads the data into the StarRocks table column `year`.
+
+For detailed examples, see [Configure column mapping](#configure-column-mapping).
 
 ### Configure column mapping for JSON data loading
 
-When you load JSON data, you can configure column mapping between the data file and the StarRocks table by using the `jsonpaths` and `columns` parameters:
+If the keys of the JSON document have the same names as the columns of the StarRocks table, you can load the JSON-formatted data by using the simple mode. In simple mode, you do not need to specify the `jsonpaths` parameter. This mode requires that the JSON-formatted data must be an object as indicated by curly brackets `{}`, such as `{"category": 1, "author": 2, "price": "3"}`. In this example, `category`, `author`, and `price` are key names, and these keys can be mapped one on one by name to the columns `category`, `author`, and `price` of the StarRocks table.
 
-- The fields declared in `jsonpaths` are mapped by name onto the JSON fields in the data file.
+If the keys of the JSON document have different names than the columns of the StarRocks table, you can load the JSON-formatted data by using the matched mode. In matched mode, you need to use the `jsonpaths` and `COLUMNS` parameters to specify the column mapping between the JSON document and the StarRocks table:
 
-- The columns declared in `columns` are mapped in sequence onto the fields declared in `jsonpaths`.
+- In the `jsonpaths` parameter, specify the JSON keys in the sequence as how they are arranged in the JSON document.
+- In the `COLUMNS` parameter, specify the mapping between the JSON keys and the StarRocks table columns:
+  - The column names specified in the `COLUMNS` parameter are mapped one on one in sequence to the JSON keys.
+  - The column names specified in the `COLUMNS` parameter are mapped one on one by name to the StarRocks table columns.
 
-- The columns declared in `columns` are mapped by name onto the columns in the StarRocks table.
+For examples about loading JSON-formatted data by using the matched mode, see [Load JSON data using matched mode](#load-json-data-using-matched-mode).
 
 ## Return value
 
@@ -405,7 +412,7 @@ curl --location-trusted -u root: -H "label:label6" \
 
 > **NOTE**
 >
-> In the preceding example, the parameters `columns` and `jsonpaths` are not specified. Therefore, the fields in `example1.json` are mapped by name onto the columns of `tbl1`.
+> In the preceding example, the parameters `columns` and `jsonpaths` are not specified. Therefore, the keys in `example1.json` are mapped by name onto the columns of `tbl1`.
 
 To increase throughput, Stream Load supports loading multiple data records all at once. Example:
 
@@ -413,7 +420,7 @@ To increase throughput, Stream Load supports loading multiple data records all a
 [{"category":"C++","author":"avc","title":"C++ primer","price":89.5},{"category":"Java","author":"avc","title":"Effective Java","price":95},{"category":"Linux","author":"avc","title":"Linux kernel","price":195}]
 ```
 
-#### Load JSON data using strict mode
+#### Load JSON data using matched mode
 
 StarRocks performs the following steps to match and process JSON data:
 
@@ -431,7 +438,7 @@ StarRocks performs the following steps to match and process JSON data:
 
 3. Extracts the specified JSON data as instructed by the `jsonpaths` parameter setting.
 
-##### Load JSON data using strict mode without root element specified
+##### Load JSON data using matched without root element specified
 
 Suppose that your data file `example2.json` consists of the following data:
 
@@ -453,9 +460,9 @@ curl --location-trusted -u root: -H "label:label7" \
 
 > **NOTE**
 >
-> In the preceding example, the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. The array structure consists of multiple JSON objects that each represent a data record. Therefore, you need to set `strip_outer_array` to `true` to strip the outermost array structure. The field **title** that you do not want to load is ignored during loading.
+> In the preceding example, the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. The array structure consists of multiple JSON objects that each represent a data record. Therefore, you need to set `strip_outer_array` to `true` to strip the outermost array structure. The key **title** that you do not want to load is ignored during loading.
 
-##### Load JSON data using strict mode with root element specified
+##### Load JSON data using matched mode with root element specified
 
 Suppose your data file `example3.json` consists of the following data:
 
@@ -478,4 +485,4 @@ curl --location-trusted -u root: \
 
 > **NOTE**
 >
-> In the preceding example, the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. The array structure consists of multiple JSON objects that each represent a data record. Therefore, you need to set `strip_outer_array` to `true` to strip the outermost array structure. The fields `title` and `timestamp` that you do not want to load are ignored during loading. Additionally, the `json_root` parameter is used to specify the root element, which is an array, of the JSON data.
+> In the preceding example, the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. The array structure consists of multiple JSON objects that each represent a data record. Therefore, you need to set `strip_outer_array` to `true` to strip the outermost array structure. The keys `title` and `timestamp` that you do not want to load are ignored during loading. Additionally, the `json_root` parameter is used to specify the root element, which is an array, of the JSON data.

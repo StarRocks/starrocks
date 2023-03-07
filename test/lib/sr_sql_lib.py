@@ -67,6 +67,7 @@ FUNCTION_FLAG = "function: "
 NAME_FLAG = "-- name: "
 UNCHECK_FLAG = "[UC]"
 ORDER_FLAG = "[ORDER]"
+REGEX_FLAG = "[REGEX]"
 
 
 class StarrocksSQLApiLib(unittest.TestCase):
@@ -331,7 +332,17 @@ class StarrocksSQLApiLib(unittest.TestCase):
         self.res_log.append(RESULT_FLAG)
         # return code
         self.res_log.append("%s" % shell_res[0])
-        self.res_log.append("%s" % shell_res[1])
+
+        if shell.endswith("_stream_load"):
+            self.res_log.append(
+                json.dumps(
+                    {"Status": json.loads(shell_res[1])["Status"], "Message": json.loads(shell_res[1])["Message"]},
+                    indent="    ",
+                )
+            )
+        else:
+            self.res_log.append("%s" % shell_res[1])
+
         self.res_log.append(RESULT_END_FLAT)
 
     def record_function_res(self, function, func_res):
@@ -349,20 +360,11 @@ class StarrocksSQLApiLib(unittest.TestCase):
 
     def execute_shell(self, shell: str):
         """execute shell"""
-        shell = self.replace(shell).split(" ")
-
-        for ids, x in enumerate(shell):
-            tools.assert_greater(len(x), 0, "shell command cannot be null")
-            if x[0] in ['\'', '"']:
-                shell[ids] = eval(x)
 
         log.info("shell cmd: %s" % shell)
+
         cmd_res = subprocess.run(
-            shell,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            encoding="utf-8",
-            timeout=1800,
+            shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=1800, shell=True
         )
 
         log.info("shell result: code: %s, stdout: %s" % (cmd_res.returncode, cmd_res.stdout))
@@ -442,17 +444,18 @@ class StarrocksSQLApiLib(unittest.TestCase):
                 tools.assert_false(str(act).startswith("E: "), "sql result not match: actual result with E")
             return
 
-        if any(re.compile(condition).search(sql) is not None for condition in skip.skip_res_cmd) \
-                or any(condition in sql for condition in skip.skip_res_cmd):
+        if any(re.compile(condition).search(sql) is not None for condition in skip.skip_res_cmd) or any(
+            condition in sql for condition in skip.skip_res_cmd
+        ):
             log.info("[%s.check] skip check" % sql_id)
             return
 
         tmp_ori_sql = ori_sql[len(UNCHECK_FLAG):] if ori_sql.startswith(UNCHECK_FLAG) else ori_sql
         if tmp_ori_sql.startswith(SHELL_FLAG):
-            tools.assert_equal(int(exp.split('\n')[0]), act[0], "shell %s error: %s" % (sql, act))
+            tools.assert_equal(int(exp.split("\n")[0]), act[0], "shell %s error: %s" % (sql, act))
 
-            exp_code = exp.split('\n')[0]
-            exp_std = "\n".join(exp.split('\n')[1:])
+            exp_code = exp.split("\n")[0]
+            exp_std = "\n".join(exp.split("\n")[1:])
             exp_std_is_json = exp_std.startswith("{")
 
             act_code = act[0]
@@ -466,8 +469,10 @@ class StarrocksSQLApiLib(unittest.TestCase):
                 exp_std = json.loads(exp_std)
                 act_std = json.loads(act_std)
                 # check all key,values in exp_std
-                tools.assert_true(all(k in act_std and exp_std[k] == act_std[k] for k in exp_std),
-                                  "shell result json not match, \n[exp]: %s,\n[act]: %s" % (exp_std, act_std))
+                tools.assert_true(
+                    all(k in act_std and exp_std[k] == act_std[k] for k in exp_std),
+                    "shell result json not match, \n[exp]: %s,\n[act]: %s" % (exp_std, act_std),
+                )
             else:
                 # str
                 if exp_std != act_std and not re.match(exp_std, act_std, flags=re.S):
@@ -475,9 +480,17 @@ class StarrocksSQLApiLib(unittest.TestCase):
 
         elif tmp_ori_sql.startswith(FUNCTION_FLAG):
             # only support str result
-            tools.assert_equal(str(exp), str(act.stdout))
+            tools.assert_equal(str(exp), str(act))
         else:
-            if exp.startswith("["):
+            if exp.startswith(REGEX_FLAG):
+                log.info("[check regex]: %s" % exp[len(REGEX_FLAG) :])
+                tools.assert_regexp_matches(
+                    r"%s" % str(act),
+                    exp[len(REGEX_FLAG) :],
+                    "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
+                    % (sql, exp[len(REGEX_FLAG) :], act),
+                )
+            elif exp.startswith("["):
                 log.info("[check type]: List")
                 # list result
                 if "\n" in exp:
@@ -620,13 +633,17 @@ class StarrocksSQLApiLib(unittest.TestCase):
         tools.assert_true(use_res["status"], "use db: [%s] error" % T_R_DB)
 
         # get records
-        query_sql = '''
+        query_sql = """
         select file, log_type, name, group_concat(log, ""), group_concat(hex(sequence), ",") 
         from (
             select * from %s.%s where version=\"%s\" and log_type="R" order by sequence
         ) a 
         group by file, log_type, name;
-        ''' % (T_R_DB, T_R_TABLE, self.version)
+        """ % (
+            T_R_DB,
+            T_R_TABLE,
+            self.version,
+        )
         log.debug(query_sql)
 
         results = self.execute_sql(query_sql, True)
@@ -666,7 +683,7 @@ class StarrocksSQLApiLib(unittest.TestCase):
         self.close_starrocks()
 
     def merge_case_info(self, part, file, new_log_info: dict):
-        """ merge case info with ori content """
+        """merge case info with ori content"""
         if not part:
             return new_log_info
 
@@ -678,7 +695,7 @@ class StarrocksSQLApiLib(unittest.TestCase):
         return ori_log_info
 
     def get_case_info_from_file(self, file):
-        """ case result files """
+        """case result files"""
         file_path = os.path.join(self.root_path, file)
         info_dict = {}
 

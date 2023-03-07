@@ -209,9 +209,11 @@ public class PrivilegeManager {
     // called by initBuiltinRolesAndUsers()
     private void initPrivilegeCollections(PrivilegeCollection collection, ObjectType objectType, List<PrivilegeType> actionList,
                                           List<String> tokens, boolean isGrant) throws PrivilegeException {
-        List<PEntryObject> object = null;
+        List<PEntryObject> object;
         if (tokens != null) {
             object = Collections.singletonList(provider.generateObject(objectType, tokens, globalStateMgr));
+        } else {
+            object = Arrays.asList(new PEntryObject[] {null});
         }
         collection.grant(objectType, actionList, object, isGrant);
     }
@@ -250,7 +252,7 @@ public class PrivilegeManager {
                 break;
 
             case SYSTEM:
-                collection.grant(objectType, actionList, null, false);
+                collection.grant(objectType, actionList, Arrays.asList(new PEntryObject[] {null}), false);
                 break;
 
             default:
@@ -1021,10 +1023,6 @@ public class PrivilegeManager {
         return actions;
     }
 
-    public ObjectType getObjectByPlural(String plural) throws PrivilegeException {
-        return provider.getTypeNameByPlural(plural);
-    }
-
     public boolean isAvailablePirvType(ObjectType objectType, PrivilegeType privilegeType) {
         return provider.isAvailablePrivType(objectType, privilegeType);
     }
@@ -1584,18 +1582,5 @@ public class PrivilegeManager {
         roleIdToPrivilegeCollection.put(roleId, collection);
         roleNameToId.put(collection.getName(), roleId);
         LOG.info("upgrade role {}[{}]", collection.getName(), roleId);
-    }
-
-    public void upgradeUserRoleUnlock(UserIdentity user, long... roleIds) {
-        UserPrivilegeCollection collection = userToPrivilegeCollection.get(user);
-        for (long roleId : roleIds) {
-            collection.grantRole(roleId);
-        }
-    }
-
-    // This function only change data in parent roles
-    // Child role will be updated as a whole by upgradeRoleInitPrivilegeUnlock
-    public void upgradeParentRoleRelationUnlock(long parentRoleId, long subRoleId) {
-        roleIdToPrivilegeCollection.get(parentRoleId).addSubRole(subRoleId);
     }
 }

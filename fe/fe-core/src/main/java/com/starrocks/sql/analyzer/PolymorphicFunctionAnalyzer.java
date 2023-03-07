@@ -144,12 +144,29 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class MapFilterDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            MapType mapType = (MapType) types[0];
+            return new MapType(mapType.getKeyType(), mapType.getValueType());
+        }
+    }
+
     private static class MapFromArraysDeduce implements java.util.function.Function<Type[], Type> {
         @Override
         public Type apply(Type[] types) {
             ArrayType keyArrayType = (ArrayType) types[0];
             ArrayType valueArrayType = (ArrayType) types[1];
             return new MapType(keyArrayType.getItemType(), valueArrayType.getItemType());
+        }
+    }
+
+    // map_apply(lambda of function, map) -> return type of lambda
+    private static class MapApplyDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            // fake return type, the real return type is from the right part lambda expression of lambda functions.
+            return types[1];
         }
     }
 
@@ -166,6 +183,8 @@ public class PolymorphicFunctionAnalyzer {
             .put("map_values", new MapValuesDeduce())
             .put("map_from_arrays", new MapFromArraysDeduce())
             .put("row", new RowDeduce())
+            .put("map_apply", new MapApplyDeduce())
+            .put("map_filter", new MapFilterDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
@@ -239,6 +258,7 @@ public class PolymorphicFunctionAnalyzer {
                 return resolvedFunction;
             }
         }
+        // TODO: refactor resolve arg types, some from L254, others from L262.
         resolvedFunction = resolveByDeducingReturnType(fn, paramTypes);
         if (resolvedFunction != null) {
             return resolvedFunction;

@@ -30,11 +30,11 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddRollupClause;
@@ -58,16 +58,17 @@ import com.starrocks.sql.common.MetaUtils;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+
 public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
         TableName tbl = statement.getTbl();
         MetaUtils.normalizationTableName(context, tbl);
         Table table = MetaUtils.getTable(context, tbl);
         if (table instanceof MaterializedView) {
-            throw new SemanticException(
-                    "The '%s' cannot be alter by 'ALTER TABLE', because '%s' is a materialized view," +
-                            "you can use 'ALTER MATERIALIZED VIEW' to alter it.",
-                    tbl.getTbl(), tbl.getTbl());
+            String msg = String.format("The '%s' cannot be alter by 'ALTER TABLE', because it is a materialized view," +
+                            "you can use 'ALTER MATERIALIZED VIEW' to alter it.", tbl.getTbl());
+            throw new SemanticException(msg, tbl.getPos());
         }
         List<AlterClause> alterClauseList = statement.getOps();
         if (alterClauseList == null || alterClauseList.isEmpty()) {
@@ -235,7 +236,7 @@ public class AlterTableStatementAnalyzer {
                 clause.setNeedTableStable(false);
                 clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown table property: " + properties.keySet());
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
             }
             return null;
         }
@@ -275,7 +276,7 @@ public class AlterTableStatementAnalyzer {
             try {
                 columnDef.analyze(true);
             } catch (AnalysisException e) {
-                throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
+                throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
             }
 
             ColumnPosition colPos = clause.getColPos();
@@ -283,16 +284,17 @@ public class AlterTableStatementAnalyzer {
                 try {
                     colPos.analyze();
                 } catch (AnalysisException e) {
-                    throw new SemanticException("Analyze colPos error: %s", e.getMessage());
+                    throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
                 }
             }
 
             if (!columnDef.isAllowNull() && columnDef.defaultValueIsNull()) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DEFAULT_FOR_FIELD, columnDef.getName());
+                throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(columnDef.getName()), columnDef.getPos());
             }
 
             if (columnDef.getAggregateType() != null && colPos != null && colPos.isFirst()) {
-                throw new SemanticException("Cannot add value column[" + columnDef.getName() + "] at first");
+                throw new SemanticException("Cannot add value column[" + columnDef.getName() + "] at first",
+                        columnDef.getPos());
             }
 
             // Make sure return null if rollup name is empty.
@@ -312,10 +314,10 @@ public class AlterTableStatementAnalyzer {
                 try {
                     colDef.analyze(true);
                 } catch (AnalysisException e) {
-                    throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
+                    throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), colDef.getPos());
                 }
                 if (!colDef.isAllowNull() && colDef.defaultValueIsNull()) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DEFAULT_FOR_FIELD, colDef.getName());
+                    throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(colDef.getName()), colDef.getPos());
                 }
             }
 
@@ -329,7 +331,7 @@ public class AlterTableStatementAnalyzer {
         @Override
         public Void visitDropColumnClause(DropColumnClause clause, ConnectContext context) {
             if (Strings.isNullOrEmpty(clause.getColName())) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, clause.getColName());
+                throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(clause.getColName()));
             }
             clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
             return null;
@@ -344,7 +346,7 @@ public class AlterTableStatementAnalyzer {
             try {
                 columnDef.analyze(true);
             } catch (AnalysisException e) {
-                throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
+                throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
             }
 
             ColumnPosition colPos = clause.getColPos();
@@ -352,7 +354,7 @@ public class AlterTableStatementAnalyzer {
                 try {
                     colPos.analyze();
                 } catch (AnalysisException e) {
-                    throw new SemanticException("Analyze colPos error: %s", e.getMessage());
+                    throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
                 }
             }
 
@@ -409,7 +411,7 @@ public class AlterTableStatementAnalyzer {
 
             // 2. replication num
             short newReplicationNum;
-            newReplicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, FeConstants.default_replication_num);
+            newReplicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, RunMode.defaultReplicationNum());
             Preconditions.checkState(newReplicationNum != (short) -1);
 
             // 3. in memory
@@ -421,13 +423,23 @@ public class AlterTableStatementAnalyzer {
 
         @Override
         public Void visitReplacePartitionClause(ReplacePartitionClause clause, ConnectContext context) {
-            if (clause.getPartitionNames().stream().anyMatch(String::isEmpty)
-                    || clause.getTempPartitionNames().stream().anyMatch(String::isEmpty)) {
-                throw new SemanticException("there are empty partition name");
+            if (clause.getPartitionNames().stream().anyMatch(String::isEmpty)) {
+                throw new SemanticException("there are empty partition name", clause.getPartition().getPos());
             }
 
-            if (clause.getPartition().isTemp() || !clause.getTempPartition().isTemp()) {
-                throw new SemanticException("Only support replace partitions with temp partitions");
+            if (clause.getTempPartitionNames().stream().anyMatch(String::isEmpty)) {
+                throw new SemanticException("there are empty partition name", clause.getTempPartition().getPos());
+            }
+
+
+            if (clause.getPartition().isTemp()) {
+                throw new SemanticException("Only support replace partitions with temp partitions",
+                        clause.getPartition().getPos());
+            }
+
+            if (!clause.getTempPartition().isTemp()) {
+                throw new SemanticException("Only support replace partitions with temp partitions",
+                        clause.getTempPartition().getPos());
             }
 
             clause.setStrictRange(PropertyAnalyzer.analyzeBooleanProp(
@@ -436,7 +448,7 @@ public class AlterTableStatementAnalyzer {
                     clause.getProperties(), PropertyAnalyzer.PROPERTIES_USE_TEMP_PARTITION_NAME, false));
 
             if (clause.getProperties() != null && !clause.getProperties().isEmpty()) {
-                throw new SemanticException("Unknown properties: " + clause.getProperties().keySet());
+                throw new SemanticException("Unknown properties: " + clause.getProperties());
             }
             return null;
         }

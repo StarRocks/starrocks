@@ -1402,6 +1402,13 @@ public class Config extends ConfigBase {
     public static String authentication_kerberos_service_key_tab = "";
 
     /**
+     * When set to true, we cannot drop user named 'admin' or grant/revoke role to/from user named 'admin',
+     * except that we're root user.
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_admin_user_protection = false;
+
+    /**
      * In some cases, some tablets may have all replicas damaged or lost.
      * At this time, the data has been lost, and the damaged tablets
      * will cause the entire query to fail, and the remaining healthy tablets cannot be queried.
@@ -1670,7 +1677,7 @@ public class Config extends ConfigBase {
      * Background refresh hive external table metadata interval in milliseconds.
      */
     @ConfField(mutable = true)
-    public static int background_refresh_hive_metadata_interval_millis = 600000;
+    public static int background_refresh_metadata_interval_millis = 600000;
 
     /**
      * Enable refresh hive partition statistics.
@@ -1702,6 +1709,42 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int iceberg_table_refresh_expire_sec = 86400;
+
+    /**
+     * iceberg metadata cache dir
+     */
+    @ConfField(mutable = true)
+    public static String iceberg_metadata_cache_disk_path = StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg";
+
+    /**
+     * iceberg metadata memory cache total size, default 512MB
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_memory_cache_capacity = 536870912L;
+
+    /**
+     * iceberg metadata memory cache expiration time, default 86500s
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_memory_cache_expiration_seconds = 86500;
+
+    /**
+     * enable iceberg metadata disk cache, default false
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_iceberg_metadata_disk_cache = false;
+
+    /**
+     * iceberg metadata disk cache total size, default 2GB
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_disk_cache_capacity = 2147483648L;
+
+    /**
+     * iceberg metadata cache max entry size, default 8MB
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_cache_max_entry_size = 8388608L;
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
@@ -1817,39 +1860,37 @@ public class Config extends ConfigBase {
     /**
      * cloud native storage: hdfs storage url
      */
+    @ConfField
     public static String cloud_native_hdfs_url = "";
 
     // AWS S3 storage configuration
     @ConfField
-    public static String cloud_native_aws_s3_bucket = "";
+    public static String aws_s3_path = "";
     @ConfField
-    public static String cloud_native_aws_s3_region = "";
+    public static String aws_s3_region = "";
     @ConfField
-    public static String cloud_native_aws_s3_endpoint = "";
-    /**
-     * Sub path to used for the backend storage
-     */
-    @ConfField
-    public static String cloud_native_aws_s3_path = "";
+    public static String aws_s3_endpoint = "";
+
     // AWS credential configuration
-    /**
-     * AWS credential type, can be one of the following value, case-sensitive
-     * - "simple"
-     * - "instance_profile"
-     * - "assume_role"
-     */
     @ConfField
-    public static String cloud_native_aws_credential_type = "simple";
-    // Configurations for aws credential_type = "simple"
+    public static boolean aws_s3_use_aws_sdk_default_behavior = false;
     @ConfField
-    public static String cloud_native_simple_credential_access_key_id = "";
+    public static boolean aws_s3_use_instance_profile = false;
+
     @ConfField
-    public static String cloud_native_simple_credential_access_key_secret = "";
-    // Configurations for aws credential_type = "assume_role"
+    public static String aws_s3_access_key = "";
     @ConfField
-    public static String cloud_native_assume_role_credential_arn = "";
+    public static String aws_s3_secret_key = "";
+
     @ConfField
-    public static String cloud_native_assume_role_credential_external_id = "";
+    public static String aws_s3_iam_role_arn = "";
+    @ConfField
+    public static String aws_s3_external_id = "";
+
+    // Enables or disables SSL connections to AWS services. Not support for now
+    // @ConfField
+    // public static String aws_s3_enable_ssl = "true";
+    
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
     // ***********************************************************

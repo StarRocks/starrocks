@@ -1,0 +1,1330 @@
+-- name: test_automatic_partition_table_non_pipeline
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+set enable_pipeline=false;
+-- result:
+-- !result
+insert into ss values('2023-02-14', 2),('2033-03-01',2);
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+2
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p203303 VALUES [("2033-03-01"), ("2033-04-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+4
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p202303 VALUES [("2023-03-01"), ("2023-04-01")),
+PARTITION p203303 VALUES [("2033-03-01"), ("2033-04-01")),
+PARTITION p203304 VALUES [("2033-04-01"), ("2033-05-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss select date(add_months(event_day, 6)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+8
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p202303 VALUES [("2023-03-01"), ("2023-04-01")),
+PARTITION p202308 VALUES [("2023-08-01"), ("2023-09-01")),
+PARTITION p202309 VALUES [("2023-09-01"), ("2023-10-01")),
+PARTITION p203303 VALUES [("2033-03-01"), ("2033-04-01")),
+PARTITION p203304 VALUES [("2033-04-01"), ("2033-05-01")),
+PARTITION p203309 VALUES [("2033-09-01"), ("2033-10-01")),
+PARTITION p203310 VALUES [("2033-10-01"), ("2033-11-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss select date(add_months(event_day, 12)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+16
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p202303 VALUES [("2023-03-01"), ("2023-04-01")),
+PARTITION p202308 VALUES [("2023-08-01"), ("2023-09-01")),
+PARTITION p202309 VALUES [("2023-09-01"), ("2023-10-01")),
+PARTITION p202402 VALUES [("2024-02-01"), ("2024-03-01")),
+PARTITION p202403 VALUES [("2024-03-01"), ("2024-04-01")),
+PARTITION p202408 VALUES [("2024-08-01"), ("2024-09-01")),
+PARTITION p202409 VALUES [("2024-09-01"), ("2024-10-01")),
+PARTITION p203303 VALUES [("2033-03-01"), ("2033-04-01")),
+PARTITION p203304 VALUES [("2033-04-01"), ("2033-05-01")),
+PARTITION p203309 VALUES [("2033-09-01"), ("2033-10-01")),
+PARTITION p203310 VALUES [("2033-10-01"), ("2033-11-01")),
+PARTITION p203403 VALUES [("2034-03-01"), ("2034-04-01")),
+PARTITION p203404 VALUES [("2034-04-01"), ("2034-05-01")),
+PARTITION p203409 VALUES [("2034-09-01"), ("2034-10-01")),
+PARTITION p203410 VALUES [("2034-10-01"), ("2034-11-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss select * from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+32
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p202303 VALUES [("2023-03-01"), ("2023-04-01")),
+PARTITION p202308 VALUES [("2023-08-01"), ("2023-09-01")),
+PARTITION p202309 VALUES [("2023-09-01"), ("2023-10-01")),
+PARTITION p202402 VALUES [("2024-02-01"), ("2024-03-01")),
+PARTITION p202403 VALUES [("2024-03-01"), ("2024-04-01")),
+PARTITION p202408 VALUES [("2024-08-01"), ("2024-09-01")),
+PARTITION p202409 VALUES [("2024-09-01"), ("2024-10-01")),
+PARTITION p203303 VALUES [("2033-03-01"), ("2033-04-01")),
+PARTITION p203304 VALUES [("2033-04-01"), ("2033-05-01")),
+PARTITION p203309 VALUES [("2033-09-01"), ("2033-10-01")),
+PARTITION p203310 VALUES [("2033-10-01"), ("2033-11-01")),
+PARTITION p203403 VALUES [("2034-03-01"), ("2034-04-01")),
+PARTITION p203404 VALUES [("2034-04-01"), ("2034-05-01")),
+PARTITION p203409 VALUES [("2034-09-01"), ("2034-10-01")),
+PARTITION p203410 VALUES [("2034-10-01"), ("2034-11-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+-- name: truncate_automatci_partition_table
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into ss values('2000-01-01', 2);
+-- result:
+-- !result
+select * from ss;
+-- result:
+2000-01-01	2
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p200001 VALUES [("2000-01-01"), ("2000-02-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+truncate table ss;
+-- result:
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p200001 VALUES [("2000-01-01"), ("2000-02-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss values('2002-01-01', 2);
+-- result:
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p200001 VALUES [("2000-01-01"), ("2000-02-01")),
+PARTITION p200201 VALUES [("2002-01-01"), ("2002-02-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+-- name: test_shadown_partition
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_display_shadow_partitions"="true");
+-- result:
+-- !result
+show partitions from ss;
+-- result:
+[REGEX]shadow_automatic_partition
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_display_shadow_partitions"="false");
+-- result:
+-- !result
+show partitions from ss;
+-- result:
+-- !result
+insert into ss values('2002-01-01', 2);
+-- result:
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p200201 VALUES [("2002-01-01"), ("2002-02-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss values('0001-02-01', 2);
+-- result:
+-- !result
+select * from ss;
+-- result:
+2002-01-01	2
+0001-02-01	2
+-- !result
+alter table ss drop partition p200201;
+-- result:
+-- !result
+select * from ss;
+-- result:
+0001-02-01	2
+-- !result
+-- name: test_date_trunc_datetime
+CREATE TABLE dt_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into dt_month values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show create table dt_month;
+-- result:
+dt_month	CREATE TABLE `dt_month` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01 00:00:00"), ("2023-03-01 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into dt_month values('2023-03-14 12:31:07', 2);
+-- result:
+-- !result
+CREATE TABLE dt_day( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into dt_day values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show create table dt_day;
+-- result:
+dt_day	CREATE TABLE `dt_day` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', event_day)
+(PARTITION p20230214 VALUES [("2023-02-14 00:00:00"), ("2023-02-15 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into dt_day values('2023-03-14 12:31:07', 2);
+-- result:
+-- !result
+CREATE TABLE dt_year( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('year', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into dt_year values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show create table dt_year;
+-- result:
+dt_year	CREATE TABLE `dt_year` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('year', event_day)
+(PARTITION p2023 VALUES [("2023-01-01 00:00:00"), ("2024-01-01 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into dt_year values('2024-03-14 12:31:07', 2);
+-- result:
+-- !result
+CREATE TABLE dt_hour( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('hour', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+show create table dt_hour;
+-- result:
+dt_hour	CREATE TABLE `dt_hour` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('hour', event_day)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+CREATE TABLE dt_minute( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('minute', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+E: (1064, "Getting syntax error from line 1, column 93 to line 1, column 123. Detail message: Unsupported expr 'date_trunc('minute', event_day)' in PARTITION BY clause.")
+-- !result
+CREATE TABLE dt_second( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('second', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+E: (1064, "Getting syntax error from line 1, column 93 to line 1, column 123. Detail message: Unsupported expr 'date_trunc('second', event_day)' in PARTITION BY clause.")
+-- !result
+CREATE TABLE dt_week( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('week', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+E: (1064, "Getting syntax error from line 1, column 87 to line 1, column 115. Detail message: Unsupported expr 'date_trunc('week', event_day)' in PARTITION BY clause.")
+-- !result
+CREATE TABLE dt_quarter( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('quarter', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+E: (1064, "Getting syntax error from line 1, column 90 to line 1, column 121. Detail message: Unsupported expr 'date_trunc('quarter', event_day)' in PARTITION BY clause.")
+-- !result
+-- name: test_single_replica
+CREATE TABLE site_access ( event_day DATETIME NOT NULL, site_id INT DEFAULT '10', city_code VARCHAR(100), user_name VARCHAR(32) DEFAULT '', pv BIGINT DEFAULT '0') DUPLICATE KEY(event_day, site_id, city_code, user_name) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day, site_id) PROPERTIES( "replication_num" = "1");
+-- result:
+-- !result
+insert into site_access values('2015-06-02 00:00:00', 1, 1, 'a', 1);
+-- result:
+-- !result
+show create table site_access;
+-- result:
+site_access	CREATE TABLE `site_access` (
+  `event_day` datetime NOT NULL COMMENT "",
+  `site_id` int(11) NULL DEFAULT "10" COMMENT "",
+  `city_code` varchar(100) NULL COMMENT "",
+  `user_name` varchar(32) NULL DEFAULT "" COMMENT "",
+  `pv` bigint(20) NULL DEFAULT "0" COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`, `site_id`, `city_code`, `user_name`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', event_day)
+(PARTITION p20150602 VALUES [("2015-06-02 00:00:00"), ("2015-06-03 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`, `site_id`) BUCKETS 6 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+select * from site_access;
+-- result:
+2015-06-02 00:00:00	1	1	a	1
+-- !result
+insert into site_access values('2015-06-02 00:10:00', 1, 1, 'a', 1);
+-- result:
+-- !result
+select * from site_access;
+-- result:
+2015-06-02 00:00:00	1	1	a	1
+2015-06-02 00:10:00	1	1	a	1
+-- !result
+insert into site_access values('2015-06-04 00:10:00', 1, 1, 'a', 1);
+-- result:
+-- !result
+select * from site_access;
+-- result:
+2015-06-02 00:00:00	1	1	a	1
+2015-06-04 00:10:00	1	1	a	1
+2015-06-02 00:10:00	1	1	a	1
+-- !result
+show create table site_access;
+-- result:
+site_access	CREATE TABLE `site_access` (
+  `event_day` datetime NOT NULL COMMENT "",
+  `site_id` int(11) NULL DEFAULT "10" COMMENT "",
+  `city_code` varchar(100) NULL COMMENT "",
+  `user_name` varchar(32) NULL DEFAULT "" COMMENT "",
+  `pv` bigint(20) NULL DEFAULT "0" COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`, `site_id`, `city_code`, `user_name`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', event_day)
+(PARTITION p20150602 VALUES [("2015-06-02 00:00:00"), ("2015-06-03 00:00:00")),
+PARTITION p20150604 VALUES [("2015-06-04 00:00:00"), ("2015-06-05 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`, `site_id`) BUCKETS 6 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+-- name: test_automatic_partition_in_new_node
+CREATE TABLE dt_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into dt_month values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+insert into dt_month values('2023-03-14 12:31:07', 2);
+-- result:
+-- !result
+show create table dt_month;
+-- result:
+dt_month	CREATE TABLE `dt_month` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01 00:00:00"), ("2023-03-01 00:00:00")),
+PARTITION p202303 VALUES [("2023-03-01 00:00:00"), ("2023-04-01 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+select * from dt_month;
+-- result:
+2023-02-14 12:31:07	2
+2023-03-14 12:31:07	2
+-- !result
+-- name: test_auto_incremental_id
+CREATE TABLE t ( id DATE NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT) Primary KEY (id) PARTITION BY date_trunc('day', id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+1
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `id` date NOT NULL COMMENT "",
+  `job1` bigint(20) NOT NULL AUTO_INCREMENT COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', id)
+(PARTITION p20210101 VALUES [("2021-01-01"), ("2021-01-02")),
+)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into t values('2021-01-03', default);
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+2
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `id` date NOT NULL COMMENT "",
+  `job1` bigint(20) NOT NULL AUTO_INCREMENT COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', id)
+(PARTITION p20210101 VALUES [("2021-01-01"), ("2021-01-02")),
+PARTITION p20210103 VALUES [("2021-01-03"), ("2021-01-04")),
+)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into t values('2021-01-05', default);
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+3
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `id` date NOT NULL COMMENT "",
+  `job1` bigint(20) NOT NULL AUTO_INCREMENT COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', id)
+(PARTITION p20210101 VALUES [("2021-01-01"), ("2021-01-02")),
+PARTITION p20210103 VALUES [("2021-01-03"), ("2021-01-04")),
+PARTITION p20210105 VALUES [("2021-01-05"), ("2021-01-06")),
+)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+-- name: test_partition_column_as_second
+create table p(c1 int null, c2 date null)engine=olap duplicate key(c1,c2) partition by date_trunc('day', c2) distributed by hash(c1) buckets 2 properties("replication_num"="1");
+-- result:
+-- !result
+insert into p values(1,'2021-01-01');
+-- result:
+-- !result
+show create table p;
+-- result:
+p	CREATE TABLE `p` (
+  `c1` int(11) NULL COMMENT "",
+  `c2` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c1`, `c2`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', c2)
+(PARTITION p20210101 VALUES [("2021-01-01"), ("2021-01-02")),
+)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 2 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+select * from p;
+-- result:
+1	2021-01-01
+-- !result
+-- name: test_date_trunc_date
+CREATE TABLE dt_month( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into dt_month values('2023-02-14', 2);
+-- result:
+-- !result
+show create table dt_month;
+-- result:
+dt_month	CREATE TABLE `dt_month` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01"), ("2023-03-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into dt_month values('2023-03-14', 2);
+-- result:
+-- !result
+CREATE TABLE dt_day( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into dt_day values('2023-02-14', 2);
+-- result:
+-- !result
+show create table dt_day;
+-- result:
+dt_day	CREATE TABLE `dt_day` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', event_day)
+(PARTITION p20230214 VALUES [("2023-02-14"), ("2023-02-15")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into dt_day values('2023-03-14', 2);
+-- result:
+-- !result
+CREATE TABLE dt_year( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('year', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into dt_year values('2023-02-14', 2);
+-- result:
+-- !result
+show create table dt_year;
+-- result:
+dt_year	CREATE TABLE `dt_year` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('year', event_day)
+(PARTITION p2023 VALUES [("2023-01-01"), ("2024-01-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into dt_year values('2024-03-14', 2);
+-- result:
+-- !result
+CREATE TABLE dt_week( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('week', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+E: (1064, "Getting syntax error from line 1, column 87 to line 1, column 115. Detail message: Unsupported expr 'date_trunc('week', event_day)' in PARTITION BY clause.")
+-- !result
+CREATE TABLE dt_quarter( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('quarter', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+E: (1064, "Getting syntax error from line 1, column 90 to line 1, column 121. Detail message: Unsupported expr 'date_trunc('quarter', event_day)' in PARTITION BY clause.")
+-- !result
+-- name: test_min_partition
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+select * from ss;
+-- result:
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+-- name: test_time_slice
+CREATE TABLE ss_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 month) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss_month values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show create table ss_month;
+-- result:
+ss_month	CREATE TABLE `ss_month` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY time_slice(event_day, 4, 'month', 'floor')
+(PARTITION p202301 VALUES [("2023-01-01 00:00:00"), ("2023-05-01 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss_month values('2023-04-14 12:31:07', 2);
+-- result:
+-- !result
+show create table ss_month;
+-- result:
+ss_month	CREATE TABLE `ss_month` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY time_slice(event_day, 4, 'month', 'floor')
+(PARTITION p202301 VALUES [("2023-01-01 00:00:00"), ("2023-05-01 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss_month values('2023-07-14 12:31:07', 2);
+-- result:
+-- !result
+show create table ss_month;
+-- result:
+ss_month	CREATE TABLE `ss_month` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY time_slice(event_day, 4, 'month', 'floor')
+(PARTITION p202301 VALUES [("2023-01-01 00:00:00"), ("2023-05-01 00:00:00")),
+PARTITION p202305 VALUES [("2023-05-01 00:00:00"), ("2023-09-01 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+CREATE TABLE ss_day( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss_day values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show create table ss_day;
+-- result:
+ss_day	CREATE TABLE `ss_day` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY time_slice(event_day, 4, 'day', 'floor')
+(PARTITION p20230214 VALUES [("2023-02-14 00:00:00"), ("2023-02-18 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss_day values('2023-02-16 12:31:07', 2);
+-- result:
+-- !result
+show create table ss_day;
+-- result:
+ss_day	CREATE TABLE `ss_day` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY time_slice(event_day, 4, 'day', 'floor')
+(PARTITION p20230214 VALUES [("2023-02-14 00:00:00"), ("2023-02-18 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss_day values('2023-02-19 12:31:07', 2);
+-- result:
+-- !result
+show create table ss_day;
+-- result:
+ss_day	CREATE TABLE `ss_day` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY time_slice(event_day, 4, 'day', 'floor')
+(PARTITION p20230214 VALUES [("2023-02-14 00:00:00"), ("2023-02-18 00:00:00")),
+PARTITION p20230218 VALUES [("2023-02-18 00:00:00"), ("2023-02-22 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+CREATE TABLE ss_year( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 2 year) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss_year values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show create table ss_year;
+-- result:
+ss_year	CREATE TABLE `ss_year` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY time_slice(event_day, 2, 'year', 'floor')
+(PARTITION p2023 VALUES [("2023-01-01 00:00:00"), ("2025-01-01 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss_year values('2024-02-16 12:31:07', 2);
+-- result:
+-- !result
+show create table ss_year;
+-- result:
+ss_year	CREATE TABLE `ss_year` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY time_slice(event_day, 2, 'year', 'floor')
+(PARTITION p2023 VALUES [("2023-01-01 00:00:00"), ("2025-01-01 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss_year values('2026-02-19 12:31:07', 2);
+-- result:
+-- !result
+show create table ss_year;
+-- result:
+ss_year	CREATE TABLE `ss_year` (
+  `event_day` datetime NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY time_slice(event_day, 2, 'year', 'floor')
+(PARTITION p2023 VALUES [("2023-01-01 00:00:00"), ("2025-01-01 00:00:00")),
+PARTITION p2025 VALUES [("2025-01-01 00:00:00"), ("2027-01-01 00:00:00")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+-- name: test_automatic_partition_table_pipeline
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss values('2023-02-14', 2),('2033-03-01',2);
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+2
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p203303 VALUES [("2033-03-01"), ("2033-04-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+4
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p202303 VALUES [("2023-03-01"), ("2023-04-01")),
+PARTITION p203303 VALUES [("2033-03-01"), ("2033-04-01")),
+PARTITION p203304 VALUES [("2033-04-01"), ("2033-05-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss select date(add_months(event_day, 6)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+8
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p202303 VALUES [("2023-03-01"), ("2023-04-01")),
+PARTITION p202308 VALUES [("2023-08-01"), ("2023-09-01")),
+PARTITION p202309 VALUES [("2023-09-01"), ("2023-10-01")),
+PARTITION p203303 VALUES [("2033-03-01"), ("2033-04-01")),
+PARTITION p203304 VALUES [("2033-04-01"), ("2033-05-01")),
+PARTITION p203309 VALUES [("2033-09-01"), ("2033-10-01")),
+PARTITION p203310 VALUES [("2033-10-01"), ("2033-11-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss select date(add_months(event_day, 12)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+16
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p202303 VALUES [("2023-03-01"), ("2023-04-01")),
+PARTITION p202308 VALUES [("2023-08-01"), ("2023-09-01")),
+PARTITION p202309 VALUES [("2023-09-01"), ("2023-10-01")),
+PARTITION p202402 VALUES [("2024-02-01"), ("2024-03-01")),
+PARTITION p202403 VALUES [("2024-03-01"), ("2024-04-01")),
+PARTITION p202408 VALUES [("2024-08-01"), ("2024-09-01")),
+PARTITION p202409 VALUES [("2024-09-01"), ("2024-10-01")),
+PARTITION p203303 VALUES [("2033-03-01"), ("2033-04-01")),
+PARTITION p203304 VALUES [("2033-04-01"), ("2033-05-01")),
+PARTITION p203309 VALUES [("2033-09-01"), ("2033-10-01")),
+PARTITION p203310 VALUES [("2033-10-01"), ("2033-11-01")),
+PARTITION p203403 VALUES [("2034-03-01"), ("2034-04-01")),
+PARTITION p203404 VALUES [("2034-04-01"), ("2034-05-01")),
+PARTITION p203409 VALUES [("2034-09-01"), ("2034-10-01")),
+PARTITION p203410 VALUES [("2034-10-01"), ("2034-11-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into ss select * from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+32
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p202303 VALUES [("2023-03-01"), ("2023-04-01")),
+PARTITION p202308 VALUES [("2023-08-01"), ("2023-09-01")),
+PARTITION p202309 VALUES [("2023-09-01"), ("2023-10-01")),
+PARTITION p202402 VALUES [("2024-02-01"), ("2024-03-01")),
+PARTITION p202403 VALUES [("2024-03-01"), ("2024-04-01")),
+PARTITION p202408 VALUES [("2024-08-01"), ("2024-09-01")),
+PARTITION p202409 VALUES [("2024-09-01"), ("2024-10-01")),
+PARTITION p203303 VALUES [("2033-03-01"), ("2033-04-01")),
+PARTITION p203304 VALUES [("2033-04-01"), ("2033-05-01")),
+PARTITION p203309 VALUES [("2033-09-01"), ("2033-10-01")),
+PARTITION p203310 VALUES [("2033-10-01"), ("2033-11-01")),
+PARTITION p203403 VALUES [("2034-03-01"), ("2034-04-01")),
+PARTITION p203404 VALUES [("2034-04-01"), ("2034-05-01")),
+PARTITION p203409 VALUES [("2034-09-01"), ("2034-10-01")),
+PARTITION p203410 VALUES [("2034-10-01"), ("2034-11-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+-- name: test_multi_fragment_open_new_node_channel
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss values('2023-02-14', 2),('2033-03-01',2);
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+64
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p202303 VALUES [("2023-03-01"), ("2023-04-01")),
+PARTITION p202304 VALUES [("2023-04-01"), ("2023-05-01")),
+PARTITION p202305 VALUES [("2023-05-01"), ("2023-06-01")),
+PARTITION p202306 VALUES [("2023-06-01"), ("2023-07-01")),
+PARTITION p202307 VALUES [("2023-07-01"), ("2023-08-01")),
+PARTITION p203303 VALUES [("2033-03-01"), ("2033-04-01")),
+PARTITION p203304 VALUES [("2033-04-01"), ("2033-05-01")),
+PARTITION p203305 VALUES [("2033-05-01"), ("2033-06-01")),
+PARTITION p203306 VALUES [("2033-06-01"), ("2033-07-01")),
+PARTITION p203307 VALUES [("2033-07-01"), ("2033-08-01")),
+PARTITION p203308 VALUES [("2033-08-01"), ("2033-09-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 8 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+CREATE TABLE dt_month( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into dt_month select * from ss;
+-- result:
+-- !result
+select count(*) from dt_month;
+-- result:
+64
+-- !result
+show create table dt_month;
+-- result:
+dt_month	CREATE TABLE `dt_month` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('month', event_day)
+(PARTITION p202302 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p202303 VALUES [("2023-03-01"), ("2023-04-01")),
+PARTITION p202304 VALUES [("2023-04-01"), ("2023-05-01")),
+PARTITION p202305 VALUES [("2023-05-01"), ("2023-06-01")),
+PARTITION p202306 VALUES [("2023-06-01"), ("2023-07-01")),
+PARTITION p202307 VALUES [("2023-07-01"), ("2023-08-01")),
+PARTITION p203303 VALUES [("2033-03-01"), ("2033-04-01")),
+PARTITION p203304 VALUES [("2033-04-01"), ("2033-05-01")),
+PARTITION p203305 VALUES [("2033-05-01"), ("2033-06-01")),
+PARTITION p203306 VALUES [("2033-06-01"), ("2033-07-01")),
+PARTITION p203307 VALUES [("2033-07-01"), ("2033-08-01")),
+PARTITION p203308 VALUES [("2033-08-01"), ("2033-09-01")),
+)
+DISTRIBUTED BY HASH(`event_day`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result

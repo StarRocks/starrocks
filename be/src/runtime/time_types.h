@@ -18,7 +18,6 @@
 #include <string>
 
 #include "common/compiler_util.h"
-
 namespace starrocks {
 
 // Date: Julian Date -2000-01-01 ~ 9999-01-01
@@ -72,6 +71,7 @@ static const int64_t USECS_PER_MINUTE = 60000000;
 static const int64_t USECS_PER_SEC = 1000000;
 
 static const int64_t NANOSECS_PER_USEC = 1000;
+static const int64_t NANOSECS_PER_SEC = 1000000000;
 
 // Corresponding to TimeUnit
 static constexpr int64_t USECS_PER_UNIT[] = {
@@ -208,7 +208,7 @@ public:
 
     inline static double time_to_literal(double time);
 
-    inline static Timestamp of_epoch_second(int seconds, int microseconds);
+    inline static Timestamp of_epoch_second(int64_t seconds, int64_t microseconds);
 
 public:
     // MAX_DATE | USECS_PER_DAY
@@ -376,11 +376,10 @@ double timestamp::time_to_literal(double time) {
     return hour * 10000 + minute * 100 + second;
 }
 
-Timestamp timestamp::of_epoch_second(int seconds, int nanoseconds) {
-    int days = seconds / SECS_PER_DAY;
-    JulianDate jd = days + date::UNIX_EPOCH_JULIAN;
-    return timestamp::from_julian_and_time(jd,
-                                           seconds % SECS_PER_DAY * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC);
+Timestamp timestamp::of_epoch_second(int64_t seconds, int64_t nanoseconds) {
+    int64_t second = seconds + timestamp::UNIX_EPOCH_SECONDS;
+    JulianDate day = second / SECS_PER_DAY;
+    return timestamp::from_julian_and_time(day, second * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC);
 }
 
 struct JulianToDateEntry {

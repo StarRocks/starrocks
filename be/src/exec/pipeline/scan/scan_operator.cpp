@@ -340,6 +340,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.workgroup = _workgroup.get();
     // TODO: consider more factors, such as scan bytes and i/o time.
     task.priority = OlapScanNode::compute_priority(_submit_task_counter->value());
+    task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
     const auto io_task_start_nano = MonotonicNanos();
     task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
                           io_task_start_nano]() {
@@ -347,8 +348,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             // set driver_id/query_id/fragment_instance_id to thread local
             // driver_id will be used in some Expr such as regex_replace
             SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(
-                    state->query_ctx()->is_report_profile() ? mem_tracker() : state->instance_mem_tracker());
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+            SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(this);
 
             auto& chunk_source = _chunk_sources[chunk_source_index];
             [[maybe_unused]] std::string category;
@@ -360,7 +361,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                             chunk_source->io_task_wait_timer()->value() + chunk_source->io_task_exec_timer()->value());
             });
             COUNTER_UPDATE(chunk_source->io_task_wait_timer(), MonotonicNanos() - io_task_start_nano);
-            SCOPED_TIMER(chunk_source->io_task_exec_timer());
 
             int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
             int64_t prev_scan_rows = chunk_source->get_scan_rows();
@@ -499,7 +499,9 @@ void ScanOperator::set_query_ctx(const QueryContextPtr& query_ctx) {
 // ========== ScanOperatorFactory ==========
 
 ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
-        : SourceOperatorFactory(id, scan_node->name(), scan_node->id()), _scan_node(scan_node) {}
+        : SourceOperatorFactory(id, scan_node->name(), scan_node->id()),
+          _scan_node(scan_node),
+          _scan_task_group(std::make_shared<workgroup::ScanTaskGroup>()) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
