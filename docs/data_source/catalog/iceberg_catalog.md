@@ -154,7 +154,7 @@ For information about how to choose a credential method for accessing AWS Glue a
 
 ##### Custom metadata service
 
-If you use a custom metadata service for your Iceberg cluster, you need to create a custom catalog class (the class name of the custom catalog cannot be the same as the name of any class that already exists in StarRocks) and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog class needs to inherit the abstract class `BaseMetastoreCatalog`. For information about how to create a custom catalog in StarRocks, see [IcebergHiveCatalog](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/external/iceberg/IcebergHiveCatalog.java). After the custom catalog is created, package the catalog and its related files, place them under the **fe/lib** path of each FE, and then restart each FE.
+If you use a custom metadata service for your Iceberg cluster, you need to create a custom catalog class (the class name of the custom catalog cannot be the same as the name of any class that already exists in StarRocks) and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog class needs to inherit the abstract class `BaseMetastoreCatalog`. After the custom catalog is created, package the catalog and its related files, place them under the **fe/lib** path of each FE, and then restart each FE.
 
 After you complete the preceding operations, you can create an Iceberg catalog and configure its properties.
 
