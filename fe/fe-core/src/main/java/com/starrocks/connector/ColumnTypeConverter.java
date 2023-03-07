@@ -436,6 +436,7 @@ public class ColumnTypeConverter {
             case TIME:
             case FIXED:
             case BINARY:
+                return Type.VARBINARY;
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
