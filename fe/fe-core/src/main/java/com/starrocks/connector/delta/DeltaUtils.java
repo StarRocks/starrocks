@@ -20,8 +20,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
-import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import io.delta.standalone.DeltaLog;
 import io.delta.standalone.actions.Metadata;
 import io.delta.standalone.types.DataType;
@@ -79,7 +79,7 @@ public class DeltaUtils {
         } else if (format.equalsIgnoreCase("PARQUET")) {
             return RemoteFileInputFormat.PARQUET;
         } else {
-            throw new StarRocksIcebergException("Unexpected file format: " + format);
+            throw new StarRocksConnectorException("Unexpected file format: " + format);
         }
     }
 }

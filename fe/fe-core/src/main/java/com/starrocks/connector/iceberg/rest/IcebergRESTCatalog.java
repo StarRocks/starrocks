@@ -17,9 +17,9 @@ package com.starrocks.connector.iceberg.rest;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
-import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
@@ -42,13 +42,13 @@ public class IcebergRESTCatalog extends RESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public Table loadTable(IcebergTable table) throws StarRocksIcebergException {
+    public Table loadTable(IcebergTable table) throws StarRocksConnectorException {
         return super.loadTable(TableIdentifier.of(table.getRemoteDbName(), table.getRemoteTableName()));
     }
 
     @Override
     public Table loadTable(TableIdentifier tableId, String tableLocation,
-            Map<String, String> properties) throws StarRocksIcebergException {
+            Map<String, String> properties) throws StarRocksConnectorException {
         return super.loadTable(tableId);
     }
 
