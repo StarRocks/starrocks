@@ -26,6 +26,7 @@ public class FunctionSetTest {
     private static final Type VARCHAR_ARRAY = new ArrayType(Type.VARCHAR);
     private static final Type TINYINT_ARRAY = new ArrayType(Type.TINYINT);
     private static final Type INT_ARRAY = new ArrayType(Type.INT);
+    private static final Type DOUBLE_ARRAY = new ArrayType(Type.DOUBLE);
     private static final Type INT_ARRAY_ARRAY = new ArrayType(INT_ARRAY);
     private static final Type TINYINT_ARRAY_ARRAY = new ArrayType(TINYINT_ARRAY);
 
@@ -85,7 +86,10 @@ public class FunctionSetTest {
         argTypes = new Type[] {INT_ARRAY, Type.DOUBLE};
         desc = new Function(new FunctionName("array_append"), argTypes, Type.INVALID, false);
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
-        Assert.assertNull(fn);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(DOUBLE_ARRAY, fn.getReturnType());
+        Assert.assertEquals(DOUBLE_ARRAY, fn.getArgs()[0]);
+        Assert.assertEquals(Type.DOUBLE, fn.getArgs()[1]);
 
         // array_append(NULL, INT)
         argTypes = new Type[] {Type.NULL, Type.INT};
@@ -109,7 +113,10 @@ public class FunctionSetTest {
         argTypes = new Type[] {TINYINT_ARRAY, Type.VARCHAR};
         desc = new Function(new FunctionName("array_append"), argTypes, Type.INVALID, false);
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
-        Assert.assertNull(fn);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(VARCHAR_ARRAY, fn.getReturnType());
+        Assert.assertEquals(VARCHAR_ARRAY, fn.getArgs()[0]);
+        Assert.assertEquals(Type.VARCHAR, fn.getArgs()[1]);
 
         // array_append(NULL, NULL)
         argTypes = new Type[] {Type.NULL, Type.NULL};
@@ -174,7 +181,10 @@ public class FunctionSetTest {
         argTypes = new Type[] {TINYINT_ARRAY_ARRAY, VARCHAR_ARRAY};
         desc = new Function(new FunctionName("array_append"), argTypes, Type.INVALID, false);
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
-        Assert.assertNull(fn);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(new ArrayType(VARCHAR_ARRAY), fn.getReturnType());
+        Assert.assertEquals(new ArrayType(VARCHAR_ARRAY), fn.getArgs()[0]);
+        Assert.assertEquals(VARCHAR_ARRAY, fn.getArgs()[1]);
 
         // array_append(ARRAY<VARCHAR>, VARCHAR)
         argTypes = new Type[] {VARCHAR_ARRAY, Type.VARCHAR};
