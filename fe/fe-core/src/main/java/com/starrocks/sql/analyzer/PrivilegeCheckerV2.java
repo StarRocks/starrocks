@@ -124,6 +124,7 @@ import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
@@ -780,6 +781,20 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+            String catalogName = statement.getCatalogName();
+            // No authorization check for using default_catalog
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                return null;
+            }
+            if (!PrivilegeActions.checkAnyActionOnCatalog(context, catalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), catalogName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
             String catalogName = statement.getCatalogName();
             // No authorization check for using default_catalog
             if (CatalogMgr.isInternalCatalog(catalogName)) {

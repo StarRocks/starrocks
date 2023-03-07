@@ -20,6 +20,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UseCatalogStmt;
@@ -100,6 +101,16 @@ public class CatalogAnalyzer {
             FeNameFormat.checkCatalogName(splitParts[1]);
             statement.setCatalogName(splitParts[1]);
 
+            return null;
+        }
+
+        @Override
+        public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
+            if (Strings.isNullOrEmpty(statement.getCatalogName())) {
+                throw new SemanticException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.");
+            }
+
+            FeNameFormat.checkCatalogName(statement.getCatalogName());
             return null;
         }
     }
