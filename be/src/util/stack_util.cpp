@@ -124,13 +124,8 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
             std::cerr << stack << std::endl;
 #endif
             // to avoid recursively throwing std::bad_alloc exception when check memory limit in memory tracker.
-            if (starrocks::tls_thread_status.is_catched()) {
-                starrocks::tls_thread_status.set_is_catched(false);
-                LOG(WARNING) << stack;
-                starrocks::tls_thread_status.set_is_catched(true);
-            } else {
-                LOG(WARNING) << stack;
-            }
+            SCOPED_SET_CATCHED(false);
+            LOG(WARNING) << stack;
         }
     }
     // call the real __cxa_throw():
