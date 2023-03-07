@@ -2,7 +2,7 @@
 
 ## 功能
 
-修改 Broker Load 作业的优先级。该命令目前可以用于修改处于 **QUEUEING** 状态或者 **LOADING** 状态的 Broker Load 作业的优先级。
+修改 **QUEUEING** 或者 **LOADING** 状态的 Broker Load 作业的优先级。StarRocks 自 v2.5 版本起支持该命令。
 
 > **说明**
 >

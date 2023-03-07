@@ -139,7 +139,7 @@ INTO TABLE <table_name>
 
 ### `WITH BROKER`
 
-在 StarRocks v2.4 及以前版本，用于指定 Broker 的名称，格式为 WITH BROKER "<broker_name>"。自 StarRocks v2.5 起，只保留 WITH BROKER 关键字，不再需要提供 broker_name。
+在 v2.4 及以前版本，您需要在导入语句中通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。自 v2.5 起，您不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。参见[从 HDFS 或外部云存储系统导入数据 > 背景信息](../../../loading/BrokerLoad.md#背景信息)。
 
 ### `broker_properties`
 
@@ -183,7 +183,7 @@ INTO TABLE <table_name>
     | kerberos_keytab         | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。 |
     | kerberos_keytab_content | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 `kerberos_keytab` 参数二选一配置。 |
 
-   使用 Kerberos 认证时，需要打开 Broker 进程的启动脚本文件 **start_broker.sh**，在文件 42 行附近修改如下信息让 Broker 进程读取 **krb5.conf** 文件信息：
+   需要注意的是，在多 Kerberos 用户场景下，您必须部署一个独立的 Broker，并且在导入语句中通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。另外还需要打开 Broker 进程的启动脚本文件 **start_broker.sh**，在文件 42 行附近修改如下信息让 Broker 进程读取 **krb5.conf** 文件信息：
 
     ```Plain
     export JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -Dfile.encoding=UTF-8 -Djava.security.krb5.conf=/etc/krb5.conf"
@@ -191,15 +191,18 @@ INTO TABLE <table_name>
 
    > **说明**
    >
-   > **/etc/krb5.conf** 文件路径根据实际情况进行修改，Broker 进程需要有权限读取该文件。部署多组 Broker 时，每组 Broker 均需要修改如下信息，重启后生效。
+   > **/etc/krb5.conf** 文件路径根据实际情况进行修改，Broker 需要有权限读取该文件。部署多个 Broker时，每个 Broker 均需要修改如下信息，重启后生效。
 
 - HA 配置
 
-  可以为 HDFS 集群中的 NameNode 节点配置 HA 机制，从而确保发生 NameNode 节点切换时，StarRocks 能够自动识别新切换到的 NameNode 节点。  
-  目前 Broker 节点支持使用如下两种方式读取 HDFS 集群中节点的信息：
+  可以为 HDFS 集群中的 NameNode 节点配置 HA 机制，从而确保发生 NameNode 节点切换时，StarRocks 能够自动识别新切换到的 NameNode 节点，包括如下两种场景：
+
+  - 在单 HDFS 集群场景下，执行的是无 Broker 的导入，您需要将 `hdfs-site.xml` 文件放在每个 FE 节点和每个 BE 节点的 `{deploy}/conf` 目录下。
+
+  - 在多 HDFS 集群场景下，执行的是有 Broker 的导入，Broker 支持使用如下两种方式读取 HDFS 集群中节点的信息：
   
-  - 将 `hdfs-site.xml` 文件放在 Broker 所在的每个节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy_dir}/conf/` 目录添加到 `CLASSPATH` 环境变量的方式读取文件信息。
-  - 在创建 Broker Load 作业时增加如下 HA 配置：
+    - 将 `hdfs-site.xml` 文件放在每个 HDFS 集群对应的 Broker 所在节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy_dir}/conf/` 目录添加到 `CLASSPATH` 环境变量的方式读取文件信息。
+    - 在创建 Broker Load 作业时增加如下 HA 配置：
 
      ```Plain
      "dfs.nameservices" = "ha_cluster",
@@ -369,6 +372,8 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
    指定导入作业的优先级。取值范围：`LOWEST`、`LOW`、`NORMAL`、`HIGH` 和 `HIGHEST`。默认值：`NORMAL`。Broker Load 通过 [FE 配置项](/administration/Configuration.md#fe-配置项) `async_load_task_pool_size` 指定任务线程池的大小，即 StarRocks 集群中可以并行执行的 Broker Load 任务的最大数量。如果某一时间段内提交的 Broker Load 作业的任务总数超过最大数量，则超出的作业会按照优先级在队列中排队等待调度。
 
    已经创建成功的导入作业，如果处于 **QUEUEING** 状态或者 **LOADING** 状态，那么您可以使用 [ALTER LOAD](../data-manipulation/ALTER%20LOAD.md) 语句修改该作业的优先级。
+
+   StarRocks 自 v2.5 版本起支持为导入作业设置 `priority` 参数。
 
 ## 列映射
 

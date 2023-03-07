@@ -10,15 +10,18 @@ Broker Load 还支持在导入过程中做数据的转换，具体请参见[导�
 
 ## 背景信息
 
-在 StarRocks v2.4 及以前版本，Broker Load 需要借助 Broker 访问外部存储系统。语法里需要写 `WITH BROKER "<broker_name>"` 来指定使用哪组 Broker 组。Broker 是一个独立的无状态服务，封装了文件系统接口。通过 Broker，StarRocks 能够访问和读取外部存储系统上的数据文件，并利用自身的计算资源对数据文件中的数据进行预处理和导入。
+在 v2.4 及以前版本，StarRocks 在执行 Broker Load 时需要借助 Broker 才能访问外部存储系统，称为“有 Broker 的导入”。导入语句中需要通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。Broker 是一个独立的无状态服务，封装了文件系统接口。通过 Broker，StarRocks 能够访问和读取外部存储系统上的数据文件，并利用自身的计算资源对数据文件中的数据进行预处理和导入。
 
-自 StarRocks v2.5 起，Broker Load 不再需要借助 Broker 即可访问外部存储系统。语法里也不再需要提供 `broker_name`，但继续保留 `WITH BROKER` 关键字。
+自 v2.5 起，StarRocks 在执行 Broker Load 时不需要借助 Broker 即可访问外部存储系统，称为“无 Broker 的导入”。导入语句中也不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。
+
+需要注意的是，无 Broker 的导入在数据源为 HDFS 的某些场景下会受限，这时您可以继续执行有 Broker 的导入，包括：
+
+- 在配置了多 HDFS 集群时，您需要为每一个 HDFS 集群配置一个独立的 Broker。
+- 在配置了单 HDFS 集群、但是多 Kerberos 用户时，您只需要部署一个独立的 Broker。
 
 > **说明**
 >
-> 无 Broker 进程的导入在某些场景下会受限。比如如果您配置了多 HDFS 集群或多 Kerberos 用户时，不支持无 Broker 进程的导入。这种情况下，您可以继续通过 Broker 进程执行导入。
-
-如果您继续通过 Brokers 来执行导入，则必须确保您的 StarRocks 集群中已部署 Broker。您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。
+> 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。
 
 ## 支持的数据文件格式
 
