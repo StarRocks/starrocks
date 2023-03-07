@@ -15,8 +15,20 @@
 
 package com.starrocks.sql.parser;
 
+import com.clearspring.analytics.util.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import org.junit.Assert;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.List;
+import java.util.stream.Stream;
 
 import static com.starrocks.sql.plan.PlanTestBase.assertContains;
 import static org.junit.Assert.fail;
@@ -107,6 +119,86 @@ class ParserTest {
             assertContains(e.getMessage(), "Getting syntax error from line 1, column 12 to line 1, column 16." +
                     " Detail message: Invalid task name format 'a.b.c'.");
         }
+    }
+
+    @Test
+    void testNonReservedWords_1() {
+        String sql = "select anti, authentication, auto_increment, cancel, distributed, enclose, escape, export," +
+                "host, incremental, minus, nodes, optimizer, privileges, qualify, skip_header, semi, trace, trim_space " +
+                "from tbl left anti join t1 on ture left semi join t2 on false full join t3 on true minus select * from tbl";
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
+        } catch (Exception e) {
+            fail("sql should success. errMsg: " +  e.getMessage());
+        }
+    }
+
+    @Test
+    void testNonReservedWords_2() {
+        // semi and anti are table names
+        String sql = "select * from semi semi join anti anti on anti.col join t1 on true";
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
+            JoinRelation topJoinRelation = (JoinRelation) ((SelectRelation) stmt.getQueryRelation()).getRelation();
+            Assert.assertEquals(JoinOperator.INNER_JOIN, topJoinRelation.getJoinOp());
+
+            JoinRelation bottomJoinRelation = (JoinRelation) topJoinRelation.getLeft();
+            Assert.assertEquals("semi", bottomJoinRelation.getLeft().getResolveTableName().getTbl());
+            Assert.assertEquals("anti", bottomJoinRelation.getRight().getResolveTableName().getTbl());
+            Assert.assertEquals(JoinOperator.INNER_JOIN, bottomJoinRelation.getJoinOp());
+        } catch (Exception e) {
+            fail("sql should success. errMsg: " +  e.getMessage());
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("keyWordSqls")
+    void testNodeReservedWords_3(String sql) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+        } catch (Exception e) {
+            fail("sql should success. errMsg: " +  e.getMessage());
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("reservedWordSqls")
+    void testReservedWords(String sql) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            fail("Not quoting reserved words. sql should fail.");
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof ParsingException);
+        }
+    }
+    
+    private static Stream<Arguments> keyWordSqls() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select current_role()");
+        sqls.add("select current_role");
+        sqls.add("SHOW ALL AUTHENTICATION ");
+        sqls.add("CANCEL BACKUP from tbl");
+        sqls.add("select current_role() from tbl");
+        sqls.add("grant all privileges on DATABASE db1 to test");
+        sqls.add("revoke export on DATABASE db1 from test");
+        sqls.add("ALTER SYSTEM MODIFY BACKEND HOST '1' to '1'");
+        sqls.add("SHOW COMPUTE NODES");
+        sqls.add("trace optimizer select 1");
+        sqls.add("select anti from t1 left anti join t2 on true");
+        sqls.add("select anti, semi from t1 left semi join t2 on true");
+        return sqls.stream().map(e -> Arguments.of(e));
+    }
+
+
+    private static Stream<Arguments> reservedWordSqls() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select * from current_role ");
+        sqls.add("select * from full full join anti anti on anti.col join t1 on true");
+        return sqls.stream().map(e -> Arguments.of(e));
     }
 }
 
