@@ -43,6 +43,7 @@ statement
     // Database Statement
     | useDatabaseStatement
     | useCatalogStatement
+    | setCatalogStatement
     | showDatabasesStatement
     | alterDbQuotaStatement
     | createDbStatement
@@ -262,6 +263,10 @@ useDatabaseStatement
 
 useCatalogStatement
     : USE string
+    ;
+
+setCatalogStatement
+    : SET CATALOG identifierOrString
     ;
 
 showDatabasesStatement
