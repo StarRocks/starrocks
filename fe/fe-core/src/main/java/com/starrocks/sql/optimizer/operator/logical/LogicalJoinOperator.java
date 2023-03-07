@@ -99,40 +99,6 @@ public class LogicalJoinOperator extends LogicalOperator {
         return result;
     }
 
-<<<<<<< HEAD
-=======
-    public ColumnRefSet getRequiredCols() {
-        ColumnRefSet result = new ColumnRefSet();
-        if (onPredicate != null) {
-            result.union(onPredicate.getUsedColumns());
-        }
-        if (predicate != null) {
-            result.union(predicate.getUsedColumns());
-        }
-        result.union(rowOutputInfo.getUsedColumnRefSet());
-
-        return result;
-    }
-
-    @Override
-    public ColumnRefOperator getSmallestColumn(ColumnRefSet required, ColumnRefFactory columnRefFactory,
-                                               OptExpression expr) {
-        ColumnRefSet candidate;
-        if (joinType.isLeftSemiAntiJoin()) {
-            candidate = expr.getChildOutputColumns(0);
-        } else if (joinType.isRightSemiAntiJoin()) {
-            candidate = expr.getChildOutputColumns(1);
-        } else {
-            candidate = getOutputColumns(new ExpressionContext(expr));
-        }
-        if (required != null) {
-            candidate.intersect(required);
-        }
-        return Utils.findSmallestColumnRef(
-                candidate.getStream().map(columnRefFactory::getColumnRef).collect(Collectors.toList()));
-    }
-
->>>>>>> 749ee7900 ([Enhancement] Replace BitSet with RoaringBitMap to lower memory usage (#16499))
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         if (projection != null) {
