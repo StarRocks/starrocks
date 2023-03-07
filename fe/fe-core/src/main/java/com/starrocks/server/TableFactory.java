@@ -248,6 +248,12 @@ public class TableFactory {
                 throw new DdlException("can not convert hive external table column type [" + column.getType() + "] " +
                         "to correct type [" + oColumn.getType() + "]");
             }
+
+            for (String partName : oTable.getPartitionColumnNames()) {
+                if (!columns.stream().map(Column::getName).collect(Collectors.toList()).contains(partName)) {
+                    throw new DdlException("partition column [" + partName + "] must exist in column list");
+                }
+            }
         }
     }
 
