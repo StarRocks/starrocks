@@ -294,7 +294,7 @@ public class AuthUpgrader {
                 case ADMIN_PRIV:
                 case NODE_PRIV:
                 case GRANT_PRIV:
-                    upgradeBuiltInRoles(privilege, collection, null);
+                    upgradeBuiltInRoles(privilege, collection);
                     break;
 
                 default:
@@ -433,7 +433,7 @@ public class AuthUpgrader {
             PrivBitSet bitSet = entry.getPrivSet();
             if (bitSet.containsPrivs(Privilege.GRANT_PRIV)) {
                 if (entry.getOrigResource().equals(STAR)) {
-                    upgradeBuiltInRoles(Privilege.GRANT_PRIV, collection, null);
+                    upgradeBuiltInRoles(Privilege.GRANT_PRIV, collection);
                 } else {
                     grantPatterns.add(entry.getOrigResource());
                 }
@@ -509,19 +509,15 @@ public class AuthUpgrader {
                         RolePrivilegeCollection.RoleFlags.REMOVABLE);
 
                 // 1. table privileges(including global+db)
-                upgradeRoleTablePrivileges(role.getTblPatternToPrivs(), collection, roleId);
+                upgradeRoleTablePrivileges(role.getTblPatternToPrivs(), collection);
 
                 // 2. resource privileges
-                upgradeRoleResourcePrivileges(role.getResourcePatternToPrivs(), collection, roleId);
+                upgradeRoleResourcePrivileges(role.getResourcePatternToPrivs(), collection);
 
                 // 3. impersonate privileges
                 upgradeRoleImpersonatePrivileges(role.getImpersonateUsers(), collection);
 
                 privilegeManager.upgradeRoleInitPrivilegeUnlock(roleId, collection);
-                // grant role to user
-                for (UserIdentity user : role.getUsers()) {
-                    privilegeManager.upgradeUserRoleUnlock(user, roleId);
-                }
             } catch (AuthUpgradeUnrecoverableException | PrivilegeException e) {
                 if (Config.ignore_invalid_privilege_authentications) {
                     LOG.warn("discard role[{}] priv:{}", roleName, role, e);
@@ -534,7 +530,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeRoleTablePrivileges(
-            Map<TablePattern, PrivBitSet> tblPatternToPrivs, RolePrivilegeCollection collection, long roleId)
+            Map<TablePattern, PrivBitSet> tblPatternToPrivs, RolePrivilegeCollection collection)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         Iterator<Map.Entry<TablePattern, PrivBitSet>> iterator;
         Set<Pair<String, String>> grantPatterns = new HashSet<>();
@@ -547,7 +543,7 @@ public class AuthUpgrader {
             PrivBitSet bitSet = entry.getValue();
             if (bitSet.containsPrivs(Privilege.GRANT_PRIV)) {
                 if (pattern.equals(TablePattern.ALL)) {
-                    upgradeBuiltInRoles(Privilege.GRANT_PRIV, collection, roleId);
+                    upgradeBuiltInRoles(Privilege.GRANT_PRIV, collection);
                 } else {
                     grantPatterns.add(Pair.create(pattern.getQuolifiedDb(), pattern.getTbl()));
                 }
@@ -633,7 +629,7 @@ public class AuthUpgrader {
                             throw new AuthUpgradeUnrecoverableException(privilege + " on " +
                                     pattern + " is not supported!");
                         }
-                        upgradeBuiltInRoles(privilege, collection, roleId);
+                        upgradeBuiltInRoles(privilege, collection);
                         break;
 
                     case GRANT_PRIV:
@@ -654,7 +650,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeRoleResourcePrivileges(
-            Map<ResourcePattern, PrivBitSet> resourcePatternToPrivs, RolePrivilegeCollection collection, long roleId)
+            Map<ResourcePattern, PrivBitSet> resourcePatternToPrivs, RolePrivilegeCollection collection)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         Iterator<Map.Entry<ResourcePattern, PrivBitSet>> iterator;
         Set<String> grantPatterns = new HashSet<>();
@@ -668,7 +664,7 @@ public class AuthUpgrader {
 
             if (bitSet.containsPrivs(Privilege.GRANT_PRIV)) {
                 if (pattern.getResourceName().equals(STAR)) {
-                    upgradeBuiltInRoles(Privilege.GRANT_PRIV, collection, roleId);
+                    upgradeBuiltInRoles(Privilege.GRANT_PRIV, collection);
                 } else {
                     grantPatterns.add(pattern.getResourceName());
                 }
@@ -697,7 +693,7 @@ public class AuthUpgrader {
                     case NODE_PRIV:
                     case ADMIN_PRIV:
                         assertGlobalResource(privilege, name);
-                        upgradeBuiltInRoles(privilege, collection, roleId);
+                        upgradeBuiltInRoles(privilege, collection);
                         break;
 
                     case GRANT_PRIV:
@@ -1035,18 +1031,18 @@ public class AuthUpgrader {
         }
     }
 
-    protected void upgradeBuiltInRoles(Privilege privilege, PrivilegeCollection collection, Long roleId)
+    protected void upgradeBuiltInRoles(Privilege privilege, PrivilegeCollection collection)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         switch (privilege) {
             case ADMIN_PRIV:   // ADMIN_PRIV -> db_admin + user_admin
-                grantRoleToCollection(collection, roleId,
+                grantRoleToCollection(collection,
                         PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID, PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID);
                 break;
             case NODE_PRIV:    // NODE_PRIV -> cluster_admin
-                grantRoleToCollection(collection, roleId, PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_ID);
+                grantRoleToCollection(collection, PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_ID);
                 break;
             case GRANT_PRIV:   // GRANT_PRIV -> user_admin
-                grantRoleToCollection(collection, roleId, PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID);
+                grantRoleToCollection(collection, PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID);
                 break;
 
             default:
@@ -1054,16 +1050,17 @@ public class AuthUpgrader {
         }
     }
 
-    private void grantRoleToCollection(PrivilegeCollection collection, Long roleId, Long... parentRoleIds)
+    private void grantRoleToCollection(PrivilegeCollection collection, Long... parentRoleIds)
             throws PrivilegeException {
-        if (roleId == null) {
-            for (long parentRoleId : parentRoleIds) {
-                ((UserPrivilegeCollection) collection).grantRole(parentRoleId);
-            }
-        } else {
-            for (long parentRoleId : parentRoleIds) {
-                privilegeManager.upgradeParentRoleRelationUnlock(parentRoleId, roleId);
-                ((RolePrivilegeCollection) collection).addParentRole(parentRoleId);
+        for (long parentRoleId : parentRoleIds) {
+            RolePrivilegeCollection rolePrivilegeCollection =
+                    privilegeManager.getRolePrivilegeCollectionUnlocked(parentRoleId, true);
+            for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> entry :
+                    rolePrivilegeCollection.getTypeToPrivilegeEntryList().entrySet()) {
+                for (PrivilegeCollection.PrivilegeEntry privEntry : entry.getValue()) {
+                    collection.grant(entry.getKey(), privilegeManager.analyzeActionSet(entry.getKey(), privEntry.getActionSet()),
+                            Collections.singletonList(privEntry.getObject()), false);
+                }
             }
         }
     }
