@@ -14,7 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.amazonaws.services.ssmcontacts.model.Plan;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -533,6 +532,7 @@ public class QueryCacheTest {
     @Test
     public void testNoGroupBy() throws Exception {
         ctx.getSessionVariable().setNewPlanerAggStage(2);
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
         List<String> aggrFunctions =
                 Lists.newArrayList("sum(v1)", "avg(v1)", "count(distinct v1)",
                         "variance(v1)", "stddev(v1)", "ndv(v1)", "hll_raw_agg(hll_hash(v1))",
@@ -550,6 +550,7 @@ public class QueryCacheTest {
         for (String agg : aggrFunctions) {
             testNoGroupBy(agg, whereClauses);
         }
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
@@ -1127,7 +1128,6 @@ public class QueryCacheTest {
 
     @Test
     public void testDigest() {
-        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String queries[] = {
                 "/*Q01*/ SELECT COUNT(*) FROM hits",
                 "/*Q02*/ SELECT COUNT(*) FROM hits WHERE AdvEngineID <> 0",
@@ -1155,12 +1155,10 @@ public class QueryCacheTest {
             }
             digests.put(s, q);
         }
-        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
     }
 
     @Test
     public void testHotPartitions() {
-        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         ctx.getSessionVariable().setQueryCacheHotPartitionNum(3);
         String queriesWithHotPartitions[] = {
                 "/*PRIMARY_KEYS*/ SELECT COUNT(*) FROM t4 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
@@ -1192,7 +1190,6 @@ public class QueryCacheTest {
                     rangeMap.values().stream().filter(expectRanges::contains).collect(Collectors.toList());
             Assert.assertEquals(matchedRanges.size(), expectRanges.size());
         }
-        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
     }
 
     @Test
