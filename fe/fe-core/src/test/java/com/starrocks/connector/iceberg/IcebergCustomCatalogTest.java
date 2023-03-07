@@ -20,6 +20,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.CachedClientPool;
 import com.starrocks.connector.iceberg.hive.HiveTableOperations;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
@@ -145,24 +146,24 @@ public class IcebergCustomCatalogTest {
         }
 
         @Override
-        public Table loadTable(IcebergTable table) throws StarRocksIcebergException {
+        public Table loadTable(IcebergTable table) throws StarRocksConnectorException {
             TableIdentifier tableId = TableIdentifier.of(table.getRemoteDbName(), table.getRemoteTableName());
             return loadTable(tableId, null, null);
         }
 
         @Override
-        public Table loadTable(TableIdentifier tableIdentifier) throws StarRocksIcebergException {
+        public Table loadTable(TableIdentifier tableIdentifier) throws StarRocksConnectorException {
             return loadTable(tableIdentifier, null, null);
         }
 
         @Override
         public Table loadTable(TableIdentifier tableId, String tableLocation,
-                               Map<String, String> properties) throws StarRocksIcebergException {
+                               Map<String, String> properties) throws StarRocksConnectorException {
             Preconditions.checkState(tableId != null);
             try {
                 return super.loadTable(tableId);
             } catch (Exception e) {
-                throw new StarRocksIcebergException(String.format(
+                throw new StarRocksConnectorException(String.format(
                         "Failed to load Iceberg table with id: %s", tableId), e);
             }
         }

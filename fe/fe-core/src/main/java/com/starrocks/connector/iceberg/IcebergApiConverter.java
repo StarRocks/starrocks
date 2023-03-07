@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.Table;
@@ -83,7 +84,7 @@ public class IcebergApiConverter {
             case PARQUET:
                 return RemoteFileInputFormat.PARQUET;
             default:
-                throw new StarRocksIcebergException("Unexpected file format: " + format);
+                throw new StarRocksConnectorException("Unexpected file format: " + format);
         }
     }
 }
