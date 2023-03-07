@@ -2466,7 +2466,7 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range) {
         auto start = Int64Column::create();
         auto end = Int64Column::create();
         start->append(0);
-        start->append(-5);
+        end->append(-5);
 
         columns.emplace_back(bitmap_column);
         columns.emplace_back(start);
