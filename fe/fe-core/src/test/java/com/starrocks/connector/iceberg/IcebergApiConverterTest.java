@@ -21,6 +21,7 @@ import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
@@ -42,7 +43,7 @@ public class IcebergApiConverterTest {
     public void testGetHdfsFileFormat() {
         RemoteFileInputFormat fileFormat = IcebergApiConverter.getHdfsFileFormat(FileFormat.PARQUET);
         Assert.assertTrue(fileFormat.equals(RemoteFileInputFormat.PARQUET));
-        Assert.assertThrows("Unexpected file format: %s", StarRocksIcebergException.class, () -> {
+        Assert.assertThrows("Unexpected file format: %s", StarRocksConnectorException.class, () -> {
             IcebergApiConverter.getHdfsFileFormat(FileFormat.AVRO);
         });
     }
