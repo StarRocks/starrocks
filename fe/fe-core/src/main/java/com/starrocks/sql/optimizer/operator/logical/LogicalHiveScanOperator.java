@@ -87,7 +87,7 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
         public LogicalHiveScanOperator.Builder withOperator(LogicalHiveScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.predicates = scanOperator.predicates;
+            this.predicates = scanOperator.predicates.clone();
             this.partitionColumns = scanOperator.partitionColumns;
             return this;
         }
