@@ -38,7 +38,7 @@ under the License.
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.5</jacoco.version>
-        <starrocks.thridparty>${basedir}/../../thirdparty</starrocks.thridparty>
+        <starrocks.thirdparty>${basedir}/../../thirdparty</starrocks.thirdparty>
         <iceberg.version>0.12.1</iceberg.version>
     </properties>
 
@@ -51,7 +51,7 @@ under the License.
                 </property>
             </activation>
             <properties>
-                <starrocks.thridparty>${env.STARROCKS_THIRDPARTY}</starrocks.thridparty>
+                <starrocks.thirdparty>${env.STARROCKS_THIRDPARTY}</starrocks.thirdparty>
             </properties>
         </profile>
     </profiles>
@@ -632,7 +632,7 @@ under the License.
                 <artifactId>maven-thrift-plugin</artifactId>
                 <version>0.1.11</version>
                 <configuration>
-                    <thriftExecutable>${starrocks.thridparty}/installed/bin/thrift</thriftExecutable>
+                    <thriftExecutable>${starrocks.thirdparty}/installed/bin/thrift</thriftExecutable>
                     <thriftSourceRoot>${starrocks.home}/gensrc/thrift</thriftSourceRoot>
                     <generator>java</generator>
                 </configuration>
