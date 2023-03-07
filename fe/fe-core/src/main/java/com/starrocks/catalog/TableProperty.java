@@ -35,13 +35,13 @@
 package com.starrocks.catalog;
 
 import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -82,7 +82,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private transient DynamicPartitionProperty dynamicPartitionProperty = new DynamicPartitionProperty(Maps.newHashMap());
     // table's default replication num
-    private Short replicationNum = FeConstants.default_replication_num;
+    private Short replicationNum = RunMode.defaultReplicationNum();
 
     // partition time to live number, -1 means no ttl
     private int partitionTTLNumber = INVALID;
@@ -164,6 +164,18 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    public TableProperty copy() {
+        TableProperty newTableProperty = new TableProperty(Maps.newHashMap(this.properties));
+        try {
+            newTableProperty.gsonPostProcess();
+        } catch (IOException e) {
+            Preconditions.checkState(false, "gsonPostProcess shouldn't fail");
+        }
+        newTableProperty.hasDelete = this.hasDelete;
+        newTableProperty.hasForbitGlobalDict = this.hasDelete;
+        return newTableProperty;
     }
 
     public static boolean isSamePrefixProperties(Map<String, String> properties, String prefix) {
@@ -267,7 +279,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildReplicationNum() {
         replicationNum = Short.parseShort(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM,
-                String.valueOf(FeConstants.default_replication_num)));
+                String.valueOf(RunMode.defaultReplicationNum())));
         return this;
     }
 
@@ -333,7 +345,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildStorageVolume() {
         storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
-            RunMode.getCurrentRunMode().isAllowCreateLakeTable() ? "default" : "local");
+            RunMode.allowCreateLakeTable() ? "default" : "local");
         return this;
     }
 

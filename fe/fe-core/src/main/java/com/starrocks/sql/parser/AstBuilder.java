@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.parser;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -239,6 +240,7 @@ import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.Property;
+import com.starrocks.sql.ast.PropertySet;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -369,6 +371,7 @@ import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.EngineType;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
@@ -1794,23 +1797,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAdminSetConfigStatement(StarRocksParser.AdminSetConfigStatementContext context) {
-        Map<String, String> configs = new HashMap<>();
-        Property property = (Property) visitProperty(context.property());
-        String configKey = property.getKey();
-        String configValue = property.getValue();
-        configs.put(configKey, configValue);
-        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs, createPos(context));
+        Property config = (Property) visitProperty(context.property());
+        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, config, createPos(context));
     }
 
     @Override
     public ParseNode visitAdminSetReplicaStatusStatement(
             StarRocksParser.AdminSetReplicaStatusStatementContext context) {
-        Map<String, String> properties = new HashMap<>();
         List<Property> propertyList = visit(context.properties().property(), Property.class);
-        for (Property property : propertyList) {
-            properties.put(property.getKey(), property.getValue());
-        }
-        return new AdminSetReplicaStatusStmt(properties, createPos(context));
+        return new AdminSetReplicaStatusStmt(new PropertySet(propertyList, createPos(context.properties())),
+                createPos(context));
     }
 
     @Override
@@ -1899,14 +1895,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             tabletIds = context.tabletList().INTEGER_VALUE().stream().map(ParseTree::getText)
                     .map(Long::parseLong).collect(toList());
         }
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-        return new AdminCheckTabletsStmt(tabletIds, properties, createPos(context));
+        return new AdminCheckTabletsStmt(tabletIds, (Property) visitProperty(context.property()), createPos(context));
     }
 
     @Override
@@ -2816,7 +2805,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName tableName = qualifiedNameToTableName(qualifiedName);
         PartitionNames partitionNames = null;
         if (context.tableDesc().partitionNames() != null) {
-            stop =  context.tableDesc().partitionNames().stop;
+            stop = context.tableDesc().partitionNames().stop;
             partitionNames = (PartitionNames) visit(context.tableDesc().partitionNames());
         }
         TableRef tableRef = new TableRef(tableName, null, partitionNames, createPos(start, stop));
@@ -4476,7 +4465,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitGrantOnAll(StarRocksParser.GrantOnAllContext context) {
         List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
                 c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-        String objectTypeUnResolved = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
+        String objectTypeUnResolved = ((Identifier) visit(context.privObjectTypePlural())).getValue().toUpperCase();
 
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         if (context.isAll != null) {
@@ -4497,7 +4486,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitRevokeOnAll(StarRocksParser.RevokeOnAllContext context) {
         List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
                 c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-        String objectTypeUnResolved = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
+        String objectTypeUnResolved = ((Identifier) visit(context.privObjectTypePlural())).getValue().toUpperCase();
 
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         if (context.isAll != null) {
@@ -4514,52 +4503,33 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitGrantOnAllGlobalFunctions(StarRocksParser.GrantOnAllGlobalFunctionsContext context) {
-        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
-                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-
-        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
-        objects.setAllPrivilegeObject(false, null);
-
-        return new GrantPrivilegeStmt(privilegeList, "GLOBAL_FUNCTIONS",
-                (GrantRevokeClause) visit(context.grantRevokeClause()),
-                objects, context.WITH() != null, createPos(context));
-    }
-
-    @Override
-    public ParseNode visitRevokeOnAllGlobalFunctions(StarRocksParser.RevokeOnAllGlobalFunctionsContext context) {
-        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
-                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-
-        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
-        objects.setAllPrivilegeObject(false, null);
-
-        return new RevokePrivilegeStmt(privilegeList, "GLOBAL_FUNCTIONS",
-                (GrantRevokeClause) visit(context.grantRevokeClause()), objects, createPos(context));
+    public ParseNode visitPrivilegeType(StarRocksParser.PrivilegeTypeContext context) {
+        NodePosition pos = createPos(context);
+        List<String> ps = new ArrayList<>();
+        for (int i = 0; i < context.getChildCount(); ++i) {
+            ps.add(context.getChild(i).getText());
+        }
+        return new Identifier(Joiner.on(" ").join(ps), pos);
     }
 
     @Override
     public ParseNode visitPrivObjectType(StarRocksParser.PrivObjectTypeContext context) {
-        if (context.identifier() == null) {
-            return new Identifier(context.getText(), createPos(context));
-        } else {
-            return visit(context.identifier());
+        NodePosition pos = createPos(context);
+        List<String> ps = new ArrayList<>();
+        for (int i = 0; i < context.getChildCount(); ++i) {
+            ps.add(context.getChild(i).getText());
         }
+        return new Identifier(Joiner.on(" ").join(ps), pos);
     }
 
     @Override
-    public ParseNode visitPrivilegeType(StarRocksParser.PrivilegeTypeContext context) {
+    public ParseNode visitPrivObjectTypePlural(StarRocksParser.PrivObjectTypePluralContext context) {
         NodePosition pos = createPos(context);
-        if (context.identifier() == null) {
-            if (context.ALL() != null) {
-                //Syntax ALL PRIVILEGES -> ALL
-                return new Identifier("ALL", pos);
-            } else {
-                return new Identifier(context.getText(), pos);
-            }
-        } else {
-            return visit(context.identifier());
+        List<String> ps = new ArrayList<>();
+        for (int i = 0; i < context.getChildCount(); ++i) {
+            ps.add(context.getChild(i).getText());
         }
+        return new Identifier(Joiner.on(" ").join(ps), pos);
     }
 
     private GrantRevokePrivilegeObjects parsePrivilegeObjectNameList(StarRocksParser.PrivObjectNameListContext context) {
@@ -4942,12 +4912,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             functionName = FunctionSet.MAX;
         }
 
+        List<String> hints = Lists.newArrayList();
+        if (context.aggregationFunction().bracketHint() != null) {
+            hints = context.aggregationFunction().bracketHint().identifier().stream().map(
+                    RuleContext::getText).collect(Collectors.toList());
+        }
+
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 context.aggregationFunction().ASTERISK_SYMBOL() == null ?
                         new FunctionParams(context.aggregationFunction().DISTINCT() != null,
                                 visit(context.aggregationFunction().expression(), Expr.class)) :
                         FunctionParams.createStarParam(), pos);
 
+        functionCallExpr.setHints(hints);
         if (context.over() != null) {
             return buildOverClause(functionCallExpr, context.over(), pos);
         }
@@ -5097,9 +5074,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             // Note: val is positive, because we do not recognize minus character in 'IntegerLiteral'
             // -2^63 will be recognized as large int(__int128)
             if (intLiteral.compareTo(LONG_MAX) <= 0) {
-                return new IntLiteral(intLiteral.longValue());
+                return new IntLiteral(intLiteral.longValue(), pos);
             } else if (intLiteral.compareTo(LARGEINT_MAX_ABS) <= 0) {
-                return new LargeIntLiteral(intLiteral.toString());
+                return new LargeIntLiteral(intLiteral.toString(), pos);
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.numOverflow(context.getText()), pos);
             }

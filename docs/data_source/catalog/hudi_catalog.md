@@ -215,8 +215,8 @@ However, if the frequency of data updates in Hudi is high, you can tune these pa
 > In most cases, if your Hudi data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
 
 | Parameter                              | Required | Description                                                  |
-| -------------------------------------- | -------- | ------------------------------------------------------------ |
-| enable_hive_metastore_cache            | No       | Specifies whether StarRocks caches the metadata of Hudi tables. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
+|----------------------------------------| -------- | ------------------------------------------------------------ |
+| enable_metastore_cache                 | No       | Specifies whether StarRocks caches the metadata of Hudi tables. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
 | enable_remote_file_cache               | No       | Specifies whether StarRocks caches the metadata of the underlying data files of Hudi tables or partitions. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
 | metastore_cache_refresh_interval_sec   | No       | The time interval at which StarRocks asynchronously updates the metadata of Hudi tables or partitions cached in itself. Unit: seconds. Default value: `7200`, which is 2 hours. |
 | remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Hudi tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
@@ -458,7 +458,7 @@ You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file o
 
 Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Hudi catalogs.
 
-By default (namely, when the `enable_hive_metastore_cache` and `enable_remote_file_cache` parameters are both set to `true`), if a query hits a partition of a Hudi table, StarRocks automatically caches the metadata of the partition and the metadata of the underlying data files of the partition. The cached metadata is updated by using the lazy update policy.
+By default (namely, when the `enable_metastore_cache` and `enable_remote_file_cache` parameters are both set to `true`), if a query hits a partition of a Hudi table, StarRocks automatically caches the metadata of the partition and the metadata of the underlying data files of the partition. The cached metadata is updated by using the lazy update policy.
 
 For example, there is a Hudi table named `table2`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hits `p1`, and StarRocks caches the metadata of `p1` and the metadata of the underlying data files of `p1`. Assume that the default time intervals to update and discard the cached metadata are as follows:
 

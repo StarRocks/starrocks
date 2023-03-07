@@ -24,6 +24,10 @@ This topic introduces how to integrate with StarRocks.
 
 [Apache Kafka](../loading/RoutineLoad.md)
 
+## IDE tools
+
+[Jupyter](./jupysql.md)
+
 ## Cluster Management
 
 [Kubernetes](https://github.com/StarRocks/starrocks-kubernetes-operator)

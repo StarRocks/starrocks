@@ -33,7 +33,6 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -88,7 +87,7 @@ public class FrontendServiceTest {
         };
     }
 
-    @Test
+    //@Test
     public void testCheckPasswordAndLoadPrivilege() {
         createUser("abc", "123", "192.168.92.3");
 

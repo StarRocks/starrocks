@@ -85,7 +85,6 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -393,7 +392,7 @@ public class NodeMgr {
                 }
             }
             getNewImageOnStartup(rightHelperNode, "");
-            if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) { // get star mgr image
+            if (RunMode.allowCreateLakeTable()) { // get star mgr image
                 // subdir might not exist
                 String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
                 File dir = new File(subDir);
@@ -416,17 +415,17 @@ public class NodeMgr {
 
         if (Strings.isNullOrEmpty(runMode)) {
             if (isFirstTimeStartUp) {
-                runMode = RunMode.getCurrentRunMode().getName();
+                runMode = RunMode.name();
                 storage.setRunMode(runMode);
                 isVersionFileChanged = true;
-            } else if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+            } else if (RunMode.allowCreateLakeTable()) {
                 LOG.error("Upgrading from a cluster with version less than 3.0 to a cluster with run mode {} of " +
-                          "version 3.0 or above is disallowed. will exit", RunMode.getCurrentRunMode().getName());
+                          "version 3.0 or above is disallowed. will exit", RunMode.name());
                 System.exit(-1);
             }
-        } else if (!runMode.equalsIgnoreCase(RunMode.getCurrentRunMode().getName())) {
+        } else if (!runMode.equalsIgnoreCase(RunMode.name())) {
             LOG.error("Unmatched run mode between config file and version file: {} vs {}. will exit! ",
-                      RunMode.getCurrentRunMode().getName(), runMode);
+                      RunMode.name(), runMode);
             System.exit(-1);
         } // else nothing to do
 
@@ -741,9 +740,13 @@ public class NodeMgr {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            Frontend fe = getFeByHost(host);
-            if (null != fe) {
-                throw new DdlException("frontend use host [" + host + "] already exists ");
+            try {
+                if (checkFeExistByIpOrFqdn(host)) {
+                    throw new DdlException("FE with the same host: " + host + " already exists");
+                }
+            } catch (UnknownHostException e) {
+                LOG.warn("failed to get right ip by fqdn {}", host, e);
+                throw new DdlException("unknown fqdn host: " + host);
             }
 
             String nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, false /* new name style */);
@@ -752,7 +755,7 @@ public class NodeMgr {
                 throw new DdlException("frontend name already exists " + nodeName + ". Try again");
             }
 
-            fe = new Frontend(role, nodeName, host, editLogPort);
+            Frontend fe = new Frontend(role, nodeName, host, editLogPort);
             frontends.put(nodeName, fe);
             if (role == FrontendNodeType.FOLLOWER) {
                 helperNodes.add(Pair.create(host, editLogPort));
@@ -931,6 +934,35 @@ public class NodeMgr {
         return null;
     }
 
+    protected boolean checkFeExistByIpOrFqdn(String ipOrFqdn) throws UnknownHostException {
+        Pair<String, String> targetIpAndFqdn = NetUtils.getIpAndFqdnByHost(ipOrFqdn);
+
+        for (Frontend fe : frontends.values()) {
+            Pair<String, String> curIpAndFqdn;
+            try {
+                curIpAndFqdn = NetUtils.getIpAndFqdnByHost(fe.getHost());
+            } catch (UnknownHostException e) {
+                LOG.warn("failed to get right ip by fqdn {}", fe.getHost(), e);
+                if (targetIpAndFqdn.second.equals(fe.getHost())
+                        && !Strings.isNullOrEmpty(targetIpAndFqdn.second)) {
+                    return true;
+                }
+                continue;
+            }
+            // target, cur has same ip
+            if (targetIpAndFqdn.first.equals(curIpAndFqdn.first)) {
+                return true;
+            }
+            // target, cur has same fqdn and both of them are not equal ""
+            if (targetIpAndFqdn.second.equals(curIpAndFqdn.second)
+                    && !Strings.isNullOrEmpty(targetIpAndFqdn.second)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public Frontend getFeByHost(String ipOrFqdn) {
         // This host could be Ip, or fqdn
         Pair<String, String> targetPair;
@@ -1065,10 +1097,7 @@ public class NodeMgr {
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
-        Map<String, String> configs = stmt.getConfigs();
-        Preconditions.checkState(configs.size() == 1);
-
-        setFrontendConfig(configs);
+        setFrontendConfig(stmt.getConfig().getMap());
 
         List<Frontend> allFrontends = getFrontends(null);
         int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
@@ -1080,8 +1109,8 @@ public class NodeMgr {
             }
 
             TSetConfigRequest request = new TSetConfigRequest();
-            request.setKeys(new ArrayList<>(configs.keySet()));
-            request.setValues(new ArrayList<>(configs.values()));
+            request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
+            request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
             try {
                 TSetConfigResponse response = FrontendServiceProxy
                         .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),

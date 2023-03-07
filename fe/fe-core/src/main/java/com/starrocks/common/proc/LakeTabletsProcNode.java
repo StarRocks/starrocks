@@ -21,10 +21,10 @@ import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.monitor.unit.ByteSizeValue;
 
@@ -42,10 +42,11 @@ public class LakeTabletsProcNode implements ProcNodeInterface {
             .build();
 
     private final Database db;
-    private final LakeTable table;
+    // lake table or lake materialized view
+    private final OlapTable table;
     private final MaterializedIndex index;
 
-    public LakeTabletsProcNode(Database db, LakeTable table, MaterializedIndex index) {
+    public LakeTabletsProcNode(Database db, OlapTable table, MaterializedIndex index) {
         this.db = db;
         this.table = table;
         this.index = index;
@@ -64,7 +65,7 @@ public class LakeTabletsProcNode implements ProcNodeInterface {
     public List<List<Comparable>> fetchComparableResult() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(index);
-        Preconditions.checkState(table.isLakeTable());
+        Preconditions.checkState(table.isCloudNativeTable());
 
         List<List<Comparable>> tabletInfos = Lists.newArrayList();
         db.readLock();

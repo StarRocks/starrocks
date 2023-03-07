@@ -46,7 +46,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -430,9 +429,6 @@ public class ConnectProcessor {
                 serializer.writeField(db.getOriginName(), table.getName(), column, true);
                 channel.sendOnePacket(serializer.toByteBuffer());
             }
-
-        } catch (StarRocksIcebergException e) {
-            LOG.error("errors happened when getting Iceberg table {}", tableName, e);
         } catch (StarRocksConnectorException e) {
             LOG.error("errors happened when getting table {}", tableName, e);
         } finally {
@@ -602,6 +598,8 @@ public class ConnectProcessor {
         if (request.isSetUser_roles()) {
             List<Long> roleIds = request.getUser_roles().getRole_id_list();
             ctx.setCurrentRoleIds(new HashSet<>(roleIds));
+        } else {
+            ctx.setCurrentRoleIds(new HashSet<>());
         }
 
         if (request.isSetIsLastStmt()) {

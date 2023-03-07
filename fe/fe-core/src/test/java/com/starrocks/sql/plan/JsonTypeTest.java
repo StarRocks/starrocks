@@ -119,7 +119,8 @@ public class JsonTypeTest extends PlanTestBase {
             getFragmentPlan("select parse_json('1') in (parse_json('1'), parse_json('2')");
             Assert.fail("should throw");
         } catch (SemanticException e) {
-            Assert.assertEquals("InPredicate of JSON is not supported", e.getMessage());
+            Assert.assertEquals("Getting analyzing error from line 1, column 7 to line 1, column 21. " +
+                    "Detail message: InPredicate of JSON is not supported.", e.getMessage());
         }
     }
 
@@ -231,6 +232,7 @@ public class JsonTypeTest extends PlanTestBase {
 
         // Multi-dimension array casting is not supported
         assertExceptionMessage("select cast(json_array(1,2,3) as array<array<int>>)",
-                "Invalid type cast from json to ARRAY<ARRAY<int(11)>> in sql `json_array(1, 2, 3)`");
+                "Getting analyzing error from line 1, column 7 to line 1, column 50. Detail message: " +
+                        "Invalid type cast from json to ARRAY<ARRAY<int(11)>> in sql `json_array(1, 2, 3)`.");
     }
 }

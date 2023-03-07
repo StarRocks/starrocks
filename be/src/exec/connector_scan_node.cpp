@@ -147,6 +147,7 @@ ConnectorScanNode::~ConnectorScanNode() {
 
 Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
+    RETURN_IF_ERROR(_data_source_provider->init(_pool, state));
     return Status::OK();
 }
 
@@ -243,6 +244,7 @@ Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRan
     data_source->set_runtime_filters(&_runtime_filter_collector);
     data_source->set_read_limit(_limit);
     data_source->set_runtime_profile(_runtime_profile.get());
+    data_source->update_has_any_predicate();
     ConnectorScanner* scanner = _pool->add(new ConnectorScanner(std::move(data_source), _runtime_profile.get()));
     scanner->init(state);
     _push_pending_scanner(scanner);

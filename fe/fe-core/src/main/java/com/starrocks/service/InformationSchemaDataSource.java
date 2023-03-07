@@ -34,7 +34,6 @@ import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.server.GlobalStateMgr;
@@ -131,13 +130,12 @@ public class InformationSchemaDataSource {
                         tableConfigInfo.setTable_schema(dbName);
                         tableConfigInfo.setTable_name(table.getName());
 
-                        if (table.isOlapOrLakeTable() ||
-                                table.getType() == TableType.OLAP_EXTERNAL ||
-                                table.getType() == TableType.MATERIALIZED_VIEW) {
+                        if (table.isNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
                             // OLAP (done)
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
                             // LAKE (done)
+                            // LAKE_MATERIALIZED_VIEW (done)
                             genNormalTableConfigInfo(table, tableConfigInfo);
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
@@ -153,8 +151,7 @@ public class InformationSchemaDataSource {
     }
 
     private static Map<String, String> genProps(Table table) {
-
-        if (table.getType() == TableType.MATERIALIZED_VIEW) {
+        if (table.isMaterializedView()) {
             MaterializedView mv = (MaterializedView) table;
             return mv.getMaterializedViewPropMap();
         }
@@ -188,7 +185,7 @@ public class InformationSchemaDataSource {
 
         // enable storage cache && cache ttl
         if (table.isLakeTable()) {
-            Map<String, String> storageProperties = ((LakeTable) olapTable).getProperties();
+            Map<String, String> storageProperties = olapTable.getProperties();
             propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
                     storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE));
             propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
@@ -295,7 +292,7 @@ public class InformationSchemaDataSource {
                         info.setTable_catalog(DEF);
                         info.setTable_schema(dbName);
                         info.setTable_name(table.getName());
-                        info.setTable_type(transferTableTypeToAdaptMysql(table.getType()));
+                        info.setTable_type(table.getMysqlType());
                         info.setEngine(table.getEngine());
                         info.setVersion(DEFAULT_EMPTY_NUM);
                         // TABLE_ROWS (depend on the table type)
@@ -312,13 +309,12 @@ public class InformationSchemaDataSource {
                         info.setChecksum(DEFAULT_EMPTY_NUM);
                         info.setTable_comment(table.getComment());
 
-                        if (table.isOlapOrLakeTable() ||
-                                table.getType() == TableType.OLAP_EXTERNAL ||
-                                table.getType() == TableType.MATERIALIZED_VIEW) {
+                        if (table.isNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
                             // OLAP (done)
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
                             // LAKE (done)
+                            // LAKE_MATERIALIZED_VIEW (done)
                             genNormalTableInfo(table, info);
                         } else {
                             // SCHEMA (use default)
@@ -337,32 +333,6 @@ public class InformationSchemaDataSource {
         });
         response.setTables_infos(infos);
         return response;
-    }
-
-    private static String transferTableTypeToAdaptMysql(TableType tableType) {
-        // 'BASE TABLE','SYSTEM VERSIONED','PARTITIONED TABLE','VIEW',
-        // 'FOREIGN TABLE','MATERIALIZED VIEW','EXTERNAL TABLE'
-        switch (tableType) {
-            case MYSQL:
-            case HIVE:
-            case ICEBERG:
-            case HUDI:
-            case ELASTICSEARCH:
-            case JDBC:
-                return "EXTERNAL TABLE";
-            case LAKE:
-            case OLAP:
-            case OLAP_EXTERNAL:
-                return "BASE TABLE";
-            case MATERIALIZED_VIEW:
-            case VIEW:
-                return "VIEW";
-            default:
-                // SCHEMA
-                // INLINE_VIEW
-                // BROKER
-                return "BASE TABLE";
-        }
     }
 
     private static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {

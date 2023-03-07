@@ -436,12 +436,6 @@ CONF_mBool(enable_prefetch, "true");
 // Otherwise, StarRocks will use all cores returned from "/proc/cpuinfo".
 CONF_Int32(num_cores, "0");
 
-// CONF_Bool(thread_creation_fault_injection, "false");
-
-// Set this to encrypt and perform an integrity
-// check on all data spilled to disk during a query
-// CONF_Bool(disk_spill_encryption, "false");
-
 // When BE start, If there is a broken disk, BE process will exit by default.
 // Otherwise, we will ignore the broken disk,
 CONF_Bool(ignore_broken_disk, "false");
@@ -691,6 +685,20 @@ CONF_Int64(pipeline_sink_brpc_dop, "64");
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 CONF_mBool(pipeline_print_profile, "false");
 
+// The arguments of multilevel feedback pipeline_driver_queue. It prioritizes small queries over larger ones,
+// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
+CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");
+CONF_Double(pipeline_driver_queue_ratio_of_adjacent_queue, "1.2");
+// 0 represents PriorityScanTaskQueue (by default), while 1 represents MultiLevelFeedScanTaskQueue.
+// - PriorityScanTaskQueue prioritizes scan tasks with lower committed times.
+// - MultiLevelFeedScanTaskQueue prioritizes scan tasks with shorter execution time.
+//   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
+CONF_Int64(pipeline_scan_queue_mode, "0");
+// The arguments of MultiLevelFeedScanTaskQueue. It prioritizes small queries over larger ones,
+// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
+CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
+CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
+
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
@@ -830,6 +838,10 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 // The minimum allowed value is 10000(10 seconds).
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
+// spill dirs
+CONF_String(spill_local_storage_dir, "spill");
+CONF_mBool(experimental_spill_skip_sync, "false");
+
 // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
 CONF_Int32(internal_service_async_thread_num, "10");
@@ -862,7 +874,7 @@ CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
 CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
 CONF_Int64(block_cache_block_size, "1048576");  // 1MB
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
-CONF_Bool(block_cache_checksum_enable, "true");
+CONF_Bool(block_cache_checksum_enable, "false");
 // Maximum number of concurrent inserts we allow globally for block cache.
 // 0 means unlimited.
 CONF_Int64(block_cache_max_concurrent_inserts, "1000000");

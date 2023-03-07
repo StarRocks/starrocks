@@ -143,7 +143,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     // not serialized field
     // record all materialized views based on this Table
     @SerializedName(value = "mvs")
-    private Set<MvId> relatedMaterializedViews;
+    protected Set<MvId> relatedMaterializedViews;
 
     public Table(TableType type) {
         this.type = type;
@@ -453,19 +453,38 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return "MySQL";
         } else if (this instanceof SchemaTable) {
             return "MEMORY";
+        } else if (this instanceof HiveTable) {
+            return "Hive";
+        } else if (this instanceof HudiTable) {
+            return "Hudi";
+        } else if (this instanceof IcebergTable) {
+            return "Iceberg";
+        } else if (this instanceof DeltaLakeTable) {
+            return "DeltaLake";
+        } else if (this instanceof EsTable) {
+            return "Elasticsearch";
+        } else if (this instanceof JDBCTable) {
+            return "JDBC";
+        } else if (this instanceof FileTable) {
+            return "File";
         } else {
             return null;
         }
     }
 
     public String getMysqlType() {
-        if (this instanceof View) {
-            return "VIEW";
+        switch (type) {
+            case INLINE_VIEW:
+            case VIEW:
+            case MATERIALIZED_VIEW:
+            case LAKE_MATERIALIZED_VIEW:
+                return "VIEW";
+            case SCHEMA:
+                return "SYSTEM VIEW";
+            default:
+                // external table also returns "BASE TABLE" for BI compatibility
+                return "BASE TABLE";
         }
-        if (this instanceof MaterializedView) {
-            return "VIEW";
-        }
-        return "BASE TABLE";
     }
 
     public String getComment() {
@@ -601,5 +620,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public List<String> getPartitionColumnNames() {
         return Lists.newArrayList();
+    }
+
+    public boolean supportsUpdate() {
+        return false;
     }
 }

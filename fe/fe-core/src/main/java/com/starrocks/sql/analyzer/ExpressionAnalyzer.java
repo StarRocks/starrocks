@@ -100,7 +100,7 @@ import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpression;
-import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class ExpressionAnalyzer {
     private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
@@ -137,7 +137,8 @@ public class ExpressionAnalyzer {
 
     private boolean isMapHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
-            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
+            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_FILTER) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
                 return true;
             }
         }
@@ -148,7 +149,7 @@ public class ExpressionAnalyzer {
         return isArrayHighOrderFunction(expr) || isMapHighOrderFunction(expr);
     }
 
-    private Expr rewriteHighOrderFunction(Expr expr) {
+    private void rewriteHighOrderFunction(Expr expr, Visitor visitor, Scope scope) {
         Preconditions.checkState(expr instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
         if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)
@@ -161,7 +162,7 @@ public class ExpressionAnalyzer {
             functionCallExpr.clearChildren();
             functionCallExpr.addChild(arr1);
             functionCallExpr.addChild(arrayMap);
-            return arrayMap;
+            visitor.visit(arrayMap, scope);
         } else if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)
                 && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
             // array_sortby(lambda_func_expr, arr1...) -> array_sortby(arr1, array_map(lambda_func_expr, arr1...))
@@ -172,9 +173,21 @@ public class ExpressionAnalyzer {
             functionCallExpr.addChild(arr1);
             functionCallExpr.addChild(arrayMap);
             functionCallExpr.setType(arr1.getType());
-            return arrayMap;
+            visitor.visit(arrayMap, scope);
+        } else if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_FILTER)
+                && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
+            // map_filter((k,v)->(k,expr),map) -> map_filter(map, map_values(map_apply((k,v)->(k,expr),map)))
+            FunctionCallExpr mapApply = new FunctionCallExpr(FunctionSet.MAP_APPLY,
+                    Lists.newArrayList(functionCallExpr.getChildren()));
+            Expr map = functionCallExpr.getChild(1);
+            visitor.visit(mapApply, scope);
+
+            FunctionCallExpr mapValues = new FunctionCallExpr(FunctionSet.MAP_VALUES, Lists.newArrayList(mapApply));
+            visitor.visit(mapValues, scope);
+            functionCallExpr.clearChildren();
+            functionCallExpr.addChild(map);
+            functionCallExpr.addChild(mapValues);
         }
-        return null;
     }
 
     // only high-order functions can use lambda functions.
@@ -187,7 +200,7 @@ public class ExpressionAnalyzer {
                 funcName = expression.toString();
             }
             throw new SemanticException(funcName + " can't use lambda functions, " +
-                    "as it is not a supported high-order function.");
+                    "as it is not a supported high-order function", expression.getPos());
         }
         int childSize = expression.getChildren().size();
         // move the lambda function to the first if it is at the last.
@@ -207,21 +220,26 @@ public class ExpressionAnalyzer {
                     expr.setType(Type.ARRAY_INT); // Let it have item type.
                 }
                 if (!expr.getType().isArrayType()) {
-                    throw new SemanticException(i + "th lambda input should be arrays.");
+                    throw new SemanticException(i + "th lambda input should be arrays", expr.getPos());
                 }
                 Type itemType = ((ArrayType) expr.getType()).getItemType();
                 scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
             }
         } else {
+            Preconditions.checkState(expression instanceof FunctionCallExpr);
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expression;
             // map_apply(func, map)
-            if (!(expression.getChild(0).getChild(0) instanceof MapExpr)) {
+            if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_APPLY) &&
+                    !(expression.getChild(0).getChild(0) instanceof MapExpr)) {
                 throw new SemanticException("The right part of map lambda function (" +
-                        expression.getChild(0).toSql() + ") should have key and value arguments");
+                        expression.getChild(0).toSql() + ") should have key and value arguments",
+                        expression.getChild(0).getPos());
             }
             if (expression.getChild(0).getChildren().size() != 3) {
+                Expr child = expression.getChild(0);
                 throw new SemanticException("The left part of map lambda function (" +
-                        expression.getChild(0).toSql() + ") should have 2 arguments, but there are "
-                        + (expression.getChild(0).getChildren().size() - 1) + " arguments");
+                        child.toSql() + ") should have 2 arguments, but there are "
+                        + (child.getChildren().size() - 1) + " arguments", child.getPos());
             }
             Expr expr = expression.getChild(1);
             bottomUpAnalyze(visitor, expr, scope);
@@ -229,19 +247,25 @@ public class ExpressionAnalyzer {
                 expr.setType(Type.ANY_MAP); // Let it have item type.
             }
             if (!expr.getType().isMapType()) {
-                throw new SemanticException("Lambda inputs should be maps.");
+                throw new SemanticException("Lambda inputs should be maps", expr.getPos());
             }
             Type keyType = ((MapType) expr.getType()).getKeyType();
             Type valueType = ((MapType) expr.getType()).getValueType();
             scope.putLambdaInput(new PlaceHolderExpr(-1, true, keyType));
             scope.putLambdaInput(new PlaceHolderExpr(-2, true, valueType));
+            // lambda functions should be rewritten before visited
+            if ((functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_FILTER))) {
+                // (k,v) -> expr => (k,v) -> (k,expr)
+                Expr lambdaFunc = functionCallExpr.getChild(0);
+                LambdaArgument larg = (LambdaArgument) lambdaFunc.getChild(1);
+                Expr slotRef = new SlotRef(null, larg.getName(), larg.getName());
+                lambdaFunc.setChild(0, new MapExpr(Type.ANY_MAP, Lists.newArrayList(slotRef,
+                        lambdaFunc.getChild(0))));
+            }
         }
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
-        Expr res = rewriteHighOrderFunction(expression);
-        if (res != null) {
-            visitor.visit(res, scope);
-        }
+        rewriteHighOrderFunction(expression, visitor, scope);
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
@@ -272,7 +296,8 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitExpression(Expr node, Scope scope) {
-            throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
+            throw new SemanticException("not yet implemented: expression analyzer for " + node.getClass().getName(),
+                    node.getPos());
         }
 
         private void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
@@ -285,8 +310,10 @@ public class ExpressionAnalyzer {
             // User enter an invalid sql, like SELECT 'col'.b FROM tbl;
             // 'col' will be parsed as StringLiteral, it's invalid.
             // TODO(SmithCruise) We should handle this problem in parser in the future.
-            Preconditions.checkArgument(child.getType().isStructType(),
-                    String.format("%s must be a struct type, check if you are using `'`", child.toSql()));
+            if (!child.getType().isStructType()) {
+                throw new SemanticException(child.toSql() + " must be a struct type, check if you are using `'`",
+                        child.getPos());
+            }
 
             List<String> fieldNames = node.getFieldNames();
             Type tmpType = child.getType();
@@ -294,7 +321,8 @@ public class ExpressionAnalyzer {
                 StructType structType = (StructType) tmpType;
                 StructField structField = structType.getField(fieldName);
                 if (structField == null) {
-                    throw new SemanticException("Struct subfield '%s' cannot be resolved", fieldName);
+                    throw new SemanticException(String.format("Struct subfield '%s' cannot be resolved", fieldName),
+                            node.getPos());
                 }
                 tmpType = structField.getType();
             }
@@ -384,11 +412,11 @@ public class ExpressionAnalyzer {
             Expr subscript = node.getChild(1);
             if (!expr.getType().isArrayType() && !expr.getType().isMapType()) {
                 throw new SemanticException("cannot subscript type " + expr.getType()
-                        + " because it is not an array or a map");
+                        + " because it is not an array or a map", expr.getPos());
             }
             if (expr.getType().isArrayType()) {
                 if (!subscript.getType().isNumericType()) {
-                    throw new SemanticException("array subscript must have type integer");
+                    throw new SemanticException("array subscript must have type integer", subscript.getPos());
                 }
                 try {
                     if (subscript.getType().getPrimitiveType() != PrimitiveType.INT) {
@@ -417,7 +445,7 @@ public class ExpressionAnalyzer {
         public Void visitArraySliceExpr(ArraySliceExpr node, Scope scope) {
             if (!node.getChild(0).getType().isArrayType()) {
                 throw new SemanticException("cannot subscript type" +
-                        node.getChild(0).getType() + " because it is not an array");
+                        node.getChild(0).getType() + " because it is not an array", node.getChild(0).getPos());
             }
             node.setType(node.getChild(0).getType());
             return null;
@@ -428,11 +456,11 @@ public class ExpressionAnalyzer {
             Expr item = node.getChild(0);
             Expr key = node.getChild(1);
             if (!key.isLiteral() || !key.getType().isStringType()) {
-                throw new SemanticException("right operand of -> should be string literal, but got " + key);
+                throw new SemanticException("right operand of -> should be string literal, but got " + key, key.getPos());
             }
             if (!item.getType().isJsonType()) {
                 throw new SemanticException(
-                        "-> operator could only be used for json column, but got " + item.getType());
+                        "-> operator could only be used for json column, but got " + item.getType(), item.getPos());
             }
             node.setType(Type.JSON);
             return null;
@@ -441,10 +469,11 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitLambdaFunctionExpr(LambdaFunctionExpr node, Scope scope) { // (x,y) -> x+y or (k,v) -> (k1,v1)
             if (scope.getLambdaInputs().size() == 0) {
-                throw new SemanticException("Lambda Functions can only be used in high-order functions with arrays/maps.");
+                throw new SemanticException("Lambda Functions can only be used in high-order functions with arrays/maps",
+                        node.getPos());
             }
             if (scope.getLambdaInputs().size() != node.getChildren().size() - 1) {
-                throw new SemanticException("Lambda arguments should equal to lambda input arrays.");
+                throw new SemanticException("Lambda arguments should equal to lambda input arrays", node.getPos());
             }
 
             // process lambda arguments
@@ -454,7 +483,7 @@ public class ExpressionAnalyzer {
                 args.add((LambdaArgument) node.getChild(i));
                 String name = ((LambdaArgument) node.getChild(i)).getName();
                 if (set.contains(name)) {
-                    throw new SemanticException("Lambda argument: " + name + " is duplicated.");
+                    throw new SemanticException("Lambda argument: " + name + " is duplicated", node.getChild(i).getPos());
                 }
                 set.add(name);
                 // bind argument with input arrays' data type and nullable info
@@ -475,10 +504,11 @@ public class ExpressionAnalyzer {
             for (int i = 0; i < node.getChildren().size(); i++) {
                 Type type = node.getChild(i).getType();
                 if (!type.isBoolean() && !type.isNull()) {
-                    throw new SemanticException("Operand '%s' part of predicate " +
-                            "'%s' should return type 'BOOLEAN' but returns type '%s'.",
+                    String msg = String.format("Operand '%s' part of predicate " +
+                                    "'%s' should return type 'BOOLEAN' but returns type '%s'",
                             AstToStringBuilder.toString(node), AstToStringBuilder.toString(node.getChild(i)),
                             type.toSql());
+                    throw new SemanticException(msg, node.getChild(i).getPos());
                 }
             }
 
@@ -497,7 +527,7 @@ public class ExpressionAnalyzer {
                 if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "between predicate type " + type.toSql() + " with type " + compatibleType.toSql()
-                                    + " is invalid.");
+                                    + " is invalid", node.getPos());
                 }
             }
 
@@ -512,13 +542,13 @@ public class ExpressionAnalyzer {
             Type compatibleType =
                     TypeManager.getCompatibleTypeForBinary(node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
-            final String ERROR_MSG = "Column type %s does not support binary predicate operation.";
+            final String ERROR_MSG = "Column type %s does not support binary predicate operation";
             if (!Type.canCastTo(type1, compatibleType)) {
-                throw new SemanticException(String.format(ERROR_MSG, type1.toSql()));
+                throw new SemanticException(String.format(ERROR_MSG, type1.toSql()), node.getPos());
             }
 
             if (!Type.canCastTo(type2, compatibleType)) {
-                throw new SemanticException(String.format(ERROR_MSG, type1.toSql()));
+                throw new SemanticException(String.format(ERROR_MSG, type1.toSql()), node.getPos());
             }
 
             node.setType(Type.BOOLEAN);
@@ -593,7 +623,7 @@ public class ExpressionAnalyzer {
                         break;
                     default:
                         // the programmer forgot to deal with a case
-                        throw unsupportedException("Unknown arithmetic operation " + op + " in: " + node);
+                        throw new SemanticException("Unknown arithmetic operation " + op + " in: " + node, node.getPos());
                 }
 
                 if (node.getChild(0).getType().equals(Type.NULL) && node.getChild(1).getType().equals(Type.NULL)) {
@@ -604,13 +634,13 @@ public class ExpressionAnalyzer {
                 if (!Type.NULL.equals(node.getChild(0).getType()) && !Type.canCastTo(t1, lhsType)) {
                     throw new SemanticException(
                             "cast type " + node.getChild(0).getType().toSql() + " with type " + lhsType.toSql()
-                                    + " is invalid.");
+                                    + " is invalid", node.getPos());
                 }
 
                 if (!Type.NULL.equals(node.getChild(1).getType()) && !Type.canCastTo(t2, rhsType)) {
                     throw new SemanticException(
                             "cast type " + node.getChild(1).getType().toSql() + " with type " + rhsType.toSql()
-                                    + " is invalid.");
+                                    + " is invalid", node.getPos());
                 }
 
                 Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {lhsType, rhsType},
@@ -631,9 +661,11 @@ public class ExpressionAnalyzer {
                 node.setType(Type.BIGINT);
                 node.setFn(fn);
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_POSTFIX) {
-                throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
+                throw new SemanticException("not yet implemented: expression analyzer for " + node.getClass().getName(),
+                        node.getPos());
             } else {
-                throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
+                throw new SemanticException("not yet implemented: expression analyzer for " + node.getClass().getName(),
+                        node.getPos());
             }
 
             return null;
@@ -663,8 +695,9 @@ public class ExpressionAnalyzer {
             Function fn = Expr.getBuiltinFunction(funcOpName.toLowerCase(), argumentTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn == null) {
-                throw new SemanticException("No matching function with signature: %s(%s).", funcOpName, Joiner.on(", ")
+                String msg = String.format("No matching function with signature: %s(%s)", funcOpName, Joiner.on(", ")
                         .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                throw new SemanticException(msg, node.getPos());
             }
             node.setType(fn.getReturnType());
             node.setFn(fn);
@@ -684,22 +717,22 @@ public class ExpressionAnalyzer {
             List<Expr> queryExpressions = Lists.newArrayList();
             node.collect(arg -> arg instanceof Subquery, queryExpressions);
             if (queryExpressions.size() > 0 && node.getChildren().size() > 2) {
-                throw new SemanticException("In Predicate only support literal expression list");
+                throw new SemanticException("In Predicate only support literal expression list", node.getPos());
             }
 
             // check compatible type
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
 
-            for (Type type : list) {
-                // TODO(mofei) support it
+            for (Expr child : node.getChildren()) {
+                Type type = child.getType();
                 if (type.isJsonType()) {
-                    throw new SemanticException("InPredicate of JSON is not supported");
+                    throw new SemanticException("InPredicate of JSON is not supported", child.getPos());
                 }
                 if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "in predicate type " + type.toSql() + " with type " + compatibleType.toSql()
-                                    + " is invalid.");
+                                    + " is invalid", child.getPos());
                 }
             }
 
@@ -719,7 +752,7 @@ public class ExpressionAnalyzer {
                             collect(Collectors.toList());
             if (leftTypes.size() != rightTypes.size()) {
                 throw new SemanticException(
-                        "subquery must return the same number of columns as provided by the IN predicate");
+                        "subquery must return the same number of columns as provided by the IN predicate", node.getPos());
             }
 
             for (int i = 0; i < rightTypes.size(); ++i) {
@@ -731,7 +764,7 @@ public class ExpressionAnalyzer {
                 if (!Type.canCastTo(leftTypes.get(i), rightTypes.get(i))) {
                     throw new SemanticException(
                             "in predicate type " + leftTypes.get(i).toSql() + " with type " + rightTypes.get(i).toSql()
-                                    + " is invalid.");
+                                    + " is invalid");
                 }
             }
             return null;
@@ -743,7 +776,7 @@ public class ExpressionAnalyzer {
                 BigInteger value = ((LargeIntLiteral) node).getValue();
                 if (value.compareTo(LargeIntLiteral.LARGE_INT_MIN) < 0 ||
                         value.compareTo(LargeIntLiteral.LARGE_INT_MAX) > 0) {
-                    throw new SemanticException("Number Overflow. literal: " + value);
+                    throw new SemanticException(PARSER_ERROR_MSG.numOverflow(value.toString()), node.getPos());
                 }
             }
             return null;
@@ -765,13 +798,13 @@ public class ExpressionAnalyzer {
             if (!type1.isStringType() && !type1.isNull()) {
                 throw new SemanticException(
                         "left operand of " + node.getOp().toString() + " must be of type STRING: " +
-                                AstToStringBuilder.toString(node));
+                                AstToStringBuilder.toString(node), node.getPos());
             }
 
             if (!type2.isStringType() && !type2.isNull()) {
                 throw new SemanticException(
                         "right operand of " + node.getOp().toString() + " must be of type STRING: " +
-                                AstToStringBuilder.toString(node));
+                                AstToStringBuilder.toString(node), node.getPos());
             }
 
             // check pattern
@@ -780,7 +813,7 @@ public class ExpressionAnalyzer {
                     Pattern.compile(((StringLiteral) node.getChild(1)).getValue());
                 } catch (PatternSyntaxException e) {
                     throw new SemanticException(
-                            "Invalid regular expression in '" + AstToStringBuilder.toString(node) + "'");
+                            "Invalid regular expression in '" + AstToStringBuilder.toString(node) + "'", node.getPos());
                 }
             }
 
@@ -796,7 +829,7 @@ public class ExpressionAnalyzer {
                 if (expr.getType().isOnlyMetricType() ||
                         (expr.getType().isComplexType() && !(node instanceof IsNullPredicate))) {
                     throw new SemanticException(
-                            "HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate");
+                            "HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate", node.getPos());
                 }
             }
         }
@@ -813,7 +846,8 @@ public class ExpressionAnalyzer {
             if (!Type.canCastTo(cast.getChild(0).getType(), castType)) {
                 throw new SemanticException("Invalid type cast from " + cast.getChild(0).getType().toSql() + " to "
                         + castType.toSql() + " in sql `" +
-                        AstToStringBuilder.toString(cast.getChild(0)).replace("%", "%%") + "`");
+                        AstToStringBuilder.toString(cast.getChild(0)).replace("%", "%%") + "`",
+                        cast.getPos());
             }
 
             cast.setType(castType);
@@ -854,7 +888,7 @@ public class ExpressionAnalyzer {
             } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 if (fn instanceof AggregateFunction) {
-                    throw new SemanticException("Time Type can not used in %s function", fnName);
+                    throw new SemanticException("Time Type can not used in" + fnName + " function", node.getPos());
                 }
             } else if (FunctionSet.STR_TO_DATE.equals(fnName)) {
                 fn = getStrToDateFunction(node, argumentTypes);
@@ -867,22 +901,24 @@ public class ExpressionAnalyzer {
             }
 
             if (fn == null) {
-                throw new SemanticException("No matching function with signature: %s(%s).",
+                String msg = String.format("No matching function with signature: %s(%s)",
                         fnName,
                         node.getParams().isStar() ? "*" : Joiner.on(", ")
                                 .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                throw new SemanticException(msg, node.getPos());
             }
 
             if (fn instanceof TableFunction) {
-                throw unsupportedException("Table function cannot be used in expression");
+                throw new SemanticException("Table function cannot be used in expression", node.getPos());
             }
 
             for (int i = 0; i < fn.getNumArgs(); i++) {
                 if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
                         !Type.canCastToAsFunctionParameter(argumentTypes[i], fn.getArgs()[i])) {
-                    throw new SemanticException("No matching function with signature: %s(%s).", fnName,
+                    String msg = String.format("No matching function with signature: %s(%s)", fnName,
                             node.getParams().isStar() ? "*" :
                                     Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
+                    throw new SemanticException(msg, node.getPos());
                 }
             }
 
@@ -891,9 +927,10 @@ public class ExpressionAnalyzer {
                 for (int i = fn.getNumArgs(); i < argumentTypes.length; i++) {
                     if (!argumentTypes[i].matchesType(varType) &&
                             !Type.canCastToAsFunctionParameter(argumentTypes[i], varType)) {
-                        throw new SemanticException("Variadic function %s(%s) can't support type: %s", fnName,
+                        String msg = String.format("Variadic function %s(%s) can't support type: %s", fnName,
                                 Arrays.stream(fn.getArgs()).map(Type::toSql).collect(Collectors.joining(", ")),
                                 argumentTypes[i]);
+                        throw new SemanticException(msg, node.getPos());
                     }
                 }
             }
@@ -910,47 +947,66 @@ public class ExpressionAnalyzer {
                 case FunctionSet.DATE_SLICE:
                     if (!(node.getChild(1) instanceof IntLiteral)) {
                         throw new SemanticException(
-                                fnName + " requires second parameter must be a constant interval");
+                                fnName + " requires second parameter must be a constant interval", node.getPos());
                     }
                     if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
                         throw new SemanticException(
-                                fnName + " requires second parameter must be greater than 0");
+                                fnName + " requires second parameter must be greater than 0", node.getPos());
                     }
                     break;
                 case FunctionSet.ARRAY_FILTER:
                     if (node.getChildren().size() != 2) {
-                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions.");
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions", node.getPos());
                     }
                     if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
                         throw new SemanticException("The first input of " + fnName +
-                                " should be an array or a lambda function.");
+                                " should be an array or a lambda function", node.getPos());
                     }
                     if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
                         throw new SemanticException("The second input of " + fnName +
-                                " should be an array or a lambda function.");
+                                " should be an array or a lambda function", node.getPos());
                     }
                     // force the second array be of Type.ARRAY_BOOLEAN
                     if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
                         throw new SemanticException("The second input of array_filter " +
-                                node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
+                                node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>", node.getPos());
                     }
                     break;
                 case FunctionSet.ARRAY_SORTBY:
                     if (node.getChildren().size() != 2) {
-                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions.");
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions", node.getPos());
                     }
                     if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
                         throw new SemanticException("The first input of " + fnName +
-                                " should be an array or a lambda function.");
+                                " should be an array or a lambda function", node.getPos());
                     }
                     if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
                         throw new SemanticException("The second input of " + fnName +
-                                " should be an array or a lambda function.");
+                                " should be an array or a lambda function", node.getPos());
                     }
                     break;
                 case FunctionSet.ARRAY_CONCAT:
                     if (node.getChildren().size() < 2) {
-                        throw new SemanticException(fnName + " should have at least two inputs");
+                        throw new SemanticException(fnName + " should have at least two inputs", node.getPos());
+                    }
+                    break;
+                case FunctionSet.MAP_FILTER:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 inputs, " +
+                                "but there are just " + node.getChildren().size() + " inputs.");
+                    }
+                    if (!node.getChild(0).getType().isMapType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be a map or a lambda function.");
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException("The second input of " + fnName +
+                                " should be a array or a lambda function.");
+                    }
+                    // force the second array be of Type.ARRAY_BOOLEAN
+                    if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
+                        throw new SemanticException("The second input of map_filter " +
+                                node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
                     }
                     break;
             }
@@ -997,10 +1053,10 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitGroupingFunctionCall(GroupingFunctionCallExpr node, Scope scope) {
             if (node.getChildren().size() < 1) {
-                throw new SemanticException("GROUPING functions required at least one parameters");
+                throw new SemanticException("GROUPING functions required at least one parameters", node.getPos());
             }
             if (node.getChildren().stream().anyMatch(e -> !(e instanceof SlotRef))) {
-                throw new SemanticException("grouping functions only support column.");
+                throw new SemanticException("grouping functions only support column", node.getPos());
             }
 
             Type[] childTypes = new Type[1];
@@ -1033,7 +1089,7 @@ public class ExpressionAnalyzer {
 
             // check is scalar type
             if (node.getChildren().stream().anyMatch(d -> !d.getType().isScalarType())) {
-                throw new SemanticException("case-when only support scalar type");
+                throw new SemanticException("case-when only support scalar type", node.getPos());
             }
 
             // check when type
@@ -1055,7 +1111,7 @@ public class ExpressionAnalyzer {
             for (Type type : whenTypes) {
                 if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException("Invalid when type cast " + type.toSql()
-                            + " to " + compatibleType.toSql());
+                            + " to " + compatibleType.toSql(), node.getPos());
                 }
             }
 
@@ -1075,7 +1131,7 @@ public class ExpressionAnalyzer {
             for (Type type : thenTypes) {
                 if (!Type.canCastTo(type, returnType)) {
                     throw new SemanticException("Invalid then type cast " + type.toSql()
-                            + " to " + returnType.toSql());
+                            + " to " + returnType.toSql(), node.getPos());
                 }
             }
 

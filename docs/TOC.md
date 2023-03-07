@@ -22,6 +22,8 @@
   + [Data compression](./table_design/data_compression.md)
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
+  + Concepts
+    + [Strict mode](./loading/load_concept/strict_mode.md)
   + [Overview of data loading](./loading/Loading_intro.md)
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
@@ -78,6 +80,7 @@
     + [Backup and restore](./administration/Backup_and_restore.md)
     + [Configuration](./administration/Configuration.md)
     + [Monitor and alert](./administration/Monitor_and_Alert.md)
+    + [Manage audit logs within StarRocks via Audit Loader](./administration/audit_loader.md)
     + [Manage a cluster](./administration/Cluster_administration.md)
     + [Enable FQDN access](./administration/enable_fqdn.md)
     + [Configure a time zone](./administration/timezone.md)
@@ -117,6 +120,7 @@
       + [SHOW GRANTS](./sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
       + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
     + Cluster Management
+      + [ADD SQLBLACKLIST](./sql-reference/sql-statements/Administration/ADD%20SQLBLACKLIST.md)
       + [ADMIN CANCEL REPAIR TABLE](./sql-reference/sql-statements/Administration/ADMIN%20CANCEL%20REPAIR.md)
       + [ADMIN CHECK TABLET](./sql-reference/sql-statements/Administration/ADMIN%20CHECK%20TABLET.md)
       + [ADMIN REPAIR TABLE](./sql-reference/sql-statements/Administration/ADMIN%20REPAIR.md)
@@ -130,9 +134,13 @@
       + [CANCEL DECOMMISSION](./sql-reference/sql-statements/Administration/CANCEL%20DECOMMISSION.md)
       + [CREATE FILE](./sql-reference/sql-statements/Administration/CREATE%20FILE.md)
       + [CREATE RESOURCE GROUP](./sql-reference/sql-statements/Administration/CREATE%20RESOURCE%20GROUP.md)
+      + [DELETE SQLBLACKLIST](./sql-reference/sql-statements/Administration/DELETE%20SQLBLACKLIST.md)
       + [DROP FILE](./sql-reference/sql-statements/Administration/DROP%20FILE.md)
       + [DROP RESOURCE GROUP](./sql-reference/sql-statements/Administration/DROP%20RESOURCE%20GROUP.md)
+      + [EXPLAIN](./sql-reference/sql-statements/Administration/EXPLAIN.md)
       + [INSTALL PLUGIN](./sql-reference/sql-statements/Administration/INSTALL%20PLUGIN.md)
+      + [KILL](./sql-reference/sql-statements/Administration/KILL.md)
+      + [SET](./sql-reference/sql-statements/Administration/SET.md)
       + [SHOW BACKENDS](./sql-reference/sql-statements/Administration/SHOW%20BACKENDS.md)
       + [SHOW BROKER](./sql-reference/sql-statements/Administration/SHOW%20BROKER.md)
       + [SHOW COMPUTE NODES](./sql-reference/sql-statements/Administration/SHOW%20COMPUTE%20NODES.md)
@@ -144,7 +152,9 @@
       + [SHOW PROC](./sql-reference/sql-statements/Administration/SHOW%20PROC.md)
       + [SHOW PROCESSLIST](./sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md)
       + [SHOW RESOURCE GROUP](./sql-reference/sql-statements/Administration/SHOW%20RESOURCE%20GROUP.md)
+      + [SHOW SQLBLACKLIST](./sql-reference/sql-statements/Administration/SHOW%20SQLBLACKLIST.md)
       + [SHOW TABLE STATUS](./sql-reference/sql-statements/Administration/SHOW%20TABLE%20STATUS.md)
+      + [SHOW VARIABLES](./sql-reference/sql-statements/Administration/SHOW%20VARIABLES.md)
       + [UNINSTALL PLUGIN](./sql-reference/sql-statements/Administration/UNINSTALL%20PLUGIN.md)
     + DDL
       + [ALTER DATABASE](./sql-reference/sql-statements/data-definition/ALTER%20DATABASE.md)

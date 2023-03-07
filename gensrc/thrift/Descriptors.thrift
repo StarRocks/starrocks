@@ -209,6 +209,8 @@ struct TOlapTablePartition {
     7: optional list<Exprs.TExprNode> end_keys
 
     8: optional list<list<Exprs.TExprNode>> in_keys
+    // for automatic partition
+    9: optional bool is_shadow_partition = false
 }
 
 struct TOlapTablePartitionParam {

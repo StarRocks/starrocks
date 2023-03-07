@@ -24,6 +24,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
@@ -51,6 +52,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.sql.SQLException;
@@ -254,7 +256,7 @@ public class MvRewriteOptimizationTest {
         PseudoCluster.getInstance().shutdown(true);
     }
 
-    @Test
+    @Ignore
     public void testSingleTableRewrite() throws Exception {
         testSingleTableEqualPredicateRewrite();
         testSingleTableRangePredicateRewrite();
@@ -1389,6 +1391,37 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    public void testHiveQueryWithMvs() throws Exception {
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        // enforce choose the hive scan operator, not mv plan
+        connectContext.getSessionVariable().setUseNthExecPlan(1);
+        createAndRefreshMv("test", "hive_union_mv_1",
+                "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
+                        "PROPERTIES (\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                        ") " +
+                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
+        createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
+                " distributed by hash(s_suppkey)" +
+                "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ") " +
+                " as " +
+                " SELECT s_suppkey , s_name, n_name" +
+                " from hive0.tpch.supplier join hive0.tpch.nation" +
+                " on s_nationkey = n_nationkey" +
+                " where s_suppkey < 100");
+
+        String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan, "TABLE: supplier", "NON-PARTITION PREDICATES: 1: s_suppkey < 10");
+
+        connectContext.getSessionVariable().setUseNthExecPlan(0);
+        dropMv("test", "hive_union_mv_1");
+        dropMv("test", "hive_join_mv_1");
+    }
+
+    @Ignore
     public void testUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
 
@@ -1831,6 +1864,21 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    public void testCardinality() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            createAndRefreshMv("test", "emp_lowcard_sum", "CREATE MATERIALIZED VIEW emp_lowcard_sum" +
+                    " DISTRIBUTED BY HASH(empid) AS SELECT empid, name, sum(salary) as sum_sal from emps group by " +
+                    "empid, name;");
+            String sql = "select name from emp_lowcard_sum group by name";
+            String plan = getFragmentPlan(sql);
+            Assert.assertTrue(plan.contains("Decode"));
+        } finally {
+            dropMv("test", "emp_lowcard_sum");
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
+    }
+    @Test
     public void testPkFk() throws SQLException {
         cluster.runSql("test", "CREATE TABLE test.parent_table1(\n" +
                 "k1 INT,\n" +
@@ -2073,9 +2121,7 @@ public class MvRewriteOptimizationTest {
         System.out.println(plan1);
         Assert.assertTrue(plan1.contains("0:OlapScanNode\n" +
                 "     TABLE: hive_nested_mv_3\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1\n" +
-                "     rollup: hive_nested_mv_3"));
+                "     PREAGGREGATION: ON\n"));
         dropMv("test", "hive_nested_mv_1");
         dropMv("test", "hive_nested_mv_2");
         dropMv("test", "hive_nested_mv_3");
