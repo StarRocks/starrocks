@@ -25,6 +25,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
@@ -94,8 +95,10 @@ public class HiveConnector implements Connector {
             updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
                     .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
         }
-        updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
-                .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
+        if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
+            updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                    .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
+        }
     }
 
     @Override

@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
@@ -21,12 +22,10 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.spark_project.guava.collect.Lists;
 
 import java.util.List;
 import java.util.Map;
@@ -47,12 +46,12 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
     }
 
     public void registerCacheUpdateProcessor(String catalogName, CacheUpdateProcessor cache) {
-        LOG.info("register updating {} metadata cache to ConnectorTableMetadataProcessor", catalogName);
+        LOG.info("register to update {} metadata cache in the ConnectorTableMetadataProcessor", catalogName);
         cacheUpdateProcessors.put(catalogName, cache);
     }
 
     public void unRegisterCacheUpdateProcessor(String catalogName) {
-        LOG.info("stop to register updating {} metadata cache to ConnectorTableMetadataProcessor", catalogName);
+        LOG.info("unregister to update {} metadata cache in the ConnectorTableMetadataProcessor", catalogName);
         cacheUpdateProcessors.remove(catalogName);
     }
 
@@ -72,14 +71,11 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
 
     private void refreshCatalogTable() {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        List<String> catalogNames = com.google.common.collect.Lists.newArrayList(cacheUpdateProcessors.keySet());
+        List<String> catalogNames = Lists.newArrayList(cacheUpdateProcessors.keySet());
         for (String catalogName : catalogNames) {
             CacheUpdateProcessor updateProcessor = cacheUpdateProcessors.get(catalogName);
             if (updateProcessor == null) {
                 LOG.error("Failed to get cacheUpdateProcessor by catalog {}.", catalogName);
-                continue;
-            }
-            if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
                 continue;
             }
 

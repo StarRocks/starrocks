@@ -26,6 +26,7 @@ import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Map;
@@ -76,9 +77,11 @@ public class HudiConnector implements Connector {
     }
 
     public void onCreate() {
-        Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
-        updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
-                .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
+        if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
+            Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
+            updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                    .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
+        }
     }
 
     public CloudConfiguration getCloudConfiguration() {
