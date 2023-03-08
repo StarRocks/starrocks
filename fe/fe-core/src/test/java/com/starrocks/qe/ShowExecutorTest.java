@@ -1097,6 +1097,7 @@ public class ShowExecutorTest {
         };
 
         ShowTableStmt stmt = new ShowTableStmt("test", true, null, null, "hive_catalog");
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
