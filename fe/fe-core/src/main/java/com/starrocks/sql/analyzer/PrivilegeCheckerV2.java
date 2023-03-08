@@ -194,8 +194,6 @@ import java.util.Map;
 import java.util.Set;
 
 public class PrivilegeCheckerV2 {
-    private static final String EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG = "external catalog is not supported for now!";
-
     private PrivilegeCheckerV2() {
     }
 
@@ -210,11 +208,10 @@ public class PrivilegeCheckerV2 {
         if (catalogName == null) {
             catalogName = context.getCurrentCatalog();
         }
-        if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
-            return;
+        if (!PrivilegeActions.checkTableAction(context, catalogName, tableName.getDb(), tableName.getTbl(), action)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
+                    action.toString(), context.getQualifiedUser(), context.getRemoteIP(), tableName);
         }
-        checkTableAction(context, tableName.getDb(), tableName.getTbl(), action);
     }
 
     public static void checkTableAction(ConnectContext context,
@@ -232,11 +229,10 @@ public class PrivilegeCheckerV2 {
         if (catalogName == null) {
             catalogName = context.getCurrentCatalog();
         }
-        if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
-            return;
+        if (!PrivilegeActions.checkAnyActionOnTable(context, catalogName, tableName.getDb(), tableName.getTbl())) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_TABLE_DENIED,
+                    context.getQualifiedUser(), tableName);
         }
-        checkAnyActionOnTable(context, tableName.getDb(), tableName.getTbl());
     }
 
     static void checkAnyActionOnTable(ConnectContext context, String dbName, String tableName) {
@@ -252,10 +248,6 @@ public class PrivilegeCheckerV2 {
         String catalogName = tableName.getCatalog();
         if (catalogName == null) {
             catalogName = context.getCurrentCatalog();
-        }
-        if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
-            return;
         }
         String actionStr = action.toString();
         if (!PrivilegeActions.checkMaterializedViewAction(context, tableName.getDb(), tableName.getTbl(), action)) {
@@ -286,11 +278,7 @@ public class PrivilegeCheckerV2 {
 
     static void checkDbAction(ConnectContext context, String catalogName, String dbName,
                               PrivilegeType action) {
-        if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
-            return;
-        }
-        if (!PrivilegeActions.checkDbAction(context, dbName, action)) {
+        if (!PrivilegeActions.checkDbAction(context, catalogName, dbName, action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     context.getQualifiedUser(), dbName);
         }
@@ -311,24 +299,14 @@ public class PrivilegeCheckerV2 {
     }
 
     static void checkAnyActionOnDb(ConnectContext context, String catalogName, String dbName) {
-        if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
-            return;
-        }
-
-        if (!PrivilegeActions.checkAnyActionOnDb(context, dbName)) {
+        if (!PrivilegeActions.checkAnyActionOnDb(context, catalogName, dbName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     context.getQualifiedUser(), dbName);
         }
     }
 
     static void checkAnyActionOnOrInDb(ConnectContext context, String catalogName, String dbName) {
-        if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
-            return;
-        }
-
-        if (!PrivilegeActions.checkAnyActionOnOrInDb(context, dbName)) {
+        if (!PrivilegeActions.checkAnyActionOnOrInDb(context, catalogName, dbName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     context.getQualifiedUser(), dbName);
         }
@@ -338,10 +316,6 @@ public class PrivilegeCheckerV2 {
         String catalogName = tableName.getCatalog();
         if (catalogName == null) {
             catalogName = context.getCurrentCatalog();
-        }
-        if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
-            return;
         }
         String actionStr = action.toString();
         if (!PrivilegeActions.checkViewAction(context, tableName.getDb(), tableName.getTbl(), action)) {
@@ -381,7 +355,7 @@ public class PrivilegeCheckerV2 {
             }
         } else if (StatsConstants.DEFAULT_ALL_ID == tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
             getTableNamesInDb(tableNames, dbId);
-        } else if (dbId == StatsConstants.DEFAULT_ALL_ID) {
+        } else {
             List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
             for (Long id : dbIds) {
                 getTableNamesInDb(tableNames, id);
@@ -697,11 +671,6 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
-            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            if (globalStateMgr.getDb(statement.getDbName()) == null) {
-                return null;
-            }
-
             checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DROP);
             return null;
         }
@@ -792,7 +761,7 @@ public class PrivilegeCheckerV2 {
             if (CatalogMgr.isInternalCatalog(statement.getCatalogName())) {
                 return null;
             }
-            if (!PrivilegeActions.checkAnyActionOnCatalog(context, statement.getCatalogName())) {
+            if (!PrivilegeActions.checkAnyActionOnOrInCatalog(context, statement.getCatalogName())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
                         context.getQualifiedUser(), statement.getCatalogName());
             }
@@ -1257,12 +1226,6 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropTableStatement(DropTableStmt statement, ConnectContext context) {
-            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            if (statement.isSetIfExists() &&
-                    globalStateMgr.getDb(statement.getDbName()).getTable(statement.getTableName()) == null) {
-                return null;
-            }
-
             if (statement.isView()) {
                 checkViewAction(context, statement.getTbl(), PrivilegeType.DROP);
             } else {
