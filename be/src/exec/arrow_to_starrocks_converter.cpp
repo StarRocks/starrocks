@@ -565,7 +565,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
             return 1000000L;
         }
         case arrow::TimeUnit::type::NANO: {
-            return 1000000000L;
+            return 0L;
         }
         default:
             return 0L;
