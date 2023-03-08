@@ -264,6 +264,7 @@ public:
         return _operators.empty() ? nullptr : down_cast<SourceOperator*>(_operators.front().get());
     }
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
+    void update_peak_driver_queue_size_counter(size_t new_value);
     // drivers that waits for runtime filters' readiness must be marked PRECONDITION_NOT_READY and put into
     // PipelineDriverPoller.
     void mark_precondition_not_ready();
@@ -501,6 +502,8 @@ protected:
     MonotonicStopWatch* _input_empty_timer_sw = nullptr;
     MonotonicStopWatch* _output_full_timer_sw = nullptr;
     MonotonicStopWatch* _pending_finish_timer_sw = nullptr;
+
+    RuntimeProfile::HighWaterMarkCounter* _peak_driver_queue_size_counter = nullptr;
 };
 
 } // namespace pipeline

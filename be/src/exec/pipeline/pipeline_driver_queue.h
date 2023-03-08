@@ -215,6 +215,8 @@ private:
 
     size_t _sum_cpu_limit = 0;
 
+    size_t _num_drivers = 0;
+
     // Cache the minimum entity, used to check should_yield() without lock.
     std::atomic<workgroup::WorkGroupDriverSchedEntity*> _min_wg_entity = nullptr;
 
