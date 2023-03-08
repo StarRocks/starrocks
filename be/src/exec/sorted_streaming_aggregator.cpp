@@ -261,7 +261,7 @@ private:
     buffer_range buffer[2];
 };
 
-SortedStreamingAggregator::SortedStreamingAggregator(AggregatorParamsPtr&& params) : Aggregator(std::move(params)) {}
+SortedStreamingAggregator::SortedStreamingAggregator(AggregatorParamsPtr params) : Aggregator(std::move(params)) {}
 
 SortedStreamingAggregator::~SortedStreamingAggregator() {
     if (_state) {
@@ -276,7 +276,7 @@ Status SortedStreamingAggregator::prepare(RuntimeState* state, ObjectPool* pool,
     return Status::OK();
 }
 
-StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size) {
+StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size, bool is_update_phase) {
     if (chunk_size == 0) {
         return std::make_shared<Chunk>();
     }
@@ -293,7 +293,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
 
     RETURN_IF_ERROR(_compute_group_by(chunk_size));
 
-    RETURN_IF_ERROR(_update_states(chunk_size));
+    RETURN_IF_ERROR(_update_states(chunk_size, is_update_phase));
 
     // selector[i] == 0 means selected
     std::vector<uint8_t> selector(chunk_size);
@@ -353,7 +353,7 @@ Status SortedStreamingAggregator::_compute_group_by(size_t chunk_size) {
     return Status::OK();
 }
 
-Status SortedStreamingAggregator::_update_states(size_t chunk_size) {
+Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_update) {
     // TODO: split the states
     // allocate state stage
     {
@@ -384,13 +384,12 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size) {
         }
     }
 
-    bool use_intermediate = _use_intermediate_as_input();
     // prepare output column
     // batch_update/merge stage
     {
         SCOPED_TIMER(_agg_stat->agg_compute_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-            if (!_is_merge_funcs[i] && !use_intermediate) {
+            if (!_is_merge_funcs[i] && is_update) {
                 _agg_functions[i]->update_batch(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
                                                 _agg_input_raw_columns[i].data(), _tmp_agg_states.data());
             } else {

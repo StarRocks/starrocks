@@ -24,6 +24,8 @@
 #include "exec/pipeline/aggregate/aggregate_streaming_source_operator.h"
 #include "exec/pipeline/aggregate/sorted_aggregate_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/sorted_aggregate_streaming_source_operator.h"
+#include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
+#include "exec/pipeline/aggregate/spillable_aggregate_blocking_source_operator.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
@@ -171,18 +173,25 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
                                                                     pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
+    auto executor = std::make_shared<IOTaskExecutor>(ExecEnv::GetInstance()->pipeline_sink_io_pool());
+    auto degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
+    auto spill_channel_factory =
+            std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
+
     // create aggregator factory
     // shared by sink operator and source operator
     auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
 
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
     auto* upstream_source_op = context->source_operator(ops_with_sink);
-    auto operators_generator = [this, should_cache, upstream_source_op, context](bool post_cache) {
+    auto operators_generator = [this, should_cache, upstream_source_op, context,
+                                spill_channel_factory](bool post_cache) {
         // shared by sink operator and source operator
         auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
-        auto sink_operator = std::make_shared<SinkFactory>(context->next_operator_id(), id(), aggregator_factory);
+        auto sink_operator = std::make_shared<SinkFactory>(context->next_operator_id(), id(), aggregator_factory,
+                                                           spill_channel_factory);
         auto source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), aggregator_factory);
 
         context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
@@ -256,8 +265,14 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
                 _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
                                        SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context);
     } else {
-        ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
-                                                 AggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
+        if (runtime_state()->enable_spill() && has_group_by_keys) {
+            ops_with_source =
+                    _decompose_to_pipeline<StreamingAggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
+                                           SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
+        } else {
+            ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
+                                                     AggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
+        }
     }
 
     // insert local shuffle after sorted streaming aggregate
