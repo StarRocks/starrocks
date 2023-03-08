@@ -24,6 +24,7 @@
 #include "common/statusor.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/blocking_priority_queue.hpp"
+#include "util/runtime_profile.h"
 
 namespace starrocks::workgroup {
 
@@ -52,6 +53,11 @@ public:
     WorkGroup* workgroup;
     WorkFunction work_function;
     int priority = 0;
+<<<<<<< HEAD
+=======
+    std::shared_ptr<ScanTaskGroup> task_group = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* peak_scan_task_queue_size_counter = nullptr;
+>>>>>>> cd90d15af ([Enhancement] Add profile about schedule queue and load (#19082))
 };
 
 class ScanTaskQueue {
