@@ -46,6 +46,8 @@ struct GroupReaderParam {
         // column type in chunk
         TypeDescriptor col_type_in_chunk;
 
+        const TIcebergSchemaField* t_iceberg_schema_field = nullptr;
+
         SlotId slot_id;
     };
 

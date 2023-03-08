@@ -20,12 +20,16 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.thrift.TIcebergSchema;
+import com.starrocks.thrift.TIcebergSchemaField;
 import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,5 +90,30 @@ public class IcebergApiConverter {
             default:
                 throw new StarRocksConnectorException("Unexpected file format: " + format);
         }
+    }
+
+    public static TIcebergSchema getTIcebergSchema(Schema schema) {
+        Types.StructType rootType = schema.asStruct();
+        TIcebergSchema tIcebergSchema = new TIcebergSchema();
+        List<TIcebergSchemaField> fields = new ArrayList<>(rootType.fields().size());
+        for (Types.NestedField nestedField : rootType.fields()) {
+            fields.add(getTIcebergSchemaField(nestedField));
+        }
+        tIcebergSchema.setFields(fields);
+        return tIcebergSchema;
+    }
+
+    private static TIcebergSchemaField getTIcebergSchemaField(Types.NestedField nestedField) {
+        TIcebergSchemaField tIcebergSchemaField = new TIcebergSchemaField();
+        tIcebergSchemaField.setField_id(nestedField.fieldId());
+        tIcebergSchemaField.setName(nestedField.name());
+        if (nestedField.type().isNestedType()) {
+            List<TIcebergSchemaField> children = new ArrayList<>(nestedField.type().asNestedType().fields().size());
+            for (Types.NestedField child : nestedField.type().asNestedType().fields()) {
+                children.add(getTIcebergSchemaField(child));
+            }
+            tIcebergSchemaField.setChildren(children);
+        }
+        return tIcebergSchemaField;
     }
 }
