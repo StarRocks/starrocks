@@ -34,7 +34,7 @@ SHOW BACKUP [FROM <db_name>]
 | UploadFinishedTime   | Snapshot upload completion time.                             |
 | FinishedTime         | Task completion Time.                                        |
 | UnfinishedTasks      | Unfinished subtask IDs in the SNAPSHOTING and UPLOADING phases. |
-| Progress             | The progress of UPLOADING tasks.                             |
+| Progress             | The progress of snapshot uploading tasks.                             |
 | TaskErrMsg           | Error messages.                                              |
 | Status               | Status information.                                          |
 | Timeout              | Task timeout. Unit: second.                                  |
