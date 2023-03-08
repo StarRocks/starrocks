@@ -138,7 +138,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
 ### `WITH BROKER`
 
-In StarRocks v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. From StarRocks v2.5 onwards, you no longer need to specify a broker group, but you still need to retain the `WITH BROKER` keyword.
+In v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker you want to use. From v2.5 onwards, you no longer need to specify a broker, but you still need to retain the `WITH BROKER` keyword. For more information, see [Load data from HDFS or cloud storage > Background information](../../../loading/BrokerLoad.md#background-information).
 
 ### `broker_properties`
 
@@ -182,7 +182,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
     | kerberos_keytab         | The save path of the Kerberos keytab file. |
     | kerberos_keytab_content | The Base64-encoded content of the the Kerberos keytab file. You can choose to specify either `kerberos_keytab` or `kerberos_keytab_content`. |
 
-    If you use Kerberos authentication, you must open the broker startup script file **start_broker.sh** and modify line 42 of the file to enable the Broker process to read the **krb5.conf** file. Example:
+    If you have configured multiple Kerberos users, you must deploy an independent broker and in the load statement you must input `WITH BROKER "<broker_name>"` to specify the broker you want to use. Additionally, you must open the broker startup script file **start_broker.sh** and modify line 42 of the file to enable the broker to read the **krb5.conf** file. Example:
 
     ```Plain
     export JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -Dfile.encoding=UTF-8 -Djava.security.krb5.conf=/etc/krb5.conf"
@@ -190,32 +190,36 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
     > **NOTE**
     >
-    > In the preceding example, `/etc/krb5.conf` can be replaced with your actual save path of the **krb5.conf** file. Make sure that the Broker process has read permissions on that file. If multiple broker groups are deployed, you must modify the **start_broker.sh** file for each of the broker groups and then restart the nodes that host the broker groups to make the modifications take effect.
+    > In the preceding example, `/etc/krb5.conf` can be replaced with your actual save path of the **krb5.conf** file. Make sure that the broker has read permissions on that file. If multiple brokers are deployed, you must modify the **start_broker.sh** file for each of these brokers and then restart the nodes that host the brokers to make the modifications take effect.
 
 - HA configuration
 
-  You can configure an HA mechanism for the NameNode of the HDFS cluster. This way, if the NameNode is switched over to another node, StarRocks can automatically identify the new node that serves as the NameNode. To enable brokers to read information about the nodes of the HDFS cluster, perform either of the following operations:
+  You can configure an HA mechanism for the NameNode of the HDFS cluster. This way, if the NameNode is switched over to another node, StarRocks can automatically identify the new node that serves as the NameNode. This includes the following two scenarios:
 
-  Place the `hdfs-site.xml` file to the `{deploy}/conf` path on each node that hosts brokers. As such, StarRocks will add the `{deploy_dir}/conf/` path to the environment variable `CLASSPATH` upon broker startup, allowing brokers to read the HDFS node information.
+  - If you load data from a single HDFS cluster, you can perform broker-free loading. In this case, you need to place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE and each BE.
 
-  Add the following HA configuration at job creation:
+  - If you load data from multiple HDFS clusters, you can perform broker-based loading. In this case, take one of the following actions to enable brokers to read information about the HDFS cluster nodes:
 
-  ```Plain
-  "dfs.nameservices" = "ha_cluster",
-  "dfs.ha.namenodes.ha_cluster" = "ha_n1,ha_n2",
-  "dfs.namenode.rpc-address.ha_cluster.ha_n1" = "<hdfs_host>:<hdfs_port>",
-  "dfs.namenode.rpc-address.ha_cluster.ha_n2" = "<hdfs_host>:<hdfs_port>",
-  "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
-  ```
+    - Place the `hdfs-site.xml` file to the `{deploy}/conf` path on the node that hosts the broker for each HDFS cluster. As such, StarRocks will add the `{deploy_dir}/conf/` path to the environment variable `CLASSPATH` upon broker startup, allowing the broker to read information about the nodes in that HDFS cluster.
 
-  The following table describes the parameters in the HA configuration.
+    - Add the following HA configuration at job creation:
 
-  | Parameter                          | Description                                                  |
-  | ---------------------------------- | ------------------------------------------------------------ |
-  | dfs.nameservices                   | The name of the HDFS cluster.                                |
-  | dfs.ha.namenodes.XXX               | The name of the NameNode in the HDFS cluster. If you specify multiple NameNode names, separate them with commas (,). `xxx` is the HDFS cluster name that you have specified in `dfs.nameservices`. |
-  | dfs.namenode.rpc-address.XXX.NN    | The RPC address of the NameNode in the HDFS cluster. `NN` is the NameNode name that you have specified in `dfs.ha.namenodes.XXX`. |
-  | dfs.client.failover.proxy.provider | The provider of the NameNode to which the client will connect. Default value: `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`. |
+      ```Plain
+      "dfs.nameservices" = "ha_cluster",
+      "dfs.ha.namenodes.ha_cluster" = "ha_n1,ha_n2",
+      "dfs.namenode.rpc-address.ha_cluster.ha_n1" = "<hdfs_host>:<hdfs_port>",
+      "dfs.namenode.rpc-address.ha_cluster.ha_n2" = "<hdfs_host>:<hdfs_port>",
+      "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
+      ```
+
+      The following table describes the parameters in the HA configuration.
+
+      | Parameter                          | Description                                                  |
+      | ---------------------------------- | ------------------------------------------------------------ |
+      | dfs.nameservices                   | The name of the HDFS cluster.                                |
+      | dfs.ha.namenodes.XXX               | The name of the NameNode in the HDFS cluster. If you specify multiple NameNode names, separate them with commas (,). `xxx` is the HDFS cluster name that you have specified in `dfs.nameservices`. |
+      | dfs.namenode.rpc-address.XXX.NN    | The RPC address of the NameNode in the HDFS cluster. `NN` is the NameNode name that you have specified in `dfs.ha.namenodes.XXX`. |
+      | dfs.client.failover.proxy.provider | The provider of the NameNode to which the client will connect. Default value: `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`. |
 
 #### Amazon S3
 
@@ -329,7 +333,9 @@ The following parameters are supported:
 
   Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/Configuration.md#fe-configuration-items) `async_load_task_pool_size`, which specifies the task pool size. The task pool size determines the maximum number of tasks that can be concurrently run for Broker Load within a specific time period. If the number of tasks to run for jobs that are submitted within the specified time period exceeds the maximum number, the jobs in the task pool will be waiting to be scheduled based on their priorities.
 
-    You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
+  You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
+
+  StarRocks allows setting the `priority` parameter for a Broker Load job since v2.5.
 
 ## Column mapping
 
