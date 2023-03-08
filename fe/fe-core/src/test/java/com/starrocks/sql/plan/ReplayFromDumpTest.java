@@ -686,4 +686,16 @@ public class ReplayFromDumpTest {
                 "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  equal join conjunct: [3807: ref_id, BIGINT, true] = [3680: deal_id, BIGINT, true]"));
     }
+
+    @Test
+    public void testPushDownDistinctAggBelowWindowRewrite() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/pushdown_distinct_agg_below_window"), null,
+                        TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: sum[([3: gross, DECIMAL128(10,2), false]); args: DECIMAL128; " +
+                "result: DECIMAL128(38,2); args nullable: false; result nullable: true]\n" +
+                "  |  group by: [2: trans_date, DATE, false], [1: country, VARCHAR, true]\n" +
+                "  |  cardinality: 49070\n"));
+    }
 }
