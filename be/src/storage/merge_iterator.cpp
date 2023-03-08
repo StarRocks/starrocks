@@ -319,7 +319,7 @@ inline Status HeapMergeIterator::fill(size_t child) {
             return Status::InternalError(strings::Substitute(
                     "Merge iterator only supports merging chunks with rows less than $0", max_merge_chunk_size));
         }
-        _heap.push(ComparableChunk{chunk, child, _schema.num_key_fields(), merge_condition});
+        _heap.push(ComparableChunk{chunk, child, output_schema().num_key_fields(), merge_condition});
     } else if (st.is_end_of_file()) {
         // ignore Status::EndOfFile.
         close_child(child);
