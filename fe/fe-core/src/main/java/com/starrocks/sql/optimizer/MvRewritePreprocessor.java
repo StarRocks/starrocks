@@ -183,7 +183,7 @@ public class MvRewritePreprocessor {
         Set<String> mvPruneKeyColNames = Sets.newHashSet();
         distributedColumns.stream().forEach(distKey -> mvPruneKeyColNames.add(distKey.getName()));
         mv.getPartitionNames().stream().forEach(partName -> mvPruneKeyColNames.add(partName));
-        final Set<Integer> mvPruneColumnIdSet = mvOutputColumnRefSet.getStream().mapToObj(
+        final Set<Integer> mvPruneColumnIdSet = mvOutputColumnRefSet.getStream().map(
                         id -> mvContext.getMvColumnRefFactory().getColumnRef(id))
                 .filter(colRef -> mvPruneKeyColNames.contains(colRef.getName()))
                 .map(colRef -> colRef.getId())

@@ -155,7 +155,7 @@ public class JoinAssociativityRule extends TransformationRule {
         parentJoinRequiredColumns.union(topJoinOperator.getRequiredChildInputColumns());
         List<ColumnRefOperator> newRightOutputColumns = newRightChildColumns.getStream()
                 .filter(parentJoinRequiredColumns::contains)
-                .mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
+                .map(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
 
         Projection leftChildJoinProjection = leftChildJoin.getProjection();
         HashMap<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
@@ -210,7 +210,7 @@ public class JoinAssociativityRule extends TransformationRule {
             Map<ColumnRefOperator, ScalarOperator> expressionProject;
             if (leftChild1.getOp().getProjection() == null) {
                 expressionProject = leftChild1.getOutputColumns().getStream()
-                        .mapToObj(id -> context.getColumnRefFactory().getColumnRef(id))
+                        .map(id -> context.getColumnRefFactory().getColumnRef(id))
                         .collect(Collectors.toMap(Function.identity(), Function.identity()));
             } else {
                 expressionProject = Maps.newHashMap(leftChild1.getOp().getProjection().getColumnRefMap());
