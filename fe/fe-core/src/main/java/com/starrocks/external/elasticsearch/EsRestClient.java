@@ -34,6 +34,8 @@
 
 package com.starrocks.external.elasticsearch;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.collect.ImmutableList;
 import okhttp3.Credentials;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -51,16 +53,25 @@ import java.io.IOException;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+
+import static com.starrocks.external.elasticsearch.EsUtil.fromJSONArray;
+import static com.starrocks.external.elasticsearch.EsUtil.readTree;
 
 public class EsRestClient {
 
@@ -283,5 +294,83 @@ public class EsRestClient {
             throw new StarRocksESException("Errors happens when create ssl socket");
         }
         return ssfFactory;
+    }
+
+    /**
+     * response
+     [
+     {
+     "index": ".kibana_1"
+     },
+     {
+     "index": ".opendistro_security"
+     },
+     {
+     "index": "kibana_sample_data_ecommerce"
+     },
+     {
+     "index": "kibana_sample_data_ecommerce_2"
+     },
+     {
+     "index": "kibana_sample_data_flights"
+     },
+     {
+     "index": "kibana_sample_data_logs"
+     }
+     ]
+     * indices are same as table
+     * @return
+     */
+    public Set<String> getIndices() {
+        String response = execute("_cat/indices?h=index&format=json&s=index:asc");
+        if (Objects.isNull(response)) {
+            throw new StarRocksESException("es indexes are null, maybe this is error");
+        }
+
+        List<String> allIndices = fromJSONArray(response, String.class);
+        return allIndices.stream()
+                .filter(index -> !index.startsWith("."))
+                .collect(Collectors.toSet());
+    }
+    /**
+     * {
+     * "kibana_sample_data_ecommerce": {
+     * "aliases": {}
+     * }
+     * }
+     * Get all alias.
+     **/
+    public Map<String, List<String>> getAliases() {
+        String response = execute("_aliases");
+        // key: index, value: aliases
+        Map<String, List<String>> aliases = new HashMap<>();
+        JsonNode root = readTree(response);
+        if (root == null) {
+            return aliases;
+        }
+        Iterator<Map.Entry<String, JsonNode>> indexElements = root.fields();
+        while (indexElements.hasNext()) {
+            Map.Entry<String, JsonNode> indexAlias = indexElements.next();
+            JsonNode aliasesNode = indexAlias.getValue().get("aliases");
+            Iterator<String> aliasNames = aliasesNode.fieldNames();
+            if (aliasNames.hasNext()) {
+                aliases.put(indexAlias.getKey(), ImmutableList.copyOf(aliasNames));
+            }
+        }
+        return aliases;
+    }
+
+    /**
+     * get tables union between indices and aliases
+     * @return
+     */
+    public List<String> listTables() {
+        Set<String> indices = getIndices();
+        Map<String, List<String>> aliases = getAliases();
+        aliases.entrySet().stream()
+                .filter(e -> !indices.contains(e.getKey()))
+                .flatMap(e -> e.getValue().stream())
+                .forEach(indices::add);
+        return new ArrayList<>(indices);
     }
 }

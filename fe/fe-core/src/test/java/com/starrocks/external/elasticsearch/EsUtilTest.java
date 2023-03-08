@@ -18,7 +18,8 @@
 package com.starrocks.external.elasticsearch;
 
 import org.json.JSONException;
-import org.json.JSONObject;
+import org.json.simple.JSONObject;
+import org.json.simple.JSONValue;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -47,21 +48,21 @@ public class EsUtilTest {
 
     @Test
     public void testGetJsonObject() {
-        JSONObject json = new JSONObject(jsonStr);
+        JSONObject json = (JSONObject) JSONValue.parse(jsonStr);
         JSONObject upperBoundSetting = EsUtil.getJsonObject(json, "settings.index.bpack.partition", 0);
-        assertTrue(upperBoundSetting.has("upperbound"));
-        assertEquals("12", upperBoundSetting.getString("upperbound"));
+        assertTrue(upperBoundSetting.containsKey("upperbound"));
+        assertEquals("12", upperBoundSetting.get("upperbound"));
 
         JSONObject unExistKey = EsUtil.getJsonObject(json, "set", 0);
         assertNull(unExistKey);
 
         JSONObject singleKey = EsUtil.getJsonObject(json, "settings", 0);
-        assertTrue(singleKey.has("index"));
+        assertTrue(singleKey.containsKey("index"));
     }
 
     @Test(expected = JSONException.class)
     public void testGetJsonObjectWithException() {
-        JSONObject json = new JSONObject(jsonStr);
+        JSONObject json = (JSONObject) JSONValue.parse(jsonStr);
         // only support json object could not get string value directly from this api, exception will be threw
         EsUtil.getJsonObject(json, "settings.index.bpack.partition.upperbound", 0);
     }

@@ -72,6 +72,7 @@ public class EsTable extends Table {
     public static final String PASSWORD = "password";
     public static final String INDEX = "index";
     public static final String TYPE = "type";
+    public static final String CATALOG_TYPE = "es.type";
     public static final String TRANSPORT = "transport";
     public static final String VERSION = "version";
     public static final String DOC_VALUES_MODE = "doc_values_mode";
@@ -130,6 +131,8 @@ public class EsTable extends Table {
     // record the latest and recently exception when sync ES table metadata (mapping, shard location)
     private Throwable lastMetaDataSyncException = null;
 
+    private String catalogName;
+
     public EsTable() {
         super(TableType.ELASTICSEARCH);
     }
@@ -139,6 +142,12 @@ public class EsTable extends Table {
         super(id, name, TableType.ELASTICSEARCH, schema);
         this.partitionInfo = partitionInfo;
         validate(properties);
+    }
+
+    public EsTable(long id, String name, List<Column> schema,
+                   Map<String, String> properties, PartitionInfo partitionInfo, String catalogName) throws DdlException {
+        this(id, name, schema, properties, partitionInfo);
+        this.catalogName = catalogName;
     }
 
     public Map<String, String> fieldsContext() {
@@ -238,7 +247,16 @@ public class EsTable extends Table {
 
         if (!Strings.isNullOrEmpty(properties.get(TYPE))
                 && !Strings.isNullOrEmpty(properties.get(TYPE).trim())) {
-            mappingType = properties.get(TYPE).trim();
+            // just for compatible external es table definition
+            // type in catalog means that such as es/hive/iceberg, but type in table properties also can be defined.
+            if (!"es".equalsIgnoreCase(properties.get(TYPE).trim())) {
+                mappingType = properties.get(TYPE).trim();
+            } else {
+                if (!Strings.isNullOrEmpty(properties.get(CATALOG_TYPE))
+                        && !Strings.isNullOrEmpty(properties.get(CATALOG_TYPE).trim())) {
+                    mappingType = properties.get(CATALOG_TYPE).trim();
+                }
+            }
         } else {
             mappingType = null;
         }
