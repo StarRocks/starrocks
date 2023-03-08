@@ -200,6 +200,8 @@ public class LoadLoadingTask extends LoadTask {
                     sb.append("load_parallel_instance_num=").append(Config.load_parallel_instance_num).append(",");
                     sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                             .append(variables.getParallelExecInstanceNum()).append(",");
+                    sb.append(SessionVariable.MAX_PARALLEL_SCAN_INSTANCE_NUM).append("=")
+                            .append(variables.getMaxParallelScanInstanceNum()).append(",");
                     sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
                     sb.append(SessionVariable.ENABLE_ADAPTIVE_SINK_DOP).append("=")
                             .append(variables.getEnableAdaptiveSinkDop())
