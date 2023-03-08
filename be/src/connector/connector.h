@@ -40,6 +40,7 @@ public:
     virtual Status open(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
     virtual Status get_next(RuntimeState* state, ChunkPtr* chunk) { return Status::OK(); }
+    virtual bool skip_predicate() const { return false; }
 
     // how many rows read from storage
     virtual int64_t raw_rows_read() const = 0;
@@ -97,6 +98,13 @@ public:
     virtual bool accept_empty_scan_ranges() const { return true; }
 
     virtual bool stream_data_source() const { return false; }
+
+    virtual Status init(ObjectPool* pool, RuntimeState* state) { return Status::OK(); }
+
+    const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
+
+protected:
+    std::vector<ExprContext*> _partition_exprs;
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 

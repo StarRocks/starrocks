@@ -38,17 +38,17 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
     private static final String INSERT_SELECT_METRIC_SAMPLE_TEMPLATE =
             "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', COUNT(1) * $ratio, "
                     + "$dataSize * $ratio, 0, 0, '', '', NOW() "
-                    + "FROM (SELECT `$columnName` FROM $tableName $hints ) as t";
+                    + "FROM (SELECT `$columnName` as column_key FROM $tableName $hints ) as t";
 
     private static final String INSERT_SELECT_TYPE_SAMPLE_TEMPLATE =
             "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', IFNULL(SUM(t1.count), 0) * $ratio, "
                     + "       $dataSize * $ratio, $countDistinctFunction, "
-                    + "       IFNULL(SUM(IF(t1.`$columnName` IS NULL, t1.count, 0)), 0) * $ratio, "
-                    + "       IFNULL(MAX(t1.`$columnName`), ''), IFNULL(MIN(t1.`$columnName`), ''), NOW() "
+                    + "       IFNULL(SUM(IF(t1.`column_key` IS NULL, t1.count, 0)), 0) * $ratio, "
+                    + "       IFNULL(MAX(t1.`column_key`), ''), IFNULL(MIN(t1.`column_key`), ''), NOW() "
                     + "FROM ( "
-                    + "    SELECT t0.`$columnName`, COUNT(1) as count "
+                    + "    SELECT t0.`$columnName` as column_key, COUNT(1) as count "
                     + "    FROM (SELECT `$columnName` FROM $tableName $hints) as t0 "
-                    + "    GROUP BY t0.`$columnName` "
+                    + "    GROUP BY t0.column_key "
                     + ") as t1";
 
     protected static final String INSERT_STATISTIC_TEMPLATE =

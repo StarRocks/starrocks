@@ -1402,6 +1402,13 @@ public class Config extends ConfigBase {
     public static String authentication_kerberos_service_key_tab = "";
 
     /**
+     * When set to true, we cannot drop user named 'admin' or grant/revoke role to/from user named 'admin',
+     * except that we're root user.
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_admin_user_protection = false;
+
+    /**
      * In some cases, some tablets may have all replicas damaged or lost.
      * At this time, the data has been lost, and the damaged tablets
      * will cause the entire query to fail, and the remaining healthy tablets cannot be queried.
@@ -1670,7 +1677,7 @@ public class Config extends ConfigBase {
      * Background refresh hive external table metadata interval in milliseconds.
      */
     @ConfField(mutable = true)
-    public static int background_refresh_hive_metadata_interval_millis = 600000;
+    public static int background_refresh_metadata_interval_millis = 600000;
 
     /**
      * Enable refresh hive partition statistics.
@@ -1702,6 +1709,42 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int iceberg_table_refresh_expire_sec = 86400;
+
+    /**
+     * iceberg metadata cache dir
+     */
+    @ConfField(mutable = true)
+    public static String iceberg_metadata_cache_disk_path = StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg";
+
+    /**
+     * iceberg metadata memory cache total size, default 512MB
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_memory_cache_capacity = 536870912L;
+
+    /**
+     * iceberg metadata memory cache expiration time, default 86500s
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_memory_cache_expiration_seconds = 86500;
+
+    /**
+     * enable iceberg metadata disk cache, default false
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_iceberg_metadata_disk_cache = false;
+
+    /**
+     * iceberg metadata disk cache total size, default 2GB
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_disk_cache_capacity = 2147483648L;
+
+    /**
+     * iceberg metadata cache max entry size, default 8MB
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_cache_max_entry_size = 8388608L;
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
@@ -1779,31 +1822,12 @@ public class Config extends ConfigBase {
     public static int heartbeat_retry_times = 3;
 
     /**
-     * Temporary use, it will be removed later.
-     * Set true if using StarOS to manage tablets for StarRocks lake table.
+     * shared_data: means run on cloud-native
+     * shared_nothing: means run on local
+     * hybrid: run on both, not production ready, should only be used in test environment now.
      */
     @ConfField
-    public static boolean use_staros = false;
-    @ConfField
-    public static String starmgr_address = "127.0.0.1:6090";
-    @ConfField
-    public static boolean integrate_starmgr = false;
-    @ConfField
-    public static String starmgr_s3_bucket = "";
-    @ConfField
-    public static String starmgr_s3_region = "";
-    @ConfField
-    public static String starmgr_s3_endpoint = "";
-    @ConfField
-    public static String starmgr_aws_credential_type = "simple";
-    @ConfField
-    public static String starmgr_simple_credential_access_key_id = "";
-    @ConfField
-    public static String starmgr_simple_credential_access_key_secret = "";
-    @ConfField
-    public static String starmgr_assume_role_credential_arn = "";
-    @ConfField
-    public static String starmgr_assume_role_credential_external_id = "";
+    public static String run_mode = "shared_nothing";
 
     /**
      * empty shard group clean threshold (by create time).
@@ -1817,18 +1841,59 @@ public class Config extends ConfigBase {
     @ConfField
     public static long shard_deleter_run_interval_sec = 600L;
 
-    @ConfField
-    public static String hdfs_url = "";
-
-    /* default file store type used */
-    @ConfField
-    public static String default_fs_type = "S3";
-
+    // ***********************************************************
+    // * BEGIN: Cloud native meta server related configurations
+    // ***********************************************************
     /**
-     * starmgr disable auto shard balance or not
+     * Cloud native meta server rpc listen port
      */
     @ConfField
-    public static boolean starmgr_disable_shard_balance = false;
+    public static int cloud_native_meta_port = 6090;
+    // remote storage related configuration
+    /**
+     * storage type for cloud native table. Available options: "S3", "HDFS", case-sensitive
+     */
+    @ConfField
+    public static String cloud_native_storage_type = "S3";
+
+    // HDFS storage configuration
+    /**
+     * cloud native storage: hdfs storage url
+     */
+    @ConfField
+    public static String cloud_native_hdfs_url = "";
+
+    // AWS S3 storage configuration
+    @ConfField
+    public static String aws_s3_path = "";
+    @ConfField
+    public static String aws_s3_region = "";
+    @ConfField
+    public static String aws_s3_endpoint = "";
+
+    // AWS credential configuration
+    @ConfField
+    public static boolean aws_s3_use_aws_sdk_default_behavior = false;
+    @ConfField
+    public static boolean aws_s3_use_instance_profile = false;
+
+    @ConfField
+    public static String aws_s3_access_key = "";
+    @ConfField
+    public static String aws_s3_secret_key = "";
+
+    @ConfField
+    public static String aws_s3_iam_role_arn = "";
+    @ConfField
+    public static String aws_s3_external_id = "";
+
+    // Enables or disables SSL connections to AWS services. Not support for now
+    // @ConfField
+    // public static String aws_s3_enable_ssl = "true";
+    
+    // ***********************************************************
+    // * END: of Cloud native meta server related configurations
+    // ***********************************************************
 
     /**
      * default storage cache ttl of lake table
@@ -1843,7 +1908,7 @@ public class Config extends ConfigBase {
      * Each automatic partition will create a hidden partition, which is not displayed to the user by default.
      * Sometimes this display can be enabled to check problems.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean enable_display_shadow_partitions = false;
 
     @ConfField

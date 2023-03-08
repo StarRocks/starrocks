@@ -28,9 +28,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
@@ -140,8 +140,10 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitShowBackupStatement(ShowBackupStmt showBackupStmt, ConnectContext context) {
-            String dbName = getDbName(showBackupStmt.getDbName(), context);
-            showBackupStmt.setDbName(dbName);
+            String dbName = showBackupStmt.getDbName();
+            if (dbName != null) {
+                getDatabase(dbName, context);
+            }
             return null;
         }
 
@@ -174,7 +176,7 @@ public class BackupRestoreAnalyzer {
             Map<String, String> copiedProperties = Maps.newHashMap(properties);
             long timeoutMs = Config.backup_job_default_timeout_ms;
             boolean allowLoad = false;
-            int replicationNum = FeConstants.default_replication_num;
+            int replicationNum = RunMode.defaultReplicationNum();
             String backupTimestamp = null;
             int metaVersion = -1;
             int starrocksMetaVersion = -1;
@@ -242,8 +244,10 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitShowRestoreStatement(ShowRestoreStmt showRestoreStmt, ConnectContext context) {
-            String dbName = getDbName(showRestoreStmt.getDbName(), context);
-            showRestoreStmt.setDbName(dbName);
+            String dbName = showRestoreStmt.getDbName();
+            if (dbName != null) {
+                getDatabase(dbName, context);
+            }
             return null;
         }
     }

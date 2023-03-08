@@ -38,6 +38,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -327,7 +328,8 @@ public class PlanFragmentBuilder {
                 FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, fragment);
                 normalizer.normalize();
             }
-        } else if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableRuntimeAdaptiveDop()) {
+        } else if (ConnectContext.get() != null &&
+                ConnectContext.get().getSessionVariable().isEnableRuntimeAdaptiveDop()) {
             for (PlanFragment fragment : fragments) {
                 if (fragment.canUseRuntimeAdaptiveDop()) {
                     fragment.enableAdaptiveDop();
@@ -374,7 +376,8 @@ public class PlanFragmentBuilder {
             // Key columns and value columns cannot be pruned in the non-skip-aggr scan stage.
             // - All the keys columns must be retained to merge and aggregate rows.
             // - Value columns can only be used after merging and aggregating.
-            if (referenceTable.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
+            MaterializedIndexMeta materializedIndexMeta = referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
+            if (materializedIndexMeta.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
                 return;
             }
 
@@ -396,12 +399,12 @@ public class PlanFragmentBuilder {
             Set<Integer> singlePredColumnIds = new HashSet<Integer>();
             Set<Integer> complexPredColumnIds = new HashSet<Integer>();
             Set<String> aggOrPrimaryKeyTableValueColumnNames = new HashSet<String>();
-            if (referenceTable.getKeysType().isAggregationFamily() ||
-                    referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+            if (materializedIndexMeta.getKeysType().isAggregationFamily() ||
+                    materializedIndexMeta.getKeysType() == KeysType.PRIMARY_KEYS) {
                 aggOrPrimaryKeyTableValueColumnNames =
-                        referenceTable.getFullSchema().stream()
+                        materializedIndexMeta.getSchema().stream()
                                 .filter(col -> !col.isKey())
-                                .map(col -> col.getName())
+                                .map(Column::getName)
                                 .collect(Collectors.toSet());
             }
 
@@ -682,6 +685,7 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setIsMaterialized(true);
                 if (slotDescriptor.getOriginType().isComplexType()) {
                     slotDescriptor.setOriginType(entry.getKey().getType());
+                    slotDescriptor.setType(entry.getKey().getType());
                 }
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
@@ -781,6 +785,7 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setIsMaterialized(true);
                 if (slotDescriptor.getOriginType().isComplexType()) {
                     slotDescriptor.setOriginType(entry.getKey().getType());
+                    slotDescriptor.setType(entry.getKey().getType());
                 }
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
@@ -1035,7 +1040,7 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
 
-                icebergScanNode.preProcessIcebergPredicate(predicates);
+                icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
                 icebergScanNode.setupScanRangeLocations();
                 //set slot for equality delete file
                 icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
@@ -1109,6 +1114,21 @@ public class PlanFragmentBuilder {
                                 case "TABLE_NAME":
                                     scanNode.setSchemaTable(constantOperator.getVarchar());
                                     break;
+                                case "BE_ID":
+                                    scanNode.setBeId(constantOperator.getBigint());
+                                    break;
+                                case "TABLE_ID":
+                                    scanNode.setTableId(constantOperator.getBigint());
+                                    break;
+                                case "PARTITION_ID":
+                                    scanNode.setPartitionId(constantOperator.getBigint());
+                                    break;
+                                case "TABLET_ID":
+                                    scanNode.setTabletId(constantOperator.getBigint());
+                                    break;
+                                case "TXN_ID":
+                                    scanNode.setTxnId(constantOperator.getBigint());
+                                    break;
                                 default:
                                     break;
                             }
@@ -1117,9 +1137,13 @@ public class PlanFragmentBuilder {
                 }
             }
 
+            if (scanNode.isBeSchemaTable()) {
+                scanNode.computeBeScanRanges();
+            }
+
             context.getScanNodes().add(scanNode);
-            PlanFragment fragment =
-                    new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
+            PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), scanNode,
+                    scanNode.isBeSchemaTable() ? DataPartition.RANDOM : DataPartition.UNPARTITIONED);
             context.getFragments().add(fragment);
             return fragment;
         }
@@ -2303,6 +2327,7 @@ public class PlanFragmentBuilder {
                     partitionExprs,
                     orderByElements,
                     node.getAnalyticWindow(),
+                    node.isUseHashBasedPartition(),
                     null, outputTupleDesc, null, null,
                     context.getDescTbl().createTupleDescriptor());
             analyticEvalNode.setSubstitutedPartitionExprs(partitionExprs);

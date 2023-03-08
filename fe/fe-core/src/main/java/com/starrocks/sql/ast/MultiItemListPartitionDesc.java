@@ -23,10 +23,10 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.thrift.TTabletType;
 
@@ -159,7 +159,7 @@ public class MultiItemListPartitionDesc extends PartitionDesc {
 
         // analyze replication num
         this.replicationNum =
-                PropertyAnalyzer.analyzeReplicationNum(allProperties, FeConstants.default_replication_num);
+                PropertyAnalyzer.analyzeReplicationNum(allProperties, RunMode.defaultReplicationNum());
 
         // analyze version info
         this.versionInfo = PropertyAnalyzer.analyzeVersionInfo(allProperties);

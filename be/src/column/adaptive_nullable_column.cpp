@@ -145,24 +145,24 @@ bool AdaptiveNullableColumn::append_strings(const Buffer<Slice>& strs) {
         switch (_state) {
         case State::kUninitialized: {
             _state = State::kNotConstant;
-            _data_column->append_strings(strs);
+            std::ignore = _data_column->append_strings(strs);
             _size = strs.size();
             break;
         }
         case State::kNotConstant: {
-            _data_column->append_strings(strs);
+            std::ignore = _data_column->append_strings(strs);
             _size += strs.size();
             break;
         }
         case State::kMaterialized: {
-            _data_column->append_strings(strs);
+            std::ignore = _data_column->append_strings(strs);
             null_column_data().resize(_null_column->size() + strs.size(), 0);
             DCHECK_EQ(_null_column->size(), _data_column->size());
             break;
         }
         default: {
             materialized_nullable();
-            _data_column->append_strings(strs);
+            std::ignore = _data_column->append_strings(strs);
             null_column_data().resize(_null_column->size() + strs.size(), 0);
             DCHECK_EQ(_null_column->size(), _data_column->size());
             break;

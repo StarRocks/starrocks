@@ -30,6 +30,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.PartitionColumnFilter;
+import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -58,7 +59,7 @@ public class OptOlapPartitionPruner {
 
         PartitionInfo partitionInfo = table.getPartitionInfo();
 
-        if (partitionInfo.getType() == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             selectedPartitionIds = rangePartitionPrune(table, (RangePartitionInfo) partitionInfo, logicalOlapScanOperator);
         } else if (partitionInfo.getType() == PartitionType.LIST) {
             selectedPartitionIds = listPartitionPrune(table, (ListPartitionInfo) partitionInfo, logicalOlapScanOperator);
@@ -102,7 +103,7 @@ public class OptOlapPartitionPruner {
 
         OlapTable table = (OlapTable) logicalOlapScanOperator.getTable();
         PartitionInfo tablePartitionInfo = table.getPartitionInfo();
-        if (tablePartitionInfo.getType() != PartitionType.RANGE) {
+        if (!tablePartitionInfo.isRangePartition()) {
             return null;
         }
 
@@ -204,6 +205,7 @@ public class OptOlapPartitionPruner {
         // Currently queries either specify a temporary partition, or do not. There is no situation
         // where two partitions are checked at the same time
         boolean isTemporaryPartitionPrune = false;
+        List<Long> specifyPartitionIds = null;
         // single item list partition has only one column mapper
         Map<Long, List<LiteralExpr>> literalExprValuesMap = listPartitionInfo.getLiteralExprValues();
         List<Long> partitionIds = Lists.newArrayList();
@@ -219,6 +221,7 @@ public class OptOlapPartitionPruner {
                 }
                 partitionIds.add(part.getId());
             }
+            specifyPartitionIds = partitionIds;
         } else {
             partitionIds = listPartitionInfo.getPartitionIds(false);
         }
@@ -266,8 +269,8 @@ public class OptOlapPartitionPruner {
         }
 
         List<ScalarOperator> scalarOperatorList = Utils.extractConjuncts(operator.getPredicate());
-        com.starrocks.planner.PartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
-                columnToNullPartitions, scalarOperatorList);
+        PartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
+                columnToNullPartitions, scalarOperatorList, specifyPartitionIds);
         try {
             List<Long> prune = partitionPruner.prune();
             if (prune == null && isTemporaryPartitionPrune)  {
@@ -296,7 +299,7 @@ public class OptOlapPartitionPruner {
         } else {
             keyRangeById = partitionInfo.getIdToRange(false);
         }
-        com.starrocks.planner.PartitionPruner partitionPruner = new RangePartitionPruner(keyRangeById,
+        PartitionPruner partitionPruner = new RangePartitionPruner(keyRangeById,
                 partitionInfo.getPartitionColumns(), operator.getColumnFilters());
         try {
             return partitionPruner.prune();
@@ -311,7 +314,7 @@ public class OptOlapPartitionPruner {
         boolean probeResult = true;
         if (candidatePartitions.isEmpty()) {
             probeResult = false;
-        } else if (partitionInfo.getType() != PartitionType.RANGE) {
+        } else if (!partitionInfo.isRangePartition()) {
             probeResult = false;
         } else if (((RangePartitionInfo) partitionInfo).getPartitionColumns().size() > 1) {
             probeResult = false;

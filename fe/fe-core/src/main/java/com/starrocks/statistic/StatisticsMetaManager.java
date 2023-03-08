@@ -33,6 +33,7 @@ import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -94,7 +95,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         Preconditions.checkState(db != null);
         OlapTable table = (OlapTable) db.getTable(tableName);
         Preconditions.checkState(table != null);
-        if (table.isLakeTable()) {
+        if (table.isCloudNativeTable()) {
             return true;
         }
 
@@ -136,7 +137,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
-        // if use_staros, create lake table
         KeysType keysType = KeysType.UNIQUE_KEYS;
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,
@@ -165,15 +165,15 @@ public class StatisticsMetaManager extends LeaderDaemon {
         LOG.info("create statistics table v2 start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME);
+        KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
-        // if use_staros, create lake table, which not support primary key
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,
                 StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
                 EngineType.defaultEngine().name(),
-                new KeysDesc(KeysType.PRIMARY_KEYS, FULL_STATISTICS_KEY_COLUMNS),
+                new KeysDesc(keysType, FULL_STATISTICS_KEY_COLUMNS),
                 null,
                 new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
                 properties,
@@ -196,6 +196,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         LOG.info("create statistics table v2 start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
+        KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
@@ -203,7 +204,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 tableName,
                 StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
                 EngineType.defaultEngine().name(),
-                new KeysDesc(KeysType.PRIMARY_KEYS, HISTOGRAM_KEY_COLUMNS),
+                new KeysDesc(keysType, HISTOGRAM_KEY_COLUMNS),
                 null,
                 new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
                 properties,

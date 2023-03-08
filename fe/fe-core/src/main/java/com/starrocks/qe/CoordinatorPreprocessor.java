@@ -52,6 +52,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -682,6 +683,10 @@ public class CoordinatorPreprocessor {
                                 int expectedDop = Math.max(1, Math.min(pipelineDop, scanRangeParams.size()));
                                 List<List<TScanRangeParams>> scanRangeParamsPerDriverSeq =
                                         ListUtil.splitBySize(scanRangeParams, expectedDop);
+                                if (fragment.isForceAssignScanRangesPerDriverSeq() && scanRangeParamsPerDriverSeq.size()
+                                        != pipelineDop) {
+                                    fragment.setPipelineDop(scanRangeParamsPerDriverSeq.size());
+                                }
                                 instanceParam.pipelineDop = scanRangeParamsPerDriverSeq.size();
                                 if (fragment.isUseRuntimeAdaptiveDop()) {
                                     instanceParam.pipelineDop = Utils.computeMinGEPower2(instanceParam.pipelineDop);
@@ -1019,21 +1024,26 @@ public class CoordinatorPreprocessor {
 
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
-            if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
+            if (scanNode instanceof SchemaScanNode) {
+                BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
+                selector.computeScanRangeAssignment();
+            } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                     scanNode instanceof FileTableScanNode) {
                 if (connectContext != null) {
                     queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
                     queryOptions.
                             setEnable_populate_block_cache(
-                            connectContext.getSessionVariable().getEnablePopulateBlockCache());
-                    queryOptions.setHudi_mor_force_jni_reader(connectContext.getSessionVariable().getHudiMORForceJNIReader());
+                                    connectContext.getSessionVariable().getEnablePopulateBlockCache());
+                    queryOptions.setHudi_mor_force_jni_reader(
+                            connectContext.getSessionVariable().getHudiMORForceJNIReader());
                 }
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),
                                 hasComputeNode,
-                                forceScheduleLocal);
+                                forceScheduleLocal,
+                                connectContext.getSessionVariable().getHDFSBackendSelectorScanRangeShuffle());
                 selector.computeScanRangeAssignment();
             } else {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
@@ -1543,6 +1553,8 @@ public class CoordinatorPreprocessor {
                         commonParams.setAdaptive_dop_param(new TAdaptiveDopParam());
                         commonParams.adaptive_dop_param.setMax_block_rows_per_driver_seq(
                                 sessionVariable.getAdaptiveDopMaxBlockRowsPerDriverSeq());
+                        commonParams.adaptive_dop_param.setMax_output_amplification_factor(
+                                sessionVariable.getAdaptiveDopMaxOutputAmplificationFactor());
                     }
                 }
             }

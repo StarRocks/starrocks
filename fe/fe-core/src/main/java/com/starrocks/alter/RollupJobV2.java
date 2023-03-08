@@ -88,6 +88,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -528,6 +529,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         tbl.rebuildFullSchema();
+        tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
     }
 
     /**
@@ -863,5 +865,10 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(origStmt);
         setColumnsDefineExpr(columnNameToDefineExpr);
+    }
+
+    @Override
+    public Optional<Long> getTransactionId() {
+        return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
 }

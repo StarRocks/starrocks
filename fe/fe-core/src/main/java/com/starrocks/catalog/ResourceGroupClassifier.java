@@ -121,9 +121,9 @@ public class ResourceGroupClassifier implements Writable {
         Text.writeString(out, json);
     }
 
-    public boolean isSatisfied(String user, String role, QueryType queryType, String sourceIp,
+    public boolean isSatisfied(String user, List<String> activeRoles, QueryType queryType, String sourceIp,
                                Set<Long> dbIds) {
-        if (!isVisible(user, role, sourceIp)) {
+        if (!isVisible(user, activeRoles, sourceIp)) {
             return false;
         }
         if (CollectionUtils.isNotEmpty(queryTypes) && !this.queryTypes.contains(queryType)) {
@@ -136,11 +136,11 @@ public class ResourceGroupClassifier implements Writable {
         return true;
     }
 
-    public boolean isVisible(String user, String role, String sourceIp) {
+    public boolean isVisible(String user, List<String> activeRoles, String sourceIp) {
         if (this.user != null && !this.user.equals(user)) {
             return false;
         }
-        if (this.role != null && !this.role.equals(role)) {
+        if (this.role != null && !activeRoles.contains(role)) {
             return false;
         }
         if (this.sourceIp != null && sourceIp != null) {

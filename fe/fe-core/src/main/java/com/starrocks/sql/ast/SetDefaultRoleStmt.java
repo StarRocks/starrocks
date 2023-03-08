@@ -31,7 +31,7 @@ public class SetDefaultRoleStmt extends StatementBase {
         this.setRoleType = setRoleType;
     }
 
-    public UserIdentity getUserIdentifier() {
+    public UserIdentity getUserIdentity() {
         return userIdentity;
     }
 
@@ -50,6 +50,6 @@ public class SetDefaultRoleStmt extends StatementBase {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
+        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 }

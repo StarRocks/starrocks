@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -27,12 +28,14 @@ import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -59,7 +62,7 @@ public class MetadataMgr {
         this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
     }
 
-    protected Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+    public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);
         } else {
@@ -138,7 +141,12 @@ public class MetadataMgr {
 
     public Database getDb(String catalogName, String dbName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        return connectorMetadata.map(metadata -> metadata.getDb(dbName)).orElse(null);
+        Database db = connectorMetadata.map(metadata -> metadata.getDb(dbName)).orElse(null);
+        // set catalog name if external catalog
+        if (db != null && CatalogMgr.isExternalCatalog(catalogName)) {
+            db.setCatalogName(catalogName);
+        }
+        return db;
     }
 
     public Table getTable(String catalogName, String dbName, String tblName) {
@@ -154,25 +162,45 @@ public class MetadataMgr {
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
-                                         List<ColumnRefOperator> columns,
-                                         List<PartitionKey> partitionKeys) {
+                                         Map<ColumnRefOperator, Column> columns,
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(metadata ->
-                metadata.getTableStatistics(session, table, columns, partitionKeys)).orElse(null);
+                metadata.getTableStatistics(session, table, columns, partitionKeys, predicate)).orElse(null);
     }
 
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
+        return getRemoteFileInfos(catalogName, table, partitionKeys, -1, null);
+    }
+
+    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
+                                                   long snapshotId, ScalarOperator predicate) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys).forEach(files::add);
+                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys, snapshotId, predicate).forEach(files::add);
             } catch (Exception e) {
                 LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", catalogName, table, e);
                 throw e;
             }
         }
         return ImmutableList.copyOf(files.build());
+    }
+
+    public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        ImmutableList.Builder<PartitionInfo> partitions = ImmutableList.builder();
+        if (connectorMetadata.isPresent()) {
+            try {
+                connectorMetadata.get().getPartitions(table, partitionNames).forEach(partitions::add);
+            } catch (Exception e) {
+                LOG.error("Failed to get partitions on catalog [{}], table [{}]", catalogName, table, e);
+                throw e;
+            }
+        }
+        return partitions.build();
     }
 
     public void dropTable(String catalogName, String dbName, String tblName) {

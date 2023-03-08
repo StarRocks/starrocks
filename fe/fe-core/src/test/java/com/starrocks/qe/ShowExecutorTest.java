@@ -41,6 +41,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -61,7 +62,6 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
@@ -72,6 +72,7 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
@@ -84,7 +85,8 @@ import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
-import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
@@ -204,7 +206,7 @@ public class ShowExecutorTest {
             }
         };
 
-        MaterializedView.BaseTableInfo baseTableInfo = new MaterializedView.BaseTableInfo(
+        BaseTableInfo baseTableInfo = new BaseTableInfo(
                 "default_catalog", "testDb", "testTbl");
 
         // mock materialized view
@@ -294,7 +296,7 @@ public class ShowExecutorTest {
 
                 db.getTables();
                 minTimes = 0;
-                result = Lists.newArrayList(table);
+                result = Lists.newArrayList(table, mv);
 
                 db.getMaterializedViews();
                 minTimes = 0;
@@ -343,6 +345,11 @@ public class ShowExecutorTest {
                 GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "emptyDb");
                 minTimes = 0;
                 result = null;
+
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("default_catalog", "testDb",
+                        "testTbl");
+                minTimes = 0;
+                result = table;
             }
         };
 
@@ -405,6 +412,8 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("testMv", resultSet.getString(0));
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testTbl", resultSet.getString(0));
         Assert.assertFalse(resultSet.next());
@@ -578,6 +587,9 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("testMv", resultSet.getString(0));
+        Assert.assertEquals("VIEW", resultSet.getString(1));
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testTbl", resultSet.getString(0));
         Assert.assertEquals("BASE TABLE", resultSet.getString(1));
@@ -760,7 +772,14 @@ public class ShowExecutorTest {
             }
         };
 
-        Config.integrate_starmgr = true;
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+
         ShowBackendsStmt stmt = new ShowBackendsStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
@@ -777,8 +796,6 @@ public class ShowExecutorTest {
         Assert.assertEquals("1", resultSet.getString(0));
         Assert.assertEquals("0", resultSet.getString(23));
         Assert.assertEquals("5", resultSet.getString(27));
-
-        Config.integrate_starmgr = false;
     }
 
     @Test
@@ -808,8 +825,12 @@ public class ShowExecutorTest {
             }
         };
 
-
-        Config.integrate_starmgr = true;
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
 
         ShowComputeNodesStmt stmt = new ShowComputeNodesStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -826,8 +847,6 @@ public class ShowExecutorTest {
         Assert.assertEquals("10", resultSet.getString(14));
         Assert.assertEquals("1.00 %", resultSet.getString(15));
         Assert.assertEquals("3.0 %", resultSet.getString(16));
-
-        Config.integrate_starmgr = false;
     }
 
     @Test
@@ -938,7 +957,7 @@ public class ShowExecutorTest {
     @Test
     public void testShowMaterializedView() throws AnalysisException, DdlException {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("testDb", (String) null);
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("testDb", (String) null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         verifyShowMaterializedViewResult(resultSet);
@@ -946,7 +965,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowMaterializedViewFromUnknownDatabase() throws DdlException, AnalysisException {
-        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("emptyDb", (String) null);
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("emptyDb", (String) null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         expectedEx.expect(AnalysisException.class);
         expectedEx.expectMessage("Unknown database 'emptyDb'");
@@ -956,12 +975,12 @@ public class ShowExecutorTest {
     @Test
     public void testShowMaterializedViewPattern() throws AnalysisException, DdlException {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("testDb", "bcd%");
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("testDb", "bcd%");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         Assert.assertFalse(resultSet.next());
 
-        stmt = new ShowMaterializedViewStmt("testDb", "%test%");
+        stmt = new ShowMaterializedViewsStmt("testDb", "%test%");
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
         verifyShowMaterializedViewResult(resultSet);
@@ -984,8 +1003,16 @@ public class ShowExecutorTest {
         Assert.assertEquals("1000", resultSet.getString(0));
         Assert.assertEquals("testMv", resultSet.getString(1));
         Assert.assertEquals("testDb", resultSet.getString(2));
-        Assert.assertEquals(expectedSqlText, resultSet.getString(3));
-        Assert.assertEquals("10", resultSet.getString(4));
+        Assert.assertEquals("ASYNC", resultSet.getString(3));
+        Assert.assertEquals("true", resultSet.getString(4));
+        Assert.assertEquals("", resultSet.getString(5));
+        Assert.assertEquals("", resultSet.getString(6));
+        Assert.assertEquals("", resultSet.getString(7));
+        Assert.assertEquals("", resultSet.getString(8));
+        Assert.assertEquals("", resultSet.getString(9));
+        Assert.assertEquals("", resultSet.getString(10));
+        Assert.assertEquals(expectedSqlText, resultSet.getString(11));
+        Assert.assertEquals("10", resultSet.getString(12));
         Assert.assertFalse(resultSet.next());
     }
 
@@ -1070,6 +1097,7 @@ public class ShowExecutorTest {
         };
 
         ShowTableStmt stmt = new ShowTableStmt("test", true, null, null, "hive_catalog");
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
@@ -1100,5 +1128,21 @@ public class ShowExecutorTest {
                 "comment \"hive_test\"\n" +
                 "PROPERTIES (\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
                 "\"type\"  =  \"hive\"\n)", resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowGrants() throws Exception {
+        ShowGrantsStmt stmt = new ShowGrantsStmt("root");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        resultSet.getResultRows().forEach(System.out::println);
+        String expectString1 = "root, null, GRANT CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, " +
+                "CREATE MATERIALIZED VIEW ON ALL DATABASES TO ROLE 'root'";
+        Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
+                l.toString().contains(expectString1)));
+        String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +
+                "UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
+        Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
+                l.toString().contains(expectString2)));
     }
 }

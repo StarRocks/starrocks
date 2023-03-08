@@ -80,6 +80,8 @@ public:
 
     int32_t incr_epoch_finished_sinker() { return ++_epoch_finished_sinker; }
 
+    size_t get_memory_usage() const { return _memory_manager->get_memory_usage(); }
+
 protected:
     const std::string _name;
     std::shared_ptr<LocalExchangeMemoryManager> _memory_manager;

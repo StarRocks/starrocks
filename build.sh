@@ -138,7 +138,10 @@ if [ -e /proc/cpuinfo ] ; then
     fi
 fi
 
-if [[ -z ${WITH_BLOCK_CACHE} ]]; then
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    # force turn off block cache on arm platform
+    WITH_BLOCK_CACHE=OFF
+elif [[ -z ${WITH_BLOCK_CACHE} ]]; then
     WITH_BLOCK_CACHE=OFF
 fi
 
@@ -301,7 +304,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_STAROS=${USE_STAROS} \
                     -DWITH_BENCH=${WITH_BENCH} \
                     -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
-                    -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
                     -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
                     -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
@@ -437,7 +439,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/amd64 ${STARROCKS_OUTPUT}/be/lib/jvm/
     fi
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
     MSG="${MSG} √ ${MSG_BE}"
 fi
 

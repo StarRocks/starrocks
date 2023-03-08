@@ -73,11 +73,12 @@ public class MaterializedViewOptimizer {
         return outputExpressions;
     }
 
-    // try to get partitial partition predicate of partitioned mv.
-    // for example, mv1 has two partition: p1:[2022-01-01, 2022-01-02), p2:[2022-01-02, 2022-01-03).
-    // p1 is updated, p2 is outdated.
-    // mv1's base partition table is t1, partition column is k1.
-    // then this function will add predicate: k1 >= "2022-01-01" and k1 < "2022-01-02" to scan node of t1
+    // try to get partial partition predicates of partitioned mv.
+    // eg, mv1's base partition table is t1, partition column is k1 and has two partition:
+    // p1:[2022-01-01, 2022-01-02), p1 is updated(refreshed),
+    // p2:[2022-01-02, 2022-01-03), p2 is outdated,
+    // then this function will add predicate:
+    // k1 >= "2022-01-01" and k1 < "2022-01-02" to scan node of t1
     public boolean updateScanWithPartitionRange(MaterializedView mv,
                                                 OptExpression mvPlan,
                                                 Set<String> mvPartitionNamesToRefresh) {
@@ -91,7 +92,7 @@ public class MaterializedViewOptimizer {
                 getLatestPartitionRangeForTable(partitionByTable, partitionTableAndColumns.second,
                         mv, mvPartitionNamesToRefresh);
         if (latestBaseTableRanges.isEmpty()) {
-            // if do not have an uptodate partition, do not rewrite
+            // if there isn't an updated partition, do not rewrite
             return false;
         }
 
@@ -100,8 +101,8 @@ public class MaterializedViewOptimizer {
         for (OptExpression scanExpr : scanExprs) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
             Table scanTable = scanOperator.getTable();
-            if ((scanTable.isLocalTable() && !scanTable.equals(partitionTableAndColumns.first))
-                    || (!scanTable.isLocalTable()) && !scanTable.getTableIdentifier().equals(
+            if ((scanTable.isNativeTable() && !scanTable.equals(partitionTableAndColumns.first))
+                    || (!scanTable.isNativeTable()) && !scanTable.getTableIdentifier().equals(
                     partitionTableAndColumns.first.getTableIdentifier())) {
                 continue;
             }
@@ -122,7 +123,7 @@ public class MaterializedViewOptimizer {
         Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
         List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
                 modifiedPartitionNames);
-        List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForLocalTable(mv, mvPartitionNamesToRefresh);
+        List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
         List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();
         for (Range<PartitionKey> range : baseTableRanges) {
             if (mvRanges.stream().anyMatch(mvRange -> mvRange.encloses(range))) {
@@ -133,8 +134,8 @@ public class MaterializedViewOptimizer {
         return latestBaseTableRanges;
     }
 
-    private List<Range<PartitionKey>> getLatestPartitionRangeForLocalTable(OlapTable partitionTable,
-                                                                           Set<String> modifiedPartitionNames) {
+    private List<Range<PartitionKey>> getLatestPartitionRangeForNativeTable(OlapTable partitionTable,
+                                                                            Set<String> modifiedPartitionNames) {
         // partitions that will be excluded
         Set<Long> filteredIds = Sets.newHashSet();
         for (Partition p : partitionTable.getPartitions()) {
@@ -148,8 +149,8 @@ public class MaterializedViewOptimizer {
 
     private List<Range<PartitionKey>> getLatestPartitionRange(Table table, Column partitionColumn,
                                                               Set<String> modifiedPartitionNames) {
-        if (table.isLocalTable()) {
-            return getLatestPartitionRangeForLocalTable((OlapTable) table, modifiedPartitionNames);
+        if (table.isNativeTable()) {
+            return getLatestPartitionRangeForNativeTable((OlapTable) table, modifiedPartitionNames);
         } else {
             Map<String, Range<PartitionKey>> partitionMap;
             try {

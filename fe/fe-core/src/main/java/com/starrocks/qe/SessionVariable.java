@@ -135,6 +135,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DISABLE_COLOCATE_JOIN = "disable_colocate_join";
     public static final String DISABLE_BUCKET_JOIN = "disable_bucket_join";
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
+    public static final String MAX_PARALLEL_SCAN_INSTANCE_NUM = "max_parallel_scan_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILLING = "enable_spilling";
     // if set to true, some of stmt will be forwarded to leader FE to get result
@@ -162,7 +163,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE = "enable_pipeline";
 
     public static final String ENABLE_RUNTIME_ADAPTIVE_DOP = "enable_runtime_adaptive_dop";
-    public static final String ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ = "runtime_adaptive_dop_max_block_rows_per_driver_seq";
+    public static final String ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ =
+            "runtime_adaptive_dop_max_block_rows_per_driver_seq";
+    public static final String ADAPTIVE_DOP_MAX_OUTPUT_AMPLIFICATION_FACTOR =
+            "runtime_adaptive_dop_max_output_amplification_factor";
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
     public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
@@ -309,6 +313,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
 
+    public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
+
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
@@ -349,6 +355,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
+    // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
+    // in full sort.
+    public static final String FULL_SORT_MAX_BUFFERED_ROWS = "full_sort_max_buffered_rows";
+
+    public static final String FULL_SORT_MAX_BUFFERED_BYTES = "full_sort_max_buffered_bytes";
+
+    // Used by full sort inorder to permute only order-by columns in cascading merging phase, after
+    // that, non-order-by output columns are permuted according to the ordinal column.
+    public static final String FULL_SORT_LATE_MATERIALIZATION = "full_sort_late_materialization";
+
+    // For group-by-count-distinct query like select a, count(distinct b) from t group by a, if group-by column a
+    // is low-cardinality while count-distinct column b is high-cardinality, there exists a performance bottleneck
+    // if column a is a0 for the majority rows, since the data is shuffle by only column a, so one PipelineDriver will
+    // tackle with the majority portion of data that can not scale to multi-machines or multi-cores. so we add a
+    // bucket column produced from evaluation of expression hash(b)%num_buckets to the partition-by column of shuffle
+    // ExchangeNode to make the computation scale-out to multi-machines/multi-cores.
+    // Here: count_distinct_column_buckets means the num_buckets and enable_distinct_column_bucketization is switch to
+    // control on/off of this bucketization optimization.
+    public static final String DISTINCT_COLUMN_BUCKETS = "count_distinct_column_buckets";
+    public static final String ENABLE_DISTINCT_COLUMN_BUCKETIZATION = "enable_distinct_column_bucketization";
+    public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -381,6 +409,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, flag = VariableMgr.INVISIBLE)
     private long adaptiveDopMaxBlockRowsPerDriverSeq = 4096L * 4;
+
+    // Effective when it is positive.
+    @VariableMgr.VarAttr(name = ADAPTIVE_DOP_MAX_OUTPUT_AMPLIFICATION_FACTOR, flag = VariableMgr.INVISIBLE)
+    private long adaptiveDopMaxOutputAmplificationFactor = 0;
 
     @VarAttr(name = ENABLE_MV_PLANNER)
     private boolean enableMVPlanner = false;
@@ -585,6 +617,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM)
     private int parallelExecInstanceNum = 1;
 
+    @VariableMgr.VarAttr(name = MAX_PARALLEL_SCAN_INSTANCE_NUM)
+    private int maxParallelScanInstanceNum = -1;
+
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
 
@@ -779,11 +814,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_SORT_AGGREGATE)
     private boolean enableSortAggregate = false;
 
+    // 1: sort based, 2: hash based
+    @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
+    private int windowPartitionMode = 1;
+
     @VarAttr(name = ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE)
     private boolean enableRewriteSumByAssociativeRule = true;
 
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;
+    }
+
+    public int getWindowPartitionMode() {
+        return windowPartitionMode;
     }
 
     public void setEnableSortAggregate(boolean enableSortAggregate) {
@@ -872,6 +915,48 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
     private long groupConcatMaxLen = 65535;
+
+    @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_ROWS, flag = VariableMgr.INVISIBLE)
+    private long fullSortMaxBufferedRows = 1024000;
+
+    @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_BYTES, flag = VariableMgr.INVISIBLE)
+    private long fullSortMaxBufferedBytes = 16L * 1024 * 1024;
+
+    @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION)
+    private boolean fullSortLateMaterialization = false;
+
+    @VariableMgr.VarAttr(name = DISTINCT_COLUMN_BUCKETS)
+    private int distinctColumnBuckets = 1024;
+
+    @VariableMgr.VarAttr(name = ENABLE_DISTINCT_COLUMN_BUCKETIZATION)
+    private boolean enableDistinctColumnBucketization = true;
+
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
+    private boolean hdfsBackendSelectorScanRangeShuffle = false;
+
+    public void setFullSortMaxBufferedRows(long v) {
+        fullSortMaxBufferedRows = v;
+    }
+
+    public void setFullSortMaxBufferedBytes(long v) {
+        fullSortMaxBufferedBytes = v;
+    }
+
+    public long getFullSortMaxBufferedRows() {
+        return fullSortMaxBufferedRows;
+    }
+
+    public long getFullSortMaxBufferedBytes() {
+        return fullSortMaxBufferedBytes;
+    }
+
+    public void setFullSortLateMaterialization(boolean v) {
+        fullSortLateMaterialization = v;
+    }
+
+    public boolean isFullSortLateMaterialization() {
+        return fullSortLateMaterialization;
+    }
 
     public boolean isActivateAllRolesOnLogin() {
         if (activateAllRolesOnLogin.equals("ON")) {
@@ -1041,6 +1126,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return parallelExecInstanceNum;
     }
 
+    public int getMaxParallelScanInstanceNum() {
+        return maxParallelScanInstanceNum;
+    }
+
     // when pipeline engine is enabled
     // in case of pipeline_dop > 0: return pipeline_dop * parallelExecInstanceNum;
     // in case of pipeline_dop <= 0 and avgNumCores < 2: return 1;
@@ -1061,6 +1150,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setParallelExecInstanceNum(int parallelExecInstanceNum) {
         this.parallelExecInstanceNum = parallelExecInstanceNum;
+    }
+
+    public void setMaxParallelScanInstanceNum(int maxParallelScanInstanceNum) {
+        this.maxParallelScanInstanceNum = maxParallelScanInstanceNum;
     }
 
     public int getExchangeInstanceParallel() {
@@ -1285,6 +1378,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getAdaptiveDopMaxBlockRowsPerDriverSeq() {
         return adaptiveDopMaxBlockRowsPerDriverSeq;
+    }
+
+    public long getAdaptiveDopMaxOutputAmplificationFactor() {
+        return adaptiveDopMaxOutputAmplificationFactor;
     }
 
     public void setEnablePipelineEngine(boolean enablePipelineEngine) {
@@ -1664,6 +1761,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setDefaultTableCompression(String compression) {
         this.defaultTableCompressionAlgorithm = compression;
+    }
+
+    public boolean getHDFSBackendSelectorScanRangeShuffle() {
+        return hdfsBackendSelectorScanRangeShuffle;
     }
 
     // Serialize to thrift object

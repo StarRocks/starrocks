@@ -68,6 +68,8 @@ public class Util {
 
     private static final long DEFAULT_EXEC_CMD_TIMEOUT_MS = 600000L;
 
+    public static final String AUTO_GENERATED_EXPR_ALIAS_PREFIX = "EXPR$";
+
     private static final String[] ORDINAL_SUFFIX =
             new String[] {"th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"};
 
@@ -441,5 +443,8 @@ public class Util {
             }
         }
     }
-}
 
+    public static String deriveAliasFromOrdinal(int ordinal) {
+        return AUTO_GENERATED_EXPR_ALIAS_PREFIX + ordinal;
+    }
+}

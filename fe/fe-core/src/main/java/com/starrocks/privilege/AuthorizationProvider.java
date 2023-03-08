@@ -36,11 +36,6 @@ public interface AuthorizationProvider {
     boolean isAvailablePrivType(ObjectType objectType, PrivilegeType privilegeType);
 
     /**
-     * analyze plural type name -> type name
-     */
-    ObjectType getTypeNameByPlural(String plural) throws PrivilegeException;
-
-    /**
      * generate PEntryObject by tokenlist
      */
     PEntryObject generateObject(ObjectType objectType, List<String> objectTokens, GlobalStateMgr mgr) throws PrivilegeException;

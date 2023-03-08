@@ -46,7 +46,7 @@ import com.starrocks.common.proc.ProcResult;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterResourceStmt;
@@ -83,7 +83,7 @@ public class ResourceMgr implements Writable {
             .build();
 
     public static final ImmutableList<String> NEED_MAPPING_CATALOG_RESOURCES = new ImmutableList.Builder<String>()
-            .add("hive").add("hudi")
+            .add("hive").add("hudi").add("iceberg")
             .build();
 
     @SerializedName(value = "nameToResource")
@@ -322,7 +322,7 @@ public class ResourceMgr implements Writable {
                     continue;
                 }
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!PrivilegeManager.checkAnyActionOnResource(ConnectContext.get(), resource.getName())) {
+                    if (!PrivilegeActions.checkAnyActionOnResource(ConnectContext.get(), resource.getName())) {
                         continue;
                     }
                 } else {

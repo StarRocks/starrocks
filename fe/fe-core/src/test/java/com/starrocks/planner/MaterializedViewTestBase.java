@@ -28,6 +28,9 @@ import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MaterializedViewTestBase extends PlanTestBase {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
@@ -66,7 +69,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 }
 
                 this.rewritePlan = getFragmentPlan(query);
-                System.out.println(rewritePlan);
             } catch (Exception e) {
                 LOG.warn("test rewwrite failed:", e);
                 this.exception = e;
@@ -161,10 +163,21 @@ public class MaterializedViewTestBase extends PlanTestBase {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
         if (!taskManager.containTask(mvTaskName)) {
-            Task task = TaskBuilder.buildMvTask(mv, "test");
+            Task task = TaskBuilder.buildMvTask(mv, dbName);
             TaskBuilder.updateTaskInfo(task, mv);
             taskManager.createTask(task, false);
         }
         taskManager.executeTaskSync(mvTaskName);
+    }
+
+    protected void createAndRefreshMV(String db, String sql) throws Exception {
+        Pattern createMvPattern = Pattern.compile("^create materialized view (\\w+) .*");
+        Matcher matcher = createMvPattern.matcher(sql.toLowerCase(Locale.ROOT));
+        if (!matcher.find()) {
+            throw new Exception("create materialized view syntax error.");
+        }
+        String tableName = matcher.group(1);
+        starRocksAssert.withMaterializedView(sql);
+        refreshMaterializedView(db, tableName);
     }
 }

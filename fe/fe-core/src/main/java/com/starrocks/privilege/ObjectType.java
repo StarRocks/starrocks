@@ -14,7 +14,10 @@
 
 package com.starrocks.privilege;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
+
+import java.util.Map;
 
 public enum ObjectType {
     TABLE(1),
@@ -40,4 +43,15 @@ public enum ObjectType {
         return id;
     }
 
+    public static final Map<String, ObjectType> OBJECT_TO_PLURAL = new ImmutableMap.Builder<String, ObjectType>()
+            .put("TABLES", ObjectType.TABLE)
+            .put("DATABASES", ObjectType.DATABASE)
+            .put("USERS", ObjectType.USER)
+            .put("RESOURCES", ObjectType.RESOURCE)
+            .put("VIEWS", ObjectType.VIEW)
+            .put("CATALOGS", ObjectType.CATALOG)
+            .put("MATERIALIZED VIEWS", ObjectType.MATERIALIZED_VIEW)
+            .put("FUNCTIONS", ObjectType.FUNCTION)
+            .put("RESOURCE GROUPS", ObjectType.RESOURCE_GROUP)
+            .put("GLOBAL FUNCTIONS", ObjectType.GLOBAL_FUNCTION).build();
 }

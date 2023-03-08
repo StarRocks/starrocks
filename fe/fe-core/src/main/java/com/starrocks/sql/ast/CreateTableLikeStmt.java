@@ -18,10 +18,11 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.TableName;
 
 public class CreateTableLikeStmt extends DdlStmt {
-
     private final boolean ifNotExists;
     private final TableName tableName;
     private final TableName existedTableName;
+
+    private CreateTableStmt createTableStmt;
 
     public CreateTableLikeStmt(boolean ifNotExists, TableName tableName, TableName existedTableName) {
         this.ifNotExists = ifNotExists;
@@ -55,6 +56,14 @@ public class CreateTableLikeStmt extends DdlStmt {
 
     public TableName getExistedDbTbl() {
         return existedTableName;
+    }
+
+    public CreateTableStmt getCreateTableStmt() {
+        return createTableStmt;
+    }
+
+    public void setCreateTableStmt(CreateTableStmt createTableStmt) {
+        this.createTableStmt = createTableStmt;
     }
 
     @Override

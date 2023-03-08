@@ -59,8 +59,6 @@ public abstract class AstVisitor<R, C> {
         return null;
     }
 
-    // ---------------------------------------- Statement --------------------------------------------------------------
-
     public R visitStatement(StatementBase statement, C context) {
         return visitNode(statement, context);
     }
@@ -68,6 +66,8 @@ public abstract class AstVisitor<R, C> {
     public R visitDDLStatement(DdlStmt statement, C context) {
         return visitStatement(statement, context);
     }
+
+    // ---------------------------------------- Query Statement --------------------------------------------------------------
 
     public R visitQueryStatement(QueryStatement statement, C context) {
         return visitStatement(statement, context);
@@ -283,7 +283,7 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitShowMaterializedViewStatement(ShowMaterializedViewStmt statement, C context) {
+    public R visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -309,6 +309,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitSetCatalogStatement(SetCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ------------------------------------------- DML Statement -------------------------------------------------------
 
     public R visitInsertStatement(InsertStmt statement, C context) {
@@ -319,8 +323,8 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitDeleteStatement(DeleteStmt node, C context) {
-        return visitStatement(node, context);
+    public R visitDeleteStatement(DeleteStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ------------------------------------------- Routine Statement ---------------------------------------------------
@@ -610,6 +614,14 @@ public abstract class AstVisitor<R, C> {
 
     public R visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitGrantRoleStatement(GrantRoleStmt statement, C context) {
+        return visitGrantRevokeRoleStatement(statement, context);
+    }
+
+    public R visitRevokeRoleStatement(RevokeRoleStmt statement, C context) {
+        return visitGrantRevokeRoleStatement(statement, context);
     }
 
     public R visitSetRoleStatement(SetRoleStmt statement, C context) {

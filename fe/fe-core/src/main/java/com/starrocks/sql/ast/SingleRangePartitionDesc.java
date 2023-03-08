@@ -22,10 +22,10 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.thrift.TTabletType;
 
@@ -58,7 +58,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         this.properties = properties;
 
         this.partitionDataProperty = DataProperty.getInferredDefaultDataProperty();
-        this.replicationNum = FeConstants.default_replication_num;
+        this.replicationNum = RunMode.defaultReplicationNum();
     }
 
     public boolean isSetIfNotExists() {
@@ -133,7 +133,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         Preconditions.checkNotNull(partitionDataProperty);
 
         // analyze replication num
-        replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, FeConstants.default_replication_num);
+        replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, RunMode.defaultReplicationNum());
         if (replicationNum == null) {
             throw new AnalysisException("Invalid replication number: " + replicationNum);
         }
@@ -151,8 +151,8 @@ public class SingleRangePartitionDesc extends PartitionDesc {
                 properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, true);
         long storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(
                 properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, Config.lake_default_storage_cache_ttl_seconds);
-        boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
-                properties, PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, false);
+        boolean enableAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
+                properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
 
         if (storageCacheTtlS < -1) {
             throw new AnalysisException("Storage cache ttl should not be less than -1");
@@ -163,10 +163,10 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         if (enableStorageCache && storageCacheTtlS == 0) {
             throw new AnalysisException("Storage cache ttl should not be 0 when cache is enabled");
         }
-        if (!enableStorageCache && allowAsyncWriteBack) {
-            throw new AnalysisException("storage allow_async_write_back can't be enabled when cache is disabled");
+        if (!enableStorageCache && enableAsyncWriteBack) {
+            throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
         }
-        storageCacheInfo = new StorageCacheInfo(enableStorageCache, storageCacheTtlS, allowAsyncWriteBack);
+        storageCacheInfo = new StorageCacheInfo(enableStorageCache, storageCacheTtlS, enableAsyncWriteBack);
 
         if (otherProperties == null) {
             // check unknown properties

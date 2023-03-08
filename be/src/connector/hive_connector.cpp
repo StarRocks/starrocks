@@ -255,6 +255,10 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
         _profile.block_cache_write_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteBytes", TUnit::BYTES, prefix);
         _profile.block_cache_write_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockCacheWriteTimer", prefix);
+        _profile.block_cache_write_fail_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_write_fail_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailBytes", TUnit::BYTES, prefix);
     }
 
     if (hdfs_scan_node.__isset.table_name) {
@@ -397,6 +401,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.open_limit = nullptr;
     for (const auto& delete_file : scan_range.delete_files) {
         scanner_params.deletes.emplace_back(&delete_file);
+    }
+    if (dynamic_cast<const IcebergTableDescriptor*>(_hive_table)) {
+        auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
+        scanner_params.iceberg_schema = tbl->get_iceberg_schema();
     }
     scanner_params.use_block_cache = _use_block_cache;
     scanner_params.enable_populate_block_cache = _enable_populate_block_cache;

@@ -44,6 +44,7 @@ import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
@@ -73,7 +74,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     // 1. Native table:
     //   1.1 Local: OLAP, MATERIALIZED_VIEW
-    //   1.2 Lake: LAKE
+    //   1.2 Cloud native: LAKE, LAKE_MATERIALIZED_VIEW
     // 2. System table: SCHEMA
     // 3. View: INLINE_VIEW, VIEW
     // 4. External table: MYSQL, OLAP_EXTERNAL, BROKER, ELASTICSEARCH, HIVE, ICEBERG, HUDI, ODBC, JDBC
@@ -93,7 +94,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         MATERIALIZED_VIEW,
         LAKE,
         DELTALAKE,
-        FILE
+        FILE,
+        LAKE_MATERIALIZED_VIEW
     }
 
     @SerializedName(value = "id")
@@ -141,7 +143,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     // not serialized field
     // record all materialized views based on this Table
     @SerializedName(value = "mvs")
-    private Set<MvId> relatedMaterializedViews;
+    protected Set<MvId> relatedMaterializedViews;
 
     public Table(TableType type) {
         this.type = type;
@@ -214,20 +216,32 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.OLAP;
     }
 
-    public boolean isMaterializedView() {
+    public boolean isOlapMaterializedView() {
         return type == TableType.MATERIALIZED_VIEW;
+    }
+
+    public boolean isLocalTable() {
+        return isOlapTable() || isOlapMaterializedView();
     }
 
     public boolean isLakeTable() {
         return type == TableType.LAKE;
     }
 
-    public boolean isLocalTable() {
-        return isOlapTable() || isMaterializedView();
+    public boolean isLakeMaterializedView() {
+        return type == TableType.LAKE_MATERIALIZED_VIEW;
+    }
+
+    public boolean isCloudNativeTable() {
+        return isLakeTable() || isLakeMaterializedView();
+    }
+
+    public boolean isMaterializedView() {
+        return isOlapMaterializedView() || isLakeMaterializedView();
     }
 
     public boolean isNativeTable() {
-        return isLocalTable() || isLakeTable();
+        return isLocalTable() || isCloudNativeTable();
     }
 
     public boolean isHiveTable() {
@@ -270,6 +284,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public Column getColumn(String name) {
         return nameToColumn.get(name);
+    }
+
+    public boolean containColumn(String columnName) {
+        return nameToColumn.containsKey(columnName);
     }
 
     public List<Column> getColumns() {
@@ -315,6 +333,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return table;
         } else if (type == TableType.LAKE) {
             table = LakeTable.read(in);
+            table.setTypeRead(true);
+            return table;
+        } else if (type == TableType.LAKE_MATERIALIZED_VIEW) {
+            table = LakeMaterializedView.read(in);
             table.setTypeRead(true);
             return table;
         } else {
@@ -431,19 +453,38 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return "MySQL";
         } else if (this instanceof SchemaTable) {
             return "MEMORY";
+        } else if (this instanceof HiveTable) {
+            return "Hive";
+        } else if (this instanceof HudiTable) {
+            return "Hudi";
+        } else if (this instanceof IcebergTable) {
+            return "Iceberg";
+        } else if (this instanceof DeltaLakeTable) {
+            return "DeltaLake";
+        } else if (this instanceof EsTable) {
+            return "Elasticsearch";
+        } else if (this instanceof JDBCTable) {
+            return "JDBC";
+        } else if (this instanceof FileTable) {
+            return "File";
         } else {
             return null;
         }
     }
 
     public String getMysqlType() {
-        if (this instanceof View) {
-            return "VIEW";
+        switch (type) {
+            case INLINE_VIEW:
+            case VIEW:
+            case MATERIALIZED_VIEW:
+            case LAKE_MATERIALIZED_VIEW:
+                return "VIEW";
+            case SCHEMA:
+                return "SYSTEM VIEW";
+            default:
+                // external table also returns "BASE TABLE" for BI compatibility
+                return "BASE TABLE";
         }
-        if (this instanceof MaterializedView) {
-            return "VIEW";
-        }
-        return "BASE TABLE";
     }
 
     public String getComment() {
@@ -579,5 +620,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public List<String> getPartitionColumnNames() {
         return Lists.newArrayList();
+    }
+
+    public boolean supportsUpdate() {
+        return false;
     }
 }

@@ -20,6 +20,7 @@
 
 #include "common/status.h"
 #include "common/tracer.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/stl_util.h"
@@ -2377,7 +2378,8 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                                     _tablet.tablet_id(), _error_msg));
     }
     std::unique_lock<std::mutex> ul(_lock);
-    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 60000, ul));
+    // wait for version timeout 55s, should smaller than exec_plan_fragment rpc timeout(60s)
+    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000, ul));
     if (_edit_version_infos.empty()) {
         string msg = strings::Substitute("tablet deleted when get_applied_rowsets tablet:$0", _tablet.tablet_id());
         LOG(WARNING) << msg;
@@ -2430,6 +2432,13 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
         LOG(WARNING) << "link_from: base_tablet's max_version:" << max_version << " < alter_version:" << request_version
                      << " tablet:" << _tablet.tablet_id() << " base_tablet:" << base_tablet->tablet_id();
         return Status::InternalError("link_from: max_version < request version");
+    }
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "link_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        return Status::OK();
     }
     vector<RowsetSharedPtr> rowsets;
     EditVersion version;
@@ -2525,6 +2534,13 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
     }
 
     std::unique_lock wrlock(_tablet.get_header_lock());
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "link_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        return Status::OK();
+    }
     st = kv_store->write_batch(&wb);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << st;
@@ -2565,6 +2581,13 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
                      << " < alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
         return Status::InternalError("convert_from: max_version < request_version");
+    }
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "convert_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        return Status::OK();
     }
     std::vector<RowsetSharedPtr> src_rowsets;
     EditVersion version;
@@ -2687,6 +2710,13 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     }
 
     std::unique_lock wrlock(_tablet.get_header_lock());
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "convert_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        return Status::OK();
+    }
     status = kv_store->write_batch(&wb);
     if (!status.ok()) {
         LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << status;
@@ -2772,6 +2802,13 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                      << " < alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
         return Status::InternalError("reorder_from: max_version < request_version");
+    }
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "reorder_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        return Status::OK();
     }
     std::vector<RowsetSharedPtr> src_rowsets;
     EditVersion version;
@@ -2945,6 +2982,13 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     }
 
     std::unique_lock wrlock(_tablet.get_header_lock());
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "reorder_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        return Status::OK();
+    }
     status = kv_store->write_batch(&wb);
     if (!status.ok()) {
         LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << status;
@@ -3031,6 +3075,44 @@ Status TabletUpdates::check_and_remove_rowset() {
         return Status::InternalError(msg);
     }
     return Status::OK();
+}
+
+void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
+    vector<uint32_t> rowsets;
+    {
+        std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            LOG(WARNING) << "tablet delete when get_tablet_info_extra tablet:" << _tablet.tablet_id();
+            return;
+        }
+        info.num_version = _edit_version_infos.size();
+        info.min_version = _edit_version_infos[0]->version.major();
+        auto& v = _edit_version_infos[_edit_version_infos.size() - 1];
+        info.max_version = v->version.major();
+        info.num_rowset = v->rowsets.size();
+        rowsets = v->rowsets;
+    }
+    int64_t total_row = 0;
+    int64_t total_size = 0;
+    {
+        std::lock_guard lg(_rowset_stats_lock);
+        for (uint32_t rowsetid : rowsets) {
+            auto itr = _rowset_stats.find(rowsetid);
+            if (itr != _rowset_stats.end()) {
+                // TODO(cbl): also report num deletes
+                total_row += itr->second->num_rows;
+                total_size += itr->second->byte_size;
+            }
+        }
+    }
+    info.num_row = total_row;
+    info.data_size = total_size;
+    auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
+    auto index_entry = index_cache.get(_tablet.tablet_id());
+    if (index_entry != nullptr) {
+        info.index_mem = index_entry->size();
+        index_cache.release(index_entry);
+    }
 }
 
 void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
@@ -3256,6 +3338,16 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         l2.unlock();                     // _rowsets_lock
         _try_commit_pendings_unlocked(); // may acquire |_rowset_stats_lock| and |_rowsets_lock|
 
+        _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
+        _apply_version_changed.notify_all();
+        // The function `unload` of index_entry in the following code acquire `_lock` in PrimaryIndex.
+        // If there are other thread to do rowset commit, it will load PrimaryIndex first which hold `_lock` in
+        // PrimaryIndex and it will acquire `_lock` in TabletUpdates which is `l1` to get applied rowset which will
+        // cause dead lock.
+        // Actually, unload PrimayIndex doesn't need to hold `_lock` of TabletUpdates, so we can release l1 in advance
+        // to avoid dead lock.
+        l1.unlock();
+
         // unload primary index
         auto manager = StorageEngine::instance()->update_manager();
         auto& index_cache = manager->index_cache();
@@ -3263,9 +3355,6 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
         index_entry->value().unload();
         index_cache.release(index_entry);
-        _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
-
-        _apply_version_changed.notify_all();
 
         LOG(INFO) << "load full snapshot done " << _debug_string(false);
 
@@ -3348,7 +3437,7 @@ void TabletUpdates::_update_total_stats(const std::vector<uint32_t>& rowsets, si
     }
 }
 
-Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
+Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids, bool with_default,
                                         std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<std::unique_ptr<Column>>* columns, void* state) {
     std::map<uint32_t, RowsetSharedPtr> rssid_to_rowsets;

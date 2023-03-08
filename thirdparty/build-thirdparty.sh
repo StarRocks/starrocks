@@ -60,6 +60,7 @@ if [[ ! -z ${STARROCKS_GCC_HOME} ]]; then
     export CC=${STARROCKS_GCC_HOME}/bin/gcc
     export CPP=${STARROCKS_GCC_HOME}/bin/cpp
     export CXX=${STARROCKS_GCC_HOME}/bin/g++
+    export PATH=${STARROCKS_GCC_HOME}/bin:$PATH
 else
     echo "STARROCKS_GCC_HOME environment variable is not set"
     exit 1
@@ -188,7 +189,7 @@ build_openssl() {
 
     LDFLAGS="-L${TP_LIB_DIR}" \
     LIBDIR="lib" \
-    ./Configure --prefix=$TP_INSTALL_DIR -zlib -no-shared ${OPENSSL_PLATFORM}
+    ./Configure --prefix=$TP_INSTALL_DIR -zlib no-shared no-tests ${OPENSSL_PLATFORM}
     make -j$PARALLEL
     make install_sw
 
@@ -450,7 +451,7 @@ build_boost() {
     # It is difficult to generate static linked b2, so we use LD_LIBRARY_PATH instead
     ./bootstrap.sh --prefix=$TP_INSTALL_DIR
     LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib:${STARROCKS_GCC_HOME}/lib64:${LD_LIBRARY_PATH} \
-    ./b2 link=static runtime-link=static -j $PARALLEL --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
+    ./b2 link=static runtime-link=static -j $PARALLEL --without-test --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
 }
 
 #leveldb
@@ -459,8 +460,8 @@ build_leveldb() {
     cd $TP_SOURCE_DIR/$LEVELDB_SOURCE
     LDFLAGS="-L ${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     make -j$PARALLEL
-    cp out-static/libleveldb.a ../../installed/lib/libleveldb.a
-    cp -r include/leveldb ../../installed/include/
+    cp out-static/libleveldb.a $TP_LIB_DIR/libleveldb.a
+    cp -r include/leveldb $TP_INCLUDE_DIR
 }
 
 # brpc
@@ -494,8 +495,8 @@ build_rocksdb() {
     EXTRA_LDFLAGS="-static-libstdc++ -static-libgcc" \
     PORTABLE=1 make USE_RTTI=1 -j$PARALLEL static_lib
 
-    cp librocksdb.a ../../installed/lib/librocksdb.a 
-    cp -r include/rocksdb ../../installed/include/
+    cp librocksdb.a $TP_LIB_DIR/librocksdb.a
+    cp -r include/rocksdb $TP_INCLUDE_DIR
 
     export CFLAGS=$OLD_FLAGS
 }
@@ -538,9 +539,9 @@ build_flatbuffers() {
   LDFLAGS="-static-libstdc++ -static-libgcc" \
   ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" -DFLATBUFFERS_BUILD_TESTS=OFF
   ${BUILD_SYSTEM} -j$PARALLEL
-  cp flatc  ../../../installed/bin/flatc
-  cp -r ../include/flatbuffers  ../../../installed/include/flatbuffers
-  cp libflatbuffers.a ../../../installed/lib/libflatbuffers.a
+  cp flatc  $TP_INSTALL_DIR/bin/flatc
+  cp -r ../include/flatbuffers  $TP_INCLUDE_DIR/flatbuffers
+  cp libflatbuffers.a $TP_LIB_DIR/libflatbuffers.a
 }
 
 # arrow
@@ -962,12 +963,12 @@ build_benchmark() {
 build_fast_float() {
     check_if_source_exist $FAST_FLOAT_SOURCE
     cd $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE
-    cp -r $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE/include $STARROCKS_THIRDPARTY/installed
+    cp -r $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE/include $TP_INSTALL_DIR
 }
 
 build_cachelib() {
     check_if_source_exist $CACHELIB_SOURCE
-    rm -rf $STARROCKS_THIRDPARTY/installed/$CACHELIB_SOURCE && mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $STARROCKS_THIRDPARTY/installed/
+    rm -rf $TP_INSTALL_DIR/$CACHELIB_SOURCE && mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $TP_INSTALL_DIR/
 }
 
 # streamvbyte
@@ -986,6 +987,56 @@ build_streamvbyte() {
 
     make -j$PARALLEL
     make install
+}
+
+# jansson
+build_jansson() {
+    check_if_source_exist $JANSSON_SOURCE
+    cd $TP_SOURCE_DIR/$JANSSON_SOURCE/
+    mkdir -p build
+    cd build
+    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
+# avro-c
+build_avro_c() {
+    check_if_source_exist $AVRO_SOURCE
+    cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
+    mkdir -p build
+    cd build
+    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_BUILD_TYPE=Release
+    ${BUILD_SYSTEM} -j$PARALLEL    
+    ${BUILD_SYSTEM} install
+    rm ${TP_INSTALL_DIR}/lib64/libavro.so*
+}
+
+# serders
+build_serdes() {
+    OLD_CFLAGS=$CFLAGS
+    unset CFLAGS
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
+    check_if_source_exist $SERDES_SOURCE
+    cd $TP_SOURCE_DIR/$SERDES_SOURCE
+    export LIBS="-lrt -lpthread -lcurl -ljansson -lrdkafka -lrdkafka++ -lavro -lssl -lcrypto -ldl" 
+    ./configure --prefix=${TP_INSTALL_DIR} \
+                --libdir=${TP_INSTALL_DIR}/lib \
+                --CFLAGS="-I ${TP_INSTALL_DIR}/include"  \
+                --CXXFLAGS="-I ${TP_INSTALL_DIR}/include" \
+                --LDFLAGS="-L ${TP_INSTALL_DIR}/lib -L ${TP_INSTALL_DIR}/lib64" \
+                --enable-static \
+                --disable-shared
+
+    make -j$PARALLEL
+    make install
+    rm ${TP_INSTALL_DIR}/lib/libserdes.so*
+    # these symbols also be definition in librdkafka, change these symbols to be local.
+    objcopy --localize-symbol=cnd_timedwait ${TP_INSTALL_DIR}/lib/libserdes.a
+    objcopy --localize-symbol=cnd_timedwait_ms ${TP_INSTALL_DIR}/lib/libserdes.a
+    objcopy --localize-symbol=thrd_is_current ${TP_INSTALL_DIR}/lib/libserdes.a
+    unset LIBS
+    export CFLAGS=$OLD_CFLAGS
 }
 
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
@@ -1038,6 +1089,9 @@ build_benchmark
 build_fast_float
 build_cachelib
 build_streamvbyte
+build_jansson
+build_avro_c
+build_serdes
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

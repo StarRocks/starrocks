@@ -68,7 +68,8 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<Sl
           _aggregator(nullptr),
           _merge_condition(std::move(merge_condition)),
           _mem_tracker(mem_tracker) {
-    if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
+    if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs != nullptr &&
+        _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         _has_op_slot = true;
     }
     _init_aggregator_if_needed();

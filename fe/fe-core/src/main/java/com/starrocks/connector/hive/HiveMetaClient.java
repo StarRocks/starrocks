@@ -210,16 +210,17 @@ public class HiveMetaClient {
     }
 
     /**
-     * Both 'getPartitionByNames' and 'getPartitionColumnStatistics' could throw exception or no response
+     * Both 'getPartitionsByNames' and 'getPartitionColumnStatistics' could throw exception or no response
      * when querying too many partitions at present. Due to statistics don't affect accuracy, user could adjust
      * session variable 'hive_partition_stats_sample_size' to ensure 'getPartitionColumnStat' normal return.
-     * But "getPartitionByNames" interface must return the full contents due to the need to get partition file information.
-     * So we resend request "getPartitionByNames" when an exception occurs.
+     * But "getPartitionsByNames" interface must return the full contents due to the need to get partition file information.
+     * So we resend request "getPartitionsByNames" when an exception occurs.
      */
     public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
         int size = partitionNames.size();
         List<Partition> partitions;
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames", String.format("%s partitions", size));
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames." + tblName,
+                String.format("%s partitions", size));
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionsByNames")) {
             RecyclableClient client = null;
@@ -266,7 +267,8 @@ public class HiveMetaClient {
                                                                           List<String> partitionNames,
                                                                           List<String> columnNames) {
         int size = partitionNames.size();
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics", String.format("%s partitions", size));
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics." + tableName,
+                String.format("%s partitions", size));
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionColumnStatistics")) {
             return callRPC("getPartitionColumnStatistics",

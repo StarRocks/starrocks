@@ -22,6 +22,8 @@
   + [Data compression](./table_design/data_compression.md)
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
+  + Concepts
+    + [Strict mode](./loading/load_concept/strict_mode.md)
   + [Overview of data loading](./loading/Loading_intro.md)
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
@@ -41,18 +43,18 @@
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
     + [Default catalog](./data_source/catalog/default_catalog.md)
-    + [Delta Lake catalog](./data_source/catalog/deltalake_catalog.md)
     + [Hive catalog](./data_source/catalog/hive_catalog.md)
     + [Iceberg catalog](./data_source/catalog/iceberg_catalog.md)
     + [Hudi catalog](./data_source/catalog/hudi_catalog.md)
+    + [Delta Lake catalog](./data_source/catalog/deltalake_catalog.md)
     + [Query external data](./data_source/catalog/query_external_data.md)
   + [External tables](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
   + [Local Cache](./data_source/Block_cache.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
-  + [Multi-table asynchronous refresh materialized view](./using_starrocks/Materialized_view.md)
-  + [Single-table Materialized View](./using_starrocks/Materialized_view-single_table.md)
+  + [Materialized view](./using_starrocks/Materialized_view.md)
+  + [Single-table materialized view](./using_starrocks/Materialized_view-single_table.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Query Cache](./using_starrocks/query_cache.md)
@@ -62,6 +64,9 @@
   + Computing the Number of Distinct Values
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
++ Integration
+  + [Integrate with StarRocks](./integrations/intro.md)
+  + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
@@ -75,6 +80,7 @@
     + [Backup and restore](./administration/Backup_and_restore.md)
     + [Configuration](./administration/Configuration.md)
     + [Monitor and alert](./administration/Monitor_and_Alert.md)
+    + [Manage audit logs within StarRocks via Audit Loader](./administration/audit_loader.md)
     + [Manage a cluster](./administration/Cluster_administration.md)
     + [Enable FQDN access](./administration/enable_fqdn.md)
     + [Configure a time zone](./administration/timezone.md)
@@ -114,6 +120,7 @@
       + [SHOW GRANTS](./sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
       + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
     + Cluster Management
+      + [ADD SQLBLACKLIST](./sql-reference/sql-statements/Administration/ADD%20SQLBLACKLIST.md)
       + [ADMIN CANCEL REPAIR TABLE](./sql-reference/sql-statements/Administration/ADMIN%20CANCEL%20REPAIR.md)
       + [ADMIN CHECK TABLET](./sql-reference/sql-statements/Administration/ADMIN%20CHECK%20TABLET.md)
       + [ADMIN REPAIR TABLE](./sql-reference/sql-statements/Administration/ADMIN%20REPAIR.md)
@@ -127,9 +134,13 @@
       + [CANCEL DECOMMISSION](./sql-reference/sql-statements/Administration/CANCEL%20DECOMMISSION.md)
       + [CREATE FILE](./sql-reference/sql-statements/Administration/CREATE%20FILE.md)
       + [CREATE RESOURCE GROUP](./sql-reference/sql-statements/Administration/CREATE%20RESOURCE%20GROUP.md)
+      + [DELETE SQLBLACKLIST](./sql-reference/sql-statements/Administration/DELETE%20SQLBLACKLIST.md)
       + [DROP FILE](./sql-reference/sql-statements/Administration/DROP%20FILE.md)
       + [DROP RESOURCE GROUP](./sql-reference/sql-statements/Administration/DROP%20RESOURCE%20GROUP.md)
+      + [EXPLAIN](./sql-reference/sql-statements/Administration/EXPLAIN.md)
       + [INSTALL PLUGIN](./sql-reference/sql-statements/Administration/INSTALL%20PLUGIN.md)
+      + [KILL](./sql-reference/sql-statements/Administration/KILL.md)
+      + [SET](./sql-reference/sql-statements/Administration/SET.md)
       + [SHOW BACKENDS](./sql-reference/sql-statements/Administration/SHOW%20BACKENDS.md)
       + [SHOW BROKER](./sql-reference/sql-statements/Administration/SHOW%20BROKER.md)
       + [SHOW COMPUTE NODES](./sql-reference/sql-statements/Administration/SHOW%20COMPUTE%20NODES.md)
@@ -141,7 +152,9 @@
       + [SHOW PROC](./sql-reference/sql-statements/Administration/SHOW%20PROC.md)
       + [SHOW PROCESSLIST](./sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md)
       + [SHOW RESOURCE GROUP](./sql-reference/sql-statements/Administration/SHOW%20RESOURCE%20GROUP.md)
+      + [SHOW SQLBLACKLIST](./sql-reference/sql-statements/Administration/SHOW%20SQLBLACKLIST.md)
       + [SHOW TABLE STATUS](./sql-reference/sql-statements/Administration/SHOW%20TABLE%20STATUS.md)
+      + [SHOW VARIABLES](./sql-reference/sql-statements/Administration/SHOW%20VARIABLES.md)
       + [UNINSTALL PLUGIN](./sql-reference/sql-statements/Administration/UNINSTALL%20PLUGIN.md)
     + DDL
       + [ALTER DATABASE](./sql-reference/sql-statements/data-definition/ALTER%20DATABASE.md)
@@ -534,6 +547,7 @@
       + [null_or_empty](./sql-reference/sql-functions/string-functions/null_or_empty.md)
       + [parse_url](./sql-reference/sql-functions/string-functions/parse_url.md)
       + [repeat](./sql-reference/sql-functions/string-functions/repeat.md)
+      + [replace](./sql-reference/sql-functions/string-functions/replace.md)
       + [reverse](./sql-reference/sql-functions/string-functions/reverse.md)
       + [right](./sql-reference/sql-functions/string-functions/right.md)
       + [rpad](./sql-reference/sql-functions/string-functions/rpad.md)
@@ -607,9 +621,6 @@
     + [Build_Handbook](./developers/build-starrocks/handbook.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
-+ Integration
-  + [Integrate with StarRocks](./integrations/intro.md)
-  + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
 + Release Notes
   + [v2.5](./release_notes/release-2.5.md)
   + [v2.4](./release_notes/release-2.4.md)

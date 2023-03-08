@@ -47,13 +47,14 @@ public:
     int64_t num_rows_read() const override { return _num_rows_read; }
     int64_t num_bytes_read() const override { return _bytes_read; }
     int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
+    bool skip_predicate() const override { return !_has_predicate; }
 
 private:
     Status get_tablet(const TInternalScanRange& scan_range);
     Status init_global_dicts(TabletReaderParams* params);
     Status init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status init_scanner_columns(std::vector<uint32_t>& scanner_columns);
-    void decide_chunk_size();
+    void decide_chunk_size(bool has_predicate);
     Status init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                               const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     Status init_tablet_reader(RuntimeState* state);
@@ -71,6 +72,7 @@ private:
     std::vector<ExprContext*> _not_push_down_conjuncts;
     ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
+    bool _has_predicate = false;
 
     ObjectPool _obj_pool;
 
@@ -134,6 +136,11 @@ private:
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
+
+    RuntimeProfile::Counter* _cache_timer = nullptr;
+    RuntimeProfile::Counter* _cache_io_timer = nullptr;
+    RuntimeProfile::Counter* _cache_read_compressed_counter = nullptr;
+    RuntimeProfile::Counter* _cache_segments_read_count = nullptr;
 };
 
 // ================================
@@ -145,6 +152,8 @@ public:
     ~LakeDataSourceProvider() override = default;
 
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
+
+    Status init(ObjectPool* pool, RuntimeState* state) override;
 
 protected:
     ConnectorScanNode* _scan_node;
@@ -164,7 +173,7 @@ LakeDataSource::~LakeDataSource() {
 Status LakeDataSource::open(RuntimeState* state) {
     _runtime_state = state;
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
-    const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
+    TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
     _slots = &tuple_desc->slots();
 
     _runtime_profile->add_info_string("Table", tuple_desc->table_desc()->name());
@@ -179,6 +188,10 @@ Status LakeDataSource::open(RuntimeState* state) {
 
     // eval const conjuncts
     RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
+
+    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
+    DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, thrift_lake_scan_node.dict_string_id_to_int_ids,
+                                           &(tuple_desc->decoded_slots()));
 
     // Init _conjuncts_manager.
     OlapScanConjunctsManager& cm = _conjuncts_manager;
@@ -327,8 +340,8 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
     return Status::OK();
 }
 
-void LakeDataSource::decide_chunk_size() {
-    if (_read_limit != -1 && _read_limit < _runtime_state->chunk_size()) {
+void LakeDataSource::decide_chunk_size(bool has_predicate) {
+    if (!has_predicate && _read_limit != -1 && _read_limit < _runtime_state->chunk_size()) {
         // Improve for select * from table limit x, x is small
         _params.chunk_size = _read_limit;
     } else {
@@ -347,11 +360,14 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache;
-    decide_chunk_size();
 
     PredicateParser parser(*_tablet_schema);
     std::vector<PredicatePtr> preds;
     RETURN_IF_ERROR(_conjuncts_manager.get_column_predicates(&parser, &preds));
+    decide_chunk_size(!preds.empty());
+    if (preds.size()) {
+        _has_predicate = true;
+    }
     for (auto& p : preds) {
         if (parser.can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());
@@ -501,6 +517,13 @@ void LakeDataSource::init_counter(RuntimeState* state) {
 
     // IOTime
     _io_timer = ADD_TIMER(_runtime_profile, "IOTime");
+
+    // Cache
+    _cache_timer = ADD_TIMER(_runtime_profile, "Cache");
+    _cache_io_timer = ADD_CHILD_TIMER(_runtime_profile, "CacheIOTime", "Cache");
+    _cache_read_compressed_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "CacheCompressedBytesRead", TUnit::BYTES, "Cache");
+    _cache_segments_read_count = ADD_CHILD_COUNTER(_runtime_profile, "CacheSegmentsReadCount", TUnit::UNIT, "Cache");
 }
 
 void LakeDataSource::update_realtime_counter(Chunk* chunk) {
@@ -576,6 +599,11 @@ void LakeDataSource::update_counter() {
         COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
     }
+
+    COUNTER_UPDATE(_cache_timer, _reader->stats().cache_io_ns);
+    COUNTER_UPDATE(_cache_io_timer, _reader->stats().cache_io_ns);
+    COUNTER_UPDATE(_cache_read_compressed_counter, _reader->stats().cache_compressed_bytes_read);
+    COUNTER_UPDATE(_cache_segments_read_count, _reader->stats().cache_segments_read_count);
 }
 
 // ================================
@@ -585,6 +613,17 @@ LakeDataSourceProvider::LakeDataSourceProvider(ConnectorScanNode* scan_node, con
 
 DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<LakeDataSource>(this, scan_range);
+}
+
+Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
+    if (_t_lake_scan_node.__isset.bucket_exprs) {
+        const auto& bucket_exprs = _t_lake_scan_node.bucket_exprs;
+        _partition_exprs.resize(bucket_exprs.size());
+        for (int i = 0; i < bucket_exprs.size(); ++i) {
+            RETURN_IF_ERROR(Expr::create_expr_tree(pool, bucket_exprs[i], &_partition_exprs[i], state));
+        }
+    }
+    return Status::OK();
 }
 
 // ================================

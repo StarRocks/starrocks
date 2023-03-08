@@ -44,6 +44,7 @@ statement
     // Database Statement
     | useDatabaseStatement
     | useCatalogStatement
+    | setCatalogStatement
     | showDatabasesStatement
     | alterDbQuotaStatement
     | createDbStatement
@@ -89,7 +90,7 @@ statement
 
     // Materialized View Statement
     | createMaterializedViewStatement
-    | showMaterializedViewStatement
+    | showMaterializedViewsStatement
     | dropMaterializedViewStatement
     | alterMaterializedViewStatement
     | refreshMaterializedViewStatement
@@ -262,6 +263,10 @@ useDatabaseStatement
 
 useCatalogStatement
     : USE CATALOG identifierOrString
+    ;
+
+setCatalogStatement
+    : SET CATALOG identifierOrString
     ;
 
 showDatabasesStatement
@@ -517,8 +522,8 @@ materializedViewDesc
     | properties
     ;
 
-showMaterializedViewStatement
-    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+showMaterializedViewsStatement
+    : SHOW MATERIALIZED VIEWS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 dropMaterializedViewStatement
@@ -1009,7 +1014,7 @@ classifier
     : '(' expressionList ')'
     ;
 
-// ------------------------------------------- Function ----------------------------------------------------
+// ------------------------------------------- UDF Statement ----------------------------------------------------
 
 showFunctionsStatement
     : SHOW FULL? (BUILTIN|GLOBAL)? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
@@ -1233,11 +1238,11 @@ executeAsStatement
     ;
 
 createRoleStatement
-    : CREATE ROLE (IF NOT EXISTS)? identifierOrString
+    : CREATE ROLE (IF NOT EXISTS)? roleList
     ;
 
 dropRoleStatement
-    : DROP ROLE (IF EXISTS)? identifierOrString
+    : DROP ROLE (IF EXISTS)? roleList
     ;
 
 showRolesStatement
@@ -1273,12 +1278,11 @@ grantPrivilegeStatement
     | GRANT privilegeTypeList ON privObjectNameList TO grantRevokeClause (WITH GRANT OPTION)?           #grantTablePrivBrief
     | GRANT privilegeTypeList ON privObjectType (privObjectNameList)?
         TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithType
-    | GRANT privilegeTypeList ON GLOBAL? privObjectType qualifiedName '(' typeList ')'
+    | GRANT privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithFunc
-    | GRANT privilegeTypeList ON ALL privObjectType
+    | GRANT privilegeTypeList ON ALL privObjectTypePlural
         (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? TO grantRevokeClause
         (WITH GRANT OPTION)?                                                                            #grantOnAll
-    | GRANT privilegeTypeList ON ALL GLOBAL FUNCTIONS TO grantRevokeClause (WITH GRANT OPTION)?         #grantOnAllGlobalFunctions
     ;
 
 revokePrivilegeStatement
@@ -1286,11 +1290,10 @@ revokePrivilegeStatement
     | REVOKE privilegeTypeList ON privObjectNameList FROM grantRevokeClause                             #revokeTablePrivBrief
     | REVOKE privilegeTypeList ON privObjectType (privObjectNameList)?
         FROM grantRevokeClause                                                                          #revokePrivWithType
-    | REVOKE privilegeTypeList ON GLOBAL? privObjectType qualifiedName '(' typeList ')'
+    | REVOKE privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         FROM grantRevokeClause                                                                          #revokePrivWithFunc
-    | REVOKE privilegeTypeList ON ALL privObjectType
+    | REVOKE privilegeTypeList ON ALL privObjectTypePlural
         (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? FROM grantRevokeClause                #revokeOnAll
-    | REVOKE privilegeTypeList ON ALL GLOBAL FUNCTIONS FROM grantRevokeClause                           #revokeOnAllGlobalFunctions
     ;
 
 showGrantsStatement
@@ -1312,19 +1315,30 @@ privObjectNameList
     : privObjectName (',' privObjectName)*
     ;
 
+privFunctionObjectNameList
+    : qualifiedName '(' typeList ')' (',' qualifiedName '(' typeList ')')*
+    ;
+
 privilegeTypeList
     :  privilegeType (',' privilegeType)*
     ;
 
 privilegeType
-    : ADMIN | ALTER | CREATE | DROP | GRANT | LOAD
-    | SELECT | INSERT | DELETE | UPDATE | EXPORT | REPOSITORY| ALL PRIVILEGES?
-    | identifier
+    : ALL PRIVILEGES?
+    | GRANT| NODE| OPERATE| DELETE| DROP| INSERT| SELECT | ALTER| EXPORT| UPDATE| USAGE| PLUGIN| FILE| BLACKLIST
+    | REPOSITORY| REFRESH| IMPERSONATE
+    | CREATE (DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW| RESOURCE| RESOURCE GROUP|
+        EXTERNAL CATALOG)
     ;
 
 privObjectType
-    : SYSTEM | TABLE | DATABASE | CATALOG | DATABASES | FUNCTION
-    | identifier
+    : TABLE| DATABASE| SYSTEM| USER| RESOURCE| VIEW| CATALOG| MATERIALIZED VIEW| FUNCTION| RESOURCE GROUP
+    | GLOBAL FUNCTION
+    ;
+
+privObjectTypePlural
+    : TABLES| DATABASES| USERS| RESOURCES| VIEWS| CATALOGS| MATERIALIZED VIEWS| FUNCTIONS| RESOURCE GROUPS
+    | GLOBAL FUNCTIONS
     ;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
@@ -1817,6 +1831,7 @@ informationFunctionExpression
     | name = CONNECTION_ID '(' ')'
     | name = CURRENT_USER ('(' ')')?
     | name = CURRENT_ROLE '(' ')'
+    | name = CURRENT_CATALOG ('(' ')')?
     ;
 
 specialDateTimeExpression
@@ -1869,7 +1884,7 @@ whenClause
 
 over
     : OVER '('
-        (PARTITION BY partition+=expression (',' partition+=expression)*)?
+        (bracketHint? PARTITION BY partition+=expression (',' partition+=expression)*)?
         (ORDER BY sortItem (',' sortItem)*)?
         windowFrame?
       ')'
@@ -2171,31 +2186,31 @@ number
 
 nonReserved
     : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
-    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
-    | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
+    | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HUB
     | IDENTIFIED | IMAGE | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL
     | MANUAL | MAP | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NONE | NULLS
-    | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
+    | OBSERVER | OF | OFFSET | ONLY | OPEN | OPERATE | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
-    | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
+    | REMOVE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW
-    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP
+    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | STREAM | SUM | STATUS | STOP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
-    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER | USERS
-    | VALUE | VARIABLES | VIEW | VERBOSE
+    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USAGE | USER | USERS
+    | VALUE | VARIABLES | VIEW | VIEWS | VERBOSE
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
     | DOTDOTDOT

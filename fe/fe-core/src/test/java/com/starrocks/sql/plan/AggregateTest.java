@@ -818,6 +818,14 @@ public class AggregateTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "1:AGGREGATE (update finalize)\n" +
                 "  |  output: retention([TRUE,TRUE])");
+
+        sql = "select retention([])";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: retention[([]); args: INVALID_TYPE; result: ARRAY<BOOLEAN>; " +
+                "args nullable: true; result nullable: true]\n" +
+                "  |  cardinality: 1");
+
         FeConstants.runningUnitTest = false;
     }
 
@@ -2115,6 +2123,37 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 14> : 'b'");
         assertContains(plan, "  2:EXCHANGE\n" +
                 "     limit: 1");
+    }
+
+    @Test
+    public void testPruneGroupByKeysRule2() throws Exception {
+        String sql = "select 1 from test_all_type group by NULL " +
+                "having (NOT (((DROUND(0.09733420538671422) ) IS NOT NULL)))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 12> : 1\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 11: expr\n" +
+                "  |  having: dround(0.09733420538671422) IS NULL\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 11> : NULL");
+    }
+
+    @Test
+    public void testPruneGroupByKeysRule3() throws Exception {
+        String sql = "select count(*), sum(t1b) from test_all_type group by NULL " +
+                "having (NOT (((DROUND(0.09733420538671422) ) IS NOT NULL)))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 12> : 12: count\n" +
+                "  |  <slot 13> : 13: sum\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*), sum(2: t1b)\n" +
+                "  |  group by: 11: expr\n" +
+                "  |  having: dround(0.09733420538671422) IS NULL");
     }
 
     @Test

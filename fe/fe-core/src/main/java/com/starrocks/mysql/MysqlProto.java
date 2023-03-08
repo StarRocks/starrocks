@@ -36,6 +36,8 @@ package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -49,6 +51,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.mysql.MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT;
@@ -72,18 +75,30 @@ public class MysqlProto {
 
         // In new RBAC privilege framework
         if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+            AuthenticationManager authenticationManager = context.getGlobalStateMgr().getAuthenticationManager();
+            UserIdentity currentUser = null;
             if (Config.enable_auth_check) {
-                UserIdentity currentUser = context.getGlobalStateMgr().getAuthenticationManager().checkPassword(
-                        user, remoteIp, scramble, randomString);
+                currentUser = authenticationManager.checkPassword(user, remoteIp, scramble, randomString);
                 if (currentUser == null) {
                     ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
                     return false;
                 }
-                context.setAuthDataSalt(randomString);
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
-                context.setQualifiedUser(user);
+            } else {
+                Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                        authenticationManager.getBestMatchedUserIdentity(user, remoteIp);
+                if (matchedUserIdentity == null) {
+                    LOG.info("enable_auth_check is false, but cannot find user '{}'@'{}'", user, remoteIp);
+                    ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
+                    return false;
+                } else {
+                    currentUser = matchedUserIdentity.getKey();
+                }
             }
+
+            context.setAuthDataSalt(randomString);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+            context.setQualifiedUser(user);
             return true;
         }
 
@@ -182,20 +197,36 @@ public class MysqlProto {
             // 1. clear the serializer
             serializer.reset();
             // 2. build the auth switch request and send to the client
-            // TODO(yiming): support kerberos in new RBAC privilege framework later
             if (authPluginName.equals(AUTHENTICATION_KERBEROS_CLIENT)) {
-                if (GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
-                    try {
-                        handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
-                    } catch (Exception e) {
-                        ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    if (GlobalStateMgr.getCurrentState().getAuthenticationManager().isSupportKerberosAuth()) {
+                        try {
+                            handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
+                        } catch (Exception e) {
+                            ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
+                            sendResponsePacket(context);
+                            return false;
+                        }
+                    } else {
+                        ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
                         sendResponsePacket(context);
                         return false;
                     }
                 } else {
-                    ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
-                    sendResponsePacket(context);
-                    return false;
+                    if (GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
+                        try {
+                            handshakePacket.buildKrb5AuthRequestDeprecated(serializer, context.getRemoteIP(),
+                                    authPacket.getUser());
+                        } catch (Exception e) {
+                            ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
+                            sendResponsePacket(context);
+                            return false;
+                        }
+                    } else {
+                        ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
+                        sendResponsePacket(context);
+                        return false;
+                    }
                 }
             } else {
                 handshakePacket.buildAuthSwitchRequest(serializer);
@@ -205,6 +236,8 @@ public class MysqlProto {
             ByteBuffer authSwitchResponse = channel.fetchOnePacket();
             if (authSwitchResponse == null) {
                 // receive response failed.
+                LOG.error("Building handshake with kerberos error, msg: Failed to get a valid service ticket for" +
+                        " {} from the client", authPacket.getUser());
                 return false;
             }
             // 3. the client use default password plugin of StarRocks to dispose

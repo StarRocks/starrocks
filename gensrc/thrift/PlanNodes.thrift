@@ -140,6 +140,7 @@ enum TFileFormatType {
     FORMAT_ORC = 8,
     FORMAT_JSON = 9,
     FORMAT_CSV_ZSTD = 10,
+    FORMAT_AVRO = 11,
 }
 
 // One broker range information.
@@ -318,9 +319,9 @@ struct THdfsScanRange {
     9: optional list<string> hudi_logs
 
     // whether to use JNI scanner to read data of hudi MOR table for snapshot queries
-    10: optional bool use_hudi_jni_reader;
+    10: optional bool use_hudi_jni_reader
 
-    11: optional list<TIcebergDeleteFile> delete_files;
+    11: optional list<TIcebergDeleteFile> delete_files
 
     // number of lines at the start of the file to skip
     12: optional i64 skip_header
@@ -417,8 +418,13 @@ struct TSchemaScanNode {
   9: optional i64 thread_id
   10: optional string user_ip   // deprecated
   11: optional Types.TUserIdentity current_user_ident   // to replace the user and user_ip
+  12: optional i64 table_id
+  13: optional i64 partition_id
+  14: optional i64 tablet_id
+  15: optional i64 txn_id
 }
 
+// If you find yourself changing this struct, see also TLakeScanNode
 struct TOlapScanNode {
   1: required Types.TTupleId tuple_id
   2: required list<string> key_column_name
@@ -436,6 +442,7 @@ struct TOlapScanNode {
 
   26: optional list<Exprs.TExpr> bucket_exprs
   27: optional list<string> sort_key_column_names
+  28: optional i32 max_parallel_scan_instance_num
 }
 
 struct TJDBCScanNode {
@@ -446,6 +453,7 @@ struct TJDBCScanNode {
   5: optional i64 limit
 }
 
+// If you find yourself changing this struct, see also TOlapScanNode
 struct TLakeScanNode {
   1: required Types.TTupleId tuple_id
   2: required list<string> key_column_name
@@ -460,6 +468,7 @@ struct TLakeScanNode {
   // which columns only be used to filter data in the stage of scan data
   10: optional list<string> unused_output_column_name
   11: optional list<string> sort_key_column_names
+  12: optional list<Exprs.TExpr> bucket_exprs
 }
 
 struct TEqJoinCondition {
@@ -713,6 +722,9 @@ struct TSortNode {
   24: optional i64 partition_limit
   25: optional TTopNType topn_type;
   26: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
+  27: optional i64 max_buffered_rows;
+  28: optional i64 max_buffered_bytes;
+  29: optional bool late_materialization;
 }
 
 enum TAnalyticWindowType {
@@ -807,6 +819,7 @@ struct TAnalyticNode {
   11: optional string sql_aggregate_functions
 
   20: optional bool has_outer_join_child
+  21: optional bool use_hash_based_partition
 }
 
 struct TMergeNode {

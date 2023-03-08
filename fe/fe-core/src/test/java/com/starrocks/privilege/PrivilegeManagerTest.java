@@ -140,45 +140,45 @@ public class PrivilegeManagerTest {
         ctx.setQualifiedUser(testUser.getQualifiedUser());
 
         PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
-        Assert.assertFalse(PrivilegeManager.checkTableAction(
+        Assert.assertFalse(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertFalse(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertFalse(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Assert.assertFalse(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
+        Assert.assertFalse(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        Assert.assertTrue(PrivilegeManager.checkTableAction(
+        Assert.assertTrue(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Assert.assertTrue(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
 
         String sql = "grant select on table db.tbl1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantStmt);
-        sql = "grant ALTER on materialized_view db3.mv1 to test_user";
+        sql = "grant ALTER on materialized view db3.mv1 to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantStmt);
 
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertTrue(PrivilegeManager.checkTableAction(
+        Assert.assertTrue(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
-        Assert.assertTrue(PrivilegeManager.checkActionInDb(ctx, DB_NAME, PrivilegeType.SELECT));
-        Assert.assertFalse(PrivilegeManager.checkActionInDb(ctx, DB_NAME, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeManager.checkActionInDb(ctx, "db3", PrivilegeType.ALTER));
+        Assert.assertTrue(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Assert.assertTrue(PrivilegeActions.checkActionInDb(ctx, DB_NAME, PrivilegeType.SELECT));
+        Assert.assertFalse(PrivilegeActions.checkActionInDb(ctx, DB_NAME, PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeActions.checkActionInDb(ctx, "db3", PrivilegeType.ALTER));
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         sql = "revoke select on db.tbl1 from test_user";
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.revoke(revokeStmt);
-        sql = "revoke ALTER on materialized_view db3.mv1 from test_user";
+        sql = "revoke ALTER on materialized view db3.mv1 from test_user";
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.revoke(revokeStmt);
 
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertFalse(PrivilegeManager.checkTableAction(
+        Assert.assertFalse(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertFalse(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertFalse(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Assert.assertFalse(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
+        Assert.assertFalse(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
 
         // grant many priveleges
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -188,14 +188,14 @@ public class PrivilegeManagerTest {
         manager.grant(grantStmt);
 
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertTrue(PrivilegeManager.checkTableAction(
+        Assert.assertTrue(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertTrue(PrivilegeManager.checkTableAction(
+        Assert.assertTrue(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.INSERT));
-        Assert.assertTrue(PrivilegeManager.checkTableAction(
+        Assert.assertTrue(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DELETE));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Assert.assertTrue(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
 
         // revoke only select
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -204,14 +204,14 @@ public class PrivilegeManagerTest {
         manager.revoke(revokeStmt);
 
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertFalse(PrivilegeManager.checkTableAction(
+        Assert.assertFalse(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertTrue(PrivilegeManager.checkTableAction(
+        Assert.assertTrue(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.INSERT));
-        Assert.assertTrue(PrivilegeManager.checkTableAction(
+        Assert.assertTrue(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DELETE));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Assert.assertTrue(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
 
         // revoke all
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -220,14 +220,14 @@ public class PrivilegeManagerTest {
         manager.revoke(revokeStmt);
 
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertFalse(PrivilegeManager.checkTableAction(
+        Assert.assertFalse(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertFalse(PrivilegeManager.checkTableAction(
+        Assert.assertFalse(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.INSERT));
-        Assert.assertFalse(PrivilegeManager.checkTableAction(
+        Assert.assertFalse(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DELETE));
-        Assert.assertFalse(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertFalse(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Assert.assertFalse(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
+        Assert.assertFalse(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
 
         // grant view
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -236,9 +236,9 @@ public class PrivilegeManagerTest {
         manager.grant(grantStmt);
 
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertTrue(PrivilegeManager.checkActionInDb(ctx, DB_NAME, PrivilegeType.ALTER));
-        Assert.assertFalse(PrivilegeManager.checkActionInDb(ctx, DB_NAME, PrivilegeType.SELECT));
+        Assert.assertTrue(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeActions.checkActionInDb(ctx, DB_NAME, PrivilegeType.ALTER));
+        Assert.assertFalse(PrivilegeActions.checkActionInDb(ctx, DB_NAME, PrivilegeType.SELECT));
 
         // revoke view
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -247,7 +247,7 @@ public class PrivilegeManagerTest {
         manager.revoke(revokeStmt);
 
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertFalse(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
+        Assert.assertFalse(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
     }
 
     @Test
@@ -257,7 +257,7 @@ public class PrivilegeManagerTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(emptyImage.getDataOutputStream());
+        masterGlobalStateMgr.saveRBACPrivilege(emptyImage.getDataOutputStream());
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         String sql = "grant select on db.tbl1 to test_user";
@@ -265,54 +265,44 @@ public class PrivilegeManagerTest {
         masterManager.grant(grantStmt);
 
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertTrue(PrivilegeManager.checkTableAction(
+        Assert.assertTrue(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
         UtFrameUtils.PseudoImage grantImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(grantImage.getDataOutputStream());
+        masterGlobalStateMgr.saveRBACPrivilege(grantImage.getDataOutputStream());
 
         sql = "revoke select on db.tbl1 from test_user";
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         masterManager.revoke(revokeStmt);
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertFalse(PrivilegeManager.checkTableAction(
+        Assert.assertFalse(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         UtFrameUtils.PseudoImage revokeImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(revokeImage.getDataOutputStream());
+        masterGlobalStateMgr.saveRBACPrivilege(revokeImage.getDataOutputStream());
 
         // start to replay
-        PrivilegeManager followerManager = PrivilegeManager.load(
-                emptyImage.getDataInputStream(), masterGlobalStateMgr, null);
+        masterGlobalStateMgr.loadRBACPrivilege(emptyImage.getDataInputStream());
+        PrivilegeManager followerManager = masterGlobalStateMgr.getPrivilegeManager();
 
         UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PRIVILEGE_V2);
         followerManager.replayUpdateUserPrivilegeCollection(
                 info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
-        PrivilegeCollection collection = followerManager.mergePrivilegeCollection(ctx);
-        Assert.assertTrue(followerManager.checkTableAction(
-                collection, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
         info = (UserPrivilegeCollectionInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PRIVILEGE_V2);
         followerManager.replayUpdateUserPrivilegeCollection(
                 info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
-        collection = followerManager.mergePrivilegeCollection(ctx);
-        Assert.assertFalse(followerManager.checkTableAction(
-                collection, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
         // check image
-        PrivilegeManager imageManager = PrivilegeManager.load(
-                grantImage.getDataInputStream(), masterGlobalStateMgr, null);
-        collection = imageManager.mergePrivilegeCollection(ctx);
-        Assert.assertTrue(imageManager.checkTableAction(
-                collection, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        masterGlobalStateMgr.loadRBACPrivilege(grantImage.getDataInputStream());
+        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
-        imageManager = PrivilegeManager.load(
-                revokeImage.getDataInputStream(), masterGlobalStateMgr, null);
-        collection = imageManager.mergePrivilegeCollection(ctx);
-        Assert.assertFalse(imageManager.checkTableAction(
-                collection, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        masterGlobalStateMgr.loadRBACPrivilege(revokeImage.getDataInputStream());
+        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
     }
 
     @Test
@@ -341,21 +331,20 @@ public class PrivilegeManagerTest {
     private void assertTableSelectOnTest(PrivilegeManager manager, boolean canSelectTbl0, boolean canSelectTbl1)
             throws PrivilegeException {
         ctx.setCurrentUserIdentity(testUser);
-        PrivilegeCollection collection = manager.mergePrivilegeCollection(ctx);
         if (canSelectTbl0) {
-            Assert.assertTrue(manager.checkTableAction(
-                    collection, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
+            Assert.assertTrue(PrivilegeActions.checkTableAction(
+                    ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
         } else {
-            Assert.assertFalse(manager.checkTableAction(
-                    collection, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
+            Assert.assertFalse(PrivilegeActions.checkTableAction(
+                    ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
         }
 
         if (canSelectTbl1) {
-            Assert.assertTrue(manager.checkTableAction(
-                    collection, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+            Assert.assertTrue(PrivilegeActions.checkTableAction(
+                    ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         } else {
-            Assert.assertFalse(manager.checkTableAction(
-                    collection, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+            Assert.assertFalse(PrivilegeActions.checkTableAction(
+                    ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         }
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
     }
@@ -367,7 +356,7 @@ public class PrivilegeManagerTest {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
 
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(emptyImage.getDataOutputStream());
+        masterGlobalStateMgr.saveRBACPrivilege(emptyImage.getDataOutputStream());
         Assert.assertFalse(masterManager.checkRoleExists("test_persist_role0"));
         Assert.assertFalse(masterManager.checkRoleExists("test_persist_role1"));
 
@@ -379,7 +368,7 @@ public class PrivilegeManagerTest {
             Assert.assertTrue(masterManager.checkRoleExists("test_persist_role" + i));
         }
         UtFrameUtils.PseudoImage createRoleImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(createRoleImage.getDataOutputStream());
+        masterGlobalStateMgr.saveRBACPrivilege(createRoleImage.getDataOutputStream());
 
         // 2. grant select on db.tbl<i> to role
         for (int i = 0; i != 2; ++i) {
@@ -387,7 +376,7 @@ public class PrivilegeManagerTest {
                     "grant select on db.tbl" + i + " to role test_persist_role" + i, ctx), ctx);
         }
         UtFrameUtils.PseudoImage grantPrivsToRoleImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(grantPrivsToRoleImage.getDataOutputStream());
+        masterGlobalStateMgr.saveRBACPrivilege(grantPrivsToRoleImage.getDataOutputStream());
         assertTableSelectOnTest(masterManager, false, false);
 
         // 3. grant test_persist_role0 to test_user
@@ -395,28 +384,28 @@ public class PrivilegeManagerTest {
                 "grant test_persist_role0 to test_user", ctx), ctx);
         assertTableSelectOnTest(masterManager, true, false);
         UtFrameUtils.PseudoImage grantRoleToUserImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(grantRoleToUserImage.getDataOutputStream());
+        masterGlobalStateMgr.saveRBACPrivilege(grantRoleToUserImage.getDataOutputStream());
 
         // 4. grant test_persist_role1 to role test_persist_role0
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant test_persist_role1 to role test_persist_role0", ctx), ctx);
         assertTableSelectOnTest(masterManager, true, true);
         UtFrameUtils.PseudoImage grantRoleToRoleImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(grantRoleToRoleImage.getDataOutputStream());
+        masterGlobalStateMgr.saveRBACPrivilege(grantRoleToRoleImage.getDataOutputStream());
 
         // 5. revoke test_persist_role1 from role test_persist_role0
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke test_persist_role1 from role test_persist_role0", ctx), ctx);
         assertTableSelectOnTest(masterManager, true, false);
         UtFrameUtils.PseudoImage revokeRoleFromRoleImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(revokeRoleFromRoleImage.getDataOutputStream());
+        masterGlobalStateMgr.saveRBACPrivilege(revokeRoleFromRoleImage.getDataOutputStream());
 
         // 6. revoke test_persist_role0 from test_user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke test_persist_role0 from test_user", ctx), ctx);
         assertTableSelectOnTest(masterManager, false, false);
         UtFrameUtils.PseudoImage revokeRoleFromUserImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(revokeRoleFromUserImage.getDataOutputStream());
+        masterGlobalStateMgr.saveRBACPrivilege(revokeRoleFromUserImage.getDataOutputStream());
 
         // 7. drop 2 roles
         for (int i = 0; i != 2; ++i) {
@@ -425,13 +414,13 @@ public class PrivilegeManagerTest {
             Assert.assertFalse(masterManager.checkRoleExists("test_persist_role" + i));
         }
         UtFrameUtils.PseudoImage dropRoleImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(dropRoleImage.getDataOutputStream());
+        masterGlobalStateMgr.saveRBACPrivilege(dropRoleImage.getDataOutputStream());
 
         //
         // start to replay
         //
-        PrivilegeManager followerManager = PrivilegeManager.load(
-                emptyImage.getDataInputStream(), masterGlobalStateMgr, null);
+        masterGlobalStateMgr.loadRBACPrivilege(emptyImage.getDataInputStream());
+        PrivilegeManager followerManager = masterGlobalStateMgr.getPrivilegeManager();
         Assert.assertFalse(followerManager.checkRoleExists("test_persist_role0"));
         Assert.assertFalse(followerManager.checkRoleExists("test_persist_role1"));
 
@@ -495,39 +484,40 @@ public class PrivilegeManagerTest {
         // check image
         //
         // 1. check image after create role
-        PrivilegeManager imageManager = PrivilegeManager.load(
-                createRoleImage.getDataInputStream(), masterGlobalStateMgr, null);
+        masterGlobalStateMgr.loadRBACPrivilege(createRoleImage.getDataInputStream());
+        PrivilegeManager imageManager = masterGlobalStateMgr.getPrivilegeManager();
+
         Assert.assertTrue(imageManager.checkRoleExists("test_persist_role0"));
         Assert.assertTrue(imageManager.checkRoleExists("test_persist_role1"));
 
         // 2. check image after grant select on db.tbl<i> to role
-        imageManager = PrivilegeManager.load(
-                grantPrivsToRoleImage.getDataInputStream(), masterGlobalStateMgr, null);
+        masterGlobalStateMgr.loadRBACPrivilege(grantPrivsToRoleImage.getDataInputStream());
         assertTableSelectOnTest(imageManager, false, false);
 
         // 3. check image after grant test_persist_role0 to test_user
-        imageManager = PrivilegeManager.load(
-                grantRoleToUserImage.getDataInputStream(), masterGlobalStateMgr, null);
+        masterGlobalStateMgr.loadRBACPrivilege(
+                grantRoleToUserImage.getDataInputStream());
         assertTableSelectOnTest(imageManager, true, false);
 
         // 4. check image after grant test_persist_role1 to role test_persist_role0
-        imageManager = PrivilegeManager.load(
-                grantRoleToRoleImage.getDataInputStream(), masterGlobalStateMgr, null);
+        masterGlobalStateMgr.loadRBACPrivilege(
+                grantRoleToRoleImage.getDataInputStream());
         assertTableSelectOnTest(imageManager, true, true);
 
         // 5. check image after revoke test_persist_role1 from role test_persist_role0
-        imageManager = PrivilegeManager.load(
-                revokeRoleFromRoleImage.getDataInputStream(), masterGlobalStateMgr, null);
+        masterGlobalStateMgr.loadRBACPrivilege(
+                revokeRoleFromRoleImage.getDataInputStream());
         assertTableSelectOnTest(imageManager, true, false);
 
         // 6. check image after revoke test_persist_role0 from test_user
-        imageManager = PrivilegeManager.load(
-                revokeRoleFromUserImage.getDataInputStream(), masterGlobalStateMgr, null);
+        masterGlobalStateMgr.loadRBACPrivilege(
+                revokeRoleFromUserImage.getDataInputStream());
         assertTableSelectOnTest(imageManager, false, false);
 
         // 7. check image after drop 2 roles
-        imageManager = PrivilegeManager.load(
-                dropRoleImage.getDataInputStream(), masterGlobalStateMgr, null);
+        masterGlobalStateMgr.loadRBACPrivilege(
+                dropRoleImage.getDataInputStream());
+        imageManager = masterGlobalStateMgr.getPrivilegeManager();
         Assert.assertFalse(imageManager.checkRoleExists("test_persist_role0"));
         Assert.assertFalse(imageManager.checkRoleExists("test_persist_role1"));
     }
@@ -542,8 +532,8 @@ public class PrivilegeManagerTest {
         manager.grant(grantTableStmt);
         Assert.assertEquals(1, grantTableStmt.getObjectList().size());
         TablePEntryObject goodTableObject = (TablePEntryObject) grantTableStmt.getObjectList().get(0);
-        // 2. add validate entry: create_table + drop on db to test_user
-        sql = "grant create_table, drop on DATABASE db to test_user";
+        // 2. add validate entry: create table + drop on db to test_user
+        sql = "grant create table, drop on DATABASE db to test_user";
         GrantPrivilegeStmt grantDbStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantDbStmt);
         List<PEntryObject> objects = Arrays.asList(goodTableObject);
@@ -553,7 +543,7 @@ public class PrivilegeManagerTest {
         // 4. add invalidate entry: select on db.invalidatetable
         objects = Arrays.asList(new TablePEntryObject(goodTableObject.databaseUUID, "-1"));
         manager.grantToUser(grantTableStmt.getObjectType(), grantTableStmt.getPrivilegeTypes(), objects, false, testUser);
-        // 5. add invalidate entry: create_table, drop on invalidatedb
+        // 5. add invalidate entry: create table, drop on invalidatedb
         objects = Arrays.asList(new DbPEntryObject("-1"));
         manager.grantToUser(grantDbStmt.getObjectType(), grantDbStmt.getPrivilegeTypes(), objects, false, testUser);
         // 6. add valid entry: ALL databases
@@ -604,7 +594,7 @@ public class PrivilegeManagerTest {
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
         ctx.setCurrentUserIdentity(testUser);
         PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
-        Assert.assertFalse(PrivilegeManager.checkTableAction(
+        Assert.assertFalse(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
         List<List<String>> sqls = Arrays.asList(
@@ -620,37 +610,37 @@ public class PrivilegeManagerTest {
             GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sqlPair.get(0), ctx);
             manager.grant(grantStmt);
             ctx.setCurrentUserIdentity(testUser);
-            Assert.assertTrue(PrivilegeManager.checkTableAction(
+            Assert.assertTrue(PrivilegeActions.checkTableAction(
                     ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
             ctx.setCurrentUserIdentity(UserIdentity.ROOT);
             RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sqlPair.get(1), ctx);
             manager.revoke(revokeStmt);
             ctx.setCurrentUserIdentity(testUser);
-            Assert.assertFalse(PrivilegeManager.checkTableAction(
+            Assert.assertFalse(PrivilegeActions.checkTableAction(
                     ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         }
 
         // on all databases
-        Assert.assertFalse(PrivilegeManager.checkDbAction(
+        Assert.assertFalse(PrivilegeActions.checkDbAction(
                 ctx, DB_NAME, PrivilegeType.CREATE_TABLE));
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
-                "GRANT CREATE_TABLE ON ALL DATABASES TO test_user", ctx);
+                "GRANT create table ON ALL DATABASES TO test_user", ctx);
         manager.grant(grantStmt);
 
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertTrue(PrivilegeManager.checkDbAction(
+        Assert.assertTrue(PrivilegeActions.checkDbAction(
                 ctx, DB_NAME, PrivilegeType.CREATE_TABLE));
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
-                "REVOKE CREATE_TABLE ON ALL DATABASES FROM test_user", ctx);
+                "REVOKE create table ON ALL DATABASES FROM test_user", ctx);
         manager.revoke(revokeStmt);
 
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertFalse(PrivilegeManager.checkDbAction(
+        Assert.assertFalse(PrivilegeActions.checkDbAction(
                 ctx, DB_NAME, PrivilegeType.CREATE_TABLE));
 
         // on all users
@@ -776,15 +766,15 @@ public class PrivilegeManagerTest {
     private void assertDbActionsOnTest(boolean canCreateTable, boolean canDrop, UserIdentity testUser) {
         ctx.setCurrentUserIdentity(testUser);
         if (canCreateTable) {
-            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db", PrivilegeType.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db", PrivilegeType.CREATE_TABLE));
         } else {
-            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db", PrivilegeType.CREATE_TABLE));
+            Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db", PrivilegeType.CREATE_TABLE));
         }
 
         if (canDrop) {
-            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db", PrivilegeType.DROP));
+            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db", PrivilegeType.DROP));
         } else {
-            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db", PrivilegeType.DROP));
+            Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db", PrivilegeType.DROP));
         }
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
     }
@@ -798,20 +788,20 @@ public class PrivilegeManagerTest {
         PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
 
-        // grant create_table on database db to role1
+        // grant create table on database db to role1
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create role role1;", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant create_table on database db to role role1;", ctx), ctx);
+                "grant create table on database db to role role1;", ctx), ctx);
 
-        // can't create_table
+        // can't create table
         assertDbActionsOnTest(false, false, testUser);
 
         // grant role1 to test_user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to test_role_user", ctx), ctx);
 
-        // can create_table but can't drop
+        // can create table but can't drop
         assertDbActionsOnTest(true, false, testUser);
 
         // grant role2 to test_user
@@ -822,37 +812,37 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role2 to test_role_user;", ctx), ctx);
 
-        // can create_table & drop
+        // can create table & drop
         assertDbActionsOnTest(true, true, testUser);
 
         // grant drop to test_user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant drop on database db to test_role_user;", ctx), ctx);
 
-        // still, can create_table & drop
+        // still, can create table & drop
         assertDbActionsOnTest(true, true, testUser);
 
         // revoke role1 from test_user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke role1 from test_role_user;", ctx), ctx);
 
-        // can drop but can't create_table
+        // can drop but can't create table
         assertDbActionsOnTest(false, true, testUser);
 
-        // grant role1 to test_user; revoke create_table from role1
+        // grant role1 to test_user; revoke create table from role1
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to test_role_user", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "revoke create_table on database db from role role1", ctx), ctx);
+                "revoke create table on database db from role role1", ctx), ctx);
 
-        // can drop but can't create_table
+        // can drop but can't create table
         assertDbActionsOnTest(false, true, testUser);
 
         // revoke empty role role1
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke role1 from test_role_user;", ctx), ctx);
 
-        // can drop but can't create_table
+        // can drop but can't create table
         assertDbActionsOnTest(false, true, testUser);
 
         // revoke role2 from test_user
@@ -1053,10 +1043,10 @@ public class PrivilegeManagerTest {
         for (int i = 0; i != 4; ++i) {
             if (args[i]) {
                 Assert.assertTrue("cannot select tbl" + i,
-                        PrivilegeManager.checkTableAction(ctx, DB_NAME, "tbl" + i, PrivilegeType.SELECT));
+                        PrivilegeActions.checkTableAction(ctx, DB_NAME, "tbl" + i, PrivilegeType.SELECT));
             } else {
                 Assert.assertFalse("can select tbl" + i,
-                        PrivilegeManager.checkTableAction(ctx, DB_NAME, "tbl" + i, PrivilegeType.SELECT));
+                        PrivilegeActions.checkTableAction(ctx, DB_NAME, "tbl" + i, PrivilegeType.SELECT));
             }
         }
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -1243,18 +1233,18 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT select on db.tbl0 TO ROLE public"), ctx), ctx);
         ctx.setCurrentUserIdentity(user);
-        Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
+        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
 
         // root role
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT root TO user_test_builtin_role"), ctx), ctx);
         ctx.setCurrentUserIdentity(user);
-        Assert.assertTrue(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.GRANT));
-        Assert.assertTrue(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.NODE));
-        Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeManager.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.GRANT));
+        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.NODE));
+        Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeActions.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
         Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1264,11 +1254,11 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT db_admin TO user_test_builtin_role"), ctx), ctx);
         ctx.setCurrentUserIdentity(user);
-        Assert.assertFalse(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.GRANT));
-        Assert.assertFalse(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.NODE));
-        Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeManager.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
+        Assert.assertFalse(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.GRANT));
+        Assert.assertFalse(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.NODE));
+        Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeActions.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("REVOKE db_admin FROM user_test_builtin_role"), ctx), ctx);
@@ -1277,11 +1267,11 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT cluster_admin TO user_test_builtin_role"), ctx), ctx);
         ctx.setCurrentUserIdentity(user);
-        Assert.assertFalse(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.GRANT));
-        Assert.assertTrue(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.NODE));
-        Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
-        Assert.assertFalse(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
-        Assert.assertFalse(PrivilegeManager.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
+        Assert.assertFalse(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.GRANT));
+        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.NODE));
+        Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
+        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
+        Assert.assertFalse(PrivilegeActions.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("REVOKE cluster_admin FROM user_test_builtin_role"), ctx), ctx);
@@ -1290,23 +1280,23 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT user_admin TO user_test_builtin_role"), ctx), ctx);
         ctx.setCurrentUserIdentity(user);
-        Assert.assertTrue(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.GRANT));
-        Assert.assertFalse(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.NODE));
-        Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
-        Assert.assertFalse(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
-        Assert.assertFalse(PrivilegeManager.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.GRANT));
+        Assert.assertFalse(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.NODE));
+        Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
+        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
+        Assert.assertFalse(PrivilegeActions.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
         Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("REVOKE user_admin FROM user_test_builtin_role"), ctx), ctx);
 
         // user root
-        Assert.assertTrue(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.GRANT));
-        Assert.assertTrue(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.NODE));
-        Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeManager.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.GRANT));
+        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.NODE));
+        Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeActions.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
 
         // grant to imutable role
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1367,7 +1357,7 @@ public class PrivilegeManagerTest {
 
         ctx.setCurrentUserIdentity(user);
         Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
-        Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
     }
 
     @Test
@@ -1382,9 +1372,9 @@ public class PrivilegeManagerTest {
                 "grant alter on all resources to resource_user with grant option", ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("resource_user", "%");
         ctx.setCurrentUserIdentity(user);
-        Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
-        Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ALTER));
+        Assert.assertTrue(PrivilegeActions.checkResourceAction(ctx, "hive0", PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeActions.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
+        Assert.assertTrue(PrivilegeActions.checkResourceAction(ctx, "hive0", PrivilegeType.ALTER));
     }
 
     @Test
@@ -1398,27 +1388,27 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant usage on all catalogs to test_catalog_user", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant create_database on all catalogs to test_catalog_user", ctx), ctx);
+                "grant create database on all catalogs to test_catalog_user", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant alter on all catalogs to test_catalog_user with grant option", ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("test_catalog_user", "%");
         ctx.setCurrentUserIdentity(user);
-        Assert.assertTrue(PrivilegeManager.checkCatalogAction(ctx, "test_catalog",
+        Assert.assertTrue(PrivilegeActions.checkCatalogAction(ctx, "test_catalog",
                 PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeManager.checkCatalogAction(ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+        Assert.assertTrue(PrivilegeActions.checkCatalogAction(ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                 PrivilegeType.CREATE_DATABASE));
-        Assert.assertTrue(PrivilegeManager.checkCatalogAction(ctx, "test_catalog",
+        Assert.assertTrue(PrivilegeActions.checkCatalogAction(ctx, "test_catalog",
                 PrivilegeType.USAGE));
-        Assert.assertTrue(PrivilegeManager.checkCatalogAction(ctx, "test_catalog",
+        Assert.assertTrue(PrivilegeActions.checkCatalogAction(ctx, "test_catalog",
                 PrivilegeType.ALTER));
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user test_catalog_user2", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant create_database on catalog " + InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME +
+                "grant create database on catalog " + InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME +
                         " to test_catalog_user2 with grant option", ctx), ctx);
         ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_catalog_user2", "%"));
-        Assert.assertTrue(PrivilegeManager.checkCatalogAction(ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+        Assert.assertTrue(PrivilegeActions.checkCatalogAction(ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                 PrivilegeType.CREATE_DATABASE));
     }
 
@@ -1434,9 +1424,9 @@ public class PrivilegeManagerTest {
                 "grant alter on all views in database db to view_user with grant option", ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("view_user", "%");
         ctx.setCurrentUserIdentity(user);
-        Assert.assertTrue(PrivilegeManager.checkViewAction(ctx, "db", "view1", PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeManager.checkViewAction(ctx, "db", "view1", PrivilegeType.SELECT));
-        Assert.assertTrue(PrivilegeManager.checkViewAction(ctx, "db", "view1", PrivilegeType.ALTER));
+        Assert.assertTrue(PrivilegeActions.checkViewAction(ctx, "db", "view1", PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeActions.checkViewAction(ctx, "db", "view1", PrivilegeType.SELECT));
+        Assert.assertTrue(PrivilegeActions.checkViewAction(ctx, "db", "view1", PrivilegeType.ALTER));
     }
 
     @Test
@@ -1446,7 +1436,7 @@ public class PrivilegeManagerTest {
                 "create user brief_user", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant drop on tbl0 to brief_user", ctx), ctx);
-        Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, "db", "tbl0", PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, "db", "tbl0", PrivilegeType.DROP));
 
         try {
             StatementBase statementBase =
@@ -1482,5 +1472,22 @@ public class PrivilegeManagerTest {
                 UtFrameUtils.parseStmtWithNewParser("revoke insert on table db.* from test_user", ctx);
         statementBase =
                 UtFrameUtils.parseStmtWithNewParser("revoke select on table db.tbl0 from test_user", ctx);
+    }
+
+    @Test
+    public void testSystem() throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create user u1", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create user u2", ctx), ctx);
+
+        String sql = "grant OPERATE ON SYSTEM TO USER u1 with grant option";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+
+        ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.OPERATE));
+
+        sql = "grant OPERATE ON SYSTEM TO USER u2";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+        ctx.setCurrentUserIdentity(new UserIdentity("u2", "%"));
+        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.OPERATE));
     }
 }

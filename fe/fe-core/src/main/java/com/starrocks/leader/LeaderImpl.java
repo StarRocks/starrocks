@@ -67,6 +67,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
@@ -918,7 +919,7 @@ public class LeaderImpl {
 
             TPartitionInfo tPartitionInfo = new TPartitionInfo();
             tPartitionInfo.setType(partitionInfo.getType().toThrift());
-            if (partitionInfo.getType() == PartitionType.RANGE) {
+            if (partitionInfo.isRangePartition()) {
                 TRangePartitionDesc rangePartitionDesc = new TRangePartitionDesc();
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 for (Column column : rangePartitionInfo.getPartitionColumns()) {
@@ -1070,9 +1071,8 @@ public class LeaderImpl {
     }
 
     public TNetworkAddress masterAddr() {
-        String masterHost = GlobalStateMgr.getCurrentState().getLeaderIp();
-        int masterRpcPort = GlobalStateMgr.getCurrentState().getLeaderRpcPort();
-        return new TNetworkAddress(masterHost, masterRpcPort);
+        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
+        return new TNetworkAddress(ipAndPort.first, ipAndPort.second);
     }
 
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {

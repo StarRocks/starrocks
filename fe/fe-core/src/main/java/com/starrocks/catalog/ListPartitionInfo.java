@@ -20,10 +20,11 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionValue;
@@ -214,7 +215,7 @@ public class ListPartitionInfo extends PartitionInfo {
         String replicationNumStr = table.getTableProperty()
                 .getProperties().get(PROPERTIES_REPLICATION_NUM);
         short tableReplicationNum = replicationNumStr == null ?
-                FeConstants.default_replication_num : Short.parseShort(replicationNumStr);
+                RunMode.defaultReplicationNum() : Short.parseShort(replicationNumStr);
 
         StringBuilder sb = new StringBuilder();
         sb.append("PARTITION BY LIST(");
@@ -309,16 +310,15 @@ public class ListPartitionInfo extends PartitionInfo {
         return "";
     }
 
-    public void handleNewListPartitionDescs(List<PartitionDesc> partitionDescs, List<Partition> partitionList,
+    public void handleNewListPartitionDescs(Map<Partition, PartitionDesc> partitionMap,
                                             Set<String> existPartitionNameSet, boolean isTempPartition)
             throws DdlException {
         try {
-            for (int i = 0; i < partitionDescs.size(); i++) {
-                Partition partition = partitionList.get(i);
+            for (Partition partition : partitionMap.keySet()) {
                 String name = partition.getName();
                 if (!existPartitionNameSet.contains(name)) {
                     long partitionId = partition.getId();
-                    PartitionDesc partitionDesc = partitionDescs.get(i);
+                    PartitionDesc partitionDesc = partitionMap.get(partition);
                     this.idToDataProperty.put(partitionId, partitionDesc.getPartitionDataProperty());
                     this.idToReplicationNum.put(partitionId, partitionDesc.getReplicationNum());
                     this.idToInMemory.put(partitionId, partitionDesc.isInMemory());
@@ -380,5 +380,19 @@ public class ListPartitionInfo extends PartitionInfo {
     public void moveRangeFromTempToFormal(long tempPartitionId) {
         super.moveRangeFromTempToFormal(tempPartitionId);
         idToIsTempPartition.computeIfPresent(tempPartitionId, (k, v) -> false);
+    }
+
+    public void addPartition(long partitionId, DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                             StorageCacheInfo storageCacheInfo, List<String> values,
+                             List<List<String>> multiValues) throws AnalysisException {
+        super.addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageCacheInfo);
+        if (multiValues != null && multiValues.size() > 0) {
+            this.idToMultiValues.put(partitionId, multiValues);
+            this.setMultiLiteralExprValues(partitionId, multiValues);
+        }
+        if (values != null && values.size() > 0) {
+            this.idToValues.put(partitionId, values);
+            this.setLiteralExprValues(partitionId, values);
+        }
     }
 }

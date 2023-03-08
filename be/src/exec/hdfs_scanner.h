@@ -93,6 +93,8 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* block_cache_write_counter = nullptr;
     RuntimeProfile::Counter* block_cache_write_bytes = nullptr;
     RuntimeProfile::Counter* block_cache_write_timer = nullptr;
+    RuntimeProfile::Counter* block_cache_write_fail_counter = nullptr;
+    RuntimeProfile::Counter* block_cache_write_fail_bytes = nullptr;
 };
 
 struct HdfsScannerParams {
@@ -148,6 +150,8 @@ struct HdfsScannerParams {
 
     std::vector<const TIcebergDeleteFile*> deletes;
 
+    const TIcebergSchema* iceberg_schema = nullptr;
+
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
     bool use_block_cache = false;
@@ -194,6 +198,8 @@ struct HdfsScannerContext {
     bool case_sensitive = false;
 
     std::string timezone;
+
+    const TIcebergSchema* iceberg_schema = nullptr;
 
     HdfsScanStats* stats = nullptr;
 
