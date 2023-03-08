@@ -77,6 +77,7 @@ class PluginMgr;
 class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
+class QuerySpillManager;
 struct RfTracePoint;
 
 class BackendServiceClient;
