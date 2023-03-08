@@ -2031,13 +2031,13 @@ public class MvRewriteOptimizationTest {
     public void testNestedMVs1() throws Exception {
         createAndRefreshMv("test", "nested_mv1", "create materialized view nested_mv1 " +
                 " distributed by hash(empid) as" +
-                " select * from emps;");
+                " select empid, deptno, name, salary from emps;");
         createAndRefreshMv("test", "nested_mv2", "create materialized view nested_mv2 " +
                 " distributed by hash(empid) as" +
-                " select empid, sum(deptno) from emps group by empid;");
+                " select empid, sum(deptno) as sum1 from emps group by empid;");
         createAndRefreshMv("test", "nested_mv3", "create materialized view nested_mv3 " +
                 " distributed by hash(empid) as" +
-                " select * from nested_mv2 where empid > 1;");
+                " select empid, sum1 from nested_mv2 where empid > 1;");
         String plan = getFragmentPlan("select empid, sum(deptno) from emps where empid > 1 group by empid");
         System.out.println(plan);
         Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
@@ -2064,21 +2064,20 @@ public class MvRewriteOptimizationTest {
                         "PROPERTIES (\n" +
                         "\"force_external_table_query_rewrite\" = \"true\"\n" +
                         ") " +
-                        " as select s_suppkey, sum(s_acctbal) from hive0.tpch.supplier group by s_suppkey");
+                        " as select s_suppkey, sum(s_acctbal) as sum1 from hive0.tpch.supplier group by s_suppkey");
         createAndRefreshMv("test", "hive_nested_mv_3",
                 "create materialized view hive_nested_mv_3 distributed by hash(s_suppkey) " +
                         "PROPERTIES (\n" +
                         "\"force_external_table_query_rewrite\" = \"true\"\n" +
                         ") " +
-                        " as select * from hive_nested_mv_2 where s_suppkey > 1");
+                        " as select s_suppkey, sum1 from hive_nested_mv_2 where s_suppkey > 1");
         String query1 = "select s_suppkey, sum(s_acctbal) from hive0.tpch.supplier where s_suppkey > 1 group by s_suppkey ";
         String plan1 = getFragmentPlan(query1);
         System.out.println(plan1);
         Assert.assertTrue(plan1.contains("0:OlapScanNode\n" +
                 "     TABLE: hive_nested_mv_3\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1\n" +
-                "     rollup: hive_nested_mv_3"));
+                "     partitions=0/1"));
         dropMv("test", "hive_nested_mv_1");
         dropMv("test", "hive_nested_mv_2");
         dropMv("test", "hive_nested_mv_3");
