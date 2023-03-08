@@ -125,7 +125,7 @@ class ParserTest {
     @Test
     void testNonReservedWords_1() {
         String sql = "select anti, authentication, auto_increment, cancel, distributed, enclose, escape, export," +
-                "host, incremental, nodes, optimizer, privileges, qualify, skip_header, semi, trace, trim_space " +
+                "host, incremental, minus, nodes, optimizer, privileges, qualify, skip_header, semi, trace, trim_space " +
                 "from tbl left anti join t1 on ture left semi join t2 on false full join t3 on true minus select * from tbl";
         SessionVariable sessionVariable = new SessionVariable();
         try {
