@@ -211,6 +211,14 @@ public class Config extends ConfigBase {
     public static String big_query_log_delete_age = "7d";
 
     /**
+     * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
+     * It is only effective when enable_collect_query_detail_info is set to false, since the plan will be recorded
+     * in the query detail when enable_collect_query_detail_info is true.
+     */
+    @ConfField(mutable = true)
+    public static boolean log_plan_cancelled_by_crash_be = true;
+
+    /**
      * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
      * to avoid creating too many partitions at one time.
      */
