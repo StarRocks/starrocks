@@ -67,6 +67,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
     _pending_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PendingFinishTime", "PendingTime");
 
+    _peak_driver_queue_size_counter = _runtime_profile->AddHighWaterMarkCounter(
+            "PeakDriverQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+
     DCHECK(_state == DriverState::NOT_READY);
 
     auto* source_op = source_operator();
@@ -185,6 +188,12 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _pending_finish_timer_sw->start();
 
     return Status::OK();
+}
+
+void PipelineDriver::update_peak_driver_queue_size_counter(size_t new_value) {
+    if (_peak_driver_queue_size_counter != nullptr) {
+        _peak_driver_queue_size_counter->set(new_value);
+    }
 }
 
 static inline bool is_multilane(pipeline::OperatorPtr& op) {
