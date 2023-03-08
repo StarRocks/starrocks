@@ -149,6 +149,15 @@ public abstract class ScalarOperator implements Cloneable {
         return this instanceof ConstantOperator && ((ConstantOperator) this).isZero();
     }
 
+    public boolean isConstantFalse() {
+        return this instanceof ConstantOperator && this.getType() == Type.BOOLEAN &&
+                !((ConstantOperator) this).getBoolean();
+    }
+
+    public boolean isConstantNullOrFalse() {
+        return isConstantNull() || isConstantFalse();
+    }
+
     public void setHints(List<String> hints) {
         this.hints = hints;
     }

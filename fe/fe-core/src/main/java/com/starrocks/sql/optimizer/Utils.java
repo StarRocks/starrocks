@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.scalar.InvertedCaseWhen;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -514,6 +515,10 @@ public class Utils {
             return null;
         }
         return predicates;
+    }
+
+    public static ScalarOperator pruneTediousPredicate(ScalarOperator predicate) {
+        return InvertedCaseWhen.pruneTedisConjuncts(predicate);
     }
 
     public static <T extends ScalarOperator> List<T> collect(ScalarOperator root, Class<T> clazz) {
