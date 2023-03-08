@@ -126,6 +126,14 @@ void AggregatorParams::init() {
 
             bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             agg_fn_types[i] = {return_type, serde_type, arg_typedescs, is_input_nullable, desc.nodes[0].is_nullable};
+            if (fn.name.function_name == "array_agg") {
+                // set order by info
+                if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
+                    !fn.aggregate_fn.is_asc_order.empty()) {
+                    agg_fn_types[i].is_asc_order = fn.aggregate_fn.is_asc_order;
+                    agg_fn_types[i].nulls_first = fn.aggregate_fn.nulls_first;
+                }
+            }
         }
     }
 
@@ -336,15 +344,6 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             VLOG_ROW << "get agg function " << func->get_name() << " serde_type " << serde_type << " return_type "
                      << return_type;
             _agg_functions[i] = func;
-            _agg_fn_types[i] = {return_type, serde_type, arg_typedescs, is_input_nullable, desc.nodes[0].is_nullable};
-            if (fn.name.function_name == "array_agg") {
-                // set order by info
-                if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
-                    !fn.aggregate_fn.is_asc_order.empty()) {
-                    _agg_fn_types[i].is_asc_order = fn.aggregate_fn.is_asc_order;
-                    _agg_fn_types[i].nulls_first = fn.aggregate_fn.nulls_first;
-                }
-            }
         }
 
         int node_idx = 0;
