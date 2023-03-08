@@ -1,6 +1,6 @@
 # Query Cache
 
-The query cache can save the intermediate computation results of queries. New queries that are semantically equivalent to previous queries can reuse the cached computation results to accelerate computations. As such, QPS is increased and average latency is decreased for highly concurrent, simple aggregate queries.
+StarRocks supports the query cache since v2.5. The query cache can save the intermediate computation results of queries. New queries that are semantically equivalent to previous queries can reuse the cached computation results to accelerate computations. As such, QPS is increased and average latency is decreased for highly concurrent, simple aggregate queries.
 
 You can use the FE session variable `enable_query_cache` to enable the query cache. See the "[FE session variables](../using_starrocks/query_cache.md#fe-session-variables)" section of this topic.
 
