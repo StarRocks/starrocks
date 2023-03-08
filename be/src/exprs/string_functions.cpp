@@ -2991,23 +2991,29 @@ static void replace_all(std::string& str, const std::string& ptn, const std::str
 }
 
 StatusOr<ColumnPtr> StringFunctions::replace(FunctionContext* context, const Columns& columns) {
+    const ColumnPtr& arg0 = columns[0];
+    if (arg0->only_null()) {
+        return arg0;
+    }
+
     const auto state =
             reinterpret_cast<const ReplaceState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (state->const_pattern && state->pattern.empty()) {
-        return columns[0];
+        return arg0;
     }
 
-    const auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
-    const auto size = str_viewer.size();
+    // NOTE: ColumnView's size is not equal to input column's size, use input column instead.
+    const auto num_rows = arg0->size();
+    const auto str_viewer = ColumnViewer<TYPE_VARCHAR>(arg0);
     if (state->only_null) {
-        return NullableColumn::create(str_viewer.column(), NullColumn::create(size, 1));
+        return ColumnHelper::create_const_null_column(num_rows);
     }
 
     const auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     const auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
-    ColumnBuilder<TYPE_VARCHAR> result(size);
-    for (int row = 0; row < size; ++row) {
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    for (int row = 0; row < num_rows; ++row) {
         if (str_viewer.is_null(row) || (!state->const_pattern && ptn_viewer.is_null(row)) ||
             (!state->const_repl && rpl_viewer.is_null(row))) {
             result.append_null();
