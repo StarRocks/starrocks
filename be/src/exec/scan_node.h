@@ -92,6 +92,8 @@ public:
 
     const std::string& name() const { return _name; }
 
+    virtual int io_tasks_per_scan_operator() const { return config::io_tasks_per_scan_operator; }
+
 protected:
     int _scan_dop(const std::vector<TScanRangeParams>& scan_ranges, const TExecPlanFragmentParams& request) const;
 
