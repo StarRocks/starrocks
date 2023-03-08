@@ -268,4 +268,28 @@ public class AnalyzeExprTest {
         analyzeSuccess("select hex(v_varbinary) from tbinary ");
         analyzeSuccess("insert into tbinary values(1, x'0000', x'0000' )");
     }
+
+    @Test
+    public void testArrayAgg() {
+        analyzeSuccess("select array_agg(a order by name desc), array_agg(a order by name)  from t;");
+        analyzeSuccess("select array_agg(a order by name, pv desc nulls last) from t group by pv;");
+        analyzeSuccess("select array_agg(null) from t;");
+        analyzeSuccess("select array_agg(null order by null) from t;");
+        analyzeSuccess("select array_agg(a order by null) from t;");
+        analyzeSuccess("select array_agg(a order by 1) from t;");
+        analyzeSuccess("select array_agg(null);");
+        analyzeSuccess("select array_agg(a order by a) from t;");
+        analyzeSuccess("select array_agg(null order by 11);");
+        analyzeSuccess("select array_agg(null order by 1,1);");
+        analyzeSuccess("select array_agg(1 order by null,null);");
+        analyzeSuccess("select array_agg(1 order by null,null,a) from t group by pv;");
+        analyzeSuccess("select array_agg(a order by b) from (select null as a, null as b " +
+                "union all select a, pv from t)A;");
+        analyzeSuccess("select array_agg(a order by a), array_sortby(array_agg(a), array_agg(name)) from t;");
+
+        analyzeFail("select array_agg(null order by);");
+        analyzeFail("select array_agg(null,a);");
+        analyzeFail("select array_agg(1,1);");
+        analyzeFail("select array_agg(1 order by 1 nulls first desc)");
+    }
 }
