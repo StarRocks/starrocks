@@ -21,6 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
@@ -52,6 +53,8 @@ public class MaterializationContext {
 
     private List<List<Table>> matchedTableLists;
 
+    private final ScalarOperator mvPartialPartitionPredicate;
+
     public MaterializationContext(OptimizerContext optimizerContext,
                                   MaterializedView mv,
                                   OptExpression mvExpression,
@@ -60,7 +63,8 @@ public class MaterializationContext {
                                   Set<String> mvPartitionNamesToRefresh,
                                   List<Table> baseTables,
                                   Set<ColumnRefOperator> originQueryColumns,
-                                  List<Table> intersectingTables) {
+                                  List<Table> intersectingTables,
+                                  ScalarOperator mvPartialPartitionPredicate) {
         this.optimizerContext = optimizerContext;
         this.mv = mv;
         this.mvExpression = mvExpression;
@@ -71,6 +75,7 @@ public class MaterializationContext {
         this.originQueryColumns = originQueryColumns;
         this.intersectingTables = intersectingTables;
         this.matchedTableLists = Lists.newArrayList();
+        this.mvPartialPartitionPredicate = mvPartialPartitionPredicate;
     }
 
     public MaterializedView getMv() {
@@ -135,5 +140,8 @@ public class MaterializationContext {
 
     public boolean isMatchedTableList(List<Table> tables) {
         return matchedTableLists.stream().anyMatch(matched -> tables.containsAll(matched) && matched.containsAll(tables));
+    }
+    public ScalarOperator getMvPartialPartitionPredicate() {
+        return mvPartialPartitionPredicate;
     }
 }
