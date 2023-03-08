@@ -124,7 +124,10 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(date.getDatetime().plusYears(year.getInt()));
     }
 
-    @ConstantFunction(name = "months_add", argTypes = {DATETIME, INT}, returnType = DATETIME)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "months_add", argTypes = {DATETIME, INT}, returnType = DATETIME),
+            @ConstantFunction(name = "add_months", argTypes = {DATETIME, INT}, returnType = DATETIME)
+    })
     public static ConstantOperator monthsAdd(ConstantOperator date, ConstantOperator month) {
         return ConstantOperator.createDatetime(date.getDatetime().plusMonths(month.getInt()));
     }
