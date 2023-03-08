@@ -150,6 +150,8 @@ struct HdfsScannerParams {
 
     std::vector<const TIcebergDeleteFile*> deletes;
 
+    const TIcebergSchema* iceberg_schema = nullptr;
+
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
     bool use_block_cache = false;
@@ -196,6 +198,8 @@ struct HdfsScannerContext {
     bool case_sensitive = false;
 
     std::string timezone;
+
+    const TIcebergSchema* iceberg_schema = nullptr;
 
     HdfsScanStats* stats = nullptr;
 
