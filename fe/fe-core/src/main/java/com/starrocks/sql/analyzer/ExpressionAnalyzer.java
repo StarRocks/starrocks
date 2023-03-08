@@ -638,6 +638,11 @@ public class ExpressionAnalyzer {
                 Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {lhsType, rhsType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
 
+                if (fn == null) {
+                    throw new SemanticException(String.format(
+                            "No matching function '%s' with operand types %s and %s", node.getOp().getName(), t1, t2));
+                }
+
                 /*
                  * commonType is the common type of the parameters of the function,
                  * and fn.getReturnType() is the return type of the function after execution
