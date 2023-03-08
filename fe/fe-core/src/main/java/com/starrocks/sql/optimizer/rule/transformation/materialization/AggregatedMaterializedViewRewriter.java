@@ -340,7 +340,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         if (!isAllGroupByKeyColumnRefs) {
             // Push group by scalar operators into new projection node.
             Map<ColumnRefOperator, ScalarOperator> newQueryProjection = mvOptExpr.getOutputColumns().getStream()
-                    .mapToObj(id -> rewriteContext.getQueryRefFactory().getColumnRef(id))
+                    .map(id -> rewriteContext.getQueryRefFactory().getColumnRef(id))
                     .collect(Collectors.toMap(identity(), identity()));
             for (ColumnRefOperator oldGroupByKey : originalGroupKeys) {
                 ScalarOperator newGroupByKey = queryColumnRefToScalarMap.get(oldGroupByKey);
