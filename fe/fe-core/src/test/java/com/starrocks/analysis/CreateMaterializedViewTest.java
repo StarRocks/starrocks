@@ -751,7 +751,12 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertEquals("Partition exp not supports:a + b", e.getMessage());
+=======
+            Assert.assertTrue(e.getMessage(),
+                    e.getMessage().contains("Unsupported expr 'a + b' in PARTITION BY clause"));
+>>>>>>> f09d2db78 (Support create sync mv from a different db (#19124))
         } finally {
             starRocksAssert.useDatabase("test");
         }
@@ -893,8 +898,14 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertEquals("Materialized view partition function date_trunc " +
                     "must related with column", e.getMessage());
+=======
+            Assert.assertEquals("Getting analyzing error from line 1, column 42 to line 1, column 63. " +
+                            "Detail message: Materialized view partition function date_trunc must related with column.",
+                    e.getMessage());
+>>>>>>> f09d2db78 (Support create sync mv from a different db (#19124))
         }
     }
 
@@ -1072,7 +1083,13 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertEquals("Materialized view partition exp: `tb2`.`k1` must related to column", e.getMessage());
+=======
+            Assert.assertEquals("Getting analyzing error from line 2, column 13 to line 2, column 38. " +
+                            "Detail message: Materialized view partition exp: `tb2`.`k1` must related to column.",
+                    e.getMessage());
+>>>>>>> f09d2db78 (Support create sync mv from a different db (#19124))
         }
     }
 
@@ -1106,8 +1123,14 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertEquals("date_trunc function can't support argument other than " +
                     "year|quarter|month|week|day", e.getMessage());
+=======
+            Assert.assertEquals("Getting analyzing error at line 3, column 29. " +
+                            "Detail message: date_trunc function can't support argument other than year|quarter|month|week|day.",
+                    e.getMessage());
+>>>>>>> f09d2db78 (Support create sync mv from a different db (#19124))
         }
     }
 
@@ -1141,9 +1164,15 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertEquals(
                     "The function date_trunc used by the materialized view for partition does not support week formatting",
                     e.getMessage());
+=======
+            Assert.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 31. " +
+                    "Detail message: The function date_trunc used by the materialized view for partition " +
+                    "does not support week formatting.", e.getMessage());
+>>>>>>> f09d2db78 (Support create sync mv from a different db (#19124))
         }
     }
 
@@ -2234,6 +2263,59 @@ public class CreateMaterializedViewTest {
             LOG.error("Test CollectAllTableAndView failed", e);
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testCreateMVWithDifferentDB() {
+        try{
+            ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
+            StarRocksAssert newStarRocksAssert = new StarRocksAssert(newConnectContext);
+            newStarRocksAssert.withDatabase("test_mv_different_db")
+                    .useDatabase("test_mv_different_db");
+            String sql = "create materialized view test.test_mv_use_different_tbl " +
+                    "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
+            CreateMaterializedViewStmt stmt =
+                    (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
+            Assert.assertEquals(stmt.getDBName(), "test");
+            Assert.assertEquals(stmt.getMVName(), "test_mv_use_different_tbl");
+            currentState.createMaterializedView(stmt);
+            waitingRollupJobV2Finish();
+
+            Table table = testDb.getTable("tbl5");
+            Assert.assertTrue(table != null);
+            OlapTable olapTable = (OlapTable)  table;
+            Assert.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
+            Assert.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
+                    .anyMatch(x -> x.getValue().getKeysType().isAggregationFamily()));
+            newStarRocksAssert.dropDatabase("test_mv_different_db");
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testCreateAsyncMVWithDifferentDB() {
+        try {
+            ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
+            StarRocksAssert newStarRocksAssert = new StarRocksAssert(newConnectContext);
+            newStarRocksAssert.withDatabase("test_mv_different_db")
+                    .useDatabase("test_mv_different_db");
+            String sql = "create materialized view test.test_mv_use_different_tbl " +
+                    "distributed by hash(k1) " +
+                    "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
+            Assert.assertEquals(stmt.getTableName().getDb(), "test");
+            Assert.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+
+            currentState.createMaterializedView(stmt);
+            newStarRocksAssert.dropDatabase("test_mv_different_db");
+            Table mv1 = testDb.getTable("test_mv_use_different_tbl");
+            Assert.assertTrue(mv1 instanceof MaterializedView);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+
     }
 }
 
