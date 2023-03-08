@@ -21,9 +21,111 @@ StatusOr<ScanTask> PriorityScanTaskQueue::take() {
 }
 
 bool PriorityScanTaskQueue::try_offer(ScanTask task) {
+    if (task.peak_scan_task_queue_size_counter != nullptr) {
+        task.peak_scan_task_queue_size_counter->set(_queue.get_size());
+    }
     return _queue.try_put(std::move(task));
 }
 
+<<<<<<< HEAD
+=======
+/// MultiLevelFeedScanTaskQueue.
+MultiLevelFeedScanTaskQueue::MultiLevelFeedScanTaskQueue() {
+    double factor = 1;
+    for (int i = NUM_QUEUES - 1; i >= 0; --i) {
+        _queues[i].factor_for_normal = factor;
+        factor *= RATIO_OF_ADJACENT_QUEUE;
+    }
+
+    int64_t time_slice = 0;
+    for (int i = 0; i < NUM_QUEUES; ++i) {
+        time_slice += LEVEL_TIME_SLICE_BASE_NS * (i + 1);
+        _queues[i].level_time_slice = time_slice;
+    }
+}
+
+void MultiLevelFeedScanTaskQueue::close() {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+
+    if (_is_closed) {
+        return;
+    }
+
+    _is_closed = true;
+    _cv.notify_all();
+}
+
+StatusOr<ScanTask> MultiLevelFeedScanTaskQueue::take() {
+    std::unique_lock<std::mutex> lock(_global_mutex);
+
+    int queue_idx = -1;
+    double target_accu_time = 0;
+
+    while (true) {
+        if (_is_closed) {
+            return Status::Cancelled("Shutdown");
+        }
+
+        // Find the queue with the smallest execution time.
+        for (int i = 0; i < NUM_QUEUES; ++i) {
+            // we just search for queue has element
+            if (!_queues[i].queue.empty()) {
+                double local_target_time = _queues[i].normalized_cost();
+                if (queue_idx < 0 || local_target_time < target_accu_time) {
+                    target_accu_time = local_target_time;
+                    queue_idx = i;
+                }
+            }
+        }
+
+        if (queue_idx >= 0) {
+            break;
+        }
+
+        _cv.wait(lock);
+    }
+
+    auto& queue = _queues[queue_idx].queue;
+    auto task = std::move(queue.front());
+    queue.pop();
+    _num_tasks--;
+    return task;
+}
+
+bool MultiLevelFeedScanTaskQueue::try_offer(ScanTask task) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+
+    if (task.peak_scan_task_queue_size_counter != nullptr) {
+        task.peak_scan_task_queue_size_counter->set(_num_tasks);
+    }
+
+    int level = _compute_queue_level(task);
+    task.task_group->sub_queue_level = level;
+    _queues[level].queue.push(std::move(task));
+    _num_tasks++;
+
+    _cv.notify_one();
+    return true;
+}
+
+void MultiLevelFeedScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_ns) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+    task.task_group->runtime_ns += runtime_ns;
+    _queues[task.task_group->sub_queue_level].incr_cost_ns(runtime_ns);
+}
+
+int MultiLevelFeedScanTaskQueue::_compute_queue_level(const ScanTask& task) const {
+    int64_t time_spent = task.task_group->runtime_ns;
+    for (int i = task.task_group->sub_queue_level; i < NUM_QUEUES; ++i) {
+        if (time_spent < _queues[i].level_time_slice) {
+            return i;
+        }
+    }
+
+    return NUM_QUEUES - 1;
+}
+
+>>>>>>> cd90d15af ([Enhancement] Add profile about schedule queue and load (#19082))
 /// WorkGroupScanTaskQueue.
 bool WorkGroupScanTaskQueue::WorkGroupScanSchedEntityComparator::operator()(
         const WorkGroupScanSchedEntityPtr& lhs_ptr, const WorkGroupScanSchedEntityPtr& rhs_ptr) const {
@@ -84,6 +186,10 @@ StatusOr<ScanTask> WorkGroupScanTaskQueue::take() {
 
 bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
     std::lock_guard<std::mutex> lock(_global_mutex);
+
+    if (task.peak_scan_task_queue_size_counter != nullptr) {
+        task.peak_scan_task_queue_size_counter->set(_num_tasks);
+    }
 
     auto* wg_entity = _sched_entity(task.workgroup);
     wg_entity->set_in_queue(this);

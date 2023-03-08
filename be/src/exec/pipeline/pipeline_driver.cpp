@@ -51,6 +51,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
     _pending_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PendingFinishTime", "PendingTime");
 
+    _peak_driver_queue_size_counter = _runtime_profile->AddHighWaterMarkCounter(
+            "PeakDriverQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+
     DCHECK(_state == DriverState::NOT_READY);
 
     source_operator()->add_morsel_queue(_morsel_queue);
@@ -116,6 +119,27 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+void PipelineDriver::update_peak_driver_queue_size_counter(size_t new_value) {
+    if (_peak_driver_queue_size_counter != nullptr) {
+        _peak_driver_queue_size_counter->set(new_value);
+    }
+}
+
+static inline bool is_multilane(pipeline::OperatorPtr& op) {
+    if (dynamic_cast<query_cache::MultilaneOperator*>(op.get()) != nullptr) {
+        return true;
+    }
+    // In essence, CacheOperator is also special MultilaneOperator semantically, it also needs handle EOS chunk.
+    // it shall populate cache on receiving EOS chunk of a tablet.
+    if (dynamic_cast<query_cache::CacheOperator*>(op.get()) != nullptr) {
+        return true;
+    }
+    return false;
+}
+
+>>>>>>> cd90d15af ([Enhancement] Add profile about schedule queue and load (#19082))
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
