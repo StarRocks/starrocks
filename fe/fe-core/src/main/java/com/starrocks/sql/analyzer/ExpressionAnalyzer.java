@@ -841,7 +841,7 @@ public class ExpressionAnalyzer {
             if (cast.isImplicit()) {
                 castType = cast.getType();
             } else {
-                castType = cast.getTargetTypeDef().getType();
+                castType = cast.getTargetTypeDef() == null ? cast.getType() : cast.getTargetTypeDef().getType();
             }
             if (!Type.canCastTo(cast.getChild(0).getType(), castType)) {
                 throw new SemanticException("Invalid type cast from " + cast.getChild(0).getType().toSql() + " to "
