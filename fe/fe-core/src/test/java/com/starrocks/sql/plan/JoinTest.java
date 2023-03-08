@@ -34,13 +34,6 @@ import org.junit.Test;
 public class JoinTest extends PlanTestBase {
 
     @Test
-    public void test() throws Exception {
-        String sql = "select * from t0 minus select * from t1";
-        String plan = getFragmentPlan(sql);
-        System.out.println(plan);
-    }
-
-    @Test
     public void testColocateDistributeSatisfyShuffleColumns() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1;";
