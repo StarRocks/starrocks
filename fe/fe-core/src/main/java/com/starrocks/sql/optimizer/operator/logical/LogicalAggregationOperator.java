@@ -150,7 +150,8 @@ public class LogicalAggregationOperator extends LogicalOperator {
         }
         CallOperator call = aggregations.values().stream().iterator().next();
         if (call.isDistinct() && call.getFnName().equalsIgnoreCase(FunctionSet.COUNT) &&
-                call.getChildren().size() == 1 && call.getChild(0).isColumnRef()) {
+                call.getChildren().size() == 1 && call.getChild(0).isColumnRef() &&
+                !groupingKeys.get(0).equals(call.getChild(0))) {
             return true;
         }
         return false;

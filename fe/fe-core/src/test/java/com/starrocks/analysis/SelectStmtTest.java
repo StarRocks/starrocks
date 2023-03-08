@@ -284,4 +284,14 @@ public class SelectStmtTest {
                 "  |  <slot 8> : CAST(murmur_hash3_32(CAST(6: cast AS VARCHAR)) % 512 AS SMALLINT)"));
         FeConstants.runningUnitTest = false;
     }
+    @Test
+    public void testGroupByCountDistinctUseTheSameColumn()
+            throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql =
+                "select k3, count(distinct [skew] k3) from db1.tbl1 group by k3";
+        String s = starRocksAssert.query(sql).explainQuery();
+        Assert.assertFalse(s, s.contains("murmur_hash3_32"));
+        FeConstants.runningUnitTest = false;
+    }
 }
