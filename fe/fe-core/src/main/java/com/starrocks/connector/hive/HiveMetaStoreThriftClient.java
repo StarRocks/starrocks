@@ -34,6 +34,8 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.collect.Lists;
+import com.starrocks.connector.ConnectorConstants;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.common.ValidWriteIdList;
@@ -45,6 +47,8 @@ import org.apache.hadoop.hive.metastore.api.AggrStats;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.Catalog;
 import org.apache.hadoop.hive.metastore.api.CheckConstraintsRequest;
+import org.apache.hadoop.hive.metastore.api.ClientCapabilities;
+import org.apache.hadoop.hive.metastore.api.ClientCapability;
 import org.apache.hadoop.hive.metastore.api.CmRecycleRequest;
 import org.apache.hadoop.hive.metastore.api.CmRecycleResponse;
 import org.apache.hadoop.hive.metastore.api.ColumnStatistics;
@@ -71,6 +75,7 @@ import org.apache.hadoop.hive.metastore.api.GetPrincipalsInRoleRequest;
 import org.apache.hadoop.hive.metastore.api.GetPrincipalsInRoleResponse;
 import org.apache.hadoop.hive.metastore.api.GetRoleGrantsForPrincipalRequest;
 import org.apache.hadoop.hive.metastore.api.GetRoleGrantsForPrincipalResponse;
+import org.apache.hadoop.hive.metastore.api.GetTableRequest;
 import org.apache.hadoop.hive.metastore.api.HeartbeatTxnRangeResponse;
 import org.apache.hadoop.hive.metastore.api.HiveObjectPrivilege;
 import org.apache.hadoop.hive.metastore.api.HiveObjectRef;
@@ -88,6 +93,7 @@ import org.apache.hadoop.hive.metastore.api.NoSuchLockException;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.NoSuchTxnException;
 import org.apache.hadoop.hive.metastore.api.NotNullConstraintsRequest;
+import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.NotificationEventRequest;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.hadoop.hive.metastore.api.NotificationEventsCountRequest;
@@ -160,7 +166,6 @@ import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
 
-import javax.security.auth.login.LoginException;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -175,8 +180,12 @@ import java.util.Map.Entry;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.annotation.Nullable;
+import javax.security.auth.login.LoginException;
 
+import static com.starrocks.connector.hive.HiveVersionUtil.HiveVersion;
 import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCatalog;
+import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.prependCatalogToDbName;
 
 /**
  * Modified from apache hive  org.apache.hadoop.hive.metastore.HiveMetaStoreClient.java
@@ -190,7 +199,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     ThriftHiveMetastore.Iface client = null;
     private TTransport transport = null;
     private boolean isConnected = false;
-    private URI metastoreUris[];
+    private URI[] metastoreUris;
     protected final Configuration conf;
     // Keep a copy of HiveConf so if Session conf changes, we may need to get a new HMS client.
     private String tokenStrForm;
@@ -204,6 +213,23 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     // for thrift connects
     private int retries = 5;
     private long retryDelaySeconds = 0;
+
+    /**
+     * Capabilities of the current client. If this client talks to a MetaStore server in a manner
+     * implying the usage of some expanded features that require client-side support that this client
+     * doesn't have (e.g. a getting a table of a new type), it will get back failures when the
+     * capability checking is enabled (the default).
+     */
+    public final static ClientCapabilities VERSION = new ClientCapabilities(
+            Lists.newArrayList(ClientCapability.INSERT_ONLY_TABLES));
+
+    // Test capability for tests.
+    public final static ClientCapabilities TEST_VERSION = new ClientCapabilities(
+            Lists.newArrayList(ClientCapability.INSERT_ONLY_TABLES, ClientCapability.TEST_CAPABILITY));
+
+    private final ClientCapabilities version;
+
+    private final HiveVersion hiveVersion;
 
     public HiveMetaStoreThriftClient(Configuration conf) throws MetaException {
         this(conf, null, true);
@@ -222,6 +248,10 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
         } else {
             this.conf = new Configuration(conf);
         }
+
+        hiveVersion = HiveVersionUtil.getVersion(conf.get(ConnectorConstants.HIVE_VERSION));
+        version = MetastoreConf.getBoolVar(conf, ConfVars.HIVE_IN_TEST) ? TEST_VERSION : VERSION;
+
         uriResolverHook = loadUriResolverHook();
 
         String msUri = MetastoreConf.getVar(conf, ConfVars.THRIFT_URIS);
@@ -591,60 +621,84 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
 
     @Override
     public Table getTable(String dbName, String tableName) throws MetaException, TException, NoSuchObjectException {
-        return getTable(null, dbName, tableName);
+        return getTable(getDefaultCatalog(conf), dbName, tableName);
     }
 
     @Override
     public Table getTable(String catName, String dbName, String tableName) throws MetaException, TException {
-        return client.get_table(dbName, tableName);
+        Table t;
+        if (hiveVersion == HiveVersion.V1_0 || hiveVersion == HiveVersion.V2_0) {
+            t = client.get_table(dbName, tableName);
+        } else if (hiveVersion == HiveVersion.V2_3) {
+            GetTableRequest req = new GetTableRequest(dbName, tableName);
+            req.setCapabilities(version);
+            t = client.get_table_req(req).getTable();
+        } else {
+            GetTableRequest req = new GetTableRequest(dbName, tableName);
+            req.setCatName(catName);
+            req.setCapabilities(version);
+            t = client.get_table_req(req).getTable();
+        }
+        return t;
     }
 
     @Override
     public Partition getPartition(String dbName, String tblName, List<String> partVals)
             throws NoSuchObjectException, MetaException, TException {
-        return getPartition(null, dbName, tblName, partVals);
+        return getPartition(getDefaultCatalog(conf), dbName, tblName, partVals);
     }
 
     @Override
     public Partition getPartition(String catName, String dbName, String tblName, List<String> partVals)
             throws NoSuchObjectException, MetaException, TException {
-        return client.get_partition(dbName, tblName, partVals);
+        return client.get_partition(prependCatalogToDbNameByVersion(hiveVersion, catName, dbName, conf),
+                tblName, partVals);
     }
 
     @Override
     public Partition getPartition(String dbName, String tblName, String name)
             throws MetaException, UnknownTableException, NoSuchObjectException, TException {
-        return getPartition(null, dbName, tblName, name);
+        return getPartition(getDefaultCatalog(conf), dbName, tblName, name);
     }
 
     @Override
     public Partition getPartition(String catName, String dbName, String tblName, String name)
             throws MetaException, UnknownTableException, NoSuchObjectException, TException {
-        return client.get_partition_by_name(dbName, tblName, name);
+        return client.get_partition_by_name(prependCatalogToDbName(catName, dbName, conf), tblName, name);
     }
 
     @Override
     public List<String> listPartitionNames(String dbName, String tblName, short maxParts)
             throws NoSuchObjectException, MetaException, TException {
-        return listPartitionNames(null, dbName, tblName, maxParts);
+        return listPartitionNames(getDefaultCatalog(conf), dbName, tblName, maxParts);
     }
 
     @Override
     public List<String> listPartitionNames(String catName, String dbName, String tblName, int maxParts)
             throws NoSuchObjectException, MetaException, TException {
-        return client.get_partition_names(dbName, tblName, shrinkMaxtoShort(maxParts));
+        if (hiveVersion == HiveVersion.V1_0 || hiveVersion == HiveVersion.V2_0 || hiveVersion == HiveVersion.V2_3) {
+            return client.get_partition_names(dbName, tblName, shrinkMaxtoShort(maxParts));
+        } else {
+            return client.get_partition_names(prependCatalogToDbName(catName, dbName, conf), tblName,
+                    shrinkMaxtoShort(maxParts));
+        }
     }
 
     @Override
     public List<String> listPartitionNames(String dbName, String tblName, List<String> partVals, short maxParts)
             throws MetaException, TException, NoSuchObjectException {
-        return listPartitionNames(null, dbName, tblName, partVals, maxParts);
+        return listPartitionNames(getDefaultCatalog(conf), dbName, tblName, partVals, maxParts);
     }
 
     @Override
     public List<String> listPartitionNames(String catName, String dbName, String tblName, List<String> partVals,
                                            int maxParts) throws MetaException, TException, NoSuchObjectException {
-        return client.get_partition_names_ps(dbName, tblName, partVals, shrinkMaxtoShort(maxParts));
+        if (hiveVersion == HiveVersion.V1_0 || hiveVersion == HiveVersion.V2_0 || hiveVersion == HiveVersion.V2_3) {
+            return client.get_partition_names_ps(dbName, tblName, partVals, shrinkMaxtoShort(maxParts));
+        } else {
+            return client.get_partition_names_ps(prependCatalogToDbName(catName, dbName, conf), tblName,
+                    partVals, shrinkMaxtoShort(maxParts));
+        }
     }
 
     @Override
@@ -665,27 +719,30 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     @Override
     public List<Partition> getPartitionsByNames(String dbName, String tblName,
                                                 List<String> partNames) throws TException {
-        return getPartitionsByNames(null, dbName, tblName, partNames);
+        return getPartitionsByNames(getDefaultCatalog(conf), dbName, tblName, partNames);
     }
 
     @Override
     public List<Partition> getPartitionsByNames(String catName, String dbName, String tblName,
                                                 List<String> partNames) throws TException {
-        return client.get_partitions_by_names(dbName, tblName, partNames);
+        return client.get_partitions_by_names(prependCatalogToDbName(catName, dbName, conf), tblName, partNames);
     }
 
     @Override
     public List<ColumnStatisticsObj> getTableColumnStatistics(String dbName, String tableName,
                                                               List<String> colNames) throws TException {
-        return getTableColumnStatistics(null, dbName, tableName, colNames);
+        return getTableColumnStatistics(getDefaultCatalog(conf), dbName, tableName, colNames);
     }
 
     @Override
     public List<ColumnStatisticsObj> getTableColumnStatistics(String catName, String dbName,
                                                               String tableName,
                                                               List<String> colNames) throws TException {
-        TableStatsRequest rqst = new TableStatsRequest(dbName, tableName, colNames);
-        return client.get_table_statistics_req(rqst).getTableStats();
+        TableStatsRequest req = new TableStatsRequest(dbName, tableName, colNames);
+        if (hiveVersion != HiveVersion.V1_0 && hiveVersion != HiveVersion.V2_0 && hiveVersion != HiveVersion.V2_3) {
+            req.setCatName(catName);
+        }
+        return client.get_table_statistics_req(req).getTableStats();
     }
 
     @Override
@@ -701,6 +758,9 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
             List<String> colNames) throws TException {
         PartitionsStatsRequest rqst = new PartitionsStatsRequest(dbName, tableName, colNames,
                 partNames);
+        if (hiveVersion != HiveVersion.V1_0 && hiveVersion != HiveVersion.V2_0 && hiveVersion != HiveVersion.V2_3) {
+            rqst.setCatName(catName);
+        }
         return client.get_partitions_statistics_req(rqst).getPartStats();
     }
 
@@ -710,7 +770,27 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
         NotificationEventRequest eventRequest = new NotificationEventRequest();
         eventRequest.setMaxEvents(maxEvents);
         eventRequest.setLastEvent(lastEventId);
-        return client.get_next_notification(eventRequest);
+        NotificationEventResponse rsp = client.get_next_notification(eventRequest);
+        LOG.debug("Got back " + rsp.getEventsSize() + " events");
+        NotificationEventResponse filtered = new NotificationEventResponse();
+        if (rsp.getEvents() != null) {
+            long nextEventId = lastEventId + 1;
+            for (NotificationEvent e : rsp.getEvents()) {
+                if (e.getEventId() != nextEventId) {
+                    LOG.error("Requested events are found missing in NOTIFICATION_LOG table. Expected: {}, Actual: {}. "
+                                    + "Probably, cleaner would've cleaned it up. "
+                                    + "Try setting higher value for hive.metastore.event.db.listener.timetolive. "
+                                    + "Also, bootstrap the system again to get back the consistent replicated state.",
+                            nextEventId, e.getEventId());
+                    throw new IllegalStateException("Notification events are missing in the meta store.");
+                }
+                if ((filter != null) && filter.accept(e)) {
+                    filtered.addToEvents(e);
+                }
+                nextEventId++;
+            }
+        }
+        return (filter != null) ? filtered : rsp;
     }
 
     @Override
@@ -719,7 +799,6 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     }
 
     public void setMetaConf(String key, String value) throws MetaException, TException {
-
         throw new TException("method not implemented");
     }
 
@@ -731,7 +810,6 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     @Override
     public void createCatalog(Catalog catalog)
             throws AlreadyExistsException, InvalidObjectException, MetaException, TException {
-
         throw new TException("method not implemented");
     }
 
@@ -755,7 +833,6 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     public void dropCatalog(String catName)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
         throw new TException("method not implemented");
-
     }
 
     @Override
@@ -828,13 +905,22 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
 
     @Override
     public List<String> getAllTables(String dbName) throws MetaException, TException, UnknownDBException {
-        return client.get_all_tables(dbName);
+        try {
+            return getAllTables(getDefaultCatalog(conf), dbName);
+        } catch (Exception e) {
+            MetaStoreUtils.logAndThrowMetaException(e);
+        }
+        return null;
     }
 
     @Override
     public List<String> getAllTables(String catName, String dbName)
             throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        if (hiveVersion == HiveVersion.V1_0 || hiveVersion == HiveVersion.V2_0 || hiveVersion == HiveVersion.V2_3) {
+            return client.get_all_tables(dbName);
+        } else {
+            return client.get_all_tables(prependCatalogToDbName(catName, dbName, conf));
+        }
     }
 
     @Override
@@ -2297,6 +2383,15 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     @Override
     public List<RuntimeStat> getRuntimeStats(int maxWeight, int maxCreateTime) throws TException {
         throw new TException("method not implemented");
+    }
+
+    private static String prependCatalogToDbNameByVersion(HiveVersion version, @Nullable String catalogName,
+                                                          @Nullable String dbName, Configuration conf) {
+        if (version == HiveVersion.V1_0 || version == HiveVersion.V2_0 || version == HiveVersion.V2_3) {
+            // For old hive version, we don't need to pass catalog name, just return db name directly.
+            return dbName;
+        }
+        return prependCatalogToDbName(catalogName, dbName, conf);
     }
 }
 
