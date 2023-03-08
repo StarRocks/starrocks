@@ -223,7 +223,7 @@ public class PushDownDistinctAggregateRewriter {
 
             List<ColumnRefOperator> additionalGroupBys = Lists.newArrayList();
             windowOp.getPartitionExpressions().stream()
-                    .flatMap(e -> e.getUsedColumns().getStream().mapToObj(factory::getColumnRef)).forEach(
+                    .flatMap(e -> e.getUsedColumns().getStream().map(factory::getColumnRef)).forEach(
                             additionalGroupBys::add);
 
             windowOp.getWindowCall().keySet().forEach(context.groupBys::remove);
@@ -275,7 +275,7 @@ public class PushDownDistinctAggregateRewriter {
             // plan. In other agg push down scenarios, it may appear. When a AggregateOperator is pushed down below
             // LogicalFilterOperator, the predicates in latter will referenced the columns produced by the former.
             LogicalFilterOperator filter = optExpression.getOp().cast();
-            filter.getRequiredChildInputColumns().getStream().mapToObj(factory::getColumnRef)
+            filter.getRequiredChildInputColumns().getStream().map(factory::getColumnRef)
                     .forEach(v -> context.groupBys.put(v, v));
             return context;
         }
@@ -328,7 +328,7 @@ public class PushDownDistinctAggregateRewriter {
                 return RewriteInfo.NOT_REWRITE;
             }
             List<ColumnRefOperator> groupBys = ctx.groupBys.values().stream().map(ScalarOperator::getUsedColumns)
-                    .flatMap(colSet -> colSet.getStream().mapToObj(factory::getColumnRef)).distinct()
+                    .flatMap(colSet -> colSet.getStream().map(factory::getColumnRef)).distinct()
                     .collect(Collectors.toList());
 
             LogicalScanOperator scanOp = optExpression.getOp().cast();
