@@ -16,9 +16,9 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.MaterializationContext;
+import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -51,17 +51,11 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
-        List<MaterializedView> usedMvs = context.getUsedMvs(queryTables);
-        List<MaterializationContext> candidateContexts;
-        if (usedMvs != null) {
-            candidateContexts = Lists.newArrayList();
-            for (MaterializationContext mvContext : context.getCandidateMvs()) {
-                if (!usedMvs.contains(mvContext.getMv())) {
-                    candidateContexts.add(mvContext);
-                }
+        List<MaterializationContext> mvCandidateContexts = Lists.newArrayList();
+        for (MaterializationContext mvContext : context.getCandidateMvs()) {
+            if (!mvContext.isMatchedTableList(queryTables)) {
+                mvCandidateContexts.add(mvContext);
             }
-        } else {
-            candidateContexts = context.getCandidateMvs();
         }
         List<OptExpression> results = Lists.newArrayList();
 
@@ -82,15 +76,14 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         }
         final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
 
-        for (MaterializationContext mvContext : candidateContexts) {
-            mvContext.setQueryTables(queryTables);
-            mvContext.setQueryExpression(queryExpression);
-            mvContext.setOptimizerContext(context);
-            MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvContext);
-            List<OptExpression> candidates = mvRewriter.rewrite(queryColumnRefRewriter, queryPredicateSplit);
+        for (MaterializationContext mvContext : mvCandidateContexts) {
+            MvRewriteContext mvRewriteContext =
+                    new MvRewriteContext(mvContext, queryTables, queryExpression, queryColumnRefRewriter, queryPredicateSplit);
+            MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
+            List<OptExpression> candidates = mvRewriter.rewrite();
             if (!candidates.isEmpty()) {
                 candidates = postRewriteMV(context, candidates);
-                context.updateUsedMv(queryTables, mvContext.getMv());
+                mvContext.addMatchedTableList(queryTables);
                 results.addAll(candidates);
             }
         }
@@ -117,7 +110,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         return result;
     }
 
-    public MaterializedViewRewriter getMaterializedViewRewrite(MaterializationContext mvContext) {
+    public MaterializedViewRewriter getMaterializedViewRewrite(MvRewriteContext mvContext) {
         return new MaterializedViewRewriter(mvContext);
     }
 

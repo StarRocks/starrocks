@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -26,42 +27,41 @@ import java.util.Map;
 import java.util.Set;
 
 public class MaterializationContext {
-    private MaterializedView mv;
+    private final MaterializedView mv;
     // scan materialized view operator
     private LogicalOlapScanOperator scanMvOperator;
     // logical OptExpression for query of materialized view
-    private OptExpression mvExpression;
+    private final OptExpression mvExpression;
 
-    private ColumnRefFactory mvColumnRefFactory;
+    private final ColumnRefFactory mvColumnRefFactory;
 
-    // logical OptExpression for query
-    private OptExpression queryExpression;
+    private final ColumnRefFactory queryRefFactory;
 
-    private ColumnRefFactory queryRefFactory;
-
-    private OptimizerContext optimizerContext;
+    private final OptimizerContext optimizerContext;
 
     private Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
 
-    private Set<String> mvPartitionNamesToRefresh;
+    private final Set<String> mvPartitionNamesToRefresh;
 
-    private List<Table> baseTables;
+    private final List<Table> baseTables;
 
-    private Set<ColumnRefOperator> originQueryColumns;
+    private final Set<ColumnRefOperator> originQueryColumns;
 
     // tables both in query and mv
-    private final List<Table> commonTables;
+    private final List<Table> intersectingTables;
 
-    private List<Table> queryTables;
+    private List<List<Table>> matchedTableLists;
 
-    public MaterializationContext(MaterializedView mv,
+    public MaterializationContext(OptimizerContext optimizerContext,
+                                  MaterializedView mv,
                                   OptExpression mvExpression,
                                   ColumnRefFactory queryColumnRefFactory,
                                   ColumnRefFactory mvColumnRefFactory,
                                   Set<String> mvPartitionNamesToRefresh,
                                   List<Table> baseTables,
                                   Set<ColumnRefOperator> originQueryColumns,
-                                  List<Table> commonTables) {
+                                  List<Table> intersectingTables) {
+        this.optimizerContext = optimizerContext;
         this.mv = mv;
         this.mvExpression = mvExpression;
         this.queryRefFactory = queryColumnRefFactory;
@@ -69,7 +69,8 @@ public class MaterializationContext {
         this.mvPartitionNamesToRefresh = mvPartitionNamesToRefresh;
         this.baseTables = baseTables;
         this.originQueryColumns = originQueryColumns;
-        this.commonTables = commonTables;
+        this.intersectingTables = intersectingTables;
+        this.matchedTableLists = Lists.newArrayList();
     }
 
     public MaterializedView getMv() {
@@ -92,28 +93,12 @@ public class MaterializationContext {
         return mvColumnRefFactory;
     }
 
-    public OptExpression getQueryExpression() {
-        return queryExpression;
-    }
-
-    public void setQueryExpression(OptExpression queryExpression) {
-        this.queryExpression = queryExpression;
-    }
-
     public ColumnRefFactory getQueryRefFactory() {
         return queryRefFactory;
     }
 
-    public void setQueryRefFactory(ColumnRefFactory queryRefFactory) {
-        this.queryRefFactory = queryRefFactory;
-    }
-
     public OptimizerContext getOptimizerContext() {
         return optimizerContext;
-    }
-
-    public void setOptimizerContext(OptimizerContext optimizerContext) {
-        this.optimizerContext = optimizerContext;
     }
 
     public Map<ColumnRefOperator, ColumnRefOperator> getOutputMapping() {
@@ -140,15 +125,15 @@ public class MaterializationContext {
         return originQueryColumns;
     }
 
-    public List<Table> getCommonTables() {
-        return commonTables;
+    public List<Table> getIntersectingTables() {
+        return intersectingTables;
     }
 
-    public List<Table> getQueryTables() {
-        return queryTables;
+    public void addMatchedTableList(List<Table> matchedTables) {
+        matchedTableLists.add(matchedTables);
     }
 
-    public void setQueryTables(List<Table> queryTables) {
-        this.queryTables = queryTables;
+    public boolean isMatchedTableList(List<Table> tables) {
+        return matchedTableLists.stream().anyMatch(matched -> tables.containsAll(matched) && matched.containsAll(tables));
     }
 }

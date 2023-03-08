@@ -36,6 +36,7 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
+import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -80,6 +81,7 @@ import java.util.stream.Collectors;
  */
 public class MaterializedViewRewriter {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewRewriter.class);
+    protected final MvRewriteContext mvRewriteContext;
     protected final MaterializationContext materializationContext;
 
     protected enum MatchMode {
@@ -94,8 +96,9 @@ public class MaterializedViewRewriter {
         NOT_MATCH
     }
 
-    public MaterializedViewRewriter(MaterializationContext materializationContext) {
-        this.materializationContext = materializationContext;
+    public MaterializedViewRewriter(MvRewriteContext mvRewriteContext) {
+        this.mvRewriteContext = mvRewriteContext;
+        this.materializationContext = mvRewriteContext.getMaterializationContext();
     }
 
     /**
@@ -122,7 +125,7 @@ public class MaterializedViewRewriter {
             }
         } else if (matchMode == MatchMode.VIEW_DELTA) {
             // only consider query with most common tables to optimize performance
-            if (!queryTables.containsAll(materializationContext.getCommonTables())) {
+            if (!queryTables.containsAll(materializationContext.getIntersectingTables())) {
                 return false;
             }
         } else {
@@ -140,11 +143,10 @@ public class MaterializedViewRewriter {
         return true;
     }
 
-    public List<OptExpression> rewrite(ReplaceColumnRefRewriter queryColumnRefRewriter,
-                                       PredicateSplit queryPredicateSplit) {
-        final OptExpression queryExpression = materializationContext.getQueryExpression();
+    public List<OptExpression> rewrite() {
+        final OptExpression queryExpression = mvRewriteContext.getQueryExpression();
         final OptExpression mvExpression = materializationContext.getMvExpression();
-        final List<Table> queryTables = materializationContext.getQueryTables();
+        final List<Table> queryTables = mvRewriteContext.getQueryTables();
         final List<Table> mvTables = MvUtils.getAllTables(mvExpression);
 
         MatchMode matchMode = getMatchMode(queryTables, mvTables);
@@ -201,10 +203,12 @@ public class MaterializedViewRewriter {
         if (relationIdMappings.isEmpty()) {
             return Lists.newArrayList();
         }
-        final EquivalenceClasses queryEc = createEquivalenceClasses(queryPredicateSplit.getEqualPredicates());
-        RewriteContext rewriteContext = new RewriteContext(queryExpression, queryPredicateSplit, queryEc,
+        final EquivalenceClasses queryEc =
+                createEquivalenceClasses(mvRewriteContext.getQueryPredicateSplit().getEqualPredicates());
+        RewriteContext rewriteContext = new RewriteContext(
+                queryExpression, mvRewriteContext.getQueryPredicateSplit(), queryEc,
                 queryRelationIdToColumns, materializationContext.getQueryRefFactory(),
-                queryColumnRefRewriter, mvExpression, mvPredicateSplit, mvRelationIdToColumns,
+                mvRewriteContext.getQueryColumnRefRewriter(), mvExpression, mvPredicateSplit, mvRelationIdToColumns,
                 materializationContext.getMvColumnRefFactory(), mvColumnRefRewriter,
                 materializationContext.getOutputMapping(), materializationContext.getOriginQueryColumns());
 
@@ -228,7 +232,6 @@ public class MaterializedViewRewriter {
             if (rewrittenExpression == null) {
                 continue;
             }
-            materializationContext.getOptimizerContext().updateUsedMv(queryTables, materializationContext.getMv());
             results.add(rewrittenExpression);
         }
 
@@ -550,8 +553,6 @@ public class MaterializedViewRewriter {
                                                       Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
                                                       ScalarOperator equalPredicates,
                                                       ScalarOperator otherPredicates) {
-
-
         if (!ConstantOperator.TRUE.equals(equalPredicates)) {
             equalPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
                     mvColumnRefToScalarOp, equalPredicates, true);
@@ -658,7 +659,7 @@ public class MaterializedViewRewriter {
         // queryBasedRewrite will return the tree of "select a, b from t where a >= 10 and a < 20"
         // which is realized by adding the compensation predicate to original query expression
         final OptExpression queryInput = queryBasedRewrite(rewriteContext,
-                mvCompensationPredicates, materializationContext.getQueryExpression());
+                mvCompensationPredicates, mvRewriteContext.getQueryExpression());
         if (queryInput == null) {
             return null;
         }

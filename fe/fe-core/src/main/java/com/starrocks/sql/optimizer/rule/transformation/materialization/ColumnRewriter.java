@@ -20,14 +20,11 @@ import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.Set;
 
 public class ColumnRewriter {
-    private static final Logger LOG = LogManager.getLogger(ColumnRewriter.class);
     private final RewriteContext rewriteContext;
 
     public ColumnRewriter(RewriteContext rewriteContext) {
@@ -116,13 +113,11 @@ public class ColumnRewriter {
             if (enableRelationRewrite && srcToDstRelationIdMapping != null) {
                 Integer srcRelationId = srcRefFactory.getRelationId(columnRef.getId());
                 if (srcRelationId < 0) {
-                    LOG.warn("invalid columnRef: {}", columnRef);
                     return null;
                 }
                 Integer targetRelationId = srcToDstRelationIdMapping.get(srcRelationId);
                 Map<String, ColumnRefOperator> relationColumns = dstRelationIdToColumns.get(targetRelationId);
                 if (relationColumns == null) {
-                    LOG.warn("no columns for relation id:{}", targetRelationId);
                     return null;
                 }
                 result = relationColumns.getOrDefault(columnRef.getName(), columnRef);

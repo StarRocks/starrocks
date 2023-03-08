@@ -55,8 +55,10 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
-import com.starrocks.sql.optimizer.PlanContext;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
@@ -286,6 +288,34 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     // Maintenance plan for this MV
     private transient ExecPlan maintenancePlan;
 
+    public static class PlanContext {
+        // mv's logical plan
+        private final OptExpression logicalPlan;
+
+        // mv plan's output columns, used for mv rewrite
+        private final List<ColumnRefOperator> outputColumns;
+
+        // column ref factory used when compile mv plan
+        private final ColumnRefFactory refFactory;
+
+        public PlanContext(OptExpression logicalPlan, List<ColumnRefOperator> outputColumns, ColumnRefFactory refFactory) {
+            this.logicalPlan = logicalPlan;
+            this.outputColumns = outputColumns;
+            this.refFactory = refFactory;
+        }
+
+        public OptExpression getLogicalPlan() {
+            return logicalPlan;
+        }
+
+        public List<ColumnRefOperator> getOutputColumns() {
+            return outputColumns;
+        }
+
+        public ColumnRefFactory getRefFactory() {
+            return refFactory;
+        }
+    }
     // mv plan rewrite
     private PlanContext planContext;
 

@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedView.PlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
@@ -63,12 +64,12 @@ public class MaterializedViewOptimizer {
             mv.setPlanContext(planContext);
         }
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !mvPartitionNamesToRefresh.isEmpty()) {
-            boolean ret = updateScanWithPartitionRange(mv, planContext.getPlan(), mvPartitionNamesToRefresh);
+            boolean ret = updateScanWithPartitionRange(mv, planContext.getLogicalPlan(), mvPartitionNamesToRefresh);
             if (!ret) {
                 return null;
             }
         }
-        return planContext.getPlan();
+        return planContext.getLogicalPlan();
     }
 
     // try to get partial partition predicates of partitioned mv.

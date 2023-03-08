@@ -96,11 +96,11 @@ public class MvRewritePreprocessor {
             }
 
             List<Table> baseTables = MvUtils.getAllTables(mvPlan);
-            List<Table> commonTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
+            List<Table> intersectingTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
             MaterializationContext materializationContext =
-                    new MaterializationContext(mv, mvPlan, queryColumnRefFactory,
+                    new MaterializationContext(context, mv, mvPlan, queryColumnRefFactory,
                             mv.getPlanContext().getRefFactory(), partitionNamesToRefresh,
-                            baseTables, originQueryColumns, commonTables);
+                            baseTables, originQueryColumns, intersectingTables);
             List<ColumnRefOperator> mvOutputColumns = mv.getPlanContext().getOutputColumns();
 
             // generate scan mv plan here to reuse it in rule applications

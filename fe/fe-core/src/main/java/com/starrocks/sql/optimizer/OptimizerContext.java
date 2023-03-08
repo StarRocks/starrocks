@@ -17,9 +17,6 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -32,8 +29,6 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 public class OptimizerContext {
     private final Memo memo;
@@ -48,7 +43,6 @@ public class OptimizerContext {
     private OptimizerTraceInfo traceInfo;
     private OptimizerConfig optimizerConfig;
     private List<MaterializationContext> candidateMvs;
-    private Map<List<Table>, List<MaterializedView>> usedMvs;
 
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
@@ -60,7 +54,6 @@ public class OptimizerContext {
         this.sessionVariable = VariableMgr.newSessionVariable();
         this.optimizerConfig = new OptimizerConfig();
         this.candidateMvs = Lists.newArrayList();
-        this.usedMvs = Maps.newHashMap();
     }
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
@@ -83,7 +76,6 @@ public class OptimizerContext {
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
         this.optimizerConfig = optimizerConfig;
         this.candidateMvs = Lists.newArrayList();
-        this.usedMvs = Maps.newHashMap();
     }
 
     public Memo getMemo() {
@@ -148,18 +140,5 @@ public class OptimizerContext {
 
     public void addCandidateMvs(MaterializationContext candidateMv) {
         this.candidateMvs.add(candidateMv);
-    }
-
-    public void updateUsedMv(List<Table> tables, MaterializedView mv) {
-        List<Table> sortedTables = tables.stream()
-                .sorted((left, right) -> left.getName().compareTo(right.getName())).collect(Collectors.toList());
-        List<MaterializedView> mvs = usedMvs.computeIfAbsent(sortedTables, key -> Lists.newArrayList());
-        mvs.add(mv);
-    }
-
-    public List<MaterializedView> getUsedMvs(List<Table> tables) {
-        List<Table> sortedTables = tables.stream()
-                .sorted((left, right) -> left.getName().compareTo(right.getName())).collect(Collectors.toList());
-        return usedMvs.get(sortedTables);
     }
 }
