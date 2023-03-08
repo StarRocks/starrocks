@@ -1941,7 +1941,7 @@ PARALLEL_TEST(VecStringFunctionsTest, replaceNullablePattern) {
                         .ok());
 }
 
-PARALLEL_TEST(VecStringFunctionsTest, replaceOnlyNullPattern) {
+PARALLEL_TEST(VecStringFunctionsTest, replaceOnlyNullPattern1) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto context = ctx.get();
 
@@ -1971,6 +1971,66 @@ PARALLEL_TEST(VecStringFunctionsTest, replaceOnlyNullPattern) {
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
         EXPECT_TRUE(result->is_null(i));
     }
+
+    ASSERT_TRUE(StringFunctions::replace_close(context,
+                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+// Test replace when input is only_null column.
+PARALLEL_TEST(VecStringFunctionsTest, replaceOnlyNullPattern2) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+
+    auto str = ColumnHelper::create_const_null_column(2);
+    auto pattern = ColumnHelper::create_const_null_column(1);
+    auto replace = ColumnHelper::create_const_null_column(1);
+
+    columns.emplace_back(str);
+    columns.emplace_back(pattern);
+    columns.emplace_back(replace);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    const auto result = StringFunctions::replace(context, columns).value();
+
+    EXPECT_EQ(result->size(), 2);
+    EXPECT_TRUE(result->only_null());
+    EXPECT_TRUE(result->is_constant());
+
+    ASSERT_TRUE(StringFunctions::replace_close(context,
+                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+// Test replace when input is not only_null column but pattern/replace is only_null
+PARALLEL_TEST(VecStringFunctionsTest, replaceOnlyNullPattern2) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+
+    auto str = ColumnHelper::create_const_column<TYPE_VARCHAR>("a b c", 2);
+    auto pattern = ColumnHelper::create_const_null_column(1);
+    auto replace = ColumnHelper::create_const_null_column(1);
+
+    columns.emplace_back(str);
+    columns.emplace_back(pattern);
+    columns.emplace_back(replace);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    const auto result = StringFunctions::replace(context, columns).value();
+
+    EXPECT_EQ(result->size(), 2);
+    EXPECT_TRUE(result->only_null());
+    EXPECT_TRUE(result->is_constant());
 
     ASSERT_TRUE(StringFunctions::replace_close(context,
                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2011,6 +2071,76 @@ PARALLEL_TEST(VecStringFunctionsTest, replaceConstPattern) {
     for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
         ASSERT_EQ(res[i], v->get_data()[i].to_string());
     }
+
+    ASSERT_TRUE(StringFunctions::replace_close(context,
+                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+// Test replace when input is const column and pattern/replace is not const column
+PARALLEL_TEST(VecStringFunctionsTest, replaceConstColumn1) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+
+    auto str = ColumnHelper::create_const_column<TYPE_VARCHAR>("a b c", 2);
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(" ", 1);
+    auto replace = BinaryColumn::create();
+    const std::string replaces[] = {"-", "+"};
+    for (int i = 0; i < sizeof(replaces) / sizeof(replaces[0]); ++i) {
+        replace->append(replaces[i]);
+    }
+
+    columns.emplace_back(str);
+    columns.emplace_back(pattern);
+    columns.emplace_back(replace);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    const auto result = StringFunctions::replace(context, columns).value();
+    ASSERT_TRUE(!result->is_constant());
+    ASSERT_EQ(result->size(), 2);
+
+    const std::string res[] = {"a-b-c", "a+b+c"};
+    const auto vv = ColumnHelper::as_column<BinaryColumn>(result);
+    for (int i = 0; i < vv->size(); i++) {
+        ASSERT_EQ(res[i], vv->get_data()[i].to_string());
+    }
+
+    ASSERT_TRUE(StringFunctions::replace_close(context,
+                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+// Test replace when input/pattern/replace are all const columns
+PARALLEL_TEST(VecStringFunctionsTest, replaceConstColumn2) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+
+    auto str = ColumnHelper::create_const_column<TYPE_VARCHAR>("a b c", 2);
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(" ", 1);
+    auto replace = ColumnHelper::create_const_column<TYPE_VARCHAR>("+", 1);
+
+
+    columns.emplace_back(str);
+    columns.emplace_back(pattern);
+    columns.emplace_back(replace);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(StringFunctions::replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    const auto result = StringFunctions::replace(context, columns).value();
+    ASSERT_TRUE(result->is_constant());
+    ASSERT_EQ(result->size(), 2);
+    const auto v = ColumnHelper::as_column<ConstColumn>(result);
+    const auto vv = ColumnHelper::as_column<BinaryColumn>(v->data_column());
+    ASSERT_EQ("a+b+c", vv->get_data()[0].to_string());
 
     ASSERT_TRUE(StringFunctions::replace_close(context,
                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
