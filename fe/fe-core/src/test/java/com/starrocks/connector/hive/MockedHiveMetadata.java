@@ -49,6 +49,8 @@ import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -101,6 +103,16 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         } finally {
             readUnlock();
         }
+    }
+
+    @Override
+    public List<String> listTableNames(String dbName) {
+        return new ArrayList<>(MOCK_TABLE_MAP.get(dbName).keySet());
+    }
+
+    @Override
+    public List<String> listDbNames() {
+        return Arrays.asList("tpch", "tpcds", "ssb");
     }
 
     @Override
