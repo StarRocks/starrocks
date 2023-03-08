@@ -133,6 +133,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DISABLE_COLOCATE_JOIN = "disable_colocate_join";
     public static final String DISABLE_BUCKET_JOIN = "disable_bucket_join";
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
+    public static final String MAX_PARALLEL_SCAN_INSTANCE_NUM = "max_parallel_scan_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILL = "enable_spill";
     // spill mode: auto, force
@@ -617,6 +618,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VariableMgr.VarAttr(name = PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM)
     private int parallelExecInstanceNum = 1;
+
+    @VariableMgr.VarAttr(name = MAX_PARALLEL_SCAN_INSTANCE_NUM)
+    private int maxParallelScanInstanceNum = -1;
 
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
@@ -1159,6 +1163,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return parallelExecInstanceNum;
     }
 
+    public int getMaxParallelScanInstanceNum() {
+        return maxParallelScanInstanceNum;
+    }
+
     // when pipeline engine is enabled
     // in case of pipeline_dop > 0: return pipeline_dop * parallelExecInstanceNum;
     // in case of pipeline_dop <= 0 and avgNumCores < 2: return 1;
@@ -1179,6 +1187,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setParallelExecInstanceNum(int parallelExecInstanceNum) {
         this.parallelExecInstanceNum = parallelExecInstanceNum;
+    }
+
+    public void setMaxParallelScanInstanceNum(int maxParallelScanInstanceNum) {
+        this.maxParallelScanInstanceNum = maxParallelScanInstanceNum;
     }
 
     public int getExchangeInstanceParallel() {
