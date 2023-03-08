@@ -30,6 +30,32 @@
 namespace starrocks {
 namespace spill {
 
+class LogBlockReader {
+public:
+    LogBlockReader(std::unique_ptr<io::InputStreamWrapper> readable, size_t length)
+            : _readable(std::move(readable)), _length(length) {}
+    ~LogBlockReader() = default;
+
+    Status read_fully(void* data, int64_t count) {
+        DCHECK(_readable != nullptr);
+        if (_offset + count > _length) {
+            return Status::EndOfFile("no more data in this block");
+        }
+        ASSIGN_OR_RETURN(auto read_len, _readable->read(data, count));
+        RETURN_IF(read_len == 0, Status::EndOfFile("no more data in this block"));
+        RETURN_IF(read_len != count,
+                  Status::InternalError(
+                          fmt::format("block's length is mismatched, expected: {}, actual: {}", count, read_len)));
+        _offset += count;
+        return Status::OK();
+    }
+
+private:
+    std::unique_ptr<io::InputStreamWrapper> _readable;
+    size_t _offset = 0;
+    size_t _length;
+};
+
 class LogBlockContainer {
 public:
     LogBlockContainer(Dir* dir, TUniqueId query_id, int32_t plan_node_id, const std::string& plan_node_name,
@@ -67,7 +93,7 @@ public:
 
     Status flush();
 
-    StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable_file();
+    StatusOr<std::unique_ptr<LogBlockReader>> get_block_reader(size_t offset, size_t length);
 
     static StatusOr<LogBlockContainerPtr> create(Dir* dir, TUniqueId query_id, int32_t plan_node_id,
                                                  const std::string& plan_node_name, uint64_t id);
@@ -112,10 +138,11 @@ Status LogBlockContainer::flush() {
     return _writable_file->flush(WritableFile::FLUSH_ASYNC);
 }
 
-StatusOr<std::unique_ptr<io::InputStreamWrapper>> LogBlockContainer::get_readable_file() {
+StatusOr<std::unique_ptr<LogBlockReader>> LogBlockContainer::get_block_reader(size_t offset, size_t length) {
     std::string file_path = path();
     ASSIGN_OR_RETURN(auto f, _dir->fs()->new_sequential_file(file_path));
-    return std::make_unique<io::InputStreamWrapper>(std::move(f));
+    RETURN_IF_ERROR(f->skip(offset));
+    return std::make_unique<LogBlockReader>(std::move(f), length);
 }
 
 StatusOr<LogBlockContainerPtr> LogBlockContainer::create(Dir* dir, TUniqueId query_id, int32_t plan_node_id,
@@ -130,8 +157,8 @@ public:
     LogBlock(LogBlockContainerPtr container, size_t offset) : _container(container), _offset(offset) {}
 
     virtual ~LogBlock() {
-        if (_readable != nullptr) {
-            _readable.reset();
+        if (_reader != nullptr) {
+            _reader.reset();
         }
     }
 
@@ -152,17 +179,10 @@ public:
     Status flush() override { return _container->flush(); }
 
     Status read_fully(void* data, int64_t count) override {
-        if (_readable == nullptr) {
-            // first time to read, init _readable
-            ASSIGN_OR_RETURN(_readable, _container->get_readable_file());
-            RETURN_IF_ERROR(_readable->skip(_offset));
+        if (_reader == nullptr) {
+            ASSIGN_OR_RETURN(_reader, _container->get_block_reader(_offset, _length));
         }
-        ASSIGN_OR_RETURN(auto read_len, _readable->read(data, count));
-        RETURN_IF(read_len == 0, Status::EndOfFile("no more data in this block"));
-        RETURN_IF(read_len != count,
-                  Status::InternalError(
-                          fmt::format("block's length is mismatched, expected: {}, actual: {}", count, read_len)));
-        return Status::OK();
+        return _reader->read_fully(data, count);
     }
 
     std::string debug_string() override {
@@ -173,7 +193,7 @@ private:
     LogBlockContainerPtr _container;
     size_t _offset;
     size_t _length = 0;
-    std::unique_ptr<io::InputStreamWrapper> _readable;
+    std::unique_ptr<LogBlockReader> _reader;
 };
 
 LogBlockManager::~LogBlockManager() {
@@ -193,11 +213,16 @@ LogBlockManager::~LogBlockManager() {
 Status LogBlockManager::open() {
     return Status::OK();
 }
+
 void LogBlockManager::close() {}
 
 StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opts) {
     AcquireDirOptions acquire_dir_opts;
+#ifdef BE_TEST
+    ASSIGN_OR_RETURN(auto dir, _dir_mgr->acquire_writable_dir(acquire_dir_opts));
+#else
     ASSIGN_OR_RETURN(auto dir, ExecEnv::GetInstance()->spill_dir_mgr()->acquire_writable_dir(acquire_dir_opts));
+#endif
 
     ASSIGN_OR_RETURN(auto block_container, get_or_create_container(dir, opts.plan_node_id, opts.name));
     auto block = std::make_shared<LogBlock>(block_container, block_container->size());

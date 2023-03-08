@@ -55,6 +55,10 @@ public:
     virtual StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) override;
     virtual Status release_block(const BlockPtr& block) override;
 
+#ifdef BE_TEST
+    void set_dir_manager(DirManager* dir_mgr) { _dir_mgr = dir_mgr; }
+#endif
+
 private:
     StatusOr<LogBlockContainerPtr> get_or_create_container(Dir* dir, int32_t plan_node_id,
                                                            const std::string& plan_node_name);
@@ -76,6 +80,9 @@ private:
     std::unordered_map<Dir*, std::shared_ptr<PlanNodeContainerMap>> _available_containers;
 
     std::vector<LogBlockContainerPtr> _full_containers;
+#ifdef BE_TEST
+    DirManager* _dir_mgr = nullptr;
+#endif
 };
 } // namespace spill
 } // namespace starrocks

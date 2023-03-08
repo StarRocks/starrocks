@@ -177,6 +177,9 @@ public:
             _mem_table_pool.push(std::move(_mem_table));
         }
     }
+#ifdef BE_TEST
+    void set_block_manager(spill::BlockManager* block_manager) { _block_manager = block_manager; }
+#endif
 
 private:
     // open stage
@@ -237,11 +240,8 @@ private:
 
     size_t _spilled_append_rows{};
     size_t _restore_read_rows{};
-    // SpillFormatContext _spill_read_ctx;
 
-    // const BlockCompressionCodec* _compress_codec = nullptr;
     std::shared_ptr<spill::Formatter> _formatter; // @TODO make unique
-    // std::shared_ptr<spill::BlockManager> _block_manager;
     spill::BlockManager* _block_manager = nullptr;
     std::shared_ptr<spill::BlockGroup> _block_group;
     std::shared_ptr<spill::InputStream> _input_stream;

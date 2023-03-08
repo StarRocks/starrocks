@@ -48,16 +48,16 @@ struct AcquireDirOptions {
 // DirManager is thread-safe.
 class DirManager {
 public:
-DirManager() = default;
-~DirManager() = default;
+    DirManager() = default;
+    ~DirManager() = default;
 
-Status init();
+    Status init();
 
-StatusOr<Dir*> acquire_writable_dir(const AcquireDirOptions& opts);
+    StatusOr<Dir*> acquire_writable_dir(const AcquireDirOptions& opts);
 
 private:
-std::atomic<size_t> _idx = 0;
-std::vector<DirPtr> _dirs;
+    std::atomic<size_t> _idx = 0;
+    std::vector<DirPtr> _dirs;
 };
 
 } // namespace spill

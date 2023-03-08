@@ -61,7 +61,9 @@ Status Spiller::prepare(RuntimeState* state) {
 
     ASSIGN_OR_RETURN(_formatter, spill::create_formatter(&_opts));
     _block_group = std::make_shared<spill::BlockGroup>(_formatter.get());
+#ifndef BE_TEST
     _block_manager = state->query_ctx()->spill_block_manager();
+#endif
 
     return Status::OK();
 }
@@ -110,8 +112,9 @@ Status Spiller::_acquire_input_stream(RuntimeState* state) {
     }
     if (_opts.is_unordered) {
         ASSIGN_OR_RETURN(_input_stream, _block_group->as_unordered_stream());
+    } else {
+        ASSIGN_OR_RETURN(_input_stream, _block_group->as_ordered_stream(state, _opts.sort_exprs, _opts.sort_desc));
     }
-    ASSIGN_OR_RETURN(_input_stream, _block_group->as_ordered_stream(state, _opts.sort_exprs, _opts.sort_desc));
     return Status::OK();
 }
 

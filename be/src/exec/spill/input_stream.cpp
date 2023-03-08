@@ -20,6 +20,8 @@
 namespace starrocks {
 namespace spill {
 
+static const int chunk_buffer_max_size = 2;
+
 class BufferedInputStream : public InputStream {
 public:
     BufferedInputStream(int capacity, InputStreamPtr stream) : _capacity(capacity), _input_stream(stream) {}
@@ -86,7 +88,6 @@ public:
 
     StatusOr<ChunkUniquePtr> get_next() override;
 
-    // @TODO need this?
     bool is_ready() override { return false; }
 
     void close() override;
@@ -100,28 +101,28 @@ StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next() {
     if (_current_idx >= _input_blocks.size()) {
         return Status::EndOfFile("end of stream");
     }
-    // @TODO keep readable here?
+
     FormatterContext ctx;
-    auto res = _formatter->deserialize(ctx, _input_blocks[_current_idx]);
-    if (res.status().is_end_of_file()) {
-        LOG(INFO) << "read block done, " << _input_blocks[_current_idx]->debug_string();
-        _input_blocks[_current_idx].reset();
-        _current_idx++;
-    } else if (!res.status().ok()) {
-        LOG(INFO) << "read block error, " << res.status().to_string();
+    while (true) {
+        auto res = _formatter->deserialize(ctx, _input_blocks[_current_idx]);
+        if (res.status().is_end_of_file()) {
+            _input_blocks[_current_idx].reset();
+            _current_idx++;
+            if (_current_idx >= _input_blocks.size()) {
+                return Status::EndOfFile("end of stream");
+            }
+            // move to the next block
+            continue;
+        }
+        if (!res.status().is_end_of_file()) {
+            return res;
+        }
     }
-    if (!res.status().is_end_of_file()) {
-        return res;
-    }
-    return nullptr;
+    __builtin_unreachable();
 }
 
-void UnorderedInputStream::close() {
-    // @TODO what?
-    // @TODO clean block
-}
+void UnorderedInputStream::close() {}
 
-// @TODO should be buffered stream?
 class OrderedInputStream : public InputStream {
 public:
     OrderedInputStream(const std::vector<BlockPtr>& blocks, RuntimeState* state)
@@ -147,17 +148,15 @@ private:
 };
 
 Status OrderedInputStream::init(Formatter* formatter, const SortExecExprs* sort_exprs, const SortDescs* descs) {
-    // @TODO chunk provider
     std::vector<starrocks::ChunkProvider> chunk_providers;
     for (auto& block : _input_blocks) {
         std::vector<BlockPtr> blocks{block};
-        auto stream =
-                std::make_shared<BufferedInputStream>(1, std::make_shared<UnorderedInputStream>(blocks, formatter));
+        auto stream = std::make_shared<BufferedInputStream>(chunk_buffer_max_size,
+                                                            std::make_shared<UnorderedInputStream>(blocks, formatter));
         _input_streams.emplace_back(std::move(stream));
         auto input_stream = _input_streams.back();
         auto chunk_provider = [input_stream, this](ChunkUniquePtr* output, bool* eos) {
             if (output == nullptr || eos == nullptr) {
-                // @TODO
                 return input_stream->is_ready();
             }
             if (!input_stream->is_ready()) {
@@ -166,7 +165,6 @@ Status OrderedInputStream::init(Formatter* formatter, const SortExecExprs* sort_
             auto res = input_stream->get_next();
             if (!res.status().ok()) {
                 if (!res.status().is_end_of_file()) {
-                    // @TODO
                     _status.update(res.status());
                 }
                 input_stream->mark_is_eof();
@@ -187,13 +185,14 @@ StatusOr<ChunkUniquePtr> OrderedInputStream::get_next() {
     bool should_exit = false;
     std::atomic_bool eos = false;
     RETURN_IF_ERROR(_merger.get_next(&chunk, &eos, &should_exit));
-    if (should_exit) {
-        return std::make_unique<Chunk>();
+    if (chunk && !chunk->is_empty()) {
+        return std::move(chunk);
     }
     if (eos) {
         return Status::EndOfFile("eos");
     }
-    return chunk;
+    DCHECK(should_exit);
+    return std::make_unique<Chunk>();
 }
 
 Status OrderedInputStream::prefetch() {
@@ -211,7 +210,8 @@ Status OrderedInputStream::prefetch() {
 }
 
 StatusOr<InputStreamPtr> BlockGroup::as_unordered_stream() {
-    return std::make_shared<UnorderedInputStream>(_blocks, _formatter);
+    auto stream = std::make_shared<UnorderedInputStream>(_blocks, _formatter);
+    return std::make_shared<BufferedInputStream>(chunk_buffer_max_size, std::move(stream));
 }
 
 StatusOr<InputStreamPtr> BlockGroup::as_ordered_stream(RuntimeState* state, const SortExecExprs* sort_exprs,
