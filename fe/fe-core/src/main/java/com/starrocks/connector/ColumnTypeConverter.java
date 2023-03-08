@@ -352,7 +352,7 @@ public class ColumnTypeConverter {
                 int scale = ((io.delta.standalone.types.DecimalType) dataType).getScale();
                 return ScalarType.createUnifiedDecimalType(precision, scale);
             case ARRAY:
-                Type type = convertToArrayType((io.delta.standalone.types.ArrayType) dataType);
+                Type type = convertToArrayTypeForDeltaLake((io.delta.standalone.types.ArrayType) dataType);
                 if (type.isArrayType()) {
                     return type;
                 } else {
@@ -459,7 +459,7 @@ public class ColumnTypeConverter {
         return new MapType(keyType, valueType);
     }
 
-    private static ArrayType convertToArrayType(io.delta.standalone.types.ArrayType arrayType) {
+    private static ArrayType convertToArrayTypeForDeltaLake(io.delta.standalone.types.ArrayType arrayType) {
         return new ArrayType(fromDeltaLakeType(arrayType.getElementType()));
     }
 

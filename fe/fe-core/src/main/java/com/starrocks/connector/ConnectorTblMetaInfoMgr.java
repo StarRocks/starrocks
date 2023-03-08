@@ -93,7 +93,6 @@ public class ConnectorTblMetaInfoMgr {
         }
     }
 
-
     public void setTableInfoForConnectorTable(String catalog, String db,
                                               com.starrocks.catalog.Table table) {
         Preconditions.checkState(table != null);
