@@ -38,10 +38,13 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,6 +55,8 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getMvPartialPartitionPredicates;
 
 public class MvRewritePreprocessor {
+    protected static final Logger LOG = LogManager.getLogger(MvRewritePreprocessor.class);
+
     private final ConnectContext connectContext;
     private final ColumnRefFactory queryColumnRefFactory;
     private final OptimizerContext context;
@@ -97,7 +102,8 @@ public class MvRewritePreprocessor {
                 if (!partitionNamesToRefresh.isEmpty()) {
                     continue;
                 }
-            } else if (partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
+            } else if (!mv.getPartitionNames().isEmpty() &&
+                    partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
                 // if the mv is partitioned, and all partitions need refresh,
                 // then it can not be an candidate
                 continue;
@@ -224,6 +230,13 @@ public class MvRewritePreprocessor {
                 .collect(Collectors.toSet());
         // Case1: keeps original predicates which belong to MV table(which are not pruned after mv's partition pruning)
         for (ScalarOperator conj : conjuncts) {
+            // ignore binary predicates which cannot be used for pruning.
+            if (conj instanceof BinaryPredicateOperator) {
+                BinaryPredicateOperator conjOp = (BinaryPredicateOperator) conj;
+                if (conjOp.getChild(0).isColumnRef() && conjOp.getChild(1).isColumnRef()) {
+                    continue;
+                }
+            }
             final List<Integer> conjColumnRefOperators =
                     Utils.extractColumnRef(conj).stream().map(ref -> ref.getId()).collect(Collectors.toList());
             if (mvPruneColumnIdSet.containsAll(conjColumnRefOperators)) {
