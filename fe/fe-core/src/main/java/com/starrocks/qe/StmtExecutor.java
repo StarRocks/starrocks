@@ -102,6 +102,11 @@ import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.SetCatalogStmt;
+import com.starrocks.sql.ast.SetDefaultRoleStmt;
+>>>>>>> feac88f28 ([Enhancement] Support set current catalog by its name (backport #19103) (#19136))
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetVar;
@@ -461,6 +466,8 @@ public class StmtExecutor {
                 handleUseDbStmt();
             } else if (parsedStmt instanceof UseCatalogStmt) {
                 handleUseCatalogStmt();
+            } else if (parsedStmt instanceof SetCatalogStmt) {
+                handleSetCatalogStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
                 if (execPlanBuildByNewPlanner) {
                     handleCreateTableAsSelectStmt(beginTimeInNanoSecond);
@@ -969,6 +976,33 @@ public class StmtExecutor {
         context.getState().setOk();
     }
 
+<<<<<<< HEAD
+=======
+    private void handleSetCatalogStmt() throws AnalysisException {
+        SetCatalogStmt setCatalogStmt = (SetCatalogStmt) parsedStmt;
+        try {
+            String catalogName = setCatalogStmt.getCatalogName();
+            context.getGlobalStateMgr().changeCatalog(context, catalogName);
+        } catch (Exception e) {
+            context.getState().setError(e.getMessage());
+            return;
+        }
+        context.getState().setOk();
+    }
+
+    // Process use warehouse statement
+    private void handleUseWarehouseStmt() throws AnalysisException {
+        UseWarehouseStmt useWarehouseStmt = (UseWarehouseStmt) parsedStmt;
+        try {
+            context.getGlobalStateMgr().changeWarehouse(context, useWarehouseStmt.getWarehouseName());
+        } catch (Exception e) {
+            context.getState().setError(e.getMessage());
+            return;
+        }
+        context.getState().setOk();
+    }
+
+>>>>>>> feac88f28 ([Enhancement] Support set current catalog by its name (backport #19103) (#19136))
     private void sendMetaData(ShowResultSetMetaData metaData) throws IOException {
         // sends how many columns
         serializer.reset();

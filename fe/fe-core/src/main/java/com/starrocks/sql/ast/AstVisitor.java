@@ -265,6 +265,17 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+<<<<<<< HEAD
+=======
+    public R visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSetCatalogStatement(SetCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+>>>>>>> feac88f28 ([Enhancement] Support set current catalog by its name (backport #19103) (#19136))
     // ------------------------------------------- DML Statement -------------------------------------------------------
 
     public R visitInsertStatement(InsertStmt statement, C context) {

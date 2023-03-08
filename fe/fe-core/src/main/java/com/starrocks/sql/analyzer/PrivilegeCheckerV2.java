@@ -39,8 +39,24 @@ import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+=======
+import com.starrocks.sql.ast.RecoverPartitionStmt;
+import com.starrocks.sql.ast.RecoverTableStmt;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.RestoreStmt;
+import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
+import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SetCatalogStmt;
+import com.starrocks.sql.ast.SetDefaultRoleStmt;
+import com.starrocks.sql.ast.SetListItem;
+import com.starrocks.sql.ast.SetPassVar;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetType;
+>>>>>>> feac88f28 ([Enhancement] Support set current catalog by its name (backport #19103) (#19136))
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
@@ -281,7 +297,109 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
+<<<<<<< HEAD
         // --------------------------------------- Plugin Statement --------------------------------------------------------
+=======
+        @Override
+        public Void visitShowResourceStatement(ShowResourcesStmt statement, ConnectContext context) {
+            // `show resources` only show resource that user has any privilege on, we will check it in
+            // the execution logic, not here, see `handleShowResources()` for details.
+            return null;
+        }
+
+        // --------------------------------- Resource Group Statement -------------------------------------
+        public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(
+                    context, PrivilegeType.CREATE_RESOURCE_GROUP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "CREATE RESOURCE GROUP");
+            }
+            return null;
+        }
+
+        public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkResourceGroupAction(
+                    context, statement.getName(), PrivilegeType.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+            }
+            return null;
+        }
+
+        public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkResourceGroupAction(
+                    context, statement.getName(), PrivilegeType.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
+            }
+            return null;
+        }
+
+        public Void visitShowResourceGroupStatement(ShowResourceGroupStmt statement, ConnectContext context) {
+            // we don't check privilege for `show resource groups` statement
+            return null;
+        }
+
+        // --------------------------------- Warehouse Statement ------------------------------------------
+        @Override
+        public Void visitUseWarehouseStatement(UseWarehouseStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        // --------------------------------- Catalog Statement --------------------------------------------
+
+        @Override
+        public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+            // No authorization check for using default_catalog
+            if (CatalogMgr.isInternalCatalog(statement.getCatalogName())) {
+                return null;
+            }
+            if (!PrivilegeActions.checkAnyActionOnCatalog(context, statement.getCatalogName())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), statement.getCatalogName());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
+            String catalogName = statement.getCatalogName();
+            // No authorization check for using default_catalog
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                return null;
+            }
+            if (!PrivilegeActions.checkAnyActionOnCatalog(context, catalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), catalogName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.CREATE_EXTERNAL_CATALOG)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), statement.getCatalogName());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkCatalogAction(context, statement.getName(), PrivilegeType.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), statement.getName());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
+            // `show catalogs` only show catalog that user has any privilege on, we will check it in
+            // the execution logic, not here, see `handleShowCatalogs()` for details.
+            return null;
+        }
+
+        // --------------------------------------- Plugin Statement ---------------------------------------
+>>>>>>> feac88f28 ([Enhancement] Support set current catalog by its name (backport #19103) (#19136))
 
         @Override
         public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {

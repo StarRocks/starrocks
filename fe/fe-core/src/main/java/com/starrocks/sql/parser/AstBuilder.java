@@ -246,6 +246,12 @@ import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.SetCatalogStmt;
+import com.starrocks.sql.ast.SetDefaultRoleStmt;
+import com.starrocks.sql.ast.SetListItem;
+>>>>>>> feac88f28 ([Enhancement] Support set current catalog by its name (backport #19103) (#19136))
 import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetQualifier;
@@ -408,6 +414,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         String catalogName = identifier.getValue();
         return new UseCatalogStmt(catalogName);
+    }
+
+    @Override
+    public ParseNode visitSetCatalogStatement(StarRocksParser.SetCatalogStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String catalogName = identifier.getValue();
+        return new SetCatalogStmt(catalogName);
     }
 
     @Override

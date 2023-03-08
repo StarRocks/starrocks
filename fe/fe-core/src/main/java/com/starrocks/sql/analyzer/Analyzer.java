@@ -79,6 +79,12 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.SetCatalogStmt;
+import com.starrocks.sql.ast.SetDefaultRoleStmt;
+>>>>>>> feac88f28 ([Enhancement] Support set current catalog by its name (backport #19103) (#19136))
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
@@ -457,6 +463,46 @@ public class Analyzer {
             return null;
         }
 
+<<<<<<< HEAD
+=======
+        @Override
+        public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
+            CatalogAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ---------------------------------------- Warehouse Statement -----------------------------------------------------
+        @Override
+        public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitResumeWarehouseStatement(ResumeWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+>>>>>>> feac88f28 ([Enhancement] Support set current catalog by its name (backport #19103) (#19136))
         @Override
         public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
             DropStmtAnalyzer.analyze(statement, context);
