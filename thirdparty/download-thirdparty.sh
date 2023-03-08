@@ -401,7 +401,6 @@ if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.9.272" ]; th
         bash ./prefetch_crt_dependency.sh
         touch prefetch_crt_dep_ok
     fi
-    cp $TP_PATCH_DIR/AwsFindPackage.cmake cmake/
     touch $PATCHED_MARK
     echo "Finished patching $AWS_SDK_CPP_SOURCE"
 else
