@@ -3241,8 +3241,13 @@ public class GlobalStateMgr {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
         if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
+<<<<<<< HEAD
                 !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+=======
+                !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+>>>>>>> a676aaad2 ([Feature] Support grant and revoke on external table/db (#19142))
         }
         ctx.setCurrentCatalog(newCatalogName);
     }
@@ -3265,7 +3270,7 @@ public class GlobalStateMgr {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }
             if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                    !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+                    !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
             }
             ctx.setCurrentCatalog(newCatalogName);
@@ -3276,20 +3281,17 @@ public class GlobalStateMgr {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
-        // So we didn't check UseDbStmt permission in PrivilegeChecker.
-        if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
-            if (isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, dbName)) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                            ctx.getQualifiedUser(), dbName);
-                }
-            } else {
-                if (!auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                            ctx.getQualifiedUser(), dbName);
-                }
+        // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
+        if (isUsingNewPrivilege()) {
+            if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, ctx.getCurrentCatalog(), dbName)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                        ctx.getQualifiedUser(), dbName);
+            }
+        } else {
+            if (!auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                        ctx.getQualifiedUser(), dbName);
             }
         }
 
