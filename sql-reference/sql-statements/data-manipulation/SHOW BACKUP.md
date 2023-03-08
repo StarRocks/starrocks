@@ -34,6 +34,7 @@ SHOW BACKUP [FROM <db_name>]
 | UploadFinishedTime   | 快照上传完成时间。                                           |
 | FinishedTime         | 本次作业完成时间。                                           |
 | UnfinishedTasks      | 在 SNAPSHOTTING，UPLOADING 等阶段，会有多个子任务在同时进行，这里展示的当前段，未完成子任务的 Task ID。 |
+| Progress             | 未完成作业进展。|
 | TaskErrMsg           | 如果有子任务执行出错，这里会显示对应子任务的错误信息。       |
 | Status               | 用于记录在整个作业过程中，可能出现的一些状态信息。           |
 | Timeout              | 作业的超时时间，单位为秒。                                   |
