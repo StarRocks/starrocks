@@ -34,12 +34,14 @@ public:
     InputStream(const std::vector<BlockPtr>& input_blocks) : _input_blocks(input_blocks) {}
 
     virtual ~InputStream() = default;
-    virtual StatusOr<ChunkUniquePtr> get_next() = 0;
+    virtual StatusOr<ChunkUniquePtr> get_next(FormatterContext& ctx) = 0;
     virtual bool is_ready() = 0;
     virtual void close() = 0;
 
     virtual bool enable_prefetch() const { return false; }
-    virtual Status prefetch() { return Status::NotSupported("input stream doesn't support prefetch"); }
+    virtual Status prefetch(FormatterContext& ctx) {
+        return Status::NotSupported("input stream doesn't support prefetch");
+    }
 
     void mark_is_eof() { _eof = true; }
 

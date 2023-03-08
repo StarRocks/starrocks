@@ -214,7 +214,6 @@ private:
     std::weak_ptr<SpillerFactory> _parent;
 
     bool _has_opened = false;
-    // std::shared_ptr<SpillerPathProvider> _path_provider;
 
     std::mutex _mutex;
     std::queue<MemTablePtr> _mem_table_pool;
@@ -223,13 +222,7 @@ private:
     FlushAllCallBack _flush_all_callback;
     FlushAllCallBack _inner_flush_all_callback;
 
-    // std::unique_ptr<SpillFormater> _spill_fmt;
-    // std::shared_ptr<SpilledFileGroup> _file_group;
     Status _spilled_task_status;
-
-    // std::atomic_int32_t _total_restore_tasks{};
-    // std::shared_ptr<SpilledInputStream> _current_stream;
-    // std::queue<SpillRestoreTaskPtr> _restore_tasks;
 
     // stats
     std::atomic_uint64_t _total_restore_tasks{};

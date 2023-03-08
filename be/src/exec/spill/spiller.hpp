@@ -93,7 +93,9 @@ StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor
     RETURN_IF_ERROR(_acquire_input_stream(state));
 
     ChunkPtr chunk;
-    ASSIGN_OR_RETURN(chunk, _input_stream->get_next());
+    // @TODO(silverbullet233): reuse ctx
+    FormatterContext ctx;
+    ASSIGN_OR_RETURN(chunk, _input_stream->get_next(ctx));
     _restore_read_rows += chunk->num_rows();
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
     return chunk;
@@ -104,12 +106,15 @@ Status Spiller::trigger_restore(RuntimeState* state, TaskExecutor&& executor, Me
     RETURN_IF_ERROR(_get_spilled_task_status());
     RETURN_IF_ERROR(_acquire_input_stream(state));
 
+    DCHECK(_input_stream->enable_prefetch());
     // if all is well and input stream enable prefetch and not eof
-    if (_input_stream->enable_prefetch() && !_input_stream->eof()) {
+    if (!_input_stream->eof()) {
         auto restore_task = [this, state, guard]() {
             _running_restore_tasks++;
             guard.scoped_begin();
-            auto res = _input_stream->prefetch();
+            // @TODO(silverbullet233): reuse ctx
+            FormatterContext ctx;
+            auto res = _input_stream->prefetch(ctx);
 
             _update_spilled_task_status(res.is_end_of_file() ? Status::OK() : res);
             guard.scoped_end();

@@ -230,7 +230,7 @@ StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opt
 }
 
 Status LogBlockManager::release_block(const BlockPtr& block) {
-    auto log_block = dynamic_cast<LogBlock*>(block.get());
+    auto log_block = down_cast<LogBlock*>(block.get());
     auto container = log_block->container();
     TRACE_SPILL_LOG << "release block: " << block->debug_string();
     bool is_full = container->size() >= config::experimental_spill_max_log_block_container_bytes;

@@ -30,13 +30,13 @@ public:
     bool is_buffer_full() { return _chunk_buffer.get_size() == _capacity || eof(); }
     bool has_chunk() { return !_chunk_buffer.empty() || eof(); }
 
-    StatusOr<ChunkUniquePtr> get_next() override;
+    StatusOr<ChunkUniquePtr> get_next(FormatterContext& ctx) override;
     bool is_ready() override { return has_chunk(); }
     void close() override {}
 
     bool enable_prefetch() const override { return true; }
 
-    Status prefetch() override;
+    Status prefetch(FormatterContext& ctx) override;
 
     StatusOr<ChunkUniquePtr> read_from_buffer();
 
@@ -56,19 +56,19 @@ StatusOr<ChunkUniquePtr> BufferedInputStream::read_from_buffer() {
     return res;
 }
 
-StatusOr<ChunkUniquePtr> BufferedInputStream::get_next() {
+StatusOr<ChunkUniquePtr> BufferedInputStream::get_next(FormatterContext& ctx) {
     if (has_chunk()) {
         return read_from_buffer();
     }
-    return _input_stream->get_next();
+    return _input_stream->get_next(ctx);
 }
 
-Status BufferedInputStream::prefetch() {
+Status BufferedInputStream::prefetch(FormatterContext& ctx) {
     if (is_buffer_full()) {
         return Status::OK();
     }
 
-    auto res = _input_stream->get_next();
+    auto res = _input_stream->get_next(ctx);
     if (res.ok()) {
         _chunk_buffer.put(std::move(res.value()));
         return Status::OK();
@@ -86,7 +86,7 @@ public:
 
     ~UnorderedInputStream() = default;
 
-    StatusOr<ChunkUniquePtr> get_next() override;
+    StatusOr<ChunkUniquePtr> get_next(FormatterContext& ctx) override;
 
     bool is_ready() override { return false; }
 
@@ -97,12 +97,11 @@ private:
     Formatter* _formatter;
 };
 
-StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next() {
+StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(FormatterContext& ctx) {
     if (_current_idx >= _input_blocks.size()) {
         return Status::EndOfFile("end of stream");
     }
 
-    FormatterContext ctx;
     while (true) {
         auto res = _formatter->deserialize(ctx, _input_blocks[_current_idx]);
         if (res.status().is_end_of_file()) {
@@ -132,13 +131,13 @@ public:
 
     Status init(Formatter* formatter, const SortExecExprs* sort_exprs, const SortDescs* descs);
 
-    StatusOr<ChunkUniquePtr> get_next() override;
+    StatusOr<ChunkUniquePtr> get_next(FormatterContext& ctx) override;
     bool is_ready() override { return _merger.is_data_ready(); }
     void close() override {}
 
     bool enable_prefetch() const override { return true; }
 
-    Status prefetch() override;
+    Status prefetch(FormatterContext& ctx) override;
 
 private:
     // multiple buffered stream
@@ -162,7 +161,9 @@ Status OrderedInputStream::init(Formatter* formatter, const SortExecExprs* sort_
             if (!input_stream->is_ready()) {
                 return false;
             }
-            auto res = input_stream->get_next();
+            // @TODO(silverbullet233): reuse ctx
+            FormatterContext ctx;
+            auto res = input_stream->get_next(ctx);
             if (!res.status().ok()) {
                 if (!res.status().is_end_of_file()) {
                     _status.update(res.status());
@@ -180,7 +181,7 @@ Status OrderedInputStream::init(Formatter* formatter, const SortExecExprs* sort_
     return Status::OK();
 }
 
-StatusOr<ChunkUniquePtr> OrderedInputStream::get_next() {
+StatusOr<ChunkUniquePtr> OrderedInputStream::get_next(FormatterContext& ctx) {
     ChunkUniquePtr chunk;
     bool should_exit = false;
     std::atomic_bool eos = false;
@@ -195,11 +196,11 @@ StatusOr<ChunkUniquePtr> OrderedInputStream::get_next() {
     return std::make_unique<Chunk>();
 }
 
-Status OrderedInputStream::prefetch() {
+Status OrderedInputStream::prefetch(FormatterContext& ctx) {
     // prefetch all stream
     size_t eof_num = 0;
     for (auto& input_stream : _input_streams) {
-        RETURN_IF_ERROR(input_stream->prefetch());
+        RETURN_IF_ERROR(input_stream->prefetch(ctx));
         eof_num += input_stream->eof();
     }
     if (eof_num == _input_streams.size()) {
