@@ -80,6 +80,8 @@ public:
     static const std::string _s_average_io_mgr_queue_capacity;
     static const std::string _s_num_scanner_threads_started;
 
+    virtual int io_tasks_per_scan_operator() const { return config::io_tasks_per_scan_operator; }
+
 protected:
     RuntimeProfile::Counter* _bytes_read_counter; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
