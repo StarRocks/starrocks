@@ -101,7 +101,7 @@ public:
 
     const std::string& name() const { return _name; }
 
-    virtual int io_tasks_per_scan_operator() const { return config::io_tasks_per_scan_operator; }
+    virtual int io_tasks_per_scan_operator() const { return _io_tasks_per_scan_operator; }
 
     // TODO: support more share_scan strategy
     void enable_shared_scan(bool enable);
@@ -122,6 +122,7 @@ protected:
     RuntimeProfile::Counter* _num_scanner_threads_started_counter = nullptr;
     std::string _name;
     bool _enable_shared_scan = false;
+    int32_t _io_tasks_per_scan_operator = config::io_tasks_per_scan_operator;
 };
 
 } // namespace starrocks
