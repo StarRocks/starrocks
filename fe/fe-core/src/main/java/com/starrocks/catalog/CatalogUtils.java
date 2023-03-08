@@ -253,6 +253,9 @@ public class CatalogUtils {
     }
 
     public static String replaceWithIndex(int start, int end, String oldChar, String replaceChar) {
+        if (start > end) {
+            return "******";
+        }
         return String.valueOf(new StringBuilder(oldChar).replace(start, end, replaceChar));
     }
 }
