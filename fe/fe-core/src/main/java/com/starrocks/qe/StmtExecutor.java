@@ -254,6 +254,8 @@ public class StmtExecutor {
             StringBuilder sb = new StringBuilder();
             sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                     .append(variables.getParallelExecInstanceNum()).append(",");
+            sb.append(SessionVariable.MAX_PARALLEL_SCAN_INSTANCE_NUM).append("=")
+                    .append(variables.getMaxParallelScanInstanceNum()).append(",");
             sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
             sb.append(SessionVariable.ENABLE_ADAPTIVE_SINK_DOP).append("=")
                     .append(variables.getEnableAdaptiveSinkDop())
