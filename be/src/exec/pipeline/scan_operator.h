@@ -55,6 +55,7 @@ private:
 
 protected:
     ScanNode* _scan_node = nullptr;
+    int _io_tasks_per_scan_operator;
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
     // a profile indenpendently, to be more specificly, _chunk_sources[i] will go through
     // many ChunkSourcePtr in the entire life time, all these ChunkSources of _chunk_sources[i]
@@ -74,8 +75,6 @@ private:
         std::lock_guard<SpinLock> l(_scan_status_mutex);
         return _scan_status;
     }
-
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
 
     const size_t _buffer_size = config::pipeline_io_buffer_size;
 

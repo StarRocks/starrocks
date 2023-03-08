@@ -680,6 +680,8 @@ CONF_Int32(orc_file_cache_max_size, "2097152");
 CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
 CONF_mInt32(parquet_header_max_size, "16384");
 
+CONF_Int32(io_tasks_per_scan_operator, "4");
+
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 // default: 16MB

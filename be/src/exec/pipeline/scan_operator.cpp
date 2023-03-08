@@ -18,10 +18,11 @@ namespace starrocks::pipeline {
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node)
         : SourceOperator(factory, id, "olap_scan", scan_node->id()),
           _scan_node(scan_node),
-          _chunk_source_profiles(MAX_IO_TASKS_PER_OP),
-          _is_io_task_running(MAX_IO_TASKS_PER_OP),
-          _chunk_sources(MAX_IO_TASKS_PER_OP) {
-    for (auto i = 0; i < MAX_IO_TASKS_PER_OP; i++) {
+          _io_tasks_per_scan_operator(scan_node->io_tasks_per_scan_operator()),
+          _chunk_source_profiles(_io_tasks_per_scan_operator),
+          _is_io_task_running(_io_tasks_per_scan_operator),
+          _chunk_sources(_io_tasks_per_scan_operator) {
+    for (auto i = 0; i < _io_tasks_per_scan_operator; i++) {
         _chunk_source_profiles[i] = std::make_shared<RuntimeProfile>(strings::Substitute("ChunkSource$0", i));
     }
 }
@@ -79,7 +80,7 @@ bool ScanOperator::has_output() const {
         }
     }
 
-    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP) {
+    if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return false;
     }
 
@@ -92,7 +93,7 @@ bool ScanOperator::has_output() const {
     }
 
     // Can trigger_next_scan for the picked-up morsel.
-    for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
+    for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
             return true;
         }
@@ -156,12 +157,12 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
-    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP) {
+    if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
 
     // Firstly, find the picked-up morsel, whose can commit an io task.
-    for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
+    for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
             RETURN_IF_ERROR(_trigger_next_scan(state, i));
         }
@@ -169,7 +170,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
 
     // Secondly, find the unused position of _chunk_sources to pick up a new morsel.
     if (!_morsel_queue->empty()) {
-        for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
+        for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
             if (_chunk_sources[i] == nullptr || (!_is_io_task_running[i] && !_chunk_sources[i]->has_output())) {
                 RETURN_IF_ERROR(_pickup_morsel(state, i));
             }
