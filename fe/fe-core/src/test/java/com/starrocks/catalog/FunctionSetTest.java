@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import org.junit.Assert;
 import org.junit.Before;
@@ -251,5 +252,45 @@ public class FunctionSetTest {
         Assert.assertNotNull(fn);
         Assert.assertEquals(Type.INT, fn.getReturnType());
         Assert.assertEquals(new ArrayType(Type.NULL), fn.getArgs()[0]);
+    }
+
+    @Test
+    public void testPolymorphicTVF() {
+        // First two columns of the result are polymorphic (derived from argument type), but the last argument is of a
+        // "concrete" type BIGINT, which is retained in the resolved function.
+        TableFunction polymorphicTVF =
+                new TableFunction(new FunctionName("three_column_tvf"), Lists.newArrayList("a", "b", "c"),
+                        Lists.newArrayList(Type.ANY_ARRAY),
+                        Lists.newArrayList(Type.ANY_ELEMENT, Type.ANY_ELEMENT, Type.BIGINT));
+
+        functionSet.addBuiltin(polymorphicTVF);
+
+        Type[] argTypes = new Type[] {VARCHAR_ARRAY};
+        Function desc = new Function(new FunctionName("three_column_tvf"), argTypes, Type.INVALID, false);
+        Function fn = functionSet.getFunction(desc, Function.CompareMode.IS_IDENTICAL);
+        Assert.assertNotNull(fn);
+        Assert.assertTrue(fn instanceof TableFunction);
+        TableFunction tableFunction = (TableFunction) fn;
+        Assert.assertEquals(3, tableFunction.getTableFnReturnTypes().size());
+        Assert.assertEquals(Type.VARCHAR, tableFunction.getTableFnReturnTypes().get(0));
+        Assert.assertEquals(Type.VARCHAR, tableFunction.getTableFnReturnTypes().get(1));
+        Assert.assertEquals(Type.BIGINT, tableFunction.getTableFnReturnTypes().get(2));
+
+        // Same but for two column TVF.
+        TableFunction twoColumnTVF =
+                new TableFunction(new FunctionName("two_column_tvf"), Lists.newArrayList("a", "b"),
+                        Lists.newArrayList(Type.ANY_ARRAY),
+                        Lists.newArrayList(Type.BIGINT, Type.ANY_ELEMENT));
+        functionSet.addBuiltin(twoColumnTVF);
+
+        argTypes = new Type[] {VARCHAR_ARRAY};
+        desc = new Function(new FunctionName("two_column_tvf"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_IDENTICAL);
+        Assert.assertNotNull(fn);
+        Assert.assertTrue(fn instanceof TableFunction);
+        tableFunction = (TableFunction) fn;
+        Assert.assertEquals(2, tableFunction.getTableFnReturnTypes().size());
+        Assert.assertEquals(Type.BIGINT, tableFunction.getTableFnReturnTypes().get(0));
+        Assert.assertEquals(Type.VARCHAR, tableFunction.getTableFnReturnTypes().get(1));
     }
 }
