@@ -426,11 +426,15 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         request.__set_rowDelimiter(http_req->header(HTTP_ROW_DELIMITER));
     }
     if (!http_req->header(HTTP_SKIP_HEADER).empty()) {
-        auto skip_header = std::stoll(http_req->header(HTTP_SKIP_HEADER));
-        if (skip_header < 0) {
-            return Status::InvalidArgument("skip_header must be equal or greater than 0");
+        try {
+            auto skip_header = std::stoll(http_req->header(HTTP_SKIP_HEADER));
+            if (skip_header < 0) {
+                return Status::InvalidArgument("skip_header must be equal or greater than 0");
+            }
+            request.__set_skipHeader(skip_header);
+        } catch (const std::invalid_argument& e) {
+            return Status::InvalidArgument("Invalid csv load skip_header format");
         }
-        request.__set_skipHeader(skip_header);
     }
     if (!http_req->header(HTTP_TRIM_SPACE).empty()) {
         if (boost::iequals(http_req->header(HTTP_TRIM_SPACE), "false")) {
