@@ -170,6 +170,7 @@ private:
     RuntimeProfile::Counter* _default_buffer_capacity_counter = nullptr;
     RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_scan_task_queue_size_counter = nullptr;
     // The total number of the original tablets in this fragment instance.
     RuntimeProfile::Counter* _tablets_counter = nullptr;
 };

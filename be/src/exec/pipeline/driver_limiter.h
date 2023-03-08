@@ -50,6 +50,8 @@ public:
     // `num_drivers` drivers back to the limiter.
     StatusOr<TokenPtr> try_acquire(int num_drivers);
 
+    int num_total_drivers() const { return _num_total_drivers; }
+
 private:
     const int _max_num_drivers;
     std::atomic<int> _num_total_drivers{0};
