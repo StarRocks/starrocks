@@ -442,7 +442,7 @@ PROPERTIES (
 
 > **说明**
 >
-> * 从 2.5.1 开始，支持在未显式指定该参数的情况下，由系统自动推导存储介质。如果您在建表时未显式指定该参数，系统会根据 BE 的磁盘类型来自动推导并设定表的存储类型。推导机制如下：如果 BE 上报的存储路径 (`storage_root_path`) 都是 SSD，系统会默认该参数为 SSD；如果 BE 上报的存储路径都是 HDD，系统会默认该参数为 HDD；如果 BE 上报的存储路径两者都有，系统会默认该参数为 SSD。
+> * 从 2.5.1 开始，支持在未显式指定该参数的情况下，由系统自动推导存储介质。如果您在建表时未显式指定该参数，系统会根据 BE 的磁盘类型来自动推导并设定表的存储类型。推导机制如下：如果 BE 上报的存储路径 (`storage_root_path`) 都是 SSD，系统会默认该参数为 SSD；如果 BE 上报的存储路径都是 HDD，系统会默认该参数为 HDD；如果 BE 上报的存储路径两者都有且 FE 配置文件中设置了 `storage_cooldown_second`，系统会默认该参数为 SSD，否则为 HDD。
 > * 当 FE 配置项 `enable_strict_storage_medium_check` 为 `true` 时，表示在建表时会严格校验 BE 上的存储介质。如果建表语句中的存储介质和 BE 的存储类型不一致，建表语句会报错 `Failed to find enough hosts with storage medium [SSD|HDD] at all backends...`。当 `enable_strict_storage_medium_check` 为 `false` 时，可以忽略该报错强行建表，但是后续可能会导致集群磁盘空间分布出现不均衡，所以强烈建议在建表时指定和集群存储介质相匹配的 `storage_medium` 属性。
 
 **storage_cooldown_time**：当设置存储介质为 SSD 时，指定该分区在该时间点之后从 SSD 降冷到 HDD，设置的时间必须大于当前时间。
