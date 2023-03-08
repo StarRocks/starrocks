@@ -41,7 +41,7 @@ void append_prev_result(ChunkPtr result_chunk, const Columns& group_by_columns, 
 
 } // namespace
 
-StreamAggregator::StreamAggregator(AggregatorParamsPtr&& params) : Aggregator(std::move(params)) {
+StreamAggregator::StreamAggregator(AggregatorParamsPtr params) : Aggregator(std::move(params)) {
     _count_agg_idx = _params->count_agg_idx;
 }
 
