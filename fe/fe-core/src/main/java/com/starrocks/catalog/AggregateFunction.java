@@ -98,11 +98,11 @@ public class AggregateFunction extends Function {
 
     private List<Boolean> isAscOrder;
 
-    public List<Boolean> getnullsFirst() {
+    public List<Boolean> getNullsFirst() {
         return nullsFirst;
     }
 
-    public void setnullsFirst(List<Boolean> nullsFirst) {
+    public void setNullsFirst(List<Boolean> nullsFirst) {
         this.nullsFirst = nullsFirst;
     }
 

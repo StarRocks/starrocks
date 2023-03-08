@@ -27,6 +27,7 @@
 namespace starrocks {
 
 // input columns result in intermediate result: struct{array[col0], array[col1], array[col2]... array[coln]}
+// return ordered array[col0']
 struct ArrayAggAggregateState {
     void update(const Column& column, size_t index, size_t offset, size_t count) {
         if (UNLIKELY(index >= data_columns->size())) {
@@ -54,6 +55,7 @@ struct ArrayAggAggregateState {
         }
     }
     // using pointer rather than vector to avoid variadic size
+    // array_agg(a order by b, c, d), the a,b,c,d are put into data_columns in order.
     Columns* data_columns;
 };
 
@@ -76,6 +78,8 @@ public:
                                                                                   arg_type->precision, arg_type->scale),
                                                 true));
         }
+        CHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
+        CHECK(state->data_columns->size() == ctx->get_is_asc_order().size() + 1);
     }
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
@@ -107,7 +111,7 @@ public:
         }
     }
 
-    // the struct and array aren't be null, consist from several columns
+    // struct and array elements aren't be null, as they consist from several columns
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         auto& input_columns = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column))->fields();
         for (auto i = 0; i < input_columns.size(); ++i) {
@@ -118,6 +122,7 @@ public:
         }
     }
 
+    // serialize each state->column to a [nullable] array in a [nullable] struct
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& state_impl = this->data(state);
         auto& columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(to))->fields_column();
@@ -131,7 +136,7 @@ public:
                 down_cast<NullableColumn*>(columns[i].get())->null_column_data().emplace_back(0);
             }
             if ((*state_impl.data_columns)[i]->only_null()) {
-                array_col->elements_column()->append_nulls((*state_impl.data_columns)[i]->size());
+                array_col->elements_column()->append_nulls(elem_size);
             } else {
                 array_col->elements_column()->append(
                         *ColumnHelper::unpack_and_duplicate_const_column(elem_size, (*state_impl.data_columns)[i]), 0,
@@ -142,17 +147,18 @@ public:
         }
     }
 
+    // finalize each state->column to a [nullable] array
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_nullable() || to->is_array());
         auto& state_impl = this->data(state);
         auto elem_size = (*state_impl.data_columns)[0]->size();
         auto res = (*state_impl.data_columns)[0];
         auto tmp = (*state_impl.data_columns)[0]->clone_empty();
-        if ((*state_impl.data_columns).size() > 1) {
+        if (state_impl.data_columns->size() > 1) {
             Permutation perm;
             Columns sort_by_columns;
             SortDescs sort_desc(ctx->get_is_asc_order(), ctx->get_nulls_first());
-            sort_by_columns.assign((*state_impl.data_columns).begin() + 1, (*state_impl.data_columns).end());
+            sort_by_columns.assign(state_impl.data_columns->begin() + 1, state_impl.data_columns->end());
             Status st = sort_and_tie_columns(false, sort_by_columns, sort_desc, &perm);
             CHECK(st.ok());
             materialize_column_by_permutation(tmp.get(), {(*state_impl.data_columns)[0]}, perm);
@@ -163,7 +169,7 @@ public:
             down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
         }
         if (res->only_null()) {
-            array_col->elements_column()->append_nulls(res->size());
+            array_col->elements_column()->append_nulls(elem_size);
         } else {
             array_col->elements_column()->append(*ColumnHelper::unpack_and_duplicate_const_column(elem_size, res), 0,
                                                  elem_size);
@@ -172,6 +178,7 @@ public:
         offsets.push_back(offsets.back() + elem_size);
     }
 
+    // convert each cell of a row to a [nullable] array in a struct
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
         auto columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(dst->get()))->fields_column();

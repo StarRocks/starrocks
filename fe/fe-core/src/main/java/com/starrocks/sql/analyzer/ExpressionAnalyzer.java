@@ -931,7 +931,7 @@ public class ExpressionAnalyzer {
                 }
                 ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
                 ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
-                ((AggregateFunction) fn).setnullsFirst(nullsFirst);
+                ((AggregateFunction) fn).setNullsFirst(nullsFirst);
                 fn.setRetType(new ArrayType(argumentTypes[0]));
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(fnName, argumentTypes)) {
                 // Since the priority of decimal version is higher than double version (according functionId),

@@ -43,6 +43,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Return value of the grammar production that parses function
@@ -53,7 +54,7 @@ public class FunctionParams implements Writable {
     private List<Expr> exprs;
     private boolean isDistinct;
 
-    private final List<OrderByElement> orderByElements;
+    private List<OrderByElement> orderByElements;
     // c'tor for non-star params
     public FunctionParams(boolean isDistinct, List<Expr> exprs) {
         isStar = false;
@@ -88,6 +89,28 @@ public class FunctionParams implements Writable {
     public List<OrderByElement> getOrderByElements() {
         return orderByElements;
     }
+
+    public String getOrderByStringToSql() {
+        if (orderByElements.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(" ORDER BY ").append(orderByElements.stream().map(OrderByElement::toSql).
+                    collect(Collectors.joining(" ")));
+            return sb.toString();
+        } else {
+            return "";
+        }
+    }
+
+    public String getOrderByStringToExplain() {
+        if (orderByElements.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(" ORDER BY ").append(orderByElements.stream().map(OrderByElement::explain).
+                    collect(Collectors.joining(" ")));
+            return sb.toString();
+        } else {
+            return "";
+        }
+    }
     public boolean isStar() {
         return isStar;
     }
@@ -117,6 +140,17 @@ public class FunctionParams implements Writable {
         } else {
             out.writeBoolean(false);
         }
+        if (orderByElements != null) {
+            out.writeBoolean(true);
+            out.writeInt(orderByElements.size());
+            for (OrderByElement elem : orderByElements) {
+                Expr.writeTo(elem.getExpr(), out);
+                out.writeBoolean(elem.getIsAsc());
+                out.writeBoolean(elem.getNullsFirstParam());
+            }
+        } else {
+            out.writeBoolean(false);
+        }
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -127,6 +161,13 @@ public class FunctionParams implements Writable {
             int size = in.readInt();
             for (int i = 0; i < size; ++i) {
                 exprs.add(Expr.readIn(in));
+            }
+        }
+        if (in.readBoolean()) {
+            orderByElements = Lists.newArrayList();
+            int size = in.readInt();
+            for (int i = 0; i < size; ++i) {
+                orderByElements.add(new OrderByElement(Expr.readIn(in), in.readBoolean(), in.readBoolean()));
             }
         }
     }
