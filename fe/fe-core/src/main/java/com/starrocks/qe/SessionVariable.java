@@ -1023,13 +1023,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // when pipeline engine is enabled
     // in case of pipeline_dop > 0: return pipeline_dop * parallelExecInstanceNum;
     // in case of pipeline_dop <= 0 and avgNumCores < 2: return 1;
-    // in case of pipeline_dop <= 0 and avgNumCores >=2; return avgNumCores/2;
+    // in case of pipeline_dop <= 0 and avgNumCores >=2; return avgNumCores;
     public int getDegreeOfParallelism() {
         if (enablePipelineEngine) {
             if (pipelineDop > 0) {
                 return pipelineDop;
             }
             return BackendCoreStat.getDefaultDOP();
+        } else {
+            return parallelExecInstanceNum;
+        }
+    }
+
+    public int getSinkDegreeOfParallelism() {
+        if (enablePipelineEngine) {
+            if (pipelineDop > 0) {
+                return pipelineDop;
+            }
+            if (maxPipelineDop <= 0) {
+                return BackendCoreStat.getSinkDefaultDOP();
+            }
+            return Math.min(maxPipelineDop, BackendCoreStat.getSinkDefaultDOP());
         } else {
             return parallelExecInstanceNum;
         }
