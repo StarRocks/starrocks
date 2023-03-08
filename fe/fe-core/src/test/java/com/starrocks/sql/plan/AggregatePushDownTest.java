@@ -63,6 +63,7 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "where month(order_date)=1\n" +
                 "order by region, order_date";
         String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, q1);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: sum[([3: income, DECIMAL128(10,2), false]); args: DECIMAL128; " +
                 "result: DECIMAL128(38,2); args nullable: false; result nullable: true]\n" +

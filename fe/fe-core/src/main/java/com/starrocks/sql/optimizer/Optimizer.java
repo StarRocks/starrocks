@@ -330,7 +330,12 @@ public class Optimizer {
 
     private OptExpression pushDownAggregation(OptExpression tree, TaskContext rootTaskContext,
                                               ColumnRefSet requiredColumns) {
-        tree = new PushDownDistinctAggregateRule().rewrite(tree, rootTaskContext);
+        if (context.getSessionVariable().isCboPushDownDistinctBelowWindow()) {
+            // TODO(by satanson): in future, PushDownDistinctAggregateRule and PushDownAggregateRule should be
+            //  fused one rule to tackle with all scenarios of agg push-down.
+            tree = new PushDownDistinctAggregateRule().rewrite(tree, rootTaskContext);
+        }
+
         if (context.getSessionVariable().getCboPushDownAggregateMode() == -1) {
             return tree;
         }

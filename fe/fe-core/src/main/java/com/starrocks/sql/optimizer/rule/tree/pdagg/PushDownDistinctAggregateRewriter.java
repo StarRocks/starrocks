@@ -4,9 +4,12 @@ package com.starrocks.sql.optimizer.rule.tree.pdagg;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
@@ -33,6 +36,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 // Push Distinct Agg down below WindowOperators, for an example:
@@ -76,13 +80,13 @@ public class PushDownDistinctAggregateRewriter {
             this.remapping = remapping;
         }
 
-        void combine(ColumnRefRemapping other) {
+        public void combine(ColumnRefRemapping other) {
             remapping.putAll(other.remapping);
             cachedReplacer = Optional.empty();
             cachedColumnRefSet = Optional.empty();
         }
 
-        ReplaceColumnRefRewriter getReplacer() {
+        public ReplaceColumnRefRewriter getReplacer() {
             if (!cachedReplacer.isPresent()) {
                 ReplaceColumnRefRewriter replacer =
                         new ReplaceColumnRefRewriter(remapping.entrySet().stream().collect(
@@ -92,19 +96,19 @@ public class PushDownDistinctAggregateRewriter {
             return cachedReplacer.get();
         }
 
-        ColumnRefSet getColumnRefSet() {
+        public ColumnRefSet getColumnRefSet() {
             if (!cachedColumnRefSet.isPresent()) {
                 cachedColumnRefSet = Optional.of(new ColumnRefSet(remapping.keySet()));
             }
             return cachedColumnRefSet.get();
         }
 
-        boolean isEmpty() {
+        public boolean isEmpty() {
             return remapping.isEmpty();
         }
     }
 
-    public static class RewriteInfo {
+    private static class RewriteInfo {
         private boolean rewritten = false;
         private ColumnRefRemapping remapping;
         private OptExpression op;
@@ -119,7 +123,7 @@ public class PushDownDistinctAggregateRewriter {
 
         private AggregatePushDownContext ctx;
 
-        public static RewriteInfo NOT_REWRITE = new RewriteInfo(false, null, null, null);
+        public static final RewriteInfo NOT_REWRITE = new RewriteInfo(false, null, null, null);
 
         public RewriteInfo(boolean rewritten, ColumnRefRemapping remapping,
                            OptExpression op, AggregatePushDownContext ctx) {
@@ -195,6 +199,16 @@ public class PushDownDistinctAggregateRewriter {
             return context;
         }
 
+        private boolean canPushDownAgg(LogicalWindowOperator windowOp) {
+            //TODO(by satanson): support AVG and COUNT in future
+            Set<String> supportWindowFun = Sets.newHashSet(FunctionSet.SUM);
+            AnalyticWindow window = windowOp.getAnalyticWindow();
+            return window == null || window.getType().equals(AnalyticWindow.Type.RANGE) &&
+                    windowOp.getWindowCall().values().stream()
+                            .allMatch(call -> !call.isDistinct() && supportWindowFun.contains(call.getFnName()) &&
+                                    call.getChild(0).isColumnRef());
+        }
+
         @Override
         public AggregatePushDownContext visitLogicalWindow(OptExpression optExpression,
                                                            AggregatePushDownContext context) {
@@ -203,7 +217,7 @@ public class PushDownDistinctAggregateRewriter {
             }
             LogicalWindowOperator windowOp = optExpression.getOp().cast();
             // only support distinct aggregation push down window
-            if (!context.origAggregator.getAggregations().isEmpty() || !windowOp.canPushDownAgg()) {
+            if (!context.origAggregator.getAggregations().isEmpty() || !canPushDownAgg(windowOp)) {
                 return visit(optExpression, context);
             }
 
@@ -257,7 +271,9 @@ public class PushDownDistinctAggregateRewriter {
                 return visit(optExpression, context);
             }
 
-            // add filter columns in groupBys
+            // add filter columns in groupBys, LogicalFilterOperator would not appear in distinct-agg + window
+            // plan. In other agg push down scenarios, it may appear. When a AggregateOperator is pushed down below
+            // LogicalFilterOperator, the predicates in latter will referenced the columns produced by the former.
             LogicalFilterOperator filter = optExpression.getOp().cast();
             filter.getRequiredChildInputColumns().getStream().mapToObj(factory::getColumnRef)
                     .forEach(v -> context.groupBys.put(v, v));
@@ -351,7 +367,7 @@ public class PushDownDistinctAggregateRewriter {
             ReplaceColumnRefRewriter replacer = rewriteInfo.getRemapping().get().getReplacer();
             LogicalProjectOperator projectOp = optExpression.getOp().cast();
             ColumnRefSet columnRefSet = new ColumnRefSet();
-            columnRefSet.union(getReferencedColumnRef(new ArrayList<>(projectOp.getColumnRefMap().keySet())));
+            columnRefSet.union(projectOp.getColumnRefMap().keySet());
             columnRefSet.union(getReferencedColumnRef(projectOp.getColumnRefMap().values()));
 
             if (!rewriteInfo.getRemapping().get().getColumnRefSet().isIntersect(columnRefSet)) {
