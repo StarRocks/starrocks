@@ -352,12 +352,33 @@ struct TFileTable {
     2: optional list<TColumn> columns
 }
 
+struct TIcebergSchema {
+    1: optional list<TIcebergSchemaField> fields
+}
+
+struct TIcebergSchemaField {
+    // Refer to field id in iceberg schema
+    1: optional i32 field_id
+
+    // Refer to field name
+    2: optional string name
+
+    // You can fill other field properties here if you needed
+    // .......
+
+    // Children fields for struct, map and list(array)
+    100: optional list<TIcebergSchemaField> children
+}
+
 struct TIcebergTable {
     // table location
     1: optional string location
 
     // Schema columns, except partition columns
     2: optional list<TColumn> columns
+
+    // Iceberg schema, used to support schema evolution
+    3: optional TIcebergSchema iceberg_schema
 }
 
 struct THudiTable {

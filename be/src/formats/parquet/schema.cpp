@@ -84,6 +84,7 @@ void SchemaDescriptor::leaf_to_field(const tparquet::SchemaElement& t_schema, co
     field->type_length = t_schema.type_length;
     field->scale = t_schema.scale;
     field->precision = t_schema.precision;
+    field->field_id = t_schema.field_id;
     field->level_info = cur_level_info;
 
     _physical_fields.push_back(field);
@@ -187,6 +188,7 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
     }
 
     field->name = level1_schema.name;
+    field->field_id = level1_schema.field_id;
     field->type.type = TYPE_ARRAY;
     field->type.children.push_back(field->children[0].type);
     field->is_nullable = is_optional;
@@ -247,6 +249,8 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos + 1, cur_level_info, kv_field, next_pos));
 
     field->name = map_schema.name;
+    // Actually, we don't need put field_id here
+    field->field_id = map_schema.field_id;
     field->type.type = TYPE_MAP;
     field->is_nullable = is_optional;
     field->level_info = cur_level_info;
@@ -272,6 +276,7 @@ Status SchemaDescriptor::group_to_struct_field(const std::vector<tparquet::Schem
     field->is_nullable = is_optional;
     field->level_info = cur_level_info;
     field->type.type = TYPE_STRUCT;
+    field->field_id = group_schema.field_id;
     return Status::OK();
 }
 
@@ -331,6 +336,7 @@ Status SchemaDescriptor::node_to_field(const std::vector<tparquet::SchemaElement
         field->name = t_schema.name;
         field->type.type = TYPE_ARRAY;
         field->is_nullable = false;
+        field->field_id = t_schema.field_id;
         field->level_info = cur_level_info;
         field->level_info.immediate_repeated_ancestor_def_level = last_immediate_repeated_ancestor_def_level;
 
@@ -354,21 +360,29 @@ Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>&
         return Status::InvalidArgument("Empty parquet Schema");
     }
     auto& root_schema = t_schemas[0];
+
+    // root_schema has no field_id, but it's child will have.
+    // Below code used to check this parquet field exist field id.
+    if (root_schema.num_children > 0) {
+        _exist_field_id = t_schemas[1].__isset.field_id;
+    }
+
     if (!is_group(root_schema)) {
         return Status::InvalidArgument("Root Schema is not group");
     }
     _fields.resize(root_schema.num_children);
     // skip root SchemaElement
     size_t next_pos = 1;
-    for (int i = 0; i < root_schema.num_children; ++i) {
+    for (size_t i = 0; i < root_schema.num_children; ++i) {
         RETURN_IF_ERROR(node_to_field(t_schemas, next_pos, LevelInfo(), &_fields[i], &next_pos));
         if (!case_sensitive) {
             _fields[i].name = boost::algorithm::to_lower_copy(_fields[i].name);
         }
-        if (_field_idx_by_name.find(_fields[i].name) != _field_idx_by_name.end()) {
+        if (_formatted_column_name_2_field_pos.find(_fields[i].name) != _formatted_column_name_2_field_pos.end()) {
             return Status::InvalidArgument(strings::Substitute("Duplicate field name: $0", _fields[i].name));
         }
-        _field_idx_by_name.emplace(_fields[i].name, i);
+        _formatted_column_name_2_field_pos.emplace(_fields[i].name, i);
+        _field_id_2_field_pos.emplace(_fields[i].field_id, i);
     }
     _case_sensitive = case_sensitive;
 
@@ -392,28 +406,30 @@ std::string SchemaDescriptor::debug_string() const {
     return ss.str();
 }
 
-int SchemaDescriptor::get_column_index(const std::string& column) const {
-    auto it = _field_idx_by_name.begin();
-    if (_case_sensitive) {
-        it = _field_idx_by_name.find(column);
-    } else {
-        it = _field_idx_by_name.find(boost::algorithm::to_lower_copy(column));
-    }
-    if (it == _field_idx_by_name.end()) return -1;
+const int32_t SchemaDescriptor::get_field_pos_by_column_name(const std::string& column_name) const {
+    const auto& format_name = _case_sensitive ? column_name : boost::algorithm::to_lower_copy(column_name);
+    auto it = _formatted_column_name_2_field_pos.find(format_name);
+    if (it == _formatted_column_name_2_field_pos.end()) return -1;
     return it->second;
 }
 
-const ParquetField* SchemaDescriptor::resolve_by_name(const std::string& name) const {
-    int idx = get_column_index(name);
+const int32_t SchemaDescriptor::get_field_pos_by_field_id(int32_t field_id) const {
+    auto it = _field_id_2_field_pos.find(field_id);
+    if (it == _field_id_2_field_pos.end()) {
+        return -1;
+    }
+    return it->second;
+}
+
+const ParquetField* SchemaDescriptor::get_stored_column_by_field_id(int32_t field_id) const {
+    int32_t idx = get_field_pos_by_field_id(field_id);
+    if (idx == -1) return nullptr;
+    return &_fields[idx];
+}
+
+const ParquetField* SchemaDescriptor::get_stored_column_by_column_name(const std::string& column_name) const {
+    int idx = get_field_pos_by_column_name(column_name);
     if (idx == -1) return nullptr;
     return &(_fields[idx]);
 }
-
-void SchemaDescriptor::get_field_names(std::unordered_set<std::string>* names) const {
-    names->clear();
-    for (const ParquetField& f : _fields) {
-        names->emplace(std::move(f.name));
-    }
-}
-
 } // namespace starrocks::parquet
