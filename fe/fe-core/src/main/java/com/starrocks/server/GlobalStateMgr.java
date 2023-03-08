@@ -3143,6 +3143,11 @@ public class GlobalStateMgr {
             ctx.setCurrentCatalog(newCatalogName);
         }
 
+        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
+            LOG.debug("Unknown catalog {} and db {}", ctx.getCurrentCatalog(), dbName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
         // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
@@ -3158,11 +3163,6 @@ public class GlobalStateMgr {
                             ctx.getQualifiedUser(), dbName);
                 }
             }
-        }
-
-        if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
-            LOG.debug("Unknown catalog '%s' and db '%s'", ctx.getCurrentCatalog(), dbName);
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
         ctx.setDatabase(dbName);
