@@ -16,6 +16,7 @@
 
 #include "runtime/sorted_chunks_merger.h"
 #include "util/blocking_queue.hpp"
+#include "util/defer_op.h"
 
 namespace starrocks {
 namespace spill {
@@ -41,9 +42,17 @@ public:
     StatusOr<ChunkUniquePtr> read_from_buffer();
 
 private:
+    bool _acquire() {
+        bool expected = false;
+        return _is_prefetching.compare_exchange_strong(expected, true);
+    }
+    void _release() { _is_prefetching = false; }
+
+private:
     int _capacity;
     InputStreamPtr _input_stream;
     UnboundedBlockingQueue<ChunkUniquePtr> _chunk_buffer;
+    std::atomic_bool _is_prefetching = false;
 };
 
 StatusOr<ChunkUniquePtr> BufferedInputStream::read_from_buffer() {
@@ -60,6 +69,7 @@ StatusOr<ChunkUniquePtr> BufferedInputStream::get_next(FormatterContext& ctx) {
     if (has_chunk()) {
         return read_from_buffer();
     }
+    CHECK(!_is_prefetching);
     return _input_stream->get_next(ctx);
 }
 
@@ -67,6 +77,12 @@ Status BufferedInputStream::prefetch(FormatterContext& ctx) {
     if (is_buffer_full()) {
         return Status::OK();
     }
+    // concurrent prefetch is not allowed, should call _acquire and _release before and after prefetch
+    // to ensure that it doesn't happen.
+    if (!_acquire()) {
+        return Status::OK();
+    }
+    DeferOp defer([this]() { _release(); });
 
     auto res = _input_stream->get_next(ctx);
     if (res.ok()) {
