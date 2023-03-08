@@ -206,6 +206,11 @@ size_t ColumnHelper::last_nonnull(const Column* col, size_t start, size_t end) {
     if (!col->has_null()) {
         return end - 1;
     }
+
+    if (start == end) {
+        return end;
+    }
+
     auto& null = as_raw_column<NullableColumn>(col)->immutable_null_column_data();
     for (size_t i = end - 1;;) {
         if (null[i] == 0) {
