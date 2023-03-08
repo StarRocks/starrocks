@@ -87,7 +87,7 @@ public:
     // query to fail.
     // Note: when you set error for the UDFs used in Data Load, you should
     // ensure the function return value is null.
-    void set_error(const char* error_msg);
+    void set_error(const char* error_msg, const bool is_udf = true);
 
     // Adds a warning that is returned to the user. This can include things like
     // overflow or other recoverable error conditions.

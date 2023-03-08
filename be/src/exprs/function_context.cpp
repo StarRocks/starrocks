@@ -126,12 +126,12 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
     }
 }
 
-void FunctionContext::set_error(const char* error_msg) {
+void FunctionContext::set_error(const char* error_msg, const bool is_udf) {
     std::lock_guard<std::mutex> lock(_error_msg_mutex);
     if (_error_msg.empty()) {
         _error_msg = error_msg;
         std::stringstream ss;
-        ss << "UDF ERROR: " << error_msg;
+        ss << (is_udf ? "UDF ERROR: " : "") << error_msg;
         if (_state != nullptr) {
             _state->set_process_status(ss.str());
         }

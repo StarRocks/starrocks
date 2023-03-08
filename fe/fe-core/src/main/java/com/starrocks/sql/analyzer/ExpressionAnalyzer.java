@@ -921,6 +921,11 @@ public class ExpressionAnalyzer {
                     }
                 }
                 for (int i = 0; i < argumentTypes.length; ++i) {
+                    // TODO: support nested type
+                    if (argumentTypes[i].isComplexType()) {
+                        throw new SemanticException("array_agg can't support inputs of nested types, " +
+                                "but " + i + "-th input is " + argumentTypes[i].toSql());
+                    }
                     argumentTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
                 }
                 fn.setArgsType(argumentTypes); // as accepting various types

@@ -29,17 +29,23 @@ namespace starrocks {
 // input columns result in intermediate result: struct{array[col0], array[col1], array[col2]... array[coln]}
 // return ordered array[col0']
 struct ArrayAggAggregateState {
-    void update(const Column& column, size_t index, size_t offset, size_t count) {
+    void update(FunctionContext* ctx, const Column& column, size_t index, size_t offset, size_t count) {
         if (UNLIKELY(index >= data_columns->size())) {
-            throw std::runtime_error(
-                    fmt::format("index {} is larger than column size {}.", index, data_columns->size()));
+            ctx->set_error(
+                    (std::string(fmt::format("index {} is larger than column size {}.", index, data_columns->size())))
+                            .c_str(),
+                    false);
+            return;
         }
         (*data_columns)[index]->append(column, offset, count);
     }
-    void update_nulls(size_t index, size_t count) {
+    void update_nulls(FunctionContext* ctx, size_t index, size_t count) {
         if (UNLIKELY(index >= data_columns->size())) {
-            throw std::runtime_error(
-                    fmt::format("index {} is larger than column size {}.", index, data_columns->size()));
+            ctx->set_error(
+                    std::string(fmt::format("index {} is larger than column size {}.", index, data_columns->size()))
+                            .c_str(),
+                    false);
+            return;
         }
         DCHECK((*data_columns)[index]->is_nullable());
         (*data_columns)[index]->append_nulls(count);
@@ -71,7 +77,8 @@ public:
             // TODO: support nested type
             if (arg_type->type == LogicalType::TYPE_STRUCT || arg_type->type == LogicalType::TYPE_ARRAY ||
                 arg_type->type == LogicalType::TYPE_MAP) {
-                throw std::runtime_error(fmt::format("array_agg can't support nest type now."));
+                ctx->set_error("array_agg can't support nested type.", false);
+                return;
             }
             state->data_columns->emplace_back(
                     ColumnHelper::create_column(TypeDescriptor::from_logical_type(arg_type->type, arg_type->len,
@@ -97,7 +104,7 @@ public:
             DCHECK(columns[i]->size() > row_num);
             // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
             if ((columns[i]->is_nullable() && columns[i]->is_null(row_num)) || columns[i]->only_null()) {
-                this->data(state).update_nulls(i, 1);
+                this->data(state).update_nulls(ctx, i, 1);
                 continue;
             }
             auto* data_col = columns[i];
@@ -107,7 +114,7 @@ public:
                 data_col = down_cast<const ConstColumn*>(columns[i])->data_column().get();
                 tmp_row_num = 0;
             }
-            this->data(state).update(*data_col, i, tmp_row_num, 1);
+            this->data(state).update(ctx, *data_col, i, tmp_row_num, 1);
         }
     }
 
@@ -117,7 +124,7 @@ public:
         for (auto i = 0; i < input_columns.size(); ++i) {
             auto array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(input_columns[i].get()));
             auto& offsets = array_column->offsets().get_data();
-            this->data(state).update(array_column->elements(), i, offsets[row_num],
+            this->data(state).update(ctx, array_column->elements(), i, offsets[row_num],
                                      offsets[row_num + 1] - offsets[row_num]);
         }
     }
