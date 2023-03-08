@@ -55,6 +55,8 @@ Status ScanOperator::prepare(RuntimeState* state) {
                                                                          RuntimeProfile::ROOT_COUNTER, true);
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitIOTaskCount", TUnit::UNIT);
+    _peak_scan_task_queue_size_counter = _unique_metrics->AddHighWaterMarkCounter(
+            "PeakScanTaskQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
 
     RETURN_IF_ERROR(do_prepare(state));
 
@@ -277,6 +279,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     // TODO: consider more factors, such as scan bytes and i/o time.
     task.priority = vectorized::OlapScanNode::compute_priority(_submit_task_counter->value());
     task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
+    task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
     task.work_function = [wp = _query_ctx, this, state, chunk_source_index, driver_id]() {
         if (auto sp = wp.lock()) {
             // Set driver_id here to share some driver-local contents.
