@@ -33,6 +33,9 @@ StatusOr<ScanTask> PriorityScanTaskQueue::take() {
 }
 
 bool PriorityScanTaskQueue::try_offer(ScanTask task) {
+    if (task.peak_scan_task_queue_size_counter != nullptr) {
+        task.peak_scan_task_queue_size_counter->set(_queue.get_size());
+    }
     return _queue.try_put(std::move(task));
 }
 
@@ -101,6 +104,10 @@ StatusOr<ScanTask> MultiLevelFeedScanTaskQueue::take() {
 
 bool MultiLevelFeedScanTaskQueue::try_offer(ScanTask task) {
     std::lock_guard<std::mutex> lock(_global_mutex);
+
+    if (task.peak_scan_task_queue_size_counter != nullptr) {
+        task.peak_scan_task_queue_size_counter->set(_num_tasks);
+    }
 
     int level = _compute_queue_level(task);
     task.task_group->sub_queue_level = level;
@@ -188,6 +195,10 @@ StatusOr<ScanTask> WorkGroupScanTaskQueue::take() {
 
 bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
     std::lock_guard<std::mutex> lock(_global_mutex);
+
+    if (task.peak_scan_task_queue_size_counter != nullptr) {
+        task.peak_scan_task_queue_size_counter->set(_num_tasks);
+    }
 
     auto* wg_entity = _sched_entity(task.workgroup);
     wg_entity->set_in_queue(this);

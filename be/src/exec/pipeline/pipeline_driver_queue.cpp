@@ -52,6 +52,7 @@ void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
         _queues[level].put(driver);
         driver->set_in_ready_queue(true);
         driver->set_in_queue(this);
+        driver->update_peak_driver_queue_size_counter(_num_drivers);
         _cv.notify_one();
         ++_num_drivers;
     }
@@ -68,6 +69,7 @@ void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) 
         _queues[levels[i]].put(drivers[i]);
         drivers[i]->set_in_ready_queue(true);
         drivers[i]->set_in_queue(this);
+        drivers[i]->update_peak_driver_queue_size_counter(_num_drivers);
         _cv.notify_one();
     }
     _num_drivers += drivers.size();
@@ -260,6 +262,8 @@ StatusOr<DriverRawPtr> WorkGroupDriverQueue::take() {
         _dequeue_workgroup(wg_entity);
     }
 
+    --_num_drivers;
+
     return wg_entity->queue()->take();
 }
 
@@ -306,13 +310,7 @@ void WorkGroupDriverQueue::update_statistics(const DriverRawPtr driver) {
 size_t WorkGroupDriverQueue::size() const {
     // TODO: reduce the lock scope
     std::lock_guard<std::mutex> lock(_global_mutex);
-
-    size_t size = 0;
-    for (auto wg_entity : _wg_entities) {
-        size += wg_entity->queue()->size();
-    }
-
-    return size;
+    return _num_drivers;
 }
 
 bool WorkGroupDriverQueue::should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const {
@@ -342,6 +340,8 @@ bool WorkGroupDriverQueue::_throttled(const workgroup::WorkGroupDriverSchedEntit
 
 template <bool from_executor>
 void WorkGroupDriverQueue::_put_back(const DriverRawPtr driver) {
+    driver->update_peak_driver_queue_size_counter(_num_drivers);
+
     auto* wg_entity = driver->workgroup()->driver_sched_entity();
     wg_entity->set_in_queue(this);
     wg_entity->queue()->put_back(driver);
@@ -350,6 +350,8 @@ void WorkGroupDriverQueue::_put_back(const DriverRawPtr driver) {
     if (_wg_entities.find(wg_entity) == _wg_entities.end()) {
         _enqueue_workgroup<from_executor>(wg_entity);
     }
+
+    ++_num_drivers;
 
     _cv.notify_one();
 }
