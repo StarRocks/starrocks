@@ -200,6 +200,8 @@ set(EXEC_FILES
     pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
     pipeline/aggregate/sorted_aggregate_streaming_sink_operator.cpp
     pipeline/aggregate/sorted_aggregate_streaming_source_operator.cpp
+    pipeline/aggregate/spillable_aggregate_blocking_sink_operator.cpp
+    pipeline/aggregate/spillable_aggregate_blocking_source_operator.cpp
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
