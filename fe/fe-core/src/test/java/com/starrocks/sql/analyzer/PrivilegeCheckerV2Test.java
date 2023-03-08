@@ -437,9 +437,9 @@ public class PrivilegeCheckerV2Test {
         ctxToTestUser();
         ShowResultSet res = new ShowExecutor(ctx,
                 (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW catalogs", ctx)).execute();
-        // TODO(yiming): check priv for show catalogs after external table priv check code is merged
-        Assert.assertEquals(3, res.getResultRows().size());
-        // Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(0).get(0));
+        System.out.println(res.getResultRows());
+        Assert.assertEquals(2, res.getResultRows().size());
+        Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(1).get(0));
     }
 
     @Test
@@ -908,7 +908,7 @@ public class PrivilegeCheckerV2Test {
                         "revoke INSERT on table db1.tbl1 from test",
                         "revoke ALTER on table db1.tbl1 from test"
                 ),
-                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "INSERT command denied to user 'test'@'localhost' for table 'db1.tbl1'");
 
         // check CTAS: create table on db and SELECT on source table
         List<String> submitTaskSqls = Arrays.asList(
@@ -2364,7 +2364,7 @@ public class PrivilegeCheckerV2Test {
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains(
-                    "SELECT command denied to user 'test'@'localhost' for table 'tbl1'"));
+                    "SELECT command denied to user 'test'@'localhost' for table 'db1.tbl1'"));
         }
         grantRevokeSqlAsRoot("revoke USAGE on FUNCTION db1.MY_UDF_JSON_GET(string, string) from test");
         Config.enable_udf = false;
@@ -2699,19 +2699,19 @@ public class PrivilegeCheckerV2Test {
                 "select * from db1.tbl1, db1.tbl2, db2.tbl1",
                 "grant SELECT on TABLE db2.tbl1 to test",
                 "revoke SELECT on TABLE db2.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "SELECT command denied to user 'test'@'localhost' for table 'db2.tbl1'");
 
         verifyGrantRevoke(
                 "select * from db1.tbl1, db1.tbl2 where exists (select * from db2.tbl1)",
                 "grant SELECT on TABLE db2.tbl1 to test",
                 "revoke SELECT on TABLE db2.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "SELECT command denied to user 'test'@'localhost' for table 'db2.tbl1'");
 
         verifyGrantRevoke(
                 "with cte as (select * from db2.tbl1) select * from db1.tbl1, db1.tbl2",
                 "grant SELECT on TABLE db2.tbl1 to test",
                 "revoke SELECT on TABLE db2.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "SELECT command denied to user 'test'@'localhost' for table 'db2.tbl1'");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant SELECT on TABLE db2.tbl1 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2720,7 +2720,7 @@ public class PrivilegeCheckerV2Test {
                 "insert into db1.tbl2 select * from db2.tbl1",
                 "grant SELECT, INSERT on TABLE db1.tbl2 to test",
                 "revoke INSERT on TABLE db1.tbl2 from test",
-                "INSERT command denied to user 'test'@'localhost' for table 'tbl2'");
+                "INSERT command denied to user 'test'@'localhost' for table 'db1.tbl2'");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant INSERT on TABLE db1.tbl2 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2731,13 +2731,13 @@ public class PrivilegeCheckerV2Test {
                 "insert into db1.tbl2 select * from db2.tbl1",
                 "grant SELECT on TABLE db2.tbl1 to test",
                 "revoke SELECT on TABLE db2.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "SELECT command denied to user 'test'@'localhost' for table 'db2.tbl1'");
 
         verifyGrantRevoke(
                 "update db1.tprimary set v1 = db1.tbl1.k1 from db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
                 "grant select, update on table db1.tprimary to test",
                 "revoke update on TABLE db1.tprimary from test",
-                "UPDATE command denied to user 'test'@'localhost' for table 'tprimary'");
+                "UPDATE command denied to user 'test'@'localhost' for table 'db1.tprimary'");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant UPDATE on TABLE db1.tprimary to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2748,7 +2748,7 @@ public class PrivilegeCheckerV2Test {
                 "update db1.tprimary set v1 = db1.tbl1.k1 from db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
                 "grant select on table db1.tbl1 to test",
                 "revoke select on TABLE db1.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "SELECT command denied to user 'test'@'localhost' for table 'db1.tbl1'");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant select on TABLE db1.tbl1 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2757,7 +2757,7 @@ public class PrivilegeCheckerV2Test {
                 "delete from db1.tprimary using db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
                 "grant select, delete on table db1.tprimary to test",
                 "revoke delete on TABLE db1.tprimary from test",
-                "DELETE command denied to user 'test'@'localhost' for table 'tprimary'");
+                "DELETE command denied to user 'test'@'localhost' for table 'db1.tprimary'");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant DELETE on TABLE db1.tprimary to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2768,7 +2768,7 @@ public class PrivilegeCheckerV2Test {
                 "delete from db1.tprimary using db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
                 "grant select on TABLE db1.tbl1 to test",
                 "revoke select on TABLE db1.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "SELECT command denied to user 'test'@'localhost' for table 'db1.tbl1'");
 
         starRocksAssert.dropTable("db1.tprimary");
     }

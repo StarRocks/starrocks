@@ -16,8 +16,10 @@ package com.starrocks.privilege;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
@@ -31,7 +33,8 @@ import java.util.Set;
 public class PrivilegeActions {
     private static final Logger LOG = LogManager.getLogger(PrivilegeActions.class);
 
-    private static boolean checkObjectTypeAction(UserIdentity userIdentity, Set<Long> roleIds, PrivilegeType privilegeType,
+    private static boolean checkObjectTypeAction(UserIdentity userIdentity, Set<Long> roleIds,
+                                                 PrivilegeType privilegeType,
                                                  ObjectType objectType, List<String> objectTokens) {
         PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
         try {
@@ -50,9 +53,16 @@ public class PrivilegeActions {
         }
     }
 
-    public static boolean checkTableAction(ConnectContext connectContext, String db, String table, PrivilegeType privilegeType) {
-        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), privilegeType,
-                ObjectType.TABLE, Arrays.asList(db, table));
+    public static boolean checkTableAction(ConnectContext connectContext, String db, String table,
+                                           PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.TABLE, Arrays.asList(db, table));
+    }
+
+    public static boolean checkTableAction(ConnectContext connectContext, String catalogName, String db, String table,
+                                           PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.TABLE, Arrays.asList(catalogName, db, table));
     }
 
     public static boolean checkTableAction(UserIdentity userIdentity, Set<Long> roleIds, String db, String table,
@@ -61,13 +71,19 @@ public class PrivilegeActions {
     }
 
     public static boolean checkDbAction(ConnectContext connectContext, String db, PrivilegeType privilegeType) {
-        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), privilegeType,
-                ObjectType.DATABASE, Collections.singletonList(db));
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.DATABASE, Collections.singletonList(db));
+    }
+
+    public static boolean checkDbAction(ConnectContext connectContext,
+                                        String catalogName, String db, PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.DATABASE, Arrays.asList(catalogName, db));
     }
 
     public static boolean checkSystemAction(ConnectContext connectContext, PrivilegeType privilegeType) {
-        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), privilegeType,
-                ObjectType.SYSTEM, null);
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.SYSTEM, null);
     }
 
     public static boolean checkSystemAction(UserIdentity userIdentity, Set<Long> roleIds, PrivilegeType privilegeType) {
@@ -75,40 +91,43 @@ public class PrivilegeActions {
     }
 
     public static boolean checkResourceAction(ConnectContext connectContext, String name, PrivilegeType privilegeType) {
-        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), privilegeType,
-                ObjectType.RESOURCE, Collections.singletonList(name));
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.RESOURCE, Collections.singletonList(name));
     }
 
-    public static boolean checkViewAction(ConnectContext connectContext, String db, String view, PrivilegeType privilegeType) {
-        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), privilegeType,
-                ObjectType.VIEW, Arrays.asList(db, view));
+    public static boolean checkViewAction(ConnectContext connectContext, String db, String view,
+                                          PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.VIEW, Arrays.asList(db, view));
     }
 
     public static boolean checkCatalogAction(ConnectContext connectContext, String name, PrivilegeType privilegeType) {
-        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), privilegeType,
-                ObjectType.CATALOG, Collections.singletonList(name));
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.CATALOG, Collections.singletonList(name));
     }
 
     public static boolean checkMaterializedViewAction(ConnectContext connectContext, String db, String materializedView,
                                                       PrivilegeType privilegeType) {
-        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), privilegeType,
-                ObjectType.MATERIALIZED_VIEW, Arrays.asList(db, materializedView));
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.MATERIALIZED_VIEW, Arrays.asList(db, materializedView));
     }
 
     public static boolean checkFunctionAction(ConnectContext connectContext, String db, String functionSig,
                                               PrivilegeType privilegeType) {
-        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), privilegeType,
-                ObjectType.FUNCTION, Arrays.asList(db, functionSig));
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.FUNCTION, Arrays.asList(db, functionSig));
     }
 
-    public static boolean checkResourceGroupAction(ConnectContext connectContext, String name, PrivilegeType privilegeType) {
-        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), privilegeType,
-                ObjectType.RESOURCE_GROUP, Collections.singletonList(name));
+    public static boolean checkResourceGroupAction(ConnectContext connectContext, String name,
+                                                   PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.RESOURCE_GROUP, Collections.singletonList(name));
     }
 
-    public static boolean checkGlobalFunctionAction(ConnectContext connectContext, String name, PrivilegeType privilegeType) {
-        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), privilegeType,
-                ObjectType.GLOBAL_FUNCTION, Collections.singletonList(name));
+    public static boolean checkGlobalFunctionAction(ConnectContext connectContext, String name,
+                                                    PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.GLOBAL_FUNCTION, Collections.singletonList(name));
     }
 
     /**
@@ -126,7 +145,8 @@ public class PrivilegeActions {
                         ObjectType.TABLE,
                         Lists.newArrayList(db, "*"),
                         GlobalStateMgr.getCurrentState());
-                if (manager.provider.searchActionOnObject(ObjectType.TABLE, allTableInDbObject, collection, privilegeType)) {
+                if (manager.provider.searchActionOnObject(ObjectType.TABLE, allTableInDbObject, collection,
+                        privilegeType)) {
                     return true;
                 }
             }
@@ -137,7 +157,8 @@ public class PrivilegeActions {
                         ObjectType.VIEW,
                         Lists.newArrayList(db, "*"),
                         GlobalStateMgr.getCurrentState());
-                if (manager.provider.searchActionOnObject(ObjectType.VIEW, allViewInDbObject, collection, privilegeType)) {
+                if (manager.provider.searchActionOnObject(ObjectType.VIEW, allViewInDbObject, collection,
+                        privilegeType)) {
                     return true;
                 }
             }
@@ -167,9 +188,9 @@ public class PrivilegeActions {
         PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(currentUser, roleIds);
-            PEntryObject tableObject = manager.provider.generateObject(
+            PEntryObject pEntryObject = manager.provider.generateObject(
                     objectType, objectTokens, GlobalStateMgr.getCurrentState());
-            return manager.provider.searchAnyActionOnObject(objectType, tableObject, collection);
+            return manager.provider.searchAnyActionOnObject(objectType, pEntryObject, collection);
         } catch (PrivObjNotFoundException e) {
             LOG.info("Object not found when checking any action on {} {}, message: {}",
                     objectType.name(), Joiner.on(".").join(objectTokens), e.getMessage());
@@ -186,25 +207,46 @@ public class PrivilegeActions {
                 Lists.newArrayList(db, table));
     }
 
+    public static boolean checkAnyActionOnTable(ConnectContext context, String catalogName, String db, String table) {
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.TABLE,
+                Lists.newArrayList(catalogName, db, table));
+    }
+
     public static boolean checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, String db, String table) {
         return checkAnyActionOnObject(currentUser, roleIds, ObjectType.TABLE, Lists.newArrayList(db, table));
+    }
+
+    public static boolean checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds,
+                                                String catalogName, String db, String table) {
+        return checkAnyActionOnObject(currentUser, roleIds, ObjectType.TABLE,
+                Lists.newArrayList(catalogName, db, table));
     }
 
     /**
      * show databases; use database
      */
     public static boolean checkAnyActionOnDb(ConnectContext context, String db) {
-        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.DATABASE,
-                Collections.singletonList(db));
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                ObjectType.DATABASE, Collections.singletonList(db));
+    }
+
+    public static boolean checkAnyActionOnDb(ConnectContext context, String catalogName, String db) {
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                ObjectType.DATABASE, Arrays.asList(catalogName, db));
     }
 
     public static boolean checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String db) {
         return checkAnyActionOnObject(currentUser, roleIds, ObjectType.DATABASE, Collections.singletonList(db));
     }
 
+    public static boolean checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds,
+                                             String catalogName, String db) {
+        return checkAnyActionOnObject(currentUser, roleIds, ObjectType.DATABASE, Arrays.asList(catalogName, db));
+    }
+
     public static boolean checkAnyActionOnResource(ConnectContext context, String name) {
-        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.RESOURCE,
-                Collections.singletonList(name));
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                ObjectType.RESOURCE, Collections.singletonList(name));
     }
 
     public static boolean checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, String db, String view) {
@@ -216,31 +258,55 @@ public class PrivilegeActions {
                 Collections.singletonList(catalogName));
     }
 
+    public static boolean checkAnyActionOnCatalog(UserIdentity userIdentity, Set<Long> roleIds, String catalogName) {
+        return checkAnyActionOnObject(userIdentity, roleIds, ObjectType.CATALOG, Collections.singletonList(catalogName));
+    }
+
+    public static boolean checkAnyActionOnOrInCatalog(ConnectContext connectContext, String catalogName) {
+        return checkAnyActionOnOrInCatalog(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                catalogName);
+    }
+
+    public static boolean checkAnyActionOnOrInCatalog(UserIdentity userIdentity, Set<Long> roleIds,
+                                                      String catalogName) {
+        // check for any action on catalog or on db or on table/view/mv/function
+        return checkAnyActionOnCatalog(userIdentity, roleIds, catalogName)
+                || checkAnyActionOnDb(userIdentity, roleIds, catalogName, "*")
+                || checkAnyActionOnTable(userIdentity, roleIds, catalogName, "*", "*")
+                || (CatalogMgr.isInternalCatalog(catalogName) &&
+                (checkAnyActionOnView(userIdentity, roleIds, "*", "*")
+                        || checkAnyActionOnMaterializedView(userIdentity, roleIds, "*", "*")
+                        || checkAnyActionOnFunction(userIdentity, roleIds, "*", "*")));
+    }
+
     public static boolean checkAnyActionOnMaterializedView(ConnectContext context, String db, String materializedView) {
-        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.MATERIALIZED_VIEW,
-                Arrays.asList(db, materializedView));
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                ObjectType.MATERIALIZED_VIEW, Arrays.asList(db, materializedView));
     }
 
     public static boolean checkAnyActionOnMaterializedView(UserIdentity currentUser, Set<Long> roleIds, String db,
                                                            String materializedView) {
-        return checkAnyActionOnObject(currentUser, roleIds, ObjectType.MATERIALIZED_VIEW, Arrays.asList(db, materializedView));
+        return checkAnyActionOnObject(currentUser, roleIds, ObjectType.MATERIALIZED_VIEW,
+                Arrays.asList(db, materializedView));
     }
 
     public static boolean checkAnyActionOnFunction(ConnectContext context, String db, String functionSig) {
-        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.FUNCTION,
-                Arrays.asList(db, functionSig));
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                ObjectType.FUNCTION, Arrays.asList(db, functionSig));
     }
 
-    public static boolean checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds, String db, String functionSig) {
+    public static boolean checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds, String db,
+                                                   String functionSig) {
         return checkAnyActionOnObject(currentUser, roleIds, ObjectType.FUNCTION, Arrays.asList(db, functionSig));
     }
 
     public static boolean checkAnyActionOnGlobalFunction(ConnectContext context, String functionSig) {
-        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.GLOBAL_FUNCTION,
-                Collections.singletonList(functionSig));
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                ObjectType.GLOBAL_FUNCTION, Collections.singletonList(functionSig));
     }
 
-    public static boolean checkAnyActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName, Table tbl) {
+    public static boolean checkAnyActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds,
+                                                          String dbName, Table tbl) {
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:
@@ -264,12 +330,23 @@ public class PrivilegeActions {
         return checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), db);
     }
 
+    public static boolean checkAnyActionOnOrInDb(ConnectContext connectContext, String catalogName, String db) {
+        return checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                catalogName, db);
+    }
+
     public static boolean checkAnyActionOnOrInDb(UserIdentity userIdentity, Set<Long> roleIds, String db) {
+        return checkAnyActionOnOrInDb(userIdentity, roleIds, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db);
+    }
+
+    public static boolean checkAnyActionOnOrInDb(UserIdentity userIdentity, Set<Long> roleIds,
+                                                 String catalogName, String db) {
         // check for any action on db or table/view/mv/function
-        return checkAnyActionOnDb(userIdentity, roleIds, db)
-                || checkAnyActionOnTable(userIdentity, roleIds, db, "*")
-                || checkAnyActionOnView(userIdentity, roleIds, db, "*")
-                || checkAnyActionOnMaterializedView(userIdentity, roleIds, db, "*")
-                || checkAnyActionOnFunction(userIdentity, roleIds, db, "*");
+        return checkAnyActionOnDb(userIdentity, roleIds, catalogName, db)
+                || checkAnyActionOnTable(userIdentity, roleIds, catalogName, db, "*")
+                || (CatalogMgr.isInternalCatalog(catalogName) &&
+                (checkAnyActionOnView(userIdentity, roleIds, db, "*")
+                        || checkAnyActionOnMaterializedView(userIdentity, roleIds, db, "*")
+                        || checkAnyActionOnFunction(userIdentity, roleIds, db, "*")));
     }
 }

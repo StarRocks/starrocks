@@ -71,7 +71,7 @@ public class PatternMatcher {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < newMysqlPattern.length(); ++i) {
             char ch = newMysqlPattern.charAt(i);
-            checkPermittedCharactor(ch);
+            checkPermittedCharacter(ch);
             switch (ch) {
                 case '%':
                     sb.append(".*");
@@ -138,13 +138,12 @@ public class PatternMatcher {
             }
         }
 
-        // System.out.println("result: " + sb.toString());
         return sb.toString();
     }
 
-    private static void checkPermittedCharactor(char c) {
+    private static void checkPermittedCharacter(char c) {
         if (FORBIDDEN_CHARS.contains(c)) {
-            throw new SemanticException("Forbidden charactor: '" + c + "'");
+            throw new SemanticException("Forbidden character: '" + c + "'");
         }
     }
 
