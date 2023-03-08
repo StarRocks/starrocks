@@ -151,6 +151,7 @@ void GroupReader::close() {
 }
 
 Status GroupReader::_init_column_readers() {
+    // ColumnReaderOptions is used by all column readers in one row group
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.timezone = _param.timezone;
     opts.case_sensitive = _param.case_sensitive;
@@ -172,8 +173,20 @@ Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column
     const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
     {
         SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
-        RETURN_IF_ERROR(
-                ColumnReader::create(_column_reader_opts, schema_node, column.col_type_in_chunk, &column_reader));
+        if (column.t_iceberg_schema_field == nullptr) {
+            RETURN_IF_ERROR(
+                    ColumnReader::create(_column_reader_opts, schema_node, column.col_type_in_chunk, &column_reader));
+        } else {
+            RETURN_IF_ERROR(ColumnReader::create(_column_reader_opts, schema_node, column.col_type_in_chunk,
+                                                 column.t_iceberg_schema_field, &column_reader));
+        }
+
+        if (column.col_type_in_chunk.is_complex_type()) {
+            // For complex type columns, we need parse def & rep levels.
+            // For OptionalColumnReader, by default, we will not parse it's def level for performance. But if
+            // column is complex type, we have to parse def level to calculate nullbility.
+            column_reader->set_need_parse_levels(true);
+        }
     }
     _column_readers[column.slot_id] = std::move(column_reader);
     return Status::OK();

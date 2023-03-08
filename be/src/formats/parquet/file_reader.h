@@ -20,6 +20,7 @@
 #include "column/chunk.h"
 #include "common/status.h"
 #include "formats/parquet/group_reader.h"
+#include "formats/parquet/meta_helper.h"
 #include "gen_cpp/parquet_types.h"
 #include "runtime/runtime_state.h"
 #include "util/buffered_stream.h"
@@ -28,7 +29,7 @@
 namespace starrocks {
 class RandomAccessFile;
 
-class HdfsScannerContext;
+struct HdfsScannerContext;
 
 } // namespace starrocks
 
@@ -97,10 +98,6 @@ private:
     static bool _can_use_deprecated_stats(const tparquet::Type::type& type, const tparquet::ColumnOrder* column_order);
     static bool _is_integer_type(const tparquet::Type::type& type);
 
-    // find column meta according column name
-    static const tparquet::ColumnMetaData* _get_column_meta(const tparquet::RowGroup& row_group,
-                                                            const std::string& col_name, bool case_sensitive);
-
     // get the data page start offset in parquet file
     static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);
 
@@ -111,7 +108,6 @@ private:
     std::vector<std::shared_ptr<GroupReader>> _row_group_readers;
     size_t _cur_row_group_idx = 0;
     size_t _row_group_size = 0;
-    Schema _schema;
 
     size_t _total_row_count = 0;
     size_t _scan_row_count = 0;
@@ -122,6 +118,7 @@ private:
     HdfsScannerContext* _scanner_ctx = nullptr;
     std::shared_ptr<SharedBufferedInputStream> _sb_stream = nullptr;
     GroupReaderParam _group_reader_param;
+    std::shared_ptr<MetaHelper> _meta_helper = nullptr;
 };
 
 } // namespace starrocks::parquet
