@@ -223,7 +223,7 @@ public class ReportHandler extends Daemon {
                         "invalid report request, multi fields " + reportType + " " + ReportType.TABLET_REPORT);
                 return result;
             }
-            // the 'tablets' member will be deprecated in future.
+            // the 'tablets' member will be deprecated in the future.
             tablets = buildTabletMap(request.getTablet_list());
             reportVersion = request.getReport_version();
             reportType = ReportType.TABLET_REPORT;
@@ -1035,7 +1035,7 @@ public class ReportHandler extends Daemon {
             return;
         }
 
-        // print a warn log here to indicate the exceptions on the backend
+        // print a warning log here to indicate the exceptions on the backend
         LOG.warn("find {} tablets on backend {} which is bad or misses versions that need clone or force recovery",
                 tabletRecoveryMap.size(), backendId);
 

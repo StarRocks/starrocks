@@ -750,8 +750,7 @@ public class ShowExecutor {
             }
 
             if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-                if (CatalogMgr.isInternalCatalog(catalogName) &&
-                        !PrivilegeActions.checkAnyActionOnOrInDb(connectContext, dbName)) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(connectContext, catalogName, dbName)) {
                     continue;
                 }
             } else {
@@ -814,9 +813,13 @@ public class ShowExecutor {
             }
         } else {
             List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
-            if (matcher != null) {
-                tableNames = tableNames.stream().filter(matcher::match).collect(Collectors.toList());
-            }
+            PatternMatcher finalMatcher = matcher;
+            final String finalCatalogName = catalogName;
+            tableNames = tableNames.stream()
+                    .filter(tblName -> finalMatcher == null || finalMatcher.match(tblName))
+                    .filter(tblName -> PrivilegeActions.checkAnyActionOnTable(connectContext,
+                            finalCatalogName, dbName, tblName))
+                    .collect(Collectors.toList());
             tableNames.forEach(name -> tableMap.put(name, "BASE TABLE"));
         }
 
@@ -2380,7 +2383,9 @@ public class ShowExecutor {
                 .filter(row -> {
                             if (globalStateMgr.isUsingNewPrivilege() &&
                                     !InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(row.get(0))) {
-                                // TODO(yiming): check any action on or in catalog
+                                return PrivilegeActions.checkAnyActionOnOrInCatalog(
+                                        connectContext.getCurrentUserIdentity(),
+                                        connectContext.getCurrentRoleIds(), row.get(0));
                             }
                             return true;
                         }
