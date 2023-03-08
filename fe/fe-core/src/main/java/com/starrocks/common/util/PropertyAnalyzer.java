@@ -389,7 +389,7 @@ public class PropertyAnalyzer {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             if (RunMode.defaultReplicationNum() > backendIds.size()) {
                 throw new AnalysisException("Number of available BE nodes is " + backendIds.size()
-                        + ", less than " + RunMode.getCurrentRunMode());
+                        + ", less than " + RunMode.defaultReplicationNum());
             }
         } else {
             if (replicationNum > backendIds.size()) {
