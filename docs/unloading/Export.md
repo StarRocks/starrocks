@@ -4,17 +4,18 @@ This topic describes how to export data from specified tables or partitions in y
 
 ## Background information
 
-In StarRocks v2.4 and earlier, Broker Load depends on brokers to set up connections between your StarRocks cluster and your storage system. When you export data from StarRocks, you need to input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. A broker is an independent, stateless service that is integrated with a file-system interface. With brokers, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
+In v2.4 and earlier, StarRocks depends on brokers to set up connections between your StarRocks cluster and your external storage system when it uses the EXPORT statement to unload data. Therefore, you need to input `WITH BROKER "<broker_name>"` to specify the broker you want to use in the EXPORT statement. This is called "broker-based unloading." A broker is an independent, stateless service that is integrated with a file-system interface, helping StarRocks unload data to your external storage system.
 
-From StarRocks v2.5 onwards, Broker Load no longer needs to depend on brokers to set up connections between your StarRocks cluster and your storage system. When you export data from StarRocks, you no longer need to specify a broker group, but you still need to retain the `WITH BROKER` keyword.
+From v2.5 onwards, StarRocks no longer depends on brokers to set up connections between your StarRocks cluster and your external storage system when it uses the EXPORT statement to unload data. Therefore, you no longer need to specify a broker in the EXPORT statement, but you still need to retain the `WITH BROKER` keyword. This is called "broker-free unloading."
+
+When your data is stored in HDFS, however, broker-free unloading may not work and you can resort to broker-based unloading:
+
+- If you unload data to multiple HDFS clusters, you need to deploy and configure an independent broker for each of these HDFS clusters.
+- If you unload data to a single HDFS cluster and you have configured multiple Kerberos users, you need to deploy one independent broker.
 
 > **NOTE**
 >
-> Unloading without the broker process may not work in certain circumstances, such as when you have multiple HDFS clusters or multiple Kerberos users. In this situation, you must export data by using the broker process.
-
-If you need to use brokers to export data, make sure that brokers are deployed in your StarRocks cluster.
-
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
+> You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
 
 ## Precautions
 
