@@ -176,7 +176,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     public Set<HiveTableName> getCachedTableNames() {
-        return tableCache.asMap().keySet();
+        return partitionKeysCache.asMap().keySet();
     }
 
     private List<String> loadAllTableNames(String dbName) {

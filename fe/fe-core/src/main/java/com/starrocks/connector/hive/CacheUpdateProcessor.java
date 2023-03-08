@@ -85,6 +85,11 @@ public class CacheUpdateProcessor {
         }
     }
 
+    public void refreshTableMetaStoreInfo(String dbName, Table table, boolean onlyCachedPartitions) {
+        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
+        metastore.refreshTable(hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
+    }
+
     public Set<HiveTableName> getCachedTableNames() {
         return ((CachingHiveMetastore) metastore).getCachedTableNames();
     }

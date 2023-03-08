@@ -93,7 +93,7 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
                     LOG.warn("{}.{}.{} not exist", catalogName, dbName, tableName);
                     continue;
                 }
-                updateProcessor.refreshTable(dbName, table, true);
+                updateProcessor.refreshTableMetaStoreInfo(dbName, table, true);
                 LOG.info("refresh table {}.{}.{} success", catalogName, dbName, tableName);
             }
             LOG.info("refresh catalog {} success", catalogName);
