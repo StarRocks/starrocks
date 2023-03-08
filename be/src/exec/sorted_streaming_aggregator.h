@@ -24,18 +24,19 @@ namespace starrocks {
 struct StateAllocator;
 class SortedStreamingAggregator final : public Aggregator {
 public:
-    SortedStreamingAggregator(AggregatorParamsPtr&& params);
+    SortedStreamingAggregator(AggregatorParamsPtr params);
     ~SortedStreamingAggregator() override;
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) override;
-    StatusOr<ChunkPtr> streaming_compute_agg_state(size_t chunk_size);
+
+    StatusOr<ChunkPtr> streaming_compute_agg_state(size_t chunk_size, bool is_update_phase = false);
 
     StatusOr<ChunkPtr> pull_eos_chunk();
 
 private:
     Status _compute_group_by(size_t chunk_size);
 
-    Status _update_states(size_t chunk_size);
+    Status _update_states(size_t chunk_size, bool is_update_phase);
 
     Status _get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
                                    Columns& agg_result_columns);
