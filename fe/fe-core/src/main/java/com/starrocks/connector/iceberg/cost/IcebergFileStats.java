@@ -61,6 +61,7 @@ public class IcebergFileStats {
             this.nullCounts = null;
             this.columnSizes = null;
             corruptedStats = null;
+            hasValidColumnMetrics = false;
         } else {
             this.minValues = new HashMap<>(minValues);
             this.maxValues = new HashMap<>(maxValues);
