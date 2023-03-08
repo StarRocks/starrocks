@@ -716,6 +716,8 @@ CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_mInt32(parquet_header_max_size, "16384");
 CONF_Bool(parquet_late_materialization_enable, "true");
 
+CONF_Int32(io_tasks_per_scan_operator, "4");
+
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
 // following the default naming pattern of aws_sdk_<date>.log.

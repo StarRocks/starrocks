@@ -109,7 +109,7 @@ public:
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.
 class FixedMorselQueue final : public MorselQueue {
 public:
-    explicit FixedMorselQueue(Morsels&& morsels, int dop);
+    explicit FixedMorselQueue(Morsels&& morsels, int dop, int max_io_tasks_per_op);
     ~FixedMorselQueue() override = default;
 
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;

@@ -22,12 +22,13 @@ ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_
                            ScanNode* scan_node, ChunkBufferLimiter* buffer_limiter)
         : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
           _scan_node(scan_node),
-          _chunk_source_profiles(MAX_IO_TASKS_PER_OP),
+          _io_tasks_per_scan_operator(scan_node->io_tasks_per_scan_operator()),
+          _chunk_source_profiles(_io_tasks_per_scan_operator),
           _buffer_limiter(buffer_limiter),
           _dop(dop),
-          _is_io_task_running(MAX_IO_TASKS_PER_OP),
-          _chunk_sources(MAX_IO_TASKS_PER_OP) {
-    for (auto i = 0; i < MAX_IO_TASKS_PER_OP; i++) {
+          _is_io_task_running(_io_tasks_per_scan_operator),
+          _chunk_sources(_io_tasks_per_scan_operator) {
+    for (auto i = 0; i < _io_tasks_per_scan_operator; i++) {
         _chunk_source_profiles[i] = std::make_shared<RuntimeProfile>(strings::Substitute("ChunkSource$0", i));
     }
 }
@@ -141,7 +142,7 @@ bool ScanOperator::has_output() const {
         return true;
     }
 
-    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP || _buffer_limiter->is_full()) {
+    if (_num_running_io_tasks >= _io_tasks_per_scan_operator || _buffer_limiter->is_full()) {
         return false;
     }
 
@@ -154,7 +155,7 @@ bool ScanOperator::has_output() const {
     }
 
     // Can trigger_next_scan for the picked-up morsel.
-    for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
+    for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
             return true;
         }
@@ -227,14 +228,14 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
 }
 
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
-    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP) {
+    if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
     if (_unpluging && _num_buffered_chunks() >= _buffer_unplug_threshold()) {
         return Status::OK();
     }
 
-    for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
+    for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         if (_is_io_task_running[i]) {
             continue;
         }
