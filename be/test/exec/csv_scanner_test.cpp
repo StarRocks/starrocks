@@ -106,7 +106,7 @@ private:
     ObjectPool _obj_pool;
 };
 
-class CSVScannerTrimSpaceTest : public CSVScannerTest{};
+class CSVScannerTrimSpaceTest : public CSVScannerTest {};
 
 TEST_P(CSVScannerTest, test_scalar_types) {
     std::vector<TypeDescriptor> types;

@@ -328,7 +328,7 @@ Status CSVReader::more_rows() {
             }
 
         case ORDINARY:
-            //  
+            //
             if (UNLIKELY(_parse_options.trim_space)) {
                 if (preState == ENCLOSE) {
                     if (*(_buff.position()) == ' ') {
@@ -404,7 +404,7 @@ Status CSVReader::more_rows() {
                 column_length = column_end - _column_delimiter_length - column_start;
             }
             // push column
-            _columns.emplace_back(column_start, column_length, is_escape_column); 
+            _columns.emplace_back(column_start, column_length, is_escape_column);
             is_escape_column = false;
             curState = START;
             is_enclose_column = false;
