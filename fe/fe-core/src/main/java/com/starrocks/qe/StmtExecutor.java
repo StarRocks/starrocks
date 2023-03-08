@@ -103,7 +103,6 @@ import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetCatalogStmt;
-import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetVar;
@@ -978,18 +977,6 @@ public class StmtExecutor {
         try {
             String catalogName = setCatalogStmt.getCatalogName();
             context.getGlobalStateMgr().changeCatalog(context, catalogName);
-        } catch (Exception e) {
-            context.getState().setError(e.getMessage());
-            return;
-        }
-        context.getState().setOk();
-    }
-
-    // Process use warehouse statement
-    private void handleUseWarehouseStmt() throws AnalysisException {
-        UseWarehouseStmt useWarehouseStmt = (UseWarehouseStmt) parsedStmt;
-        try {
-            context.getGlobalStateMgr().changeWarehouse(context, useWarehouseStmt.getWarehouseName());
         } catch (Exception e) {
             context.getState().setError(e.getMessage());
             return;
