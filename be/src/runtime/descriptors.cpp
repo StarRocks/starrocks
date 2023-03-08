@@ -156,6 +156,7 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
         : HiveTableDescriptor(tdesc, pool) {
     _table_location = tdesc.icebergTable.location;
     _columns = tdesc.icebergTable.columns;
+    _t_iceberg_schema = tdesc.icebergTable.iceberg_schema;
 }
 
 DeltaLakeTableDescriptor::DeltaLakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
