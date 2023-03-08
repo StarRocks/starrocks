@@ -14,10 +14,13 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
@@ -133,6 +136,24 @@ public class LogicalApplyOperator extends LogicalOperator {
             outputColumns.union(output);
         }
         return outputColumns;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> entryList = Lists.newArrayList();
+        for (ColumnOutputInfo entry : inputs.get(0).getRowOutputInfo().getColumnEntries()) {
+            entryList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
+        }
+
+        if (needOutputRightChildColumns) {
+            for (ColumnOutputInfo entry : inputs.get(1).getRowOutputInfo().getColumnEntries()) {
+                entryList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
+            }
+        } else if (output != null) {
+            entryList.add(new ColumnOutputInfo(output, output));
+        }
+
+        return new RowOutputInfo(entryList);
     }
 
     @Override
