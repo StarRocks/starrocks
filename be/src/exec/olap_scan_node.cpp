@@ -71,6 +71,12 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
+    if (_olap_scan_node.__isset.max_parallel_scan_instance_num && _olap_scan_node.max_parallel_scan_instance_num >= 1) {
+        // The parallel scan num will be restricted by the config::io_tasks_per_scan_operator.
+        _io_tasks_per_scan_operator =
+                std::min(_olap_scan_node.max_parallel_scan_instance_num, config::io_tasks_per_scan_operator);
+    }
+
     _estimate_scan_and_output_row_bytes();
 
     return Status::OK();
@@ -754,10 +760,20 @@ void OlapScanNode::_estimate_scan_and_output_row_bytes() {
 }
 
 size_t OlapScanNode::_scanner_concurrency() const {
+    // The max scan parallel num for pipeline engine is config::io_tasks_per_scan_operator,
+    // But the max scan parallel num of non-pipeline engine is kMaxConcurrency.
+    // This functions is only used for non-pipeline engine,
+    // so use the min value of concurrency which is calculated and max_parallel_scan_instance_num.
+    // And the function will be removed later with non-pipeline engine
+
     int concurrency = estimated_max_concurrent_chunks();
     // limit concurrency not greater than scanner numbers
     concurrency = std::min<int>(concurrency, _num_scanners);
     concurrency = std::min<int>(concurrency, kMaxConcurrency);
+
+    if (_olap_scan_node.__isset.max_parallel_scan_instance_num && _olap_scan_node.max_parallel_scan_instance_num >= 1) {
+        concurrency = std::min(concurrency, _olap_scan_node.max_parallel_scan_instance_num);
+    }
 
     return concurrency;
 }
