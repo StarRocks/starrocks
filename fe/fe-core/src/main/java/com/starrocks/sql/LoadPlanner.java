@@ -151,7 +151,7 @@ public class LoadPlanner {
             this.context = new ConnectContext();
         }
         if (this.context.getSessionVariable().getEnableAdaptiveSinkDop()) {
-            this.parallelInstanceNum = this.context.getSessionVariable().getDegreeOfParallelism();
+            this.parallelInstanceNum = this.context.getSessionVariable().getSinkDegreeOfParallelism();
         } else {
             this.parallelInstanceNum = Config.load_parallel_instance_num;
         }
