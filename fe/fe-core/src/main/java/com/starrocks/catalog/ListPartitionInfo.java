@@ -15,6 +15,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
@@ -29,6 +30,7 @@ import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.sql.ast.SinglePartitionDesc;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -319,6 +321,8 @@ public class ListPartitionInfo extends PartitionInfo {
                 if (!existPartitionNameSet.contains(name)) {
                     long partitionId = partition.getId();
                     PartitionDesc partitionDesc = partitionMap.get(partition);
+                    Preconditions.checkArgument(partitionDesc instanceof SinglePartitionDesc);
+                    Preconditions.checkArgument(((SinglePartitionDesc) partitionDesc).isAnalyzed());
                     this.idToDataProperty.put(partitionId, partitionDesc.getPartitionDataProperty());
                     this.idToReplicationNum.put(partitionId, partitionDesc.getReplicationNum());
                     this.idToInMemory.put(partitionId, partitionDesc.isInMemory());
