@@ -54,6 +54,10 @@ WITH BROKER
   | timeout          | The amount of time after which the export task times out. Unit: second. Default value: `86400`, meaning 1 day. |
   | include_query_id | Specifies whether the name of the exported file contains `query_id`. Valid values: `true` and `false`. The value `true` specifies that the file name contains `query_id`, and the value `false` specifies that the file name does not contain `query_id`. |
 
+- `WITH BROKER`
+
+In v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker you want to use. From v2.5 onwards, you no longer need to specify a broker, but you still need to retain the `WITH BROKER` keyword. For more information, see [Export data using EXPORT > Background information](../../../unloading/Export.md#background-information).
+
 - `broker_properties`
 
   The information that is used to authenticate the source data. The authentication information varies depending on the data source. For more information, see [BROKER LOAD](../../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
