@@ -237,15 +237,22 @@ public class CatalogUtils {
         return bucketNum;
     }
 
-    public static void maskProperties(Map<String, String> properties) {
+    public static void maskCloudCredential(Map<String, String> properties) {
         // aws.s3.access_key -> ******
-        properties.computeIfPresent(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, (k, v) -> "******");
+        properties.computeIfPresent(CloudConfigurationConstants.AWS_S3_ACCESS_KEY,
+                (k, v) -> replaceWithIndex(2, v.length() - 2, v, "******"));
         // aws.s3.secret_key -> ******
-        properties.computeIfPresent(CloudConfigurationConstants.AWS_S3_SECRET_KEY, (k, v) -> "******");
+        properties.computeIfPresent(CloudConfigurationConstants.AWS_S3_SECRET_KEY,
+                (k, v) -> replaceWithIndex(2, v.length() - 2, v, "******"));
         // aws.glue.access_key -> ******
-        properties.computeIfPresent(CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY, (k, v) -> "******");
+        properties.computeIfPresent(CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY,
+                (k, v) -> replaceWithIndex(2, v.length() - 2, v, "******"));
         // aws.glue.secret_key -> ******
-        properties.computeIfPresent(CloudConfigurationConstants.AWS_GLUE_SECRET_KEY, (k, v) -> "******");
+        properties.computeIfPresent(CloudConfigurationConstants.AWS_GLUE_SECRET_KEY,
+                (k, v) -> replaceWithIndex(2, v.length() - 2, v, "******"));
+    }
 
+    public static String replaceWithIndex(int start, int end, String oldChar, String replaceChar) {
+        return String.valueOf(new StringBuilder(oldChar).replace(start, end, replaceChar));
     }
 }

@@ -2582,7 +2582,7 @@ public class GlobalStateMgr {
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
             Map<String, String> fileProperties = fileTable.getFileProperties();
-            CatalogUtils.maskProperties(fileProperties);
+            CatalogUtils.maskCloudCredential(fileProperties);
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }

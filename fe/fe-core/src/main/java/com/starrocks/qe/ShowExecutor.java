@@ -2458,7 +2458,7 @@ public class ShowExecutor {
             createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
         }
         Map<String, String> config = catalog.getConfig();
-        CatalogUtils.maskProperties(config);
+        CatalogUtils.maskCloudCredential(config);
         // Properties
         createCatalogSql.append("PROPERTIES (")
                 .append(new PrintableMap<>(config, " = ", true, true))
