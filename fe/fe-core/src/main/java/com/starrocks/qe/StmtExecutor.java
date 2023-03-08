@@ -110,6 +110,11 @@ import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TDescriptorTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TLoadJobType;
+>>>>>>> f1ce56e89 ([Enhancement] Log plan when query is cancelled by crash BE #19138)
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
@@ -418,6 +423,15 @@ public class StmtExecutor {
                         }
                         break;
                     } catch (RpcException e) {
+                        // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
+                        // and hence there is no need to log it here.
+                        if (i == 0 && context.getQueryDetail() == null && Config.log_plan_cancelled_by_crash_be) {
+                            LOG.warn("Query cancelled by crash of backends or RpcException, [QueryId={}] [SQL={}] [Plan={}]",
+                                    DebugUtil.printId(context.getExecutionId()),
+                                    originStmt == null ? "" : originStmt.originStmt,
+                                    execPlan.getExplainString(TExplainLevel.COSTS),
+                                    e);
+                        }
                         if (i == retryTime - 1) {
                             throw e;
                         }
@@ -1181,6 +1195,15 @@ public class StmtExecutor {
                  * So we should distinguish these two factors.
                  */
                 if (!coord.checkBackendState()) {
+                    // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
+                    // and hence there is no need to log it here.
+                    if (Config.log_plan_cancelled_by_crash_be && context.getQueryDetail() == null) {
+                        LOG.warn("Query cancelled by crash of backends [QueryId={}] [SQL={}] [Plan={}]",
+                                DebugUtil.printId(context.getExecutionId()),
+                                originStmt == null ? "" : originStmt.originStmt,
+                                execPlan.getExplainString(TExplainLevel.COSTS));
+                    }
+
                     coord.cancel();
                     ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_EXCEPTION);
                 } else {
