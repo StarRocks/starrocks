@@ -47,7 +47,7 @@ const std::unordered_map<orc::TypeKind, LogicalType> g_orc_starrocks_logical_typ
         {orc::DATE, starrocks::TYPE_DATE},
         {orc::TIMESTAMP, starrocks::TYPE_DATETIME},
         {orc::STRING, starrocks::TYPE_VARCHAR},
-        {orc::BINARY, starrocks::TYPE_VARCHAR},
+        {orc::BINARY, starrocks::TYPE_VARBINARY},
         {orc::CHAR, starrocks::TYPE_CHAR},
         {orc::VARCHAR, starrocks::TYPE_VARCHAR},
         {orc::TIMESTAMP_INSTANT, starrocks::TYPE_DATETIME},
