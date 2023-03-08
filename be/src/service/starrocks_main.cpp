@@ -242,6 +242,7 @@ int main(int argc, char** argv) {
                   << "\n";
         aws_sdk_options.loggingOptions.logLevel = level;
     }
+    aws_sdk_options.httpOptions.compliantRfc3986Encoding = starrocks::config::aws_sdk_compliant_rfc3986_encoding;
     Aws::InitAPI(aws_sdk_options);
 
     std::vector<starrocks::StorePath> paths;
