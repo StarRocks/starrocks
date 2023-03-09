@@ -52,7 +52,6 @@ import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
@@ -99,6 +98,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -2458,7 +2458,7 @@ public class ShowExecutor {
             createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
         }
         Map<String, String> config = catalog.getConfig();
-        CatalogUtils.maskCloudCredential(config);
+        CloudCredentialUtil.maskCloudCredential(config);
         // Properties
         createCatalogSql.append("PROPERTIES (")
                 .append(new PrintableMap<>(config, " = ", true, true))
