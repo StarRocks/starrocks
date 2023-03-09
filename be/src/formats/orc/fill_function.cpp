@@ -728,7 +728,7 @@ static void fill_varbinary_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, s
 }
 
 static void fill_varbinary_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
-                                                const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+                                            const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     auto* data = down_cast<orc::StringVectorBatch*>(cvb);
 
     size_t len = 0;
