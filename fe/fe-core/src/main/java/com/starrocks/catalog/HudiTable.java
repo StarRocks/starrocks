@@ -31,6 +31,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.io.Text;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
@@ -154,7 +155,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public String getUUID() {
-        return String.join(".", catalogName, hiveDbName, hiveTableName, Long.toString(createTime));
+        if (CatalogMgr.isExternalCatalog(catalogName)) {
+            return String.join(".", catalogName, hiveDbName, hiveTableName, Long.toString(createTime));
+        } else {
+            return Long.toString(id);
+        }
     }
 
     @Override
