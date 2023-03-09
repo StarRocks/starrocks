@@ -187,6 +187,14 @@ public class AnalyzeExprTest {
                 "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'']) as col_map " +
                 "union all select map_from_arrays(null,null) union all select map_from_arrays([],[]) " +
                 "union all select map_from_arrays([null],[null]))A;");
+        analyzeSuccess("select transform_keys((k,v)->(k+1>length(v)), col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A");
+        analyzeSuccess("select transform_values((k,v)->(k+1>length(v)), col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
+        analyzeSuccess("select transform_values((k,v)->(k is null), col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
+        analyzeSuccess("select transform_values((k,v)->null, col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
 
         analyzeFail("select map_apply((k,v)->(k+1,length(v)), col_map) from (select null as col_map)A;");
         analyzeFail(" select map_apply((k)->(k,k), col_map) from (select map_from_arrays([1,3,null,2,null]," +
@@ -209,6 +217,12 @@ public class AnalyzeExprTest {
                 "null],['ab','cdd',null,null,'']) as col_map)A;");
         analyzeFail("select map_apply((k,v)->(v,k), col_map,col_map) from (select map_from_arrays" +
                 "([1,3,null,2,null],['ab','cdd',null,null,'']) as col_map)A;");
+        analyzeFail("select transform_keys((k,v)->(k,v), col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
+        analyzeFail(" select transform_values((k)->null, col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
+        analyzeFail("select transform_values((k,null)->null, col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
     }
 
     @Test
