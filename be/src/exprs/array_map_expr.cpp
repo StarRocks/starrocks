@@ -38,11 +38,10 @@ ArrayMapExpr::ArrayMapExpr(TypeDescriptor type) : Expr(std::move(type), false) {
 // The result of lambda expressions do not change the offsets of the current array and the null map.
 // NOTE the return column must be of the return type.
 StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
-    // keep ColumnPtr refs
-    std::vector<ColumnPtr> inputs;
     std::vector<ColumnPtr> input_elements;
     NullColumnPtr input_null_map = nullptr;
     ArrayColumn* input_array = nullptr;
+    ColumnPtr input_array_ptr_ref = nullptr; // hold shared_ptr to avoid early deleted.
     // for many valid arguments:
     // if one of them is a null literal, the result is a null literal;
     // if one of them is only null, then results are null;
@@ -50,14 +49,13 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
     // make sure all inputs have the same offsets.
     // TODO(fzh): support several arrays with different offsets and set null for non-equal size of arrays.
     for (int i = 1; i < _children.size(); ++i) {
-        ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], chunk);
+        ASSIGN_OR_RETURN(auto child_col, context->evaluate(_children[i], chunk));
         // the column is a null literal.
         if (child_col->only_null()) {
             return ColumnHelper::align_return_type(child_col, type(), chunk->num_rows(), true);
         }
         // no optimization for const columns.
         child_col = ColumnHelper::unpack_and_duplicate_const_column(child_col->size(), child_col);
-        inputs.emplace_back(child_col);
 
         auto column = child_col;
         if (child_col->is_nullable()) {
@@ -79,6 +77,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
 
         if (input_array == nullptr) {
             input_array = cur_array;
+            input_array_ptr_ref = column;
         } else {
             if (UNLIKELY(!ColumnHelper::offsets_equal(cur_array->offsets_column(), input_array->offsets_column()))) {
                 return Status::InternalError("Input array element's size is not equal in array_map().");
@@ -115,14 +114,14 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             cur_chunk->append_column(captured->replicate(input_array->offsets_column()->get_data()), id);
         }
         if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
-            column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
+            ASSIGN_OR_RETURN(column, context->evaluate(_children[0], cur_chunk.get()));
             column = ColumnHelper::align_return_type(column, type().children[0], cur_chunk->num_rows(), true);
         } else { // split large chunks into small ones to avoid too large or various batch_size
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             accumulator.push(std::move(cur_chunk));
             accumulator.finalize();
             while (auto tmp_chunk = accumulator.pull()) {
-                auto tmp_col = EVALUATE_NULL_IF_ERROR(context, _children[0], tmp_chunk.get());
+                ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
                 tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows(), true);
                 if (column == nullptr) {
                     column = tmp_col;
