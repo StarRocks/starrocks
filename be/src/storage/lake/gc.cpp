@@ -213,24 +213,36 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
                                                              const std::vector<std::string>& tablet_metadatas,
                                                              const std::vector<std::string>& txn_logs) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
+    const auto now = std::time(nullptr);
+    const auto expire_seconds = config::lake_gc_segment_expire_seconds;
     const auto metadata_root_location = join_path(root_location, kMetadataDirectoryName);
     const auto txn_log_root_location = join_path(root_location, kTxnLogDirectoryName);
     const auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
 
     std::set<std::string> datafiles;
 
+    bool need_check_modify_time = true;
+    int64_t total_files = 0;
     // List segment
-    auto iter_st = fs->iterate_dir(segment_root_location, [&](std::string_view name) {
-        if (LIKELY(is_segment(name) || is_del(name) || is_delvec(name))) {
-            datafiles.emplace(name);
+    auto iter_st = fs->iterate_dir2(segment_root_location, [&](std::string_view name, const FileMeta& meta) {
+        total_files++;
+        if (!is_segment(name) && !is_del(name) && !is_delvec(name)) {
+            LOG_EVERY_N(WARNING, 100) << "Unrecognized data file " << name;
+            return true;
         }
+        if (meta.has_modify_time() && now < meta.modify_time() + expire_seconds) {
+            need_check_modify_time = false;
+            return true;
+        }
+        datafiles.emplace(name);
         return true;
     });
     if (!iter_st.ok() && !iter_st.is_not_found()) {
         return iter_st;
     }
 
-    LOG(INFO) << "find_orphan_datafiles datafile cnt: " << datafiles.size();
+    VLOG(4) << "Listed all data files. total files=" << total_files << " possible orphan files=" << datafiles.size();
+
     if (datafiles.empty()) {
         return datafiles;
     }
@@ -264,7 +276,6 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         auto location = join_path(metadata_root_location, filename);
         auto res = tablet_mgr->get_tablet_metadata(location, false);
         if (res.status().is_not_found()) {
-            LOG(WARNING) << fmt::format("find_orphan_datafiles tablet meta {} not found", location);
             continue;
         } else if (!res.ok()) {
             return res.status();
@@ -281,7 +292,6 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         auto location = join_path(txn_log_root_location, filename);
         auto res = tablet_mgr->get_txn_log(location, false);
         if (res.status().is_not_found()) {
-            LOG(WARNING) << fmt::format("find_orphan_datafiles txnlog {} not found", location);
             continue;
         } else if (!res.ok()) {
             return res.status();
@@ -307,22 +317,23 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         }
     }
 
-    auto now = std::time(nullptr);
-
-    for (auto it = datafiles.begin(); it != datafiles.end(); /**/) {
-        auto location = join_path(segment_root_location, *it);
-        auto res = fs->get_file_modified_time(location);
-        if (!res.ok()) {
-            LOG_IF(WARNING, !res.status().is_not_found())
-                    << "Fail to get modified time of " << location << ": " << res.status();
-            it = datafiles.erase(it);
-        } else if (now < *res + config::lake_gc_segment_expire_seconds) {
-            it = datafiles.erase(it);
-        } else {
-            ++it;
+    if (need_check_modify_time && !datafiles.empty()) {
+        LOG(INFO) << "Checking modify time of " << datafiles.size() << " data files";
+        for (auto it = datafiles.begin(); it != datafiles.end(); /**/) {
+            auto location = join_path(segment_root_location, *it);
+            auto res = fs->get_file_modified_time(location);
+            if (!res.ok()) {
+                LOG_IF(WARNING, !res.status().is_not_found())
+                        << "Fail to get modified time of " << location << ": " << res.status();
+                it = datafiles.erase(it);
+            } else if (now < *res + expire_seconds) {
+                it = datafiles.erase(it);
+            } else {
+                ++it;
+            }
         }
     }
-
+    VLOG(4) << "Found " << datafiles.size() << " orphan files";
     return datafiles;
 }
 

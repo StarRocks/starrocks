@@ -334,13 +334,14 @@ public:
 
     Status path_exists(const std::string& path) override { return Status::NotSupported("S3FileSystem::path_exists"); }
 
-    Status list_path(const std::string& dir, std::vector<FileStatus>* result) override;
-
     Status get_children(const std::string& dir, std::vector<std::string>* file) override {
         return Status::NotSupported("S3FileSystem::get_children");
     }
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
+
+    Status iterate_dir2(const std::string& dir,
+                        const std::function<bool(std::string_view, const FileMeta&)>& cb) override;
 
     Status delete_file(const std::string& path) override;
 
@@ -528,7 +529,8 @@ Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<boo
     return directory_exist ? Status::OK() : Status::NotFound(dir);
 }
 
-Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* file_status) {
+Status S3FileSystem::iterate_dir2(const std::string& dir,
+                                  const std::function<bool(std::string_view, const FileMeta&)>& cb) {
     S3URI uri;
     if (!uri.parse(dir)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
@@ -559,9 +561,11 @@ Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* 
             const auto& full_name = cp.GetPrefix();
 
             std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
-            bool is_dir = true;
-            int64_t file_size = 0;
-            file_status->emplace_back(name, is_dir, file_size);
+            FileMeta stat;
+            stat.set_is_dir(true);
+            if (!cb(name, stat)) {
+                return Status::OK();
+            }
         }
         for (auto&& obj : result.GetContents()) {
             if (obj.GetKey() == uri.key()) {
@@ -570,19 +574,26 @@ Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* 
             DCHECK(HasPrefixString(obj.GetKey(), uri.key()));
 
             std::string_view obj_key(obj.GetKey());
-            bool is_dir = true;
-            int64_t file_size = 0;
+            FileMeta stat;
+            if (obj.LastModifiedHasBeenSet()) {
+                stat.set_modify_time(obj.GetLastModified().Seconds());
+            }
             if (obj_key.back() == '/') {
                 obj_key = std::string_view(obj_key.data(), obj_key.size() - 1);
+                stat.set_is_dir(true);
             } else {
                 DCHECK(obj.SizeHasBeenSet());
-                is_dir = false;
-                file_size = obj.GetSize();
+                stat.set_is_dir(false);
+                if (obj.SizeHasBeenSet()) {
+                    stat.set_size(obj.GetSize());
+                }
             }
 
             std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
 
-            file_status->emplace_back(name, is_dir, file_size);
+            if (!cb(name, stat)) {
+                return Status::OK();
+            }
         }
     } while (result.GetIsTruncated());
     return directory_exist ? Status::OK() : Status::NotFound(dir);

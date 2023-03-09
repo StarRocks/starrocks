@@ -801,37 +801,40 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
 Status SnapshotLoader::_get_existing_files_from_remote_without_broker(const std::unique_ptr<FileSystem>& fs,
                                                                       const std::string& remote_path,
                                                                       std::map<std::string, FileStat>* files) {
-    std::vector<FileStatus> file_status;
-    Status status = fs->list_path(remote_path, &file_status);
-    if (!status.ok() && !status.is_not_found()) {
-        std::stringstream ss;
-        ss << "failed to list files in remote path: " << remote_path << ", msg: " << status.message();
-        LOG(WARNING) << ss.str();
-        return status;
-    }
-    LOG(INFO) << "finished to list files from remote path. file num: " << file_status.size();
-
-    // split file name and checksum
-    for (const auto& file : file_status) {
-        if (file.is_dir) {
-            // this is not a file
-            continue;
+    int64_t file_num = 0;
+    Status st;
+    st.update(fs->iterate_dir2(remote_path, [&](std::string_view name, const FileMeta& meta) {
+        if (UNLIKELY(!meta.has_is_dir())) {
+            st.update(Status::InternalError("Unable to recognize the file type"));
+            return false;
         }
-
-        const std::string& file_name = file.name;
-        size_t pos = file_name.find_last_of('.');
-        if (pos == std::string::npos || pos == file_name.size() - 1) {
+        file_num++;
+        if (meta.is_dir()) {
+            return true;
+        }
+        if (UNLIKELY(!meta.has_size())) {
+            st.update(Status::InternalError("Unable to get file size"));
+            return false;
+        }
+        size_t pos = name.find_last_of('.');
+        if (pos == std::string::npos || pos == name.size() - 1) {
             // Not found checksum separator, ignore this file
-            continue;
+            return true;
         }
-        std::string name = std::string(file_name, 0, pos);
-        std::string md5 = std::string(file_name, pos + 1);
-        FileStat stat = {name, md5, file.size};
-        files->emplace(name, stat);
-        VLOG(2) << "split remote file: " << name << ", checksum: " << md5;
+        std::string name_part(name.data(), name.data() + pos);
+        std::string md5_part(name.data() + pos + 1, name.data() + name.size());
+        FileStat stat = {name_part, md5_part, meta.size()};
+        files->emplace(name_part, stat);
+        VLOG(2) << "split remote file: " << name_part << ", checksum: " << md5_part;
+        return true;
+    }));
+
+    if (!st.ok() && !st.is_not_found()) {
+        LOG(WARNING) << "failed to list files in remote path: " << remote_path << ", msg: " << st;
+        return st;
     }
 
-    LOG(INFO) << "finished to split files. valid file num: " << files->size();
+    LOG(INFO) << "finished to split files. total file num: " << file_num << " valid file num: " << files->size();
 
     return Status::OK();
 }
