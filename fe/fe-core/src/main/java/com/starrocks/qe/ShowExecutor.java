@@ -867,7 +867,15 @@ public class ShowExecutor {
                     continue;
                 }
                 final String columnName = col.getName();
-                final String columnType = col.getType().canonicalName().toLowerCase();
+                String columnType = col.getType().canonicalName().toLowerCase();
+                if (columnType.startsWith("array")) {
+                    columnType = "array";
+                } else if (columnType.startsWith("map")) {
+                    columnType = "map";
+                } else if (columnType.startsWith("struct")) {
+                    columnType = "struct";
+                }
+
                 final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
                 final String isKey = col.isKey() ? "YES" : "NO";
                 final String defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
