@@ -89,6 +89,7 @@
 ### 行为变更
 
 - Session 变量 `query_timeout` 添加最大值 `259200` 和最小值 `1` 的限制。
+- 取消 FE 参数 `default_storage_medium`，表的存储介质改为系统自动推导。 [#14394](https://github.com/StarRocks/starrocks/pull/14394)
 
 ## 2.4.1
 
