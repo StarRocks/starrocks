@@ -86,14 +86,20 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
                 try {
                     table = metadataMgr.getTable(catalogName, dbName, tableName);
                 } catch (Exception e) {
-                    LOG.warn("can't get table of {}.{}.{}", catalogName, dbName, tableName);
+                    LOG.warn("can't get table of {}.{}.{}，msg: {}", catalogName, dbName, tableName, e);
                     continue;
                 }
                 if (table == null) {
                     LOG.warn("{}.{}.{} not exist", catalogName, dbName, tableName);
                     continue;
                 }
-                updateProcessor.refreshTableMetaStoreInfo(dbName, table, true);
+                try {
+                    updateProcessor.refreshTableMetaStoreInfo(dbName, table, true);
+                } catch (Exception e) {
+                    LOG.warn("refresh {}.{}.{} meta store info failed, msg : {}", catalogName, dbName,
+                            tableName, e);
+                    continue;
+                }
                 LOG.info("refresh table {}.{}.{} success", catalogName, dbName, tableName);
             }
             LOG.info("refresh catalog {} success", catalogName);
