@@ -379,6 +379,7 @@ vectorized_functions = [
     [50201, 'current_timestamp', 'DATETIME', [], 'TimeFunctions::now'],
     [50202, 'localtime', 'DATETIME', [], 'TimeFunctions::now'],
     [50203, 'localtimestamp', 'DATETIME', [], 'TimeFunctions::now'],
+    [50204, 'now', 'DATETIME', ['INT'], 'TimeFunctions::now'],
     [50210, 'curtime', 'TIME', [], 'TimeFunctions::curtime'],
     [50211, 'current_time', 'TIME', [], 'TimeFunctions::curtime'],
     [50220, 'curdate', 'DATE', [], 'TimeFunctions::curdate'],

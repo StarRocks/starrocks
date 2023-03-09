@@ -1118,4 +1118,15 @@ public class ScalarOperatorFunctionsTest {
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.now().getDatetime());
     }
+
+    @Test
+    public void testNowWithParameter() throws AnalysisException {
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setThreadLocalInfo();
+        ctx.setStartTime();
+        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime())
+                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+        assertEquals(expected, ScalarOperatorFunctions.now(new ConstantOperator(6, Type.INT)).getDatetime());
+    }
+
 }
