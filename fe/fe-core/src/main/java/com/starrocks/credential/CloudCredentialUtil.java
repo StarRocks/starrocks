@@ -17,24 +17,26 @@ package com.starrocks.credential;
 import java.util.Map;
 
 public class CloudCredentialUtil {
+    private static final String MASK_CLOUD_CREDENTIAL_WORDS = "******";
+
     public static void maskCloudCredential(Map<String, String> properties) {
         // aws.s3.access_key -> ******
         properties.computeIfPresent(CloudConfigurationConstants.AWS_S3_ACCESS_KEY,
-                (k, v) -> replaceWithIndex(2, v.length() - 2, v, "******"));
+                (k, v) -> replaceWithIndex(2, v.length() - 2, v, MASK_CLOUD_CREDENTIAL_WORDS));
         // aws.s3.secret_key -> ******
         properties.computeIfPresent(CloudConfigurationConstants.AWS_S3_SECRET_KEY,
-                (k, v) -> replaceWithIndex(2, v.length() - 2, v, "******"));
+                (k, v) -> replaceWithIndex(2, v.length() - 2, v, MASK_CLOUD_CREDENTIAL_WORDS));
         // aws.glue.access_key -> ******
         properties.computeIfPresent(CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY,
-                (k, v) -> replaceWithIndex(2, v.length() - 2, v, "******"));
+                (k, v) -> replaceWithIndex(2, v.length() - 2, v, MASK_CLOUD_CREDENTIAL_WORDS));
         // aws.glue.secret_key -> ******
         properties.computeIfPresent(CloudConfigurationConstants.AWS_GLUE_SECRET_KEY,
-                (k, v) -> replaceWithIndex(2, v.length() - 2, v, "******"));
+                (k, v) -> replaceWithIndex(2, v.length() - 2, v, MASK_CLOUD_CREDENTIAL_WORDS));
     }
 
     public static String replaceWithIndex(int start, int end, String oldChar, String replaceChar) {
         if (start > end) {
-            return "******";
+            return MASK_CLOUD_CREDENTIAL_WORDS;
         }
         return String.valueOf(new StringBuilder(oldChar).replace(start, end, replaceChar));
     }
