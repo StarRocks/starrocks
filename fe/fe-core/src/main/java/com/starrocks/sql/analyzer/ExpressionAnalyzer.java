@@ -141,6 +141,8 @@ public class ExpressionAnalyzer {
     private boolean isMapHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_FILTER) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM_VALUES) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM_KEYS) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
                 return true;
             }
@@ -232,10 +234,16 @@ public class ExpressionAnalyzer {
             Preconditions.checkState(expression instanceof FunctionCallExpr);
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expression;
             // map_apply(func, map)
-            if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_APPLY) &&
-                    !(expression.getChild(0).getChild(0) instanceof MapExpr)) {
-                throw new SemanticException("The right part of map lambda function (" +
-                        expression.getChild(0).toSql() + ") should have key and value arguments");
+            if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
+                if (!(expression.getChild(0).getChild(0) instanceof MapExpr)) {
+                    throw new SemanticException("The right part of map lambda function (" +
+                            expression.getChild(0).toSql() + ") should have key and value arguments");
+                }
+            } else {
+                if (expression.getChild(0).getChild(0) instanceof MapExpr) {
+                    throw new SemanticException("The right part of map lambda function (" +
+                            expression.getChild(0).toSql() + ") should have only one arguments");
+                }
             }
             if (expression.getChild(0).getChildren().size() != 3) {
                 throw new SemanticException("The left part of map lambda function (" +
@@ -255,13 +263,25 @@ public class ExpressionAnalyzer {
             scope.putLambdaInput(new PlaceHolderExpr(-1, true, keyType));
             scope.putLambdaInput(new PlaceHolderExpr(-2, true, valueType));
             // lambda functions should be rewritten before visited
-            if ((functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_FILTER))) {
+            if ((functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_FILTER)) ||
+                    functionCallExpr.getFnName().getFunction().equals(FunctionSet.TRANSFORM_VALUES)) {
                 // (k,v) -> expr => (k,v) -> (k,expr)
                 Expr lambdaFunc = functionCallExpr.getChild(0);
                 LambdaArgument larg = (LambdaArgument) lambdaFunc.getChild(1);
                 Expr slotRef = new SlotRef(null, larg.getName(), larg.getName());
                 lambdaFunc.setChild(0, new MapExpr(Type.ANY_MAP, Lists.newArrayList(slotRef,
                         lambdaFunc.getChild(0))));
+                if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.TRANSFORM_VALUES)) {
+                    functionCallExpr.resetFnName("", FunctionSet.MAP_APPLY);
+                }
+            } else if ((functionCallExpr.getFnName().getFunction().equals(FunctionSet.TRANSFORM_KEYS))) {
+                // (k,v) -> expr => (k,v) -> (expr, v)
+                Expr lambdaFunc = functionCallExpr.getChild(0);
+                LambdaArgument larg = (LambdaArgument) lambdaFunc.getChild(2);
+                Expr slotRef = new SlotRef(null, larg.getName(), larg.getName());
+                lambdaFunc.setChild(0, new MapExpr(Type.ANY_MAP, Lists.newArrayList(
+                        lambdaFunc.getChild(0), slotRef)));
+                functionCallExpr.resetFnName("", FunctionSet.MAP_APPLY);
             }
         }
         // visit LambdaFunction
