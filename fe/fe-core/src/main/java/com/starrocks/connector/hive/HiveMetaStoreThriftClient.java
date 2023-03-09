@@ -619,14 +619,14 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     @Override
     public Table getTable(String catName, String dbName, String tableName) throws MetaException, TException {
         try {
-            // Using get_table_req() first, if user is using Hive v1.x version, it will request failed,
-            // then fail over to use get_table() instead.
+            // Using get_table() first, if user's Hive forbidden this request,
+            // then fail over to use get_table_req() instead.
+            return client.get_table(dbName, tableName);
+        } catch (Exception e) {
+            LOG.warn("Using get_table() failed, fail over to use get_table_req()", e);
             GetTableRequest req = new GetTableRequest(dbName, tableName);
             req.setCapabilities(version);
             return client.get_table_req(req).getTable();
-        } catch (Exception e) {
-            LOG.warn("Using get_table_req() failed, fail over to use get_table()");
-            return client.get_table(dbName, tableName);
         }
     }
 
