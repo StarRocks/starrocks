@@ -51,14 +51,8 @@ set(EXEC_FILES
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp
-<<<<<<< HEAD
         ./exec/vectorized/hdfs_scan_node_test.cpp
-=======
         ./exec/workgroup/scan_task_queue_test.cpp
-        ./exec/pipeline/pipeline_control_flow_test.cpp
-        ./exec/pipeline/pipeline_driver_queue_test.cpp
-        ./exec/pipeline/pipeline_file_scan_node_test.cpp
->>>>>>> 5670c10a0 ([Enhancement] Add MultiLevelFeedScanTaskQueue (#18893))
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/query_context_manger_test.cpp
