@@ -55,17 +55,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitIOTaskCount", TUnit::UNIT);
 
-    if (_workgroup == nullptr) {
-        DCHECK(_io_threads != nullptr);
-        auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);
-        if (num_scan_operators > _io_threads->get_queue_capacity()) {
-            state->exec_env()->decrement_num_scan_operators(1);
-            return Status::TooManyTasks(
-                    strings::Substitute("num_scan_operators exceeds queue capacity($0) of pipeline_pool_thread",
-                                        _io_threads->get_queue_capacity()));
-        }
-    }
-
     RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
