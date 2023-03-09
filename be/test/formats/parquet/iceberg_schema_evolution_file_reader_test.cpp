@@ -102,6 +102,14 @@ protected:
     const std::string add_struct_sufield_file_path =
             "./be/test/formats/parquet/test_data/iceberg_schema_evolution/add_struct_subfield.parquet";
 
+    // message hive_schema {
+    //   optional int32 c1;
+    //   optional int64 c2;
+    //   optional binary c3 (STRING);
+    //   optional int96 c4;
+    // }
+    const std::string no_field_id_file_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet2";
+
     std::unique_ptr<RandomAccessFile> _create_file(const std::string& file_path) {
         return *FileSystem::Default()->new_random_access_file(file_path);
     }
@@ -681,6 +689,65 @@ TEST_F(IcebergSchemaEvolutionTest, TestWidenColumnType) {
     ASSERT_EQ(1, chunk->num_rows());
 
     EXPECT_EQ("[{a:2}]", chunk->debug_row(0));
+}
+
+// Test iceberg table's parquet file don't have field id
+TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
+    auto file = _create_file(no_field_id_file_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(no_field_id_file_path));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+    TIcebergSchema schema = TIcebergSchema{};
+
+    // Should read as null
+    TIcebergSchemaField field_c1{};
+    field_c1.__set_field_id(1);
+    field_c1.__set_name("rename_c1");
+
+    // Can read values
+    TIcebergSchemaField field_c2{};
+    field_c2.__set_field_id(2);
+    field_c2.__set_name("c2");
+
+    // Should read as null
+    TIcebergSchemaField field_c3{};
+    field_c3.__set_field_id(3);
+    field_c3.__set_name("rename_c3");
+
+    std::vector<TIcebergSchemaField> fields{field_c1, field_c2, field_c3};
+    schema.__set_fields(fields);
+    ctx->iceberg_schema = &schema;
+
+    TypeDescriptor rename_c1 = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    TypeDescriptor c2 = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    TypeDescriptor rename_c3 = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+
+    Utils::SlotDesc slot_descs[] = {{"rename_c1", rename_c1}, {"c2", c2}, {"rename_c3", rename_c3}, {""}};
+
+    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_sufield_file_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    if (!status.ok()) {
+        std::cout << status.get_error_msg() << std::endl;
+    }
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(rename_c1, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c2, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(rename_c3, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(11, chunk->num_rows());
+    EXPECT_EQ("[NULL, 10, NULL]", chunk->debug_row(0));
 }
 
 } // namespace starrocks::parquet
