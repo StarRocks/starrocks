@@ -38,9 +38,10 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
     std::vector<ColumnPtr> input_columns;
     NullColumnPtr input_null_map = nullptr;
     MapColumn* input_map = nullptr;
+    ColumnPtr input_map_ptr_ref = nullptr; // hold shared_ptr to avoid early deleted.
     // step 1: get input columns from map(key_col, value_col)
-    for (int i = 1; i < _children.size(); ++i) {
-        ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], chunk);
+    for (int i = 1; i < _children.size(); ++i) { // currently only 2 children, may be more in the future
+        ASSIGN_OR_RETURN(auto child_col, context->evaluate(_children[i], chunk));
         // the column is a null literal.
         if (child_col->only_null()) {
             return ColumnHelper::align_return_type(child_col, type(), chunk->num_rows(), true);
@@ -68,6 +69,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
 
         if (input_map == nullptr) {
             input_map = cur_map;
+            input_map_ptr_ref = data_column;
         } else {
             if (UNLIKELY(!ColumnHelper::offsets_equal(cur_map->offsets_column(), input_map->offsets_column()))) {
                 return Status::InternalError("Input map element's size are not equal in map_apply().");
@@ -104,14 +106,14 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
         }
         // evaluate the lambda expression
         if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
-            column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
+            ASSIGN_OR_RETURN(column, context->evaluate(_children[0], cur_chunk.get()));
             column = ColumnHelper::align_return_type(column, type(), cur_chunk->num_rows(), false);
         } else { // split large chunks into small ones to avoid too large or various batch_size
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             accumulator.push(std::move(cur_chunk));
             accumulator.finalize();
             while (auto tmp_chunk = accumulator.pull()) {
-                auto tmp_col = EVALUATE_NULL_IF_ERROR(context, _children[0], tmp_chunk.get());
+                ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
                 tmp_col = ColumnHelper::align_return_type(tmp_col, type(), tmp_chunk->num_rows(), false);
                 if (column == nullptr) {
                     column = tmp_col;
