@@ -28,7 +28,7 @@ public class CloudCredentialUtil {
     private static final String MASK_CLOUD_CREDENTIAL_WORDS = "******";
 
     public static void maskCloudCredential(Map<String, String> properties) {
-        // Mask for aws credential
+        // Mask for aws's credential
         doMask(properties, CloudConfigurationConstants.AWS_S3_ACCESS_KEY);
         doMask(properties, CloudConfigurationConstants.AWS_S3_SECRET_KEY);
         doMask(properties, CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY);
