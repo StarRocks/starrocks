@@ -80,7 +80,7 @@ public:
     static const std::string _s_average_io_mgr_queue_capacity;
     static const std::string _s_num_scanner_threads_started;
 
-    virtual int io_tasks_per_scan_operator() const { return config::io_tasks_per_scan_operator; }
+    virtual int io_tasks_per_scan_operator() const { return _io_tasks_per_scan_operator; }
 
 protected:
     RuntimeProfile::Counter* _bytes_read_counter; // # bytes read from the scanner
@@ -95,6 +95,7 @@ protected:
     // Aggregated scanner thread counters
     RuntimeProfile::ThreadCounters* _scanner_thread_counters;
     RuntimeProfile::Counter* _num_scanner_threads_started_counter;
+    int32_t _io_tasks_per_scan_operator = config::io_tasks_per_scan_operator;
 };
 
 } // namespace starrocks
