@@ -46,6 +46,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Paths;
 import java.security.SecureRandom;
 
@@ -149,6 +150,22 @@ public class IOUtil {
             hadoopOutputFile.getFileSystem().delete(hadoopOutputFile.getPath(), false);
         } catch (Exception e) {
             LOG.warn("failed on deleting file: {}. msg: {}", hadoopOutputFile.getPath(), e);
+        }
+    }
+
+    public static void closeInputStreamIgnoreException(InputStream stream) {
+        try {
+            stream.close();
+        } catch (IOException e) {
+            //ignored
+        }
+    }
+
+    public static void closeOutputStreamIgnoreException(OutputStream stream) {
+        try {
+            stream.close();
+        } catch (IOException e) {
+            //ignored
         }
     }
 }

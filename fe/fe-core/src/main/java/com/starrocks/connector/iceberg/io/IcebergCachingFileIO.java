@@ -181,8 +181,8 @@ public class IcebergCachingFileIO implements FileIO {
             HadoopOutputFile tmpOutputFile = (HadoopOutputFile) IOUtil.getTmpOutputFile(
                     METADATA_CACHE_DISK_PATH, key);
             PositionOutputStream outputStream = tmpOutputFile.createOrOverwrite();
-            Path localFilePath = new Path(IOUtil.remoteToLocalFilePath(METADATA_CACHE_DISK_PATH, key));
             try {
+                Path localFilePath = new Path(IOUtil.remoteToLocalFilePath(METADATA_CACHE_DISK_PATH, key));
                 while (totalBytesToRead > 0) {
                     // read the stream in 4MB chunk
                     int bytesToRead = (int) Math.min(BUFFER_CHUNK_SIZE, totalBytesToRead);
@@ -215,11 +215,17 @@ public class IcebergCachingFileIO implements FileIO {
                 }
             } catch (IOException ex) {
                 try {
+                    IOUtil.closeInputStreamIgnoreException(stream);
+                    IOUtil.closeOutputStreamIgnoreException(outputStream);
                     tmpOutputFile.getFileSystem().delete(tmpOutputFile.getPath(), false);
                 } catch (IOException ioException) {
                     LOG.warn("failed on deleting file : {}. msg: {}", tmpOutputFile.getPath(), ioException);
                 }
                 throw new UncheckedIOException(ex);
+            } catch (IllegalArgumentException e) {
+                IOUtil.closeInputStreamIgnoreException(stream);
+                IOUtil.closeOutputStreamIgnoreException(outputStream);
+                throw e;
             }
         }
     }
@@ -455,11 +461,14 @@ public class IcebergCachingFileIO implements FileIO {
         }
         @Override
         public void close() throws IOException {
-            stream.close();
-            diskCache.asMap().computeIfPresent(key, (k, v) -> {
-                v.unpin();
-                return v;
-            });
+            try {
+                stream.close();
+            } finally {
+                diskCache.asMap().computeIfPresent(key, (k, v) -> {
+                    v.unpin();
+                    return v;
+                });
+            }
         }
 
         @Override
@@ -531,10 +540,10 @@ public class IcebergCachingFileIO implements FileIO {
         }
 
         private CacheEntry newCacheEntry() {
+            SeekableInputStream stream = null;
             try {
                 long fileLength = getLength();
                 long totalBytesToRead = fileLength;
-                SeekableInputStream stream;
                 if (contentCache.isExistOnDiskCache(location())) {
                     LOG.debug(location() + " hit on disk cache");
                     stream = contentCache.getDiskSeekableStream(location());
@@ -568,6 +577,9 @@ public class IcebergCachingFileIO implements FileIO {
                 stream.close();
                 return new CacheEntry(fileLength - totalBytesToRead, buffers);
             } catch (IOException ex) {
+                if (stream != null) {
+                    IOUtil.closeInputStreamIgnoreException(stream);
+                }
                 throw new UncheckedIOException(ex);
             }
         }
