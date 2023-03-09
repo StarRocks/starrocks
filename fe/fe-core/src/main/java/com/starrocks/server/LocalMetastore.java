@@ -2135,6 +2135,10 @@ public class LocalMetastore implements ConnectorMetadata {
             if (table.isOlapTable() && !runMode.isAllowCreateOlapTable()) {
                 throw new DdlException("Cannot create table without persistent volume in current run mode \"" + runMode + "\"");
             }
+
+            if (table.isLakeTable() && table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                throw new DdlException("Does not support primary key in current version with run mode \"" + runMode + "\"");
+            }
         } else {
             throw new DdlException("Unrecognized engine \"" + stmt.getEngineName() + "\"");
         }
