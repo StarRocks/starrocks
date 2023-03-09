@@ -767,6 +767,8 @@ static void fill_varbinary_column_with_null(orc::ColumnVectorBatch* cvb, ColumnP
             vo.emplace_back(vb.size());
         }
     }
+
+    c->update_has_null();
 }
 
 static void fill_date_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
