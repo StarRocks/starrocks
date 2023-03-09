@@ -89,6 +89,7 @@ The following bugs are fixed:
 ### Behavior Change
 
 - Constrained the session variable `query_timeout` with an upper limit of `259200` and a lower limit of `1`.
+- Deprecated the FE parameter `default_storage_medium`. The storage medium of a table is automatically inferred by the system. [#14394](https://github.com/StarRocks/starrocks/pull/14394)
 
 ## 2.4.1
 
