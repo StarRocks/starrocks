@@ -95,7 +95,9 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
     } else {
         _has_last_chunk = false;
         ASSIGN_OR_RETURN(res, _aggregator->pull_eos_chunk());
-        _accumulator.push(std::move(res));
+        if (res != nullptr && !res->is_empty()) {
+            _accumulator.push(std::move(res));
+        }
         _accumulator.finalize();
     }
 
