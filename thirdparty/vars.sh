@@ -298,10 +298,10 @@ JINDOSDK_SOURCE="jindosdk-4.6.2"
 JINDOSDK_MD5SUM="7288ffb8f2fbdde6b907d15041a0f79c"
 
 # aws-sdk-cpp
-AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.9.179.tar.gz"
-AWS_SDK_CPP_NAME="aws-sdk-cpp-1.9.179.tar.gz"
-AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.9.179"
-AWS_SDK_CPP_MD5SUM="3a4e2703eaeeded588814ee9e61a3342"
+AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.9.272.tar.gz"
+AWS_SDK_CPP_NAME="aws-sdk-cpp-1.9.272.tar.gz"
+AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.9.272"
+AWS_SDK_CPP_MD5SUM="3a9190e3d14b81bfdd9c41a89a419202"
 
 # velocypack: A fast and compact format for serialization and storage
 VPACK_DOWNLOAD="https://github.com/arangodb/velocypack/archive/refs/tags/XYZ1.0.tar.gz"
@@ -349,4 +349,8 @@ BROKER_THIRDPARTY_JARS_MD5SUM="8e9a8c2ef3b19709dd0cc37e26a60c83"
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
+<<<<<<< HEAD
             BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS"
+=======
+            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS JANSSON AVRO SERDES"
+>>>>>>> 672d29a2a ([BugFix] [Thirdparty lib] Fix AWS signature mismatch when querying partitioned Hive table on GCS (#19228))
