@@ -11,9 +11,8 @@ Delta Lake Catalog 是一种 External Catalog。通过 Delta Lake Catalog，您�
 
 ## 使用说明
 
-- StarRocks 查询 Delta Lake 数据时，支持 Parquet、ORC 和 CSV 三种文件格式。
-- StarRocks 查询 Delta Lake 数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 CSV 格式的 Delta Lake 表，StarRocks 不支持 MAP 数据类型。
-- Delta Lake Catalog 仅支持查询 Delta Lake 数据，不支持针对 Delta Lake 的写/删操作。
+- StarRocks 查询 Delta Lake 数据时，支持 Parquet 文件格式。Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
+- StarRocks 查询 Delta Lake 数据时，不支持 MAP 和 STRUCT 数据类型。
 
 ## 准备工作
 
@@ -440,10 +439,10 @@ HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2
 
 | Parameter                         | Description                                                  |
 | --------------------------------- | ------------------------------------------------------------ |
-| hms_events_polling_interval_ms    | StarRocks 从 HMS 中读取事件的时间间隔。默认值：`5000`。单位：毫秒。 |
-| hms_events_batch_size_per_rpc     | StarRocks 每次读取事件的最大数量。默认值：`500`。            |
+| hms_events_polling_interval_ms    | StarRocks 从 HMS 中读取事件的时间间隔。默认值：`5000`。单位：毫秒。  |
+| hms_events_batch_size_per_rpc     | StarRocks 每次读取事件的最大数量。默认值：`500`。                  |
 | enable_hms_parallel_process_evens | 指定 StarRocks 在读取事件时是否并行处理读取的事件。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 则开启并行机制，取值为 `false` 则关闭并行机制。 |
-| hms_process_events_parallel_num   | StarRocks 每次处理事件的最大并发数。默认值：`4`。            |
+| hms_process_events_parallel_num   | StarRocks 每次处理事件的最大并发数。默认值：`4`。                  |
 
 ## 附录：理解自动异步更新策略
 
