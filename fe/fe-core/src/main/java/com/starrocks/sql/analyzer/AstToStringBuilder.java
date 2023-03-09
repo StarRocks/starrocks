@@ -889,7 +889,7 @@ public class AstToStringBuilder {
             } else if (functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
                 sb.append(visit(node.getChild(0)));
                 List<OrderByElement> sortClause = fnParams.getOrderByElements();
-                if (!sortClause.isEmpty()) {
+                if (sortClause != null && !sortClause.isEmpty()) {
                     sb.append(" ORDER BY ").append(visitAstList(sortClause));
                 }
                 sb.append(")");

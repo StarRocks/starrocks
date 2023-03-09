@@ -91,7 +91,7 @@ public class FunctionParams implements Writable {
     }
 
     public String getOrderByStringToSql() {
-        if (orderByElements.isEmpty()) {
+        if (orderByElements != null && !orderByElements.isEmpty()) {
             StringBuilder sb = new StringBuilder();
             sb.append(" ORDER BY ").append(orderByElements.stream().map(OrderByElement::toSql).
                     collect(Collectors.joining(" ")));
@@ -102,7 +102,7 @@ public class FunctionParams implements Writable {
     }
 
     public String getOrderByStringToExplain() {
-        if (orderByElements.isEmpty()) {
+        if (orderByElements != null && !orderByElements.isEmpty()) {
             StringBuilder sb = new StringBuilder();
             sb.append(" ORDER BY ").append(orderByElements.stream().map(OrderByElement::explain).
                     collect(Collectors.joining(" ")));
