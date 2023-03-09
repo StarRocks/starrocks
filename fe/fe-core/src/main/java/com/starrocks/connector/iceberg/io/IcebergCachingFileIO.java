@@ -60,6 +60,7 @@ import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.iceberg.exceptions.NotFoundException;
+import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
 import org.apache.iceberg.hadoop.Util;
 import org.apache.iceberg.io.FileIO;
@@ -160,7 +161,16 @@ public class IcebergCachingFileIO implements FileIO {
         }
 
         public boolean isExistOnDisk() {
-            return this.inputFile != null && this.inputFile.exists();
+            if (this.inputFile == null) {
+                return false;
+            } else {
+                HadoopInputFile hadoopInputFile = (HadoopInputFile) this.inputFile;
+                try {
+                    return hadoopInputFile.getFileSystem().exists(hadoopInputFile.getPath());
+                } catch (IOException e) {
+                    return false;
+                }
+            }
         }
 
         public void pin() {
@@ -316,13 +326,13 @@ public class IcebergCachingFileIO implements FileIO {
                     .writer(new CacheWriter<String, DiskCacheEntry>() {
                         @Override
                         public void write(@NonNull String s, @NonNull DiskCacheEntry diskCacheEntry) {
-
+                            // no more action to do when create and modify
                         }
 
                         @Override
                         public void delete(@NonNull String s, @Nullable DiskCacheEntry diskCacheEntry,
                                            @NonNull RemovalCause removalCause) {
-                            LOG.debug(s + " to be eliminated from disk, reason: " + removalCause);
+                            LOG.debug("{} to be eliminated from disk, reason: {}", s, removalCause);
                             HadoopOutputFile hadoopOutputFile = (HadoopOutputFile) IOUtil.getOutputFile(
                                     METADATA_CACHE_DISK_PATH, s);
                             try {
@@ -411,7 +421,11 @@ public class IcebergCachingFileIO implements FileIO {
         @Override
         public boolean isExistOnDiskCache(String key) {
             DiskCacheEntry entry = diskCache.getIfPresent(key);
-            return entry != null && entry.isExistOnDisk();
+            if (entry != null && !entry.isExistOnDisk()) {
+                diskCache.invalidate(key);
+                return false;
+            }
+            return entry != null;
         }
 
         @Override
