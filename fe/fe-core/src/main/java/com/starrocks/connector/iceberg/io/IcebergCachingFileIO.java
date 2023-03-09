@@ -435,7 +435,16 @@ public class IcebergCachingFileIO implements FileIO {
                 return v;
             });
             if (diskCacheEntry != null) {
-                return new DiskCacheSeekableInputStream(diskCacheEntry.inputFile.newStream(), diskCache, key);
+                try {
+                    SeekableInputStream stream = diskCacheEntry.toSeekableInputStream();
+                    return new DiskCacheSeekableInputStream(stream, diskCache, key);
+                } catch (Exception e) {
+                    diskCache.asMap().computeIfPresent(key, (k, v) -> {
+                        v.unpin();
+                        return v;
+                    });
+                    return null;
+                }
             } else {
                 return null;
             }
