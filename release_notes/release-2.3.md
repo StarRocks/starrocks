@@ -1,5 +1,26 @@
 # StarRocks version 2.3
 
+## 2.3.10
+
+发布日期： 2023 年 3 月 9 日
+
+### 功能优化
+
+优化 `storage_medium` 的推导机制。当 BE 同时使用 SSD 和 HDD 作为存储介质时，如果配置了 `storage_cooldown_time`，StarRocks 设置 `storage_medium` 为 `SSD`。反之，则 StarRocks 设置 `storage_medium` 为 `HDD`。[#18649](https://github.com/StarRocks/starrocks/pull/18649)
+
+### 问题修复
+
+修复了如下问题：
+
+- 查询数据湖 Parquet 文件中 ARRAY 类型数据时查询可能会失败。 [#17626](https://github.com/StarRocks/starrocks/pull/17626) [#17788](https://github.com/StarRocks/starrocks/pull/17788) [#18051](https://github.com/StarRocks/starrocks/pull/18051)
+- 程序发起的 Stream Load 导入任务卡住，FE 接收不到程序发起的 HTTP 请求。[#18559](https://github.com/StarRocks/starrocks/pull/18559)
+- 查询 Elasticsearch 外表可能会报错。[#13727](https://github.com/StarRocks/starrocks/pull/13727)
+- 表达式在初始阶段发生错误，可能导致会 BE 停止服务。[#11396](https://github.com/StarRocks/starrocks/pull/11396)
+- 查询语句使用空数组字面量 `[]`，可能会导致查询失败。[#18550](https://github.com/StarRocks/starrocks/pull/18550)
+- 版本从 2.2 及以上升级至 2.3.9 及以上后，创建 Routine Load 时 COLUMN 包含计算表达式，可能会报错 `No match for <expr> with operand types xxx and xxx`。[#17856](https://github.com/StarRocks/starrocks/pull/17856)
+- 重启 BE 后导入操作卡住。[#18488](https://github.com/StarRocks/starrocks/pull/18488)
+- 当查询语句的 WHERE 子句包含 OR 运算符时，多余分区被扫描。[#18610](https://github.com/StarRocks/starrocks/pull/18610)
+
 ## 2.3.9
 
 发布日期： 2023 年 2 月 20 日
