@@ -982,7 +982,7 @@ public class ExpressionAnalyzer {
                 node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
                 argumentTypes[1] = Type.ARRAY_BOOLEAN;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (fnName.equals(FunctionSet.MAP_FILTER) {
+            } else if (fnName.equals(FunctionSet.MAP_FILTER)) {
                 if (node.getChildren().size() != 2) {
                     throw new SemanticException(fnName + " should have 2 inputs, " +
                             "but there are just " + node.getChildren().size() + " inputs.");
