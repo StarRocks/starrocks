@@ -215,10 +215,10 @@ public class OlapTable extends Table {
     protected long binlogTxnId = -1;
 
     // Record the alter, schema change, MV update time
-    public final AtomicLong lastSchemaUpdateTime = new AtomicLong(-1);
+    public AtomicLong lastSchemaUpdateTime = new AtomicLong(-1);
     // Record the start and end time for data load version update phase
-    public final AtomicLong lastVersionUpdateStartTime = new AtomicLong(-1);
-    public final AtomicLong lastVersionUpdateEndTime = new AtomicLong(0);
+    public AtomicLong lastVersionUpdateStartTime = new AtomicLong(-1);
+    public AtomicLong lastVersionUpdateEndTime = new AtomicLong(0);
 
     public OlapTable() {
         this(TableType.OLAP);
@@ -1570,6 +1570,11 @@ public class OlapTable extends Table {
 
         // The table may be restored from another cluster, it should be set to current cluster id.
         clusterId = GlobalStateMgr.getCurrentState().getClusterId();
+
+        lastSchemaUpdateTime = new AtomicLong(-1);
+        // Record the start and end time for data load version update phase
+        lastVersionUpdateStartTime = new AtomicLong(-1);
+        lastVersionUpdateEndTime = new AtomicLong(0);
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
