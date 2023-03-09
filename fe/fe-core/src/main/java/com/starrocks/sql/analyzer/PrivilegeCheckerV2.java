@@ -769,7 +769,7 @@ public class PrivilegeCheckerV2 {
             if (CatalogMgr.isInternalCatalog(catalogName)) {
                 return null;
             }
-            if (!PrivilegeActions.checkAnyActionOnCatalog(context, catalogName)) {
+            if (!PrivilegeActions.checkAnyActionOnOrInCatalog(context, catalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
                         context.getQualifiedUser(), catalogName);
             }
