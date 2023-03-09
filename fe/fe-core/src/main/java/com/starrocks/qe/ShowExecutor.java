@@ -77,7 +77,13 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
+<<<<<<< HEAD
 import com.starrocks.lake.LakeTable;
+=======
+import com.starrocks.common.util.PrintableMap;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.credential.CloudCredentialUtil;
+>>>>>>> ef29bbbb4 ([Feature]Support mask cloud credential in show create catalog and show create file table (#19126))
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -1809,4 +1815,37 @@ public class ShowExecutor {
 
         return returnRows;
     }
+<<<<<<< HEAD
+=======
+
+    private void handleShowCreateExternalCatalog() {
+        ShowCreateExternalCatalogStmt showStmt = (ShowCreateExternalCatalogStmt) stmt;
+        String catalogName = showStmt.getCatalogName();
+        Catalog catalog = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
+        List<List<String>> rows = Lists.newArrayList();
+        if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalogName)) {
+            resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+            return;
+        }
+        // Create external catalog catalogName (
+        StringBuilder createCatalogSql = new StringBuilder();
+        createCatalogSql.append("CREATE EXTERNAL CATALOG ")
+                .append("`").append(catalogName).append("`")
+                .append("\n");
+
+        // Comment
+        String comment = catalog.getComment();
+        if (comment != null) {
+            createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
+        }
+        Map<String, String> config = catalog.getConfig();
+        CloudCredentialUtil.maskCloudCredential(config);
+        // Properties
+        createCatalogSql.append("PROPERTIES (")
+                .append(new PrintableMap<>(config, " = ", true, true))
+                .append("\n)");
+        rows.add(Lists.newArrayList(catalogName, createCatalogSql.toString()));
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+>>>>>>> ef29bbbb4 ([Feature]Support mask cloud credential in show create catalog and show create file table (#19126))
 }

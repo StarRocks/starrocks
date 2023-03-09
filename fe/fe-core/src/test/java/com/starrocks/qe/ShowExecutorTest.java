@@ -973,4 +973,74 @@ public class ShowExecutorTest {
         Assert.assertEquals("BASE TABLE", resultSet.getString(1));
         Assert.assertFalse(resultSet.next());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testShowCreateExternalCatalog() throws AnalysisException, DdlException {
+        new MockUp<CatalogMgr>() {
+            @Mock
+            public Catalog getCatalogByName(String name) {
+                Map<String, String> properties = new HashMap<>();
+                properties.put("hive.metastore.uris", "thrift://hadoop:9083");
+                properties.put("type", "hive");
+                Catalog catalog = new Catalog(1, "test_hive", properties, "hive_test");
+                return catalog;
+            }
+        };
+        ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("test_hive");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertEquals("test_hive", resultSet.getResultRows().get(0).get(0));
+        Assert.assertEquals("CREATE EXTERNAL CATALOG `test_hive`\n" +
+                "comment \"hive_test\"\n" +
+                "PROPERTIES (\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
+                "\"type\"  =  \"hive\"\n)", resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowGrants() throws Exception {
+        ShowGrantsStmt stmt = new ShowGrantsStmt("root");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        resultSet.getResultRows().forEach(System.out::println);
+        String expectString1 = "root, null, GRANT CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, " +
+                "CREATE MATERIALIZED VIEW ON ALL DATABASES TO ROLE 'root'";
+        Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
+                l.toString().contains(expectString1)));
+        String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +
+                "UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
+        Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
+                l.toString().contains(expectString2)));
+    }
+
+    @Test
+    public void testShowCreateExternalCatalogWithMask() throws AnalysisException, DdlException {
+        new MockUp<CatalogMgr>() {
+            @Mock
+            public Catalog getCatalogByName(String name) {
+                Map<String, String> properties = new HashMap<>();
+                properties.put("hive.metastore.uris", "thrift://hadoop:9083");
+                properties.put("type", "hive");
+                properties.put("aws.s3.access_key", "iam_user_access_key");
+                properties.put("aws.s3.secret_key", "iam_user_secret_key");
+                Catalog catalog = new Catalog(1, "test_hive", properties, "hive_test");
+                return catalog;
+            }
+        };
+        ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("test_hive");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertEquals("test_hive", resultSet.getResultRows().get(0).get(0));
+        Assert.assertEquals("CREATE EXTERNAL CATALOG `test_hive`\n" +
+                "comment \"hive_test\"\n" +
+                "PROPERTIES (\"aws.s3.access_key\"  =  \"ia******ey\",\n" +
+                "\"aws.s3.secret_key\"  =  \"ia******ey\",\n" +
+                "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
+                "\"type\"  =  \"hive\"\n" +
+                ")", resultSet.getResultRows().get(0).get(1));
+    }
+>>>>>>> ef29bbbb4 ([Feature]Support mask cloud credential in show create catalog and show create file table (#19126))
 }
