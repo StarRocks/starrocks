@@ -724,8 +724,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
     TypeDescriptor c2 = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
     TypeDescriptor rename_c3 = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
 
-    Utils::SlotDesc slot_descs[] = {{"rename_c1", rename_c1}, {"c2", c2}, {"rename_c3", rename_c3},
-                                    {""}};
+    Utils::SlotDesc slot_descs[] = {{"rename_c1", rename_c1}, {"c2", c2}, {"rename_c3", rename_c3}, {""}};
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
@@ -741,13 +740,14 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
 
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(col, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(rename_c1, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c2, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(rename_c3, true), chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
-    ASSERT_EQ(1, chunk->num_rows());
-
-    EXPECT_EQ("[{a:2}]", chunk->debug_row(0));
+    ASSERT_EQ(11, chunk->num_rows());
+    EXPECT_EQ("[NULL, 10, NULL]", chunk->debug_row(0));
 }
 
 } // namespace starrocks::parquet
