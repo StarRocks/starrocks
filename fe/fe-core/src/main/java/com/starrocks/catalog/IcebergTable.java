@@ -28,6 +28,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TIcebergTable;
@@ -99,7 +100,11 @@ public class IcebergTable extends Table {
 
     @Override
     public String getUUID() {
-        return String.join(".", catalogName, remoteDbName, remoteTableName, Long.toString(createTime));
+        if (CatalogMgr.isExternalCatalog(catalogName)) {
+            return String.join(".", catalogName, remoteDbName, remoteTableName, Long.toString(createTime));
+        } else {
+            return Long.toString(id);
+        }
     }
 
     public List<Column> getPartitionColumns() {
