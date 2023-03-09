@@ -28,8 +28,8 @@ PromiseStatusPtr call_function_in_pthread(RuntimeState* state, std::function<Sta
 PromiseStatusPtr call_hdfs_scan_function_in_pthread(std::function<Status()> func) {
     PromiseStatusPtr ms = std::make_unique<PromiseStatus>();
     if (bthread_self()) {
-        ExecEnv::GetInstance()->pipeline_hdfs_scan_io_thread_pool()->offer(
-                [promise = ms.get(), func]() { promise->set_value(func()); });
+        ExecEnv::GetInstance()->hdfs_scan_executor_without_workgroup()->submit(
+                workgroup::ScanTask([promise = ms.get(), func]() { promise->set_value(func()); }));
     } else {
         ms->set_value(func());
     }
