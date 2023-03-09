@@ -29,6 +29,11 @@ struct PartitionChunks {
     int32_t remain_size = 0;
 
     const size_t partition_idx;
+
+    void reset() {
+        chunks.clear();
+        select_indexes.clear();
+    }
 };
 
 // =====================
@@ -63,7 +68,12 @@ template <PhmapSeed seed>
 using FixedSize16SlicePartitionHashMap =
         phmap::flat_hash_map<SliceKey16, PartitionChunks*, FixedSizeSliceKeyHash<SliceKey16, seed>>;
 
+template <bool IsNullable, bool IsFixedLengthSlice>
 struct PartitionHashMapBase {
+    // For constexpr condition
+    static constexpr bool is_nullable = IsNullable;
+    static constexpr bool is_fixed_length_slice = IsFixedLengthSlice;
+
     const int32_t chunk_size;
     bool is_downgrade = false;
 
@@ -117,8 +127,11 @@ protected:
         }
     }
 
-    template <typename HashMap>
+    template <bool EnableDowngrade, typename HashMap>
     void check_downgrade(HashMap& hash_map) {
+        if constexpr (!EnableDowngrade) {
+            return;
+        }
         if (is_downgrade) {
             return;
         }
@@ -139,8 +152,8 @@ protected:
     //      called when coming a new key not in the hash map.
     // @partition_chunk_consumer: void(size_t partition_idx, const ChunkPtr& chunk)
     //      called for each partition with enough num rows after adding chunk to the hash map.
-    template <typename HashMap, typename KeyLoader, typename KeyAllocator, typename NewPartitionCallback,
-              typename PartitionChunkConsumer>
+    template <bool EnableDowngrade, typename HashMap, typename KeyLoader, typename KeyAllocator,
+              typename NewPartitionCallback, typename PartitionChunkConsumer>
     void append_chunk_for_one_key(HashMap& hash_map, ChunkPtr chunk, KeyLoader&& key_loader,
                                   KeyAllocator&& key_allocator, ObjectPool* obj_pool,
                                   NewPartitionCallback&& new_partition_cb,
@@ -167,8 +180,11 @@ protected:
                 return ctor(key_allocator(key), part_chunks);
             });
             if (is_new_partition) {
-                check_downgrade(hash_map);
-                new_partition_cb(next_partition_idx++);
+                check_downgrade<EnableDowngrade>(hash_map);
+                if constexpr (!std::is_same_v<std::nullptr_t, std::decay_t<decltype(new_partition_cb)>>) {
+                    new_partition_cb(next_partition_idx);
+                }
+                next_partition_idx++;
             }
 
             auto& value = *(iter->second);
@@ -189,8 +205,10 @@ protected:
             flush(*(hash_map[key]), chunk);
         }
 
-        for (const auto& key : visited_keys) {
-            consume_full_chunks(*(hash_map[key]), std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+        if constexpr (!std::is_same_v<std::nullptr_t, std::decay_t<decltype(partition_chunk_consumer)>>) {
+            for (const auto& key : visited_keys) {
+                consume_full_chunks(*(hash_map[key]), std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+            }
         }
 
         // The first i rows has been pushed into hash_map
@@ -213,8 +231,8 @@ protected:
     //      called when coming a new key not in the hash map.
     // @partition_chunk_consumer: void(size_t partition_idx, const ChunkPtr& chunk)
     //      called for each partition with enough num rows after adding chunk to the hash map.
-    template <typename HashMap, typename KeyLoader, typename KeyAllocator, typename NewPartitionCallback,
-              typename PartitionChunkConsumer>
+    template <bool EnableDowngrade, typename HashMap, typename KeyLoader, typename KeyAllocator,
+              typename NewPartitionCallback, typename PartitionChunkConsumer>
     void append_chunk_for_one_nullable_key(HashMap& hash_map, PartitionChunks& null_key_value, ChunkPtr chunk,
                                            const NullableColumn* nullable_key_column, KeyLoader&& key_loader,
                                            KeyAllocator&& key_allocator, ObjectPool* obj_pool,
@@ -226,7 +244,9 @@ protected:
 
         if (!init_null_key_partition) {
             init_null_key_partition = true;
-            new_partition_cb(kNullKeyPartitionIdx);
+            if constexpr (!std::is_same_v<std::nullptr_t, std::decay_t<decltype(new_partition_cb)>>) {
+                new_partition_cb(kNullKeyPartitionIdx);
+            }
         }
 
         if (nullable_key_column->only_null()) {
@@ -252,7 +272,9 @@ protected:
             null_key_value.remain_size = chunk_size - null_key_value.chunks.back()->num_rows();
             total_num_rows += size;
 
-            consume_full_chunks(null_key_value, std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+            if constexpr (!std::is_same_v<std::nullptr_t, std::decay_t<decltype(partition_chunk_consumer)>>) {
+                consume_full_chunks(null_key_value, std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+            }
         } else {
             phmap::flat_hash_set<typename HashMap::key_type, typename HashMap::hasher, typename HashMap::key_equal,
                                  typename HashMap::allocator_type>
@@ -277,8 +299,11 @@ protected:
                         return ctor(key_allocator(key), obj_pool->add(new PartitionChunks(next_partition_idx)));
                     });
                     if (is_new_partition) {
-                        check_downgrade(hash_map);
-                        new_partition_cb(next_partition_idx++);
+                        check_downgrade<EnableDowngrade>(hash_map);
+                        if constexpr (!std::is_same_v<std::nullptr_t, std::decay_t<decltype(new_partition_cb)>>) {
+                            new_partition_cb(next_partition_idx);
+                        }
+                        next_partition_idx++;
                     }
                     value_ptr = iter->second;
                 }
@@ -302,10 +327,13 @@ protected:
             }
             flush(null_key_value, chunk);
 
-            for (const auto& key : visited_keys) {
-                consume_full_chunks(*(hash_map[key]), std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+            if constexpr (!std::is_same_v<std::nullptr_t, std::decay_t<decltype(partition_chunk_consumer)>>) {
+                for (const auto& key : visited_keys) {
+                    consume_full_chunks(*(hash_map[key]),
+                                        std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+                }
+                consume_full_chunks(null_key_value, std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
             }
-            consume_full_chunks(null_key_value, std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
 
             // The first i rows has been pushed into hash_map
             if (is_downgrade && i > 0) {
@@ -318,7 +346,7 @@ protected:
 };
 
 template <PrimitiveType primitive_type, typename HashMap>
-struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
+struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase<false, false> {
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using FieldType = RunTimeCppType<primitive_type>;
@@ -326,13 +354,13 @@ struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
 
     PartitionHashMapWithOneNumberKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
-    template <typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnableDowngrade, typename NewPartitionCallback, typename PartitionChunkConsumer>
     bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool,
                       NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
         DCHECK(!key_columns[0]->is_nullable());
         const auto* key_column = down_cast<ColumnType*>(key_columns[0].get());
         const auto& key_column_data = key_column->get_data();
-        append_chunk_for_one_key(
+        append_chunk_for_one_key<EnableDowngrade>(
                 hash_map, chunk, [&](uint32_t offset) { return key_column_data[offset]; },
                 [](const FieldType& key) { return key; }, obj_pool,
                 std::forward<NewPartitionCallback>(new_partition_cb),
@@ -342,7 +370,7 @@ struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
 };
 
 template <PrimitiveType primitive_type, typename HashMap>
-struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
+struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase<true, false> {
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using FieldType = RunTimeCppType<primitive_type>;
@@ -351,13 +379,13 @@ struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
 
     PartitionHashMapWithOneNullableNumberKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
-    template <typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnableDowngrade, typename NewPartitionCallback, typename PartitionChunkConsumer>
     bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool,
                       NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
         DCHECK(key_columns[0]->is_nullable());
         const auto* nullable_key_column = ColumnHelper::as_raw_column<NullableColumn>(key_columns[0].get());
         const auto& key_column_data = down_cast<ColumnType*>(nullable_key_column->data_column().get())->get_data();
-        append_chunk_for_one_nullable_key(
+        append_chunk_for_one_nullable_key<EnableDowngrade>(
                 hash_map, null_key_value, chunk, nullable_key_column,
                 [&](uint32_t offset) { return key_column_data[offset]; }, [](const FieldType& key) { return key; },
                 obj_pool, std::forward<NewPartitionCallback>(new_partition_cb),
@@ -367,18 +395,18 @@ struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
 };
 
 template <typename HashMap>
-struct PartitionHashMapWithOneStringKey : public PartitionHashMapBase {
+struct PartitionHashMapWithOneStringKey : public PartitionHashMapBase<false, false> {
     using Iterator = typename HashMap::iterator;
     HashMap hash_map;
 
     PartitionHashMapWithOneStringKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
-    template <typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnableDowngrade, typename NewPartitionCallback, typename PartitionChunkConsumer>
     bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool,
                       NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
         DCHECK(!key_columns[0]->is_nullable());
         const auto* key_column = down_cast<BinaryColumn*>(key_columns[0].get());
-        append_chunk_for_one_key(
+        append_chunk_for_one_key<EnableDowngrade>(
                 hash_map, chunk, [&](uint32_t offset) { return key_column->get_slice(offset); },
                 [&](const Slice& key) {
                     uint8_t* pos = mem_pool->allocate(key.size);
@@ -392,20 +420,20 @@ struct PartitionHashMapWithOneStringKey : public PartitionHashMapBase {
 };
 
 template <typename HashMap>
-struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase {
+struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase<true, false> {
     using Iterator = typename HashMap::iterator;
     HashMap hash_map;
     PartitionChunks null_key_value{kNullKeyPartitionIdx};
 
     PartitionHashMapWithOneNullableStringKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
-    template <typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnableDowngrade, typename NewPartitionCallback, typename PartitionChunkConsumer>
     bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool,
                       NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
         DCHECK(key_columns[0]->is_nullable());
         const auto* nullable_key_column = ColumnHelper::as_raw_column<NullableColumn>(key_columns[0].get());
         const auto* key_column = down_cast<BinaryColumn*>(nullable_key_column->data_column().get());
-        append_chunk_for_one_nullable_key(
+        append_chunk_for_one_nullable_key<EnableDowngrade>(
                 hash_map, null_key_value, chunk, nullable_key_column,
                 [&](uint32_t offset) { return key_column->get_slice(offset); },
                 [&](const Slice& key) {
@@ -420,7 +448,7 @@ struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase {
 };
 
 template <typename HashMap>
-struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase {
+struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, false> {
     using Iterator = typename HashMap::iterator;
     using KeyType = typename HashMap::key_type;
 
@@ -437,7 +465,7 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase {
               inner_mem_pool(std::make_unique<MemPool>()),
               buffer(inner_mem_pool->allocate(max_one_row_size * chunk_size)) {}
 
-    template <typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnableDowngrade, typename NewPartitionCallback, typename PartitionChunkConsumer>
     bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool,
                       NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
         if (is_downgrade) {
@@ -460,7 +488,7 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase {
             key_column->serialize_batch(buffer, slice_sizes, num_rows, max_one_row_size);
         }
 
-        append_chunk_for_one_key(
+        append_chunk_for_one_key<EnableDowngrade>(
                 hash_map, chunk,
                 [&](uint32_t offset) {
                     return Slice{buffer + offset * max_one_row_size, slice_sizes[offset]};
@@ -486,7 +514,7 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase {
 };
 
 template <typename HashMap>
-struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase {
+struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase<false, true> {
     using Iterator = typename HashMap::iterator;
     using FixedSizeSliceKey = typename HashMap::key_type;
 
@@ -505,7 +533,7 @@ struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase 
         memset(buf, 0x0, max_fixed_size * chunk_size);
     }
 
-    template <typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnableDowngrade, typename NewPartitionCallback, typename PartitionChunkConsumer>
     bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool,
                       NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
         DCHECK(fixed_byte_size != -1);
@@ -532,7 +560,7 @@ struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase 
             }
         }
 
-        append_chunk_for_one_key(
+        append_chunk_for_one_key<EnableDowngrade>(
                 hash_map, chunk, [&](uint32_t offset) { return keys[offset]; },
                 [&](const FixedSizeSliceKey& key) { return key; }, obj_pool,
                 std::forward<NewPartitionCallback>(new_partition_cb),

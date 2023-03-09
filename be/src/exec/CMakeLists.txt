@@ -56,6 +56,7 @@ set(EXEC_FILES
     vectorized/aggregate/aggregate_streaming_node.cpp
     vectorized/aggregate/distinct_streaming_node.cpp
     vectorized/partition/chunks_partitioner.cpp
+    vectorized/partition/partition_hash_variant.cpp
     vectorized/analytic_node.cpp
     vectorized/analytor.cpp
     vectorized/csv_scanner.cpp
@@ -130,6 +131,17 @@ set(EXEC_FILES
     vectorized/sorting/sort_column.cpp
     vectorized/sorting/sort_permute.cpp
     vectorized/connector_scan_node.cpp
+
+    vectorized/chunks_sorter_spillable_full_sort.cpp
+    spill/spiller_path_provider.cpp
+    spill/spiller.cpp
+    spill/query_spill_manager.cpp
+    spill/mem_table.cpp
+    spill/spilled_stream.cpp
+    spill/spiller_factory.cpp
+    pipeline/spill_process_channel.cpp
+    pipeline/spill_process_operator.cpp
+
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp
@@ -146,6 +158,8 @@ set(EXEC_FILES
     pipeline/dict_decode_operator.cpp
     pipeline/result_sink_operator.cpp
     pipeline/olap_table_sink_operator.cpp
+    pipeline/spill_process_operator.cpp
+    pipeline/spill_process_channel.cpp
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
     pipeline/scan/morsel.cpp
@@ -172,6 +186,7 @@ set(EXEC_FILES
     pipeline/nljoin/nljoin_build_operator.cpp
     pipeline/nljoin/nljoin_probe_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
+    pipeline/sort/spillable_partition_sort_sink_operator.cpp
     pipeline/sort/local_partition_topn_sink.cpp
     pipeline/sort/local_partition_topn_source.cpp
     pipeline/sort/local_partition_topn_context.cpp
@@ -213,6 +228,9 @@ set(EXEC_FILES
     pipeline/set/intersect_build_sink_operator.cpp
     pipeline/set/intersect_probe_sink_operator.cpp
     pipeline/set/intersect_output_source_operator.cpp
+    pipeline/hash_partition_context.cpp
+    pipeline/hash_partition_sink_operator.cpp
+    pipeline/hash_partition_source_operator.cpp
     pipeline/chunk_accumulate_operator.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp

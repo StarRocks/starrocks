@@ -25,7 +25,7 @@ using vectorized::SortDescs;
 class SortContext final : public ContextWithDependency {
 public:
     explicit SortContext(RuntimeState* state, const TTopNType::type topn_type, int64_t offset, int64_t limit,
-                         const int32_t num_right_sinkers, const std::vector<ExprContext*> sort_exprs,
+                         const int32_t num_right_sinkers, const std::vector<ExprContext*>& sort_exprs,
                          const SortDescs& sort_descs)
             : _state(state),
               _topn_type(topn_type),
@@ -44,6 +44,8 @@ public:
     void finish_partition(uint64_t partition_rows);
     bool is_partition_sort_finished() const;
     bool is_output_finished() const;
+    bool is_partition_ready() const;
+    void cancel();
 
     StatusOr<ChunkPtr> pull_chunk();
 
@@ -64,16 +66,18 @@ private:
     std::vector<std::shared_ptr<ChunksSorter>> _chunks_sorter_partitions; // Partial sorters
     std::vector<std::unique_ptr<vectorized::SimpleChunkSortCursor>> _partial_cursors;
     vectorized::MergeCursorsCascade _merger;
-    vectorized::ChunkSlice _current_chunk;
+    vectorized::ChunkSlice<> _current_chunk;
     int64_t _required_rows = 0;
     bool _merger_inited = false;
 };
 
 class SortContextFactory {
 public:
-    SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging, int64_t offset,
-                       int64_t limit, int32_t num_right_sinkers, std::vector<ExprContext*> sort_exprs,
-                       const std::vector<bool>& _is_asc_order, const std::vector<bool>& is_null_first);
+    SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging, size_t num_right_sinkers,
+                       std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
+                       const std::vector<bool>& is_null_first, const std::vector<TExpr>& partition_exprs,
+                       int64_t offset, int64_t limit, const std::string& sort_keys,
+                       const std::vector<OrderByType>& order_by_types);
 
     SortContextPtr create(int32_t idx);
 

@@ -80,6 +80,7 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
                 runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
                 _sort_keys, _max_buffered_rows, _max_buffered_bytes, _early_materialized_slots);
     }
+
     auto sort_context = _sort_context_factory->create(driver_sequence);
 
     sort_context->add_partition_chunks_sorter(chunks_sorter);

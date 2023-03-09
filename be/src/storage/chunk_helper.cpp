@@ -2,6 +2,8 @@
 
 #include "storage/chunk_helper.h"
 
+#include <memory>
+
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -378,12 +380,12 @@ vectorized::ChunkPtr ChunkHelper::new_chunk(const vectorized::Schema& schema, si
     return std::make_shared<vectorized::Chunk>(std::move(columns), std::make_shared<vectorized::Schema>(schema));
 }
 
-std::shared_ptr<vectorized::Chunk> ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
+vectorized::ChunkUniquePtr ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
     return new_chunk(tuple_desc.slots(), n);
 }
 
-std::shared_ptr<vectorized::Chunk> ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    auto chunk = std::make_shared<vectorized::Chunk>();
+vectorized::ChunkUniquePtr ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
+    auto chunk = std::make_unique<vectorized::Chunk>();
     for (const auto slot : slots) {
         auto column = vectorized::ColumnHelper::create_column(slot->type(), slot->is_nullable());
         column->reserve(n);

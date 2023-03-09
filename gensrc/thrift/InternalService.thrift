@@ -97,6 +97,11 @@ enum TPipelineProfileLevel {
   DETAIL
 }
 
+enum TSpillMode {
+  AUTO,
+  FORCE
+}
+
 enum TTabletInternalParallelMode {
   AUTO,
   FORCE_SPLIT
@@ -199,6 +204,13 @@ struct TQueryOptions {
   68: optional i32 transmission_encode_level;
   
   69: optional bool enable_populate_block_cache;
+
+  70: optional i32 spill_mem_table_size;
+  71: optional i32 spill_mem_table_num;
+  72: optional double spill_mem_limit_threshold;
+  73: optional i64 spill_operator_min_bytes;
+  74: optional TSpillMode spill_mode;
+ 
 }
 
 

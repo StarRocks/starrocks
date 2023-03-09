@@ -411,19 +411,23 @@ ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& 
     return res;
 }
 
-bool ChunkSlice::empty() const {
+template <class Ptr>
+bool ChunkSlice<Ptr>::empty() const {
     return !chunk || offset == chunk->num_rows();
 }
 
-size_t ChunkSlice::rows() const {
+template <class Ptr>
+size_t ChunkSlice<Ptr>::rows() const {
     return chunk->num_rows() - offset;
 }
 
-void ChunkSlice::reset(vectorized::ChunkUniquePtr input) {
+template <class Ptr>
+void ChunkSlice<Ptr>::reset(Ptr input) {
     chunk = std::move(input);
 }
 
-size_t ChunkSlice::skip(size_t skip_rows) {
+template <class Ptr>
+size_t ChunkSlice<Ptr>::skip(size_t skip_rows) {
     size_t real_skipped = std::min(rows(), skip_rows);
     offset += real_skipped;
     if (empty()) {
@@ -435,7 +439,8 @@ size_t ChunkSlice::skip(size_t skip_rows) {
 }
 
 // Cutoff required rows from this chunk
-vectorized::ChunkPtr ChunkSlice::cutoff(size_t required_rows) {
+template <class Ptr>
+Ptr ChunkSlice<Ptr>::cutoff(size_t required_rows) {
     DCHECK(!empty());
     size_t cut_rows = std::min(rows(), required_rows);
     auto res = chunk->clone_empty(cut_rows);
@@ -447,4 +452,7 @@ vectorized::ChunkPtr ChunkSlice::cutoff(size_t required_rows) {
     }
     return res;
 }
+
+template struct ChunkSlice<vectorized::ChunkPtr>;
+template struct ChunkSlice<vectorized::ChunkUniquePtr>;
 } // namespace starrocks::vectorized

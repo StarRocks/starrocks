@@ -47,7 +47,8 @@ public:
 
     void setup_runtime(starrocks::RuntimeProfile* profile, MemTracker* parent_mem_tracker) override;
 
-private:
+protected:
+    Status _init(RuntimeState* state);
     // Three stages of sorting procedure:
     // 1. Accumulate input chunks into a big chunk(but not exceed the kMaxBufferedChunkSize), to reduce the memory copy during merge
     // 2. Sort the accumulated big chunk partially
