@@ -32,12 +32,15 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -714,5 +717,94 @@ public class MvUtils {
         }
         return partitionPredicates.isEmpty() ?
                 ConstantOperator.createBoolean(true) : Utils.compoundAnd(partitionPredicates);
+    }
+
+    // try to get partial partition predicates of partitioned mv.
+    // eg, mv1's base partition table is t1, partition column is k1 and has two partition:
+    // p1:[2022-01-01, 2022-01-02), p1 is updated(refreshed),
+    // p2:[2022-01-02, 2022-01-03), p2 is outdated,
+    // then this function will return predicate:
+    // k1 >= "2022-01-01" and k1 < "2022-01-02"
+    public static ScalarOperator getMvPartialPartitionPredicates(MaterializedView mv,
+                                                                 OptExpression mvPlan,
+                                                                 Set<String> mvPartitionNamesToRefresh) {
+        Pair<Table, Column> partitionTableAndColumns = mv.getPartitionTableAndColumn();
+        if (partitionTableAndColumns == null) {
+            return null;
+        }
+
+        Table partitionByTable = partitionTableAndColumns.first;
+        List<Range<PartitionKey>> latestBaseTableRanges =
+                getLatestPartitionRangeForTable(partitionByTable, partitionTableAndColumns.second,
+                        mv, mvPartitionNamesToRefresh);
+        if (latestBaseTableRanges.isEmpty()) {
+            // if there isn't an updated partition, do not rewrite
+            return null;
+        }
+
+        Column partitionColumn = partitionTableAndColumns.second;
+        List<OptExpression> scanExprs = MvUtils.collectScanExprs(mvPlan);
+        for (OptExpression scanExpr : scanExprs) {
+            LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
+            Table scanTable = scanOperator.getTable();
+            if ((scanTable.isNativeTable() && !scanTable.equals(partitionTableAndColumns.first))
+                    || (!scanTable.isNativeTable()) && !scanTable.getTableIdentifier().equals(
+                    partitionTableAndColumns.first.getTableIdentifier())) {
+                continue;
+            }
+            ColumnRefOperator columnRef = scanOperator.getColumnReference(partitionColumn);
+            List<ScalarOperator> partitionPredicates = MvUtils.convertRanges(columnRef, latestBaseTableRanges);
+            ScalarOperator partialPartitionPredicate = Utils.compoundOr(partitionPredicates);
+            return partialPartitionPredicate;
+        }
+        return null;
+    }
+
+    private static List<Range<PartitionKey>> getLatestPartitionRangeForTable(Table partitionByTable,
+                                                                      Column partitionColumn,
+                                                                      MaterializedView mv,
+                                                                      Set<String> mvPartitionNamesToRefresh) {
+        Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
+        List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
+                modifiedPartitionNames);
+        List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
+        List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();
+        for (Range<PartitionKey> range : baseTableRanges) {
+            if (mvRanges.stream().anyMatch(mvRange -> mvRange.encloses(range))) {
+                latestBaseTableRanges.add(range);
+            }
+        }
+        latestBaseTableRanges = MvUtils.mergeRanges(latestBaseTableRanges);
+        return latestBaseTableRanges;
+    }
+
+    private static List<Range<PartitionKey>> getLatestPartitionRangeForNativeTable(OlapTable partitionTable,
+                                                                            Set<String> modifiedPartitionNames) {
+        // partitions that will be excluded
+        Set<Long> filteredIds = Sets.newHashSet();
+        for (Partition p : partitionTable.getPartitions()) {
+            if (modifiedPartitionNames.contains(p.getName()) || !p.hasData()) {
+                filteredIds.add(p.getId());
+            }
+        }
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionTable.getPartitionInfo();
+        return rangePartitionInfo.getRangeList(filteredIds, false);
+    }
+
+    private static List<Range<PartitionKey>> getLatestPartitionRange(Table table, Column partitionColumn,
+                                                              Set<String> modifiedPartitionNames) {
+        if (table.isNativeTable()) {
+            return getLatestPartitionRangeForNativeTable((OlapTable) table, modifiedPartitionNames);
+        } else {
+            Map<String, Range<PartitionKey>> partitionMap;
+            try {
+                partitionMap = PartitionUtil.getPartitionRange(table, partitionColumn);
+            } catch (UserException e) {
+                LOG.warn("Materialized view Optimizer compute partition range failed.", e);
+                return Lists.newArrayList();
+            }
+            return partitionMap.entrySet().stream().filter(entry -> !modifiedPartitionNames.contains(entry.getKey())).
+                    map(Map.Entry::getValue).collect(Collectors.toList());
+        }
     }
 }

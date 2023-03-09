@@ -25,7 +25,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.optimizer.MaterializationContext;
+import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -71,8 +71,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             .add(FunctionSet.APPROX_COUNT_DISTINCT)
             .build();
 
-    public AggregatedMaterializedViewRewriter(MaterializationContext materializationContext) {
-        super(materializationContext);
+    public AggregatedMaterializedViewRewriter(MvRewriteContext mvRewriteContext) {
+        super(mvRewriteContext);
     }
 
     @Override
