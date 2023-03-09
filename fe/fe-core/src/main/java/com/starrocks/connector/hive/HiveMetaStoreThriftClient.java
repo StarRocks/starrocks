@@ -34,6 +34,7 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.common.ValidWriteIdList;
@@ -45,6 +46,8 @@ import org.apache.hadoop.hive.metastore.api.AggrStats;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.Catalog;
 import org.apache.hadoop.hive.metastore.api.CheckConstraintsRequest;
+import org.apache.hadoop.hive.metastore.api.ClientCapabilities;
+import org.apache.hadoop.hive.metastore.api.ClientCapability;
 import org.apache.hadoop.hive.metastore.api.CmRecycleRequest;
 import org.apache.hadoop.hive.metastore.api.CmRecycleResponse;
 import org.apache.hadoop.hive.metastore.api.ColumnStatistics;
@@ -71,6 +74,7 @@ import org.apache.hadoop.hive.metastore.api.GetPrincipalsInRoleRequest;
 import org.apache.hadoop.hive.metastore.api.GetPrincipalsInRoleResponse;
 import org.apache.hadoop.hive.metastore.api.GetRoleGrantsForPrincipalRequest;
 import org.apache.hadoop.hive.metastore.api.GetRoleGrantsForPrincipalResponse;
+import org.apache.hadoop.hive.metastore.api.GetTableRequest;
 import org.apache.hadoop.hive.metastore.api.HeartbeatTxnRangeResponse;
 import org.apache.hadoop.hive.metastore.api.HiveObjectPrivilege;
 import org.apache.hadoop.hive.metastore.api.HiveObjectRef;
@@ -190,7 +194,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     ThriftHiveMetastore.Iface client = null;
     private TTransport transport = null;
     private boolean isConnected = false;
-    private URI metastoreUris[];
+    private URI[] metastoreUris;
     protected final Configuration conf;
     // Keep a copy of HiveConf so if Session conf changes, we may need to get a new HMS client.
     private String tokenStrForm;
@@ -204,6 +208,21 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     // for thrift connects
     private int retries = 5;
     private long retryDelaySeconds = 0;
+
+    /**
+     * Capabilities of the current client. If this client talks to a MetaStore server in a manner
+     * implying the usage of some expanded features that require client-side support that this client
+     * doesn't have (e.g. a getting a table of a new type), it will get back failures when the
+     * capability checking is enabled (the default).
+     */
+    public final static ClientCapabilities VERSION = new ClientCapabilities(
+            Lists.newArrayList(ClientCapability.INSERT_ONLY_TABLES));
+
+    // Test capability for tests.
+    public final static ClientCapabilities TEST_VERSION = new ClientCapabilities(
+            Lists.newArrayList(ClientCapability.INSERT_ONLY_TABLES, ClientCapability.TEST_CAPABILITY));
+
+    private final ClientCapabilities version;
 
     public HiveMetaStoreThriftClient(Configuration conf) throws MetaException {
         this(conf, null, true);
@@ -222,6 +241,9 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
         } else {
             this.conf = new Configuration(conf);
         }
+
+        version = MetastoreConf.getBoolVar(conf, ConfVars.HIVE_IN_TEST) ? TEST_VERSION : VERSION;
+
         uriResolverHook = loadUriResolverHook();
 
         String msUri = MetastoreConf.getVar(conf, ConfVars.THRIFT_URIS);
@@ -596,7 +618,16 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
 
     @Override
     public Table getTable(String catName, String dbName, String tableName) throws MetaException, TException {
-        return client.get_table(dbName, tableName);
+        try {
+            // Using get_table() first, if user's Hive forbidden this request,
+            // then fail over to use get_table_req() instead.
+            return client.get_table(dbName, tableName);
+        } catch (Exception e) {
+            LOG.warn("Using get_table() failed, fail over to use get_table_req()", e);
+            GetTableRequest req = new GetTableRequest(dbName, tableName);
+            req.setCapabilities(version);
+            return client.get_table_req(req).getTable();
+        }
     }
 
     @Override
