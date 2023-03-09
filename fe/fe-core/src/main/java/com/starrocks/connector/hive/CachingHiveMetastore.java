@@ -25,6 +25,11 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+import java.util.Set;
+>>>>>>> 133bb4e0c ([Enhancement] Support periodic refresh external catalog table (#18962))
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
@@ -158,6 +163,10 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     public List<String> getAllTableNames(String dbName) {
         return get(tableNamesCache, dbName);
+    }
+
+    public Set<HiveTableName> getCachedTableNames() {
+        return partitionKeysCache.asMap().keySet();
     }
 
     private List<String> loadAllTableNames(String dbName) {
