@@ -21,6 +21,7 @@ import com.starrocks.catalog.ComplexTypeAccessGroup;
 import com.starrocks.catalog.ComplexTypeAccessPath;
 import com.starrocks.catalog.ComplexTypeAccessPathType;
 import com.starrocks.catalog.ComplexTypeAccessPaths;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
@@ -253,9 +254,9 @@ public class PruneComplexTypeUtil {
 
         @Override
         public Void visitCall(CallOperator call, Context context) {
-            if (call.getFnName().equalsIgnoreCase("map_keys") || call.getFnName().equalsIgnoreCase("map_size")) {
+            if (call.getFnName().equals(FunctionSet.MAP_KEYS) || call.getFnName().equals(FunctionSet.MAP_SIZE)) {
                 complexTypeAccessPaths.push(new ComplexTypeAccessPath(ComplexTypeAccessPathType.MAP_KEY));
-            } else if (call.getFnName().equalsIgnoreCase("map_values")) {
+            } else if (call.getFnName().equals(FunctionSet.MAP_VALUES)) {
                 complexTypeAccessPaths.push(new ComplexTypeAccessPath(ComplexTypeAccessPathType.MAP_VALUE));
             }
 
@@ -263,8 +264,8 @@ public class PruneComplexTypeUtil {
                 child.accept(this, context);
             }
 
-            if (call.getFnName().equalsIgnoreCase("map_keys") || call.getFnName().equalsIgnoreCase("map_size") ||
-                    call.getFnName().equalsIgnoreCase("map_values")) {
+            if (call.getFnName().equals(FunctionSet.MAP_KEYS) || call.getFnName().equals(FunctionSet.MAP_SIZE) ||
+                    call.getFnName().equals(FunctionSet.MAP_VALUES)) {
                 complexTypeAccessPaths.pop();
             }
 
