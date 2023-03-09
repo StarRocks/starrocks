@@ -36,6 +36,8 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -355,7 +357,24 @@ public class AnalyzerUtils {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             Table table = node.getTable();
-            tables.put(node.getName(), table);
+            if (table == null) {
+                tables.put(node.getName(), null);
+                return null;
+            }
+            // For external tables, their db/table names are case-insensitive, need to get real names of them.
+            if (table.isHiveTable() || table.isHudiTable()) {
+                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+                TableName tableName = new TableName(hiveMetaStoreTable.getCatalogName(), hiveMetaStoreTable.getDbName(),
+                        hiveMetaStoreTable.getTableName());
+                tables.put(tableName, table);
+            } else if (table.isIcebergTable()) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                TableName tableName = new TableName(icebergTable.getCatalogName(), icebergTable.getRemoteDbName(),
+                        icebergTable.getRemoteTableName());
+                tables.put(tableName, table);
+            } else {
+                tables.put(node.getName(), table);
+            }
             return null;
         }
     }
@@ -488,7 +507,8 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            tableRelations.put(node.getName().getTbl(), node);
+            String tblName = node.getTable() != null ? node.getTable().getName() : node.getName().getTbl();
+            tableRelations.put(tblName, node);
             return null;
         }
     }
