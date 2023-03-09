@@ -515,7 +515,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public Set<String> getUpdatedPartitionNamesOfTable(Table base, boolean withMv) {
-        if (base.isLocalTable()) {
+        if (base.isNativeTable()) {
             Set<String> result = Sets.newHashSet();
             OlapTable baseTable = (OlapTable) base;
             result.addAll(getUpdatedPartitionNamesOfOlapTable(baseTable));
