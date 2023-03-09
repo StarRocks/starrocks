@@ -15,8 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableList;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -24,7 +22,6 @@ import org.junit.Test;
 import java.util.List;
 
 public class MaterializedViewTest extends MaterializedViewTestBase {
-    private static final Logger LOG = LogManager.getLogger(MaterializedViewTest.class);
     private static final String MATERIALIZED_DB_NAME = "test_mv";
     private static final List<String> outerJoinTypes = ImmutableList.of("left", "right");
 
