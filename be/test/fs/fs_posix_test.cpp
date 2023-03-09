@@ -199,4 +199,32 @@ TEST_F(PosixFileSystemTest, create_dir_recursive) {
     ASSERT_TRUE(FileSystem::Default()->path_exists(dir_path).is_not_found());
 }
 
+TEST_F(PosixFileSystemTest, iterate_dir2) {
+    auto fs = FileSystem::Default();
+    auto now = ::time(nullptr);
+    ASSERT_OK(fs->create_dir_recursive("./ut_dir/fs_posix/iterate_dir2.d"));
+    ASSIGN_OR_ABORT(auto f, fs->new_writable_file("./ut_dir/fs_posix/iterate_dir2"));
+    ASSERT_OK(f->append("test"));
+    ASSERT_OK(f->close());
+
+    ASSERT_OK(fs->iterate_dir2("./ut_dir/fs_posix/", [&](std::string_view name, const FileMeta& meta) -> bool {
+        if (name == "iterate_dir2.d") {
+            CHECK(meta.has_is_dir());
+            CHECK(meta.is_dir());
+            CHECK(meta.has_modify_time());
+            CHECK_GE(meta.modify_time(), now);
+        } else if (name == "iterate_dir2") {
+            CHECK(meta.has_is_dir());
+            CHECK(!meta.is_dir());
+            CHECK(meta.has_size());
+            CHECK_EQ(4, meta.size());
+            CHECK(meta.has_modify_time());
+            CHECK_GE(meta.modify_time(), now);
+        } else {
+            CHECK(false) << "Unexpected file " << name;
+        }
+        return true;
+    }));
+}
+
 } // namespace starrocks

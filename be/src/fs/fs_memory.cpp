@@ -182,6 +182,41 @@ public:
         return Status::OK();
     }
 
+    Status iterate_dir2(const butil::FilePath& path, const std::function<bool(std::string_view, const FileMeta&)>& cb) {
+        auto inode = get_inode(path);
+        if (inode == nullptr || inode->type != kDir) {
+            return Status::NotFound(path.value());
+        }
+        DCHECK(path.value().back() != '/' || path.value() == "/");
+        std::string s = (path.value() == "/") ? path.value() : path.value() + "/";
+        for (auto iter = _namespace.lower_bound(s); iter != _namespace.end(); ++iter) {
+            Slice child(iter->first);
+            if (!child.starts_with(s)) {
+                break;
+            }
+            FileMeta meta;
+            ASSIGN_OR_RETURN(bool is_dir, is_directory(butil::FilePath(child.to_string())));
+            meta.set_is_dir(is_dir);
+            if (!is_dir) {
+                ASSIGN_OR_RETURN(int64_t size, get_file_size(butil::FilePath(child.to_string())));
+                meta.set_size(size);
+            }
+            // Get the relative path.
+            child.remove_prefix(s.size());
+            if (child.empty()) {
+                continue;
+            }
+            auto slash = (const char*)memchr(child.data, '/', child.size);
+            if (slash != nullptr) {
+                continue;
+            }
+            if (!cb(child.data, meta)) {
+                break;
+            }
+        }
+        return Status::OK();
+    }
+
     Status delete_file(const butil::FilePath& path) {
         auto iter = _namespace.find(path.value());
         if (iter == _namespace.end() || iter->second->type != kNormal) {
@@ -418,6 +453,13 @@ Status MemoryFileSystem::iterate_dir(const std::string& dir, const std::function
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(dir, &new_path));
     return _impl->iterate_dir(butil::FilePath(new_path), cb);
+}
+
+Status MemoryFileSystem::iterate_dir2(const std::string& dir,
+                                      const std::function<bool(std::string_view, const FileMeta&)>& cb) {
+    std::string new_path;
+    RETURN_IF_ERROR(canonicalize(dir, &new_path));
+    return _impl->iterate_dir2(butil::FilePath(new_path), cb);
 }
 
 Status MemoryFileSystem::delete_file(const std::string& path) {
