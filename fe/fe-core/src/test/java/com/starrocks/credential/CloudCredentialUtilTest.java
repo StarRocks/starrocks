@@ -15,59 +15,82 @@
 package com.starrocks.credential;
 
 import com.starrocks.credential.azure.AzureStoragePath;
-import com.starrocks.credential.azure.AzureStoragePathUtil;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class AzureStoragePathUtilTest {
+import java.util.HashMap;
+import java.util.Map;
+
+public class CloudCredentialUtilTest {
+    @Test
+    public void testMaskCloudCredential() {
+        Map<String, String> properties = new HashMap<>();
+        String key = CloudConfigurationConstants.AWS_S3_SECRET_KEY;
+
+        properties.put(key, "");
+        CloudCredentialUtil.maskCloudCredential(properties);
+        Assert.assertEquals("******", properties.get(key));
+
+        properties.put(key, "he");
+        CloudCredentialUtil.maskCloudCredential(properties);
+        Assert.assertEquals("******", properties.get(key));
+
+        properties.put(key, "hehe");
+        CloudCredentialUtil.maskCloudCredential(properties);
+        Assert.assertEquals("******", properties.get(key));
+
+        properties.put(key, "heheh");
+        CloudCredentialUtil.maskCloudCredential(properties);
+        Assert.assertEquals("he******eh", properties.get(key));
+    }
 
     @Test
-    public void testWithABFS() {
+    public void testAzurePathParseWithABFS() {
         String uri = "abfs://bottle@smith.dfs.core.windows.net/path/1/2";
-        AzureStoragePath path = AzureStoragePathUtil.parseStoragePath(uri);
+        AzureStoragePath path = CloudCredentialUtil.parseAzureStoragePath(uri);
         Assert.assertEquals(path.getContainer(), "bottle");
         Assert.assertEquals(path.getStorageAccount(), "smith");
 
         uri = "abfss://bottle@smith.dfs.core.windows.net/path/1/2";
-        path = AzureStoragePathUtil.parseStoragePath(uri);
+        path = CloudCredentialUtil.parseAzureStoragePath(uri);
         Assert.assertEquals("bottle", path.getContainer());
         Assert.assertEquals("smith", path.getStorageAccount());
 
         uri = "abfs://a@.dfs.core.windows.net/path/1/2";
-        path = AzureStoragePathUtil.parseStoragePath(uri);
+        path = CloudCredentialUtil.parseAzureStoragePath(uri);
         Assert.assertEquals("", path.getContainer());
         Assert.assertEquals("", path.getStorageAccount());
 
         uri = "abfs://a@p/path/1/2";
-        path = AzureStoragePathUtil.parseStoragePath(uri);
+        path = CloudCredentialUtil.parseAzureStoragePath(uri);
         Assert.assertEquals("", path.getContainer());
         Assert.assertEquals("", path.getStorageAccount());
 
         uri = "";
-        path = AzureStoragePathUtil.parseStoragePath(uri);
+        path = CloudCredentialUtil.parseAzureStoragePath(uri);
         Assert.assertEquals("", path.getContainer());
         Assert.assertEquals("", path.getStorageAccount());
     }
 
     @Test
-    public void testWithWASB() {
+    public void testAzurePathParseWithWASB() {
         String uri = "wasb://bottle@smith.blob.core.windows.net/path/1/2";
-        AzureStoragePath path = AzureStoragePathUtil.parseStoragePath(uri);
+        AzureStoragePath path = CloudCredentialUtil.parseAzureStoragePath(uri);
         Assert.assertEquals(path.getContainer(), "bottle");
         Assert.assertEquals(path.getStorageAccount(), "smith");
 
         uri = "wasbs://bottle@smith.blob.core.windows.net/path/1/2";
-        path = AzureStoragePathUtil.parseStoragePath(uri);
+        path = CloudCredentialUtil.parseAzureStoragePath(uri);
         Assert.assertEquals("bottle", path.getContainer());
         Assert.assertEquals("smith", path.getStorageAccount());
 
         uri = "wasb://a@.blob.core.windows.net/path/1/2";
-        path = AzureStoragePathUtil.parseStoragePath(uri);
+        path = CloudCredentialUtil.parseAzureStoragePath(uri);
         Assert.assertEquals("", path.getContainer());
         Assert.assertEquals("", path.getStorageAccount());
 
         uri = "wasb://a@p/path/1/2";
-        path = AzureStoragePathUtil.parseStoragePath(uri);
+        path = CloudCredentialUtil.parseAzureStoragePath(uri);
         Assert.assertEquals("", path.getContainer());
         Assert.assertEquals("", path.getStorageAccount());
     }

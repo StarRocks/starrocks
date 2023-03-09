@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudCredentialUtil;
 
 import java.util.Map;
 
@@ -89,6 +90,6 @@ public class AzureCloudConfigurationFactory extends CloudConfigurationFactory {
         if (path == null) {
             return new AzureStoragePath("", "");
         }
-        return AzureStoragePathUtil.parseStoragePath(path);
+        return CloudCredentialUtil.parseAzureStoragePath(path);
     }
 }
