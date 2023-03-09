@@ -11,9 +11,13 @@ Iceberg Catalog 是一种 External Catalog。通过 Iceberg Catalog，您不需�
 
 ## 使用说明
 
-- StarRocks 查询 Iceberg 数据时，支持 Parquet、ORC 和 CSV 三种文件格式。
-- StarRocks 查询 Iceberg 数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 CSV 格式的 Iceberg 表，StarRocks 不支持 MAP 数据类型。
-- Iceberg Catalog 仅支持查询 Iceberg 数据，不支持针对 Iceberg 的写/删操作。
+- StarRocks 查询 Iceberg 数据时，支持 Parquet 和 ORC 文件格式，其中：
+
+  - Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
+  - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
+
+- StarRocks 查询 Iceberg 数据时，不支持 MAP 和 STRUCT 数据类型。
+- Iceberg Catalog 不支持查询 Iceberg v2 表数据。
 
 ## 准备工作
 

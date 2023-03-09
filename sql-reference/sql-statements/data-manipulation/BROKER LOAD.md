@@ -191,7 +191,7 @@ INTO TABLE <table_name>
 
    > **说明**
    >
-   > **/etc/krb5.conf** 文件路径根据实际情况进行修改，Broker 需要有权限读取该文件。部署多个 Broker时，每个 Broker 均需要修改如下信息，重启后生效。
+   > **/etc/krb5.conf** 文件路径根据实际情况进行修改，Broker 需要有权限读取该文件。部署多个 Broker 时，每个 Broker 均需要修改如上信息，然后重启各 Broker 所在的节点使配置生效。
 
 - HA 配置
 
