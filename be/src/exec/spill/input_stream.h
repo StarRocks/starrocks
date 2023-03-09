@@ -52,11 +52,11 @@ protected:
     std::vector<BlockPtr> _input_blocks;
 };
 
-typedef std::shared_ptr<InputStream> InputStreamPtr;
+using InputStreamPtr = std::shared_ptr<InputStream>;
 
 class BlockGroup {
 public:
-    BlockGroup(Formatter* formatter) : _formatter(formatter) {}
+    BlockGroup(FormatterPtr formatter) : _formatter(std::move(formatter)) {}
 
     void append(BlockPtr block) { _blocks.emplace_back(std::move(block)); }
 
@@ -66,7 +66,7 @@ public:
                                                const SortDescs* sort_descs);
 
 private:
-    Formatter* _formatter;
+    FormatterPtr _formatter;
     std::vector<BlockPtr> _blocks;
 };
 

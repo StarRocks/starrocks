@@ -60,7 +60,7 @@ Status Spiller::prepare(RuntimeState* state) {
     }
 
     ASSIGN_OR_RETURN(_formatter, spill::create_formatter(&_opts));
-    _block_group = std::make_shared<spill::BlockGroup>(_formatter.get());
+    _block_group = std::make_shared<spill::BlockGroup>(_formatter);
 #ifndef BE_TEST
     _block_manager = state->query_ctx()->spill_block_manager();
 #endif

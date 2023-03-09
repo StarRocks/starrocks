@@ -160,7 +160,6 @@ public:
         return _decrease_running_flush_tasks();
     }
 
-    // bool has_output_data() { return _current_stream && _current_stream->is_ready(); }
     bool has_output_data() { return _input_stream && _input_stream->is_ready(); }
     size_t spilled_append_rows() { return _spilled_append_rows; }
 
@@ -177,9 +176,8 @@ public:
             _mem_table_pool.push(std::move(_mem_table));
         }
     }
-#ifdef BE_TEST
+    // only used in UT
     void set_block_manager(spill::BlockManager* block_manager) { _block_manager = block_manager; }
-#endif
 
 private:
     // open stage

@@ -97,8 +97,8 @@ Status BufferedInputStream::prefetch(FormatterContext& ctx) {
 
 class UnorderedInputStream : public InputStream {
 public:
-    UnorderedInputStream(const std::vector<BlockPtr>& input_blocks, Formatter* formatter)
-            : InputStream(input_blocks), _formatter(formatter) {}
+    UnorderedInputStream(const std::vector<BlockPtr>& input_blocks, FormatterPtr formatter)
+            : InputStream(input_blocks), _formatter(std::move(formatter)) {}
 
     ~UnorderedInputStream() = default;
 
@@ -110,7 +110,7 @@ public:
 
 private:
     size_t _current_idx = 0;
-    Formatter* _formatter;
+    FormatterPtr _formatter;
 };
 
 StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(FormatterContext& ctx) {
@@ -145,7 +145,7 @@ public:
 
     ~OrderedInputStream() = default;
 
-    Status init(Formatter* formatter, const SortExecExprs* sort_exprs, const SortDescs* descs);
+    Status init(FormatterPtr formatter, const SortExecExprs* sort_exprs, const SortDescs* descs);
 
     StatusOr<ChunkUniquePtr> get_next(FormatterContext& ctx) override;
     bool is_ready() override { return _merger.is_data_ready(); }
@@ -162,7 +162,7 @@ private:
     Status _status;
 };
 
-Status OrderedInputStream::init(Formatter* formatter, const SortExecExprs* sort_exprs, const SortDescs* descs) {
+Status OrderedInputStream::init(FormatterPtr formatter, const SortExecExprs* sort_exprs, const SortDescs* descs) {
     std::vector<starrocks::ChunkProvider> chunk_providers;
     for (auto& block : _input_blocks) {
         std::vector<BlockPtr> blocks{block};
