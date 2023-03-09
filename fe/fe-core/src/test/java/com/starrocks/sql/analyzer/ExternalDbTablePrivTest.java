@@ -246,4 +246,13 @@ public class ExternalDbTablePrivTest {
         Assert.assertTrue(executor.execute().getResultRows().isEmpty());
     }
 
+    @Test
+    public void testPrivOnExternalCatalog() throws Exception {
+        // set catalog xxx: check any action on or in catalog
+        verifyGrantRevoke(
+                "set catalog hive0",
+                "grant select on tpch.region to test",
+                "revoke select on tpch.region from test",
+                "Access denied for user 'test' to catalog 'hive0'");
+    }
 }
