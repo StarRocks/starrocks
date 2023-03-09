@@ -40,6 +40,8 @@ import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -47,7 +49,10 @@ import java.io.InputStream;
 import java.nio.file.Paths;
 import java.security.SecureRandom;
 
+import static com.starrocks.connector.iceberg.io.IcebergCachingFileIO.METADATA_CACHE_DISK_PATH;
+
 public class IOUtil {
+    private static final Logger LOG = LogManager.getLogger(IOUtil.class);
     public static final String FILE_PREFIX = "file://";
     public static final String FILE_SIMPLIFIED_PREFIX = "file:/";
     public static final String EMPTY_STRING = "";
@@ -135,5 +140,15 @@ public class IOUtil {
         String prefix = remotePath.toUri().getScheme();
         String newPath = path.substring(path.indexOf("/"));
         return Paths.get(FILE_PREFIX + localDir, prefix, newPath).toString();
+    }
+
+    public static void deleteLocalFileWithRemotePath(String key) {
+        HadoopOutputFile hadoopOutputFile = (HadoopOutputFile) IOUtil.getOutputFile(
+                METADATA_CACHE_DISK_PATH, key);
+        try {
+            hadoopOutputFile.getFileSystem().delete(hadoopOutputFile.getPath(), false);
+        } catch (Exception e) {
+            LOG.warn("failed on deleting file: {}. msg: {}", hadoopOutputFile.getPath(), e);
+        }
     }
 }
