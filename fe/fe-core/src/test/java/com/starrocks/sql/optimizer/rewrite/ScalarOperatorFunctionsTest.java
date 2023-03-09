@@ -332,6 +332,22 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void to_date() {
+        LocalDateTime dateTime = LocalDateTime.of(LocalDate.of(2013,05,17), LocalTime.of(0, 0, 0));
+        assertEquals(dateTime, ScalarOperatorFunctions
+                .toDate(ConstantOperator.createDatetime(LocalDateTime.of(2013,05,17,12,35,10))).getDatetime());
+
+        assertEquals(dateTime, ScalarOperatorFunctions
+                .toDate(ConstantOperator.createDatetime(LocalDateTime.of(2013,05,17,12,35,10, 123))).getDatetime());
+
+        assertEquals(dateTime, ScalarOperatorFunctions
+                .toDate(ConstantOperator.createDatetime(LocalDateTime.of(2013,5,17,12,35,10))).getDatetime());
+
+        assertEquals(dateTime, ScalarOperatorFunctions
+                .toDate(ConstantOperator.createDatetime(LocalDateTime.of(2013,05,17,12,35,10, 00001))).getDatetime());
+    }
+
+    @Test
     public void dateParse() {
         assertEquals("2013-05-10T00:00", ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013,05,10"), ConstantOperator.createVarchar("%Y,%m,%d"))
