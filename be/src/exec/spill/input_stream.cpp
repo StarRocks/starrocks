@@ -28,7 +28,7 @@ public:
     BufferedInputStream(int capacity, InputStreamPtr stream) : _capacity(capacity), _input_stream(stream) {}
     ~BufferedInputStream() override = default;
 
-    bool is_buffer_full() { return _chunk_buffer.get_size() == _capacity || eof(); }
+    bool is_buffer_full() { return _chunk_buffer.get_size() >= _capacity || eof(); }
     bool has_chunk() { return !_chunk_buffer.empty() || eof(); }
 
     StatusOr<ChunkUniquePtr> get_next(FormatterContext& ctx) override;
