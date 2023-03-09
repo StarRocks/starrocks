@@ -25,6 +25,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
@@ -158,6 +159,10 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     public List<String> getAllTableNames(String dbName) {
         return get(tableNamesCache, dbName);
+    }
+
+    public Set<HiveTableName> getCachedTableNames() {
+        return partitionKeysCache.asMap().keySet();
     }
 
     private List<String> loadAllTableNames(String dbName) {
