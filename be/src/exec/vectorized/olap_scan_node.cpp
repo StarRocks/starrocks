@@ -42,6 +42,12 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _unused_output_columns.emplace_back(col_name);
     }
 
+    if (_olap_scan_node.__isset.max_parallel_scan_instance_num && _olap_scan_node.max_parallel_scan_instance_num >= 1) {
+        // The parallel scan num will be restricted by the config::io_tasks_per_scan_operator.
+        _io_tasks_per_scan_operator =
+                std::min(_olap_scan_node.max_parallel_scan_instance_num, config::io_tasks_per_scan_operator);
+    }
+
     return Status::OK();
 }
 
@@ -616,9 +622,14 @@ size_t OlapScanNode::_scanner_concurrency() {
     DCHECK_GT(chunk_mem_usage, 0);
     // limit scan memory usage not greater than 1/4 query limit
     int concurrency = std::max<int>(query_limit * config::scan_use_query_mem_ratio / chunk_mem_usage, 1);
+
     // limit concurrency not greater than scanner numbers
     concurrency = std::min<int>(concurrency, _num_scanners);
     concurrency = std::min<int>(concurrency, kMaxConcurrency);
+
+    if (_olap_scan_node.__isset.max_parallel_scan_instance_num && _olap_scan_node.max_parallel_scan_instance_num >= 1) {
+        concurrency = std::min(concurrency, _olap_scan_node.max_parallel_scan_instance_num);
+    }
 
     return concurrency;
 }
