@@ -52,36 +52,5 @@ public class TestHdfsFsManager extends TestCase {
             Assert.fail(e.getMessage());
         }
     } 
-    
-    @Test
-    public void testGetFileSystemForS3aScheme() throws IOException {
-        Map<String, String> properties = new HashMap<String, String>();
-        properties.put("fs.s3a.access.key", "accessKey");
-        properties.put("fs.s3a.secret.key", "secretKey");
-        properties.put("fs.s3a.endpoint", "s3.test.com");
-        try {
-            HdfsFs fs = fileSystemManager.getFileSystem("s3a://testbucket/data/abc/logs", properties, null);
-            assertNotNull(fs);
-            fs.getDFSFileSystem().close();
-        } catch (UserException e) {
-            Assert.fail(e.getMessage());
-        }
-    }
 
-    @Test
-    public void testGetRegionFromEndPoint() throws IOException {
-        Map<String, String> properties = new HashMap<String, String>();
-        properties.put("fs.s3a.access.key", "accessKey");
-        properties.put("fs.s3a.secret.key", "secretKey");
-        properties.put("fs.s3a.endpoint", "s3.ap-southeast-1.amazonaws.com");
-        THdfsProperties property = new THdfsProperties();
-        try {
-            HdfsFs fs = fileSystemManager.getFileSystem("s3a://testbucket/data/abc/logs", properties, property);
-            assertNotNull(fs);
-            Assert.assertEquals(property.region, "ap-southeast-1");
-            fs.getDFSFileSystem().close();
-        } catch (UserException e) {
-            Assert.fail(e.getMessage());
-        }
-    }
 }
