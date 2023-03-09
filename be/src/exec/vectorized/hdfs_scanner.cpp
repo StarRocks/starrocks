@@ -148,7 +148,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         if (_scanner_params.open_limit != nullptr) {
             _scanner_params.open_limit->fetch_add(1, std::memory_order_relaxed);
         }
-        LOG(INFO) << "open file success: " << _scanner_params.path;
+        VLOG_FILE << "open file success: " << _scanner_params.path;
     }
     return status;
 }
