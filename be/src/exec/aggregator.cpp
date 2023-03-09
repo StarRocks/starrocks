@@ -212,15 +212,15 @@ Status Aggregator::open(RuntimeState* state) {
         RETURN_IF_UNLIKELY_NULL(_single_agg_state, Status::MemoryAllocFailed("alloc single agg state failed"));
         auto call_agg_create = [this]() {
             for (int i = 0; i < _agg_functions.size(); i++) {
-                _agg_functions[i]->create(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
+                _agg_functions[i]->create(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
             }
             return Status::OK();
         };
         if (_has_udaf) {
             auto promise_st = call_function_in_pthread(state, call_agg_create);
-            promise_st->get_future().get();
+            RETURN_IF_ERROR(promise_st->get_future().get());
         } else {
-            call_agg_create();
+            RETURN_IF_ERROR(call_agg_create());
         }
 
         if (_agg_expr_ctxs.empty()) {
@@ -461,7 +461,7 @@ Status Aggregator::_reset_state(RuntimeState* state) {
     // Note: we must free agg_states object before _mem_pool free_all;
     if (_group_by_expr_ctxs.empty()) {
         for (int i = 0; i < _agg_functions.size(); i++) {
-            _agg_functions[i]->destroy(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
+            _agg_functions[i]->destroy(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
         }
     } else if (!_is_only_group_by_columns) {
         _release_agg_memory();
@@ -471,7 +471,7 @@ Status Aggregator::_reset_state(RuntimeState* state) {
     if (_group_by_expr_ctxs.empty()) {
         _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
         for (int i = 0; i < _agg_functions.size(); i++) {
-            _agg_functions[i]->create(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
+            _agg_functions[i]->create(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
         }
     } else if (_is_only_group_by_columns) {
         TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
@@ -501,7 +501,7 @@ void Aggregator::close(RuntimeState* state) {
             // Note: we must free agg_states object before _mem_pool free_all;
             if (_single_agg_state != nullptr) {
                 for (int i = 0; i < _agg_functions.size(); i++) {
-                    _agg_functions[i]->destroy(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
+                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
                 }
             } else if (!_is_only_group_by_columns) {
                 _release_agg_memory();
