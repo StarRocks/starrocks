@@ -70,7 +70,7 @@ ORDER_FLAG = "[ORDER]"
 REGEX_FLAG = "[REGEX]"
 
 
-class StarrocksSQLApiLib(unittest.TestCase):
+class StarrocksSQLApiLib(object):
     """api lib"""
 
     version = os.environ.get("version", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
@@ -314,7 +314,7 @@ class StarrocksSQLApiLib(unittest.TestCase):
                 if sql_res != b"":
                     self.res_log.append(str(sql_res).strip())
             elif sql_res is not None and str(sql_res).strip() != "":
-                self.res_log.append(str(sql_res).strip("\n"))
+                self.res_log.append(str(sql_res))
             else:
                 log.info("SQL result: %s" % sql_res)
 
