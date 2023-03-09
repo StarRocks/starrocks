@@ -1453,6 +1453,17 @@ unsupportedStatement
     | BEGIN WORK?
     | COMMIT WORK? (AND NO? CHAIN)? (NO? RELEASE)?
     | ROLLBACK WORK? (AND NO? CHAIN)? (NO? RELEASE)?
+    | LOCK TABLES lock_item (',' lock_item)*
+    | UNLOCK TABLES
+    ;
+
+lock_item
+    : identifier (AS? alias=identifier)? lock_type
+    ;
+
+lock_type
+    : READ LOCAL?
+    | LOW_PRIORITY? WRITE
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -2120,7 +2131,7 @@ nonReserved
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
     | IDENTIFIED | IMAGE | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
-    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL
+    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK
     | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
     | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
@@ -2133,7 +2144,7 @@ nonReserved
     | STORAGE| STRING | STATS | SUBMIT | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
-    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
+    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER | UNLOCK
     | VALUE | VARIABLES | VIEW | VERBOSE
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE
     | YEAR
