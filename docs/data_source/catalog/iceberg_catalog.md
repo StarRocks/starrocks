@@ -11,9 +11,13 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 ## Usage notes
 
-- The file formats of Iceberg that StarRocks supports are Parquet, ORC, and CSV.
-- The data types of Iceberg that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP data type for CSV-formatted Iceberg tables.
-- You can only use Iceberg catalogs to query data. You cannot use Iceberg catalogs to drop, delete, or insert data into your Iceberg cluster.
+- The file formats of Iceberg that StarRocks supports are Parquet and ORC:
+
+  - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
+  - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
+
+- The data types of Delta Lake that StarRocks does not support are MAP and STRUCT.
+- Iceberg catalogs do not support Iceberg v2 tables.
 
 ## Integration preparations
 
