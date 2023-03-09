@@ -54,6 +54,12 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
+    if (_olap_scan_node.__isset.max_parallel_scan_instance_num && _olap_scan_node.max_parallel_scan_instance_num >= 1) {
+        // The parallel scan num will be restricted by the config::io_tasks_per_scan_operator.
+        _io_tasks_per_scan_operator =
+                std::min(_olap_scan_node.max_parallel_scan_instance_num, config::io_tasks_per_scan_operator);
+    }
+
     _estimate_scan_and_output_row_bytes();
 
     return Status::OK();
@@ -360,7 +366,7 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
 
     // None tablet to read shouldn't use tablet internal parallel.
     if (morsels.empty()) {
-        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels), 1);
+        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels), 1, io_tasks_per_scan_operator());
     }
 
     // Disable by the session variable shouldn't use tablet internal parallel.
@@ -369,14 +375,14 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     bool enable =
             query_options.__isset.enable_tablet_internal_parallel && query_options.enable_tablet_internal_parallel;
     if (!enable) {
-        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels), dop);
+        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels), dop, io_tasks_per_scan_operator());
     }
 
     int64_t scan_dop;
     int64_t splitted_scan_rows;
     ASSIGN_OR_RETURN(auto could, _could_tablet_internal_parallel(scan_ranges, request, &scan_dop, &splitted_scan_rows));
     if (!could) {
-        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels), dop);
+        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels), dop, io_tasks_per_scan_operator());
     }
 
     // Split tablet physically.
@@ -386,7 +392,7 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     }
 
     // TODO: use LogicalSplitMorselQueue, when it can split tablet logically.
-    return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels), dop);
+    return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels), dop, io_tasks_per_scan_operator());
 }
 
 StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
@@ -732,10 +738,20 @@ void OlapScanNode::_estimate_scan_and_output_row_bytes() {
 }
 
 size_t OlapScanNode::_scanner_concurrency() const {
+    // The max scan parallel num for pipeline engine is config::io_tasks_per_scan_operator,
+    // But the max scan parallel num of non-pipeline engine is kMaxConcurrency.
+    // This functions is only used for non-pipeline engine,
+    // so use the min value of concurrency which is calculated and max_parallel_scan_instance_num.
+    // And the function will be removed later with non-pipeline engine
+
     int concurrency = estimated_max_concurrent_chunks();
     // limit concurrency not greater than scanner numbers
     concurrency = std::min<int>(concurrency, _num_scanners);
     concurrency = std::min<int>(concurrency, kMaxConcurrency);
+
+    if (_olap_scan_node.__isset.max_parallel_scan_instance_num && _olap_scan_node.max_parallel_scan_instance_num >= 1) {
+        concurrency = std::min(concurrency, _olap_scan_node.max_parallel_scan_instance_num);
+    }
 
     return concurrency;
 }

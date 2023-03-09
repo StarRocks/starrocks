@@ -1913,7 +1913,7 @@ public class PlanFragmentBuilder {
 
                     outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
                     joinNode.setOutputSlots(
-                            outputColumns.getStream().boxed().collect(Collectors.toList()));
+                            outputColumns.getStream().collect(Collectors.toList()));
                 }
 
                 joinNode.setDistributionMode(distributionMode);
