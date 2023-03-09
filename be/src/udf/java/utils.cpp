@@ -5,6 +5,8 @@
 #include <memory>
 
 #include "bthread/bthread.h"
+#include "exec/workgroup/scan_executor.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
