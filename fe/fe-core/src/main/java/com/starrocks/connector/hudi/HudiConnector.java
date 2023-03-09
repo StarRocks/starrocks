@@ -22,11 +22,15 @@ import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Map;
+import java.util.Optional;
 
 public class HudiConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
@@ -73,6 +77,11 @@ public class HudiConnector implements Connector {
     }
 
     public void onCreate() {
+        if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
+            Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
+            updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                    .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
+        }
     }
 
     public CloudConfiguration getCloudConfiguration() {
@@ -82,5 +91,6 @@ public class HudiConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
     }
 }

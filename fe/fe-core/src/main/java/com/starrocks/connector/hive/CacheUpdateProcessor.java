@@ -33,6 +33,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -82,6 +83,15 @@ public class CacheUpdateProcessor {
         if (isResourceMappingCatalog(catalogName) && table.isHiveTable()) {
             processSchemaChange(dbName, (HiveTable) table);
         }
+    }
+
+    public void refreshTableMetaStoreInfo(String dbName, Table table, boolean onlyCachedPartitions) {
+        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
+        metastore.refreshTable(hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
+    }
+
+    public Set<HiveTableName> getCachedTableNames() {
+        return ((CachingHiveMetastore) metastore).getCachedTableNames();
     }
 
     private List<String> getExistPaths(HiveMetaStoreTable table) {
