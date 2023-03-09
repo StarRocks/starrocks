@@ -563,7 +563,9 @@ public final class MetricRepo {
 
     private static void collectRoutineLoadProcessMetrics(MetricVisitor visitor) {
         List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadManager().getRoutineLoadJobByState(
-                Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE, RoutineLoadJob.JobState.RUNNING));
+                Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
+                                RoutineLoadJob.JobState.PAUSED,
+                                RoutineLoadJob.JobState.RUNNING));
 
         List<RoutineLoadJob> kafkaJobs = jobs.stream()
                 .filter(job -> (job instanceof KafkaRoutineLoadJob)
