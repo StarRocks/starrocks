@@ -173,10 +173,10 @@ public class MaterializedViewRewriter {
         ScalarOperator mvPredicate = MvUtils.rewriteOptExprCompoundPredicate(mvExpression, mvColumnRefRewriter);
 
         if (!ConstantOperator.TRUE.equals(mvPartitionPredicate)) {
-            // add latest partition predicate to mv predicate
             mvPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(mvPredicate, mvPartitionPredicate));
         }
         if (materializationContext.getMvPartialPartitionPredicate() != null) {
+            // add latest partition predicate to mv predicate
             ScalarOperator rewritten = mvColumnRefRewriter.rewrite(materializationContext.getMvPartialPartitionPredicate());
             mvPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(mvPredicate, rewritten));
         }

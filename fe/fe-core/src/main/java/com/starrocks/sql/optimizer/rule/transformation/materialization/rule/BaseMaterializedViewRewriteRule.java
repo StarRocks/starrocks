@@ -50,13 +50,18 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
-        List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         List<MaterializationContext> mvCandidateContexts = Lists.newArrayList();
-        for (MaterializationContext mvContext : context.getCandidateMvs()) {
-            if (!mvContext.isMatchedTableList(queryTables)) {
-                mvCandidateContexts.add(mvContext);
+        if (queryExpression.getGroupExpression() != null) {
+            int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
+            for (MaterializationContext mvContext : context.getCandidateMvs()) {
+                if (!mvContext.isMatchedGroup(currentRootGroupId)) {
+                    mvCandidateContexts.add(mvContext);
+                }
             }
+        } else {
+            mvCandidateContexts = context.getCandidateMvs();
         }
+
         List<OptExpression> results = Lists.newArrayList();
 
         // Construct queryPredicateSplit to avoid creating multi times for multi MVs.
@@ -75,7 +80,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
         }
         final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
-
+        List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         for (MaterializationContext mvContext : mvCandidateContexts) {
             MvRewriteContext mvRewriteContext =
                     new MvRewriteContext(mvContext, queryTables, queryExpression, queryColumnRefRewriter, queryPredicateSplit);
@@ -83,7 +88,10 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             List<OptExpression> candidates = mvRewriter.rewrite();
             if (!candidates.isEmpty()) {
                 candidates = postRewriteMV(context, candidates);
-                mvContext.addMatchedTableList(queryTables);
+                if (queryExpression.getGroupExpression() != null) {
+                    int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
+                    mvContext.addMatchedGroup(currentRootGroupId);
+                }
                 results.addAll(candidates);
             }
         }

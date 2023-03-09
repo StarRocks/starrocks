@@ -288,7 +288,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     // Maintenance plan for this MV
     private transient ExecPlan maintenancePlan;
 
-    public static class PlanContext {
+    public static class MvRewriteContext {
         // mv's logical plan
         private final OptExpression logicalPlan;
 
@@ -298,10 +298,26 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // column ref factory used when compile mv plan
         private final ColumnRefFactory refFactory;
 
-        public PlanContext(OptExpression logicalPlan, List<ColumnRefOperator> outputColumns, ColumnRefFactory refFactory) {
+        // indidate whether this mv is a SPJG plan
+        // if not, we do not store other fields to save memory,
+        // because we will not use other fields
+        private boolean isValidMvPlan;
+
+        public MvRewriteContext() {
+            this.logicalPlan = null;
+            this.outputColumns = null;
+            this.refFactory = null;
+            this.isValidMvPlan = false;
+        }
+
+        public MvRewriteContext(
+                OptExpression logicalPlan,
+                List<ColumnRefOperator> outputColumns,
+                ColumnRefFactory refFactory) {
             this.logicalPlan = logicalPlan;
             this.outputColumns = outputColumns;
             this.refFactory = refFactory;
+            this.isValidMvPlan = true;
         }
 
         public OptExpression getLogicalPlan() {
@@ -315,9 +331,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         public ColumnRefFactory getRefFactory() {
             return refFactory;
         }
+
+        public boolean isValidMvPlan() {
+            return isValidMvPlan;
+        }
     }
-    // mv plan rewrite
-    private PlanContext planContext;
+    // context used in mv rewrite
+    // just in memory now
+    // there are only reads after first-time write
+    private MvRewriteContext mvRewriteContext;
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -996,11 +1018,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.maintenancePlan = maintenancePlan;
     }
 
-    public PlanContext getPlanContext() {
-        return planContext;
+    public MvRewriteContext getPlanContext() {
+        return mvRewriteContext;
     }
 
-    public void setPlanContext(PlanContext planContext) {
-        this.planContext = planContext;
+    public void setPlanContext(MvRewriteContext mvRewriteContext) {
+        this.mvRewriteContext = mvRewriteContext;
     }
 }

@@ -79,6 +79,18 @@ public class MvRewritePreprocessor {
             if (!mv.isActive()) {
                 continue;
             }
+
+            MaterializedView.MvRewriteContext mvRewriteContext = mv.getPlanContext();
+            if (mvRewriteContext == null) {
+                // build mv query logical plan
+                MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
+                mvRewriteContext = mvOptimizer.optimize(mv, connectContext);
+                mv.setPlanContext(mvRewriteContext);
+            }
+            if (!mvRewriteContext.isValidMvPlan()) {
+                continue;
+            }
+
             Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
             PartitionInfo partitionInfo = mv.getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {
@@ -91,13 +103,7 @@ public class MvRewritePreprocessor {
                 continue;
             }
 
-            // 1. build mv query logical plan
-            MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-            OptExpression mvPlan = mvOptimizer.optimize(mv, connectContext);
-            if (!MvUtils.isValidMVPlan(mvPlan)) {
-                continue;
-            }
-
+            OptExpression mvPlan = mvRewriteContext.getLogicalPlan();
             ScalarOperator mvPartialPartitionPredicates = null;
             if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
                 // when mv is partitioned and there are some refreshed partitions,

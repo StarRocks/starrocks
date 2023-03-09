@@ -51,7 +51,9 @@ public class MaterializationContext {
     // tables both in query and mv
     private final List<Table> intersectingTables;
 
-    private List<List<Table>> matchedTableLists;
+    // group ids that are rewritten by this mv
+    // used to reduce the rewrite times for the same group and mv
+    private List<Integer> matchedGroups;
 
     private final ScalarOperator mvPartialPartitionPredicate;
 
@@ -74,7 +76,7 @@ public class MaterializationContext {
         this.baseTables = baseTables;
         this.originQueryColumns = originQueryColumns;
         this.intersectingTables = intersectingTables;
-        this.matchedTableLists = Lists.newArrayList();
+        this.matchedGroups = Lists.newArrayList();
         this.mvPartialPartitionPredicate = mvPartialPartitionPredicate;
     }
 
@@ -134,12 +136,12 @@ public class MaterializationContext {
         return intersectingTables;
     }
 
-    public void addMatchedTableList(List<Table> matchedTables) {
-        matchedTableLists.add(matchedTables);
+    public void addMatchedGroup(int matchedGroupId) {
+        matchedGroups.add(matchedGroupId);
     }
 
-    public boolean isMatchedTableList(List<Table> tables) {
-        return matchedTableLists.stream().anyMatch(matched -> tables.containsAll(matched) && matched.containsAll(tables));
+    public boolean isMatchedGroup(int groupId) {
+        return matchedGroups.contains(groupId);
     }
     public ScalarOperator getMvPartialPartitionPredicate() {
         return mvPartialPartitionPredicate;
