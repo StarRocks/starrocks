@@ -618,6 +618,11 @@ public class ExpressionAnalyzer {
                         throw unsupportedException("Unknown arithmetic operation " + op + " in: " + node);
                 }
 
+                if (Type.INVALID.equals(node.getChild(0).getOriginType()) ||
+                        Type.INVALID.equals(node.getChild(1).getOriginType())) {
+                    throw new SemanticException("Any function type can not cast to " + Type.INVALID.toSql());
+                }
+
                 if (node.getChild(0).getType().equals(Type.NULL) && node.getChild(1).getType().equals(Type.NULL)) {
                     lhsType = Type.NULL;
                     rhsType = Type.NULL;
