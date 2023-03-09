@@ -312,11 +312,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String mv = "select empid + 1 as col1 from emps where deptno = 10";
         testRewriteOK(mv, "select empid + 1 from emps where deptno = 10");
         testRewriteOK(mv, "select max(empid + 1) from emps where deptno = 10");
-        testRewriteFail(mv, "select max(empid) from emps where deptno = 10");
+        testRewriteOK(mv, "select max(empid) from emps where deptno = 10").contains("col1 - 1");
 
         testRewriteFail(mv, "select max(empid) from emps where deptno = 11");
         testRewriteFail(mv, "select max(empid) from emps");
-        testRewriteFail(mv, "select empid from emps where deptno = 10");
+        testRewriteOK(mv, "select empid from emps where deptno = 10").contains("col1 - 1");
     }
 
     @Test
@@ -498,8 +498,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggregate8() {
-        // TODO: support rewrite query by using mv's binary predicate later
-        testRewriteFail("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
+        testRewriteOK("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
                 "select deptno + 1, sum(empid) + 1 as s\n"
                         + "from emps where deptno > 10 group by deptno");
@@ -709,13 +708,13 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "from emps where deptno > 10 group by deptno");
     }
 
-    @Ignore
-    // TODO: Support deptno + 1 rewrite to deptno
+    @Test
     public void testAggregateMaterializationAggregateFuncs8() {
-        testRewriteOK("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
+        testRewriteOK("select empid, deptno + 1 as col, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
+
                 "select deptno + 1, sum(empid) + 1 as s\n"
-                        + "from emps where deptno > 10 group by deptno");
+                        + "from emps where deptno > 10 group by deptno").contains("col - 1");
     }
 
     @Test
