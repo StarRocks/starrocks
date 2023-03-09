@@ -344,6 +344,10 @@ struct TOlapScanNode {
   23: optional map<i32, i32> dict_string_id_to_int_ids
   // which columns only be used to filter data in the stage of scan data
   24: optional list<string> unused_output_column_name
+  //25: optional bool sorted_by_keys_per_tablet = false (reserved for 2.3+)
+  //26: optional list<Exprs.TExpr> bucket_exprs (reserved for 2.3+)
+  //27: optional list<string> sort_key_column_names (reserved for v2.3+)
+  28: optional i32 max_parallel_scan_instance_num
 }
 
 struct TJDBCScanNode {
