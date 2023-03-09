@@ -6050,19 +6050,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // labelName can be null or (db.)name format
     private LabelName createLabelName(StarRocksParser.QualifiedNameContext dbCtx,
                                       StarRocksParser.IdentifierContext nameCtx) {
-        if (dbCtx == null && nameCtx == null) {
-            return new LabelName(null, null, NodePosition.ZERO);
+
+        Token start = null;
+        Token stop = null;
+
+        String name = null;
+        if (nameCtx != null) {
+            name = getIdentifierName(nameCtx);
+            start = nameCtx.start;
+            stop = nameCtx.stop;
         }
-        Token start = nameCtx.start;
-        Token stop = nameCtx.stop;
-        String name = getIdentifierName(nameCtx);
+
         String dbName = null;
-
         if (dbCtx != null) {
-            start = dbCtx.start;
             dbName = getQualifiedName(dbCtx).toString();
-
+            start = dbCtx.start;
         }
+
         return new LabelName(dbName, name, createPos(start, stop));
     }
 }
