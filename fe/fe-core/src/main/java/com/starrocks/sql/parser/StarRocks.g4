@@ -20,7 +20,7 @@ sqlStatements
     ;
 
 singleStatement
-    : (statement (SEMICOLON+ | EOF)) | emptyStatement
+    : (statement (SEMICOLON | EOF)) | emptyStatement
     ;
 emptyStatement
     : SEMICOLON

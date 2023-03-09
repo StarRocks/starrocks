@@ -98,11 +98,11 @@ public class QueryPlannerTest {
 
         sql = "SHOW VARIABLES LIKE 'lower_case_%';;;";
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
-        Assert.assertEquals(1, stmts.size());
+        Assert.assertEquals(3, stmts.size());
 
         sql = "SHOW VARIABLES LIKE 'lower_case_%';;;SHOW VARIABLES LIKE 'lower_case_%';";
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
-        Assert.assertEquals(2, stmts.size());
+        Assert.assertEquals(4, stmts.size());
 
         sql = "SHOW VARIABLES LIKE 'lower_case_%'";
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
