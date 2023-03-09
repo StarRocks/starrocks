@@ -365,15 +365,15 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
                         scan_operator->set_workgroup(_wg);
 
                         if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
-                            scan_operator->set_scan_executor(state->exec_env()->hdfs_scan_executor_with_workgroup());
+                            scan_operator->set_scan_executor(exec_env->hdfs_scan_executor_with_workgroup());
                         } else {
-                            scan_operator->set_scan_executor(state->exec_env()->scan_executor_with_workgroup());
+                            scan_operator->set_scan_executor(exec_env->scan_executor_with_workgroup());
                         }
                     } else {
                         if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
-                            scan_operator->set_scan_executor(state->exec_env()->hdfs_scan_executor_without_workgroup());
+                            scan_operator->set_scan_executor(exec_env->hdfs_scan_executor_without_workgroup());
                         } else {
-                            scan_operator->set_scan_executor(state->exec_env()->scan_executor_without_workgroup());
+                            scan_operator->set_scan_executor(exec_env->scan_executor_without_workgroup());
                         }
                     }
                 }
