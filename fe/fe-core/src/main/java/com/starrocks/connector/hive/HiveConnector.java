@@ -25,6 +25,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
@@ -89,10 +90,16 @@ public class HiveConnector implements Connector {
     }
 
     public void onCreate() {
+        Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
         if (internalMgr.enableHmsEventsIncrementalSync()) {
-            Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
             updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
                     .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
+        } else {
+            if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
+                updateProcessor
+                        .ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                                .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
+            }
         }
     }
 
@@ -101,6 +108,7 @@ public class HiveConnector implements Connector {
         internalMgr.shutdown();
         metadataFactory.getCacheUpdateProcessor().ifPresent(CacheUpdateProcessor::invalidateAll);
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterCacheUpdateProcessor(catalogName);
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
     }
 
     public CloudConfiguration getCloudConfiguration() {
