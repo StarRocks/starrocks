@@ -149,6 +149,8 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
 
+    std::shared_ptr<workgroup::ScanTaskGroup> scan_task_group() const { return _scan_task_group; }
+
 protected:
     ScanNode* const _scan_node;
     ChunkBufferLimiterPtr _buffer_limiter;
