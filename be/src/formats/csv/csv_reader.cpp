@@ -328,14 +328,11 @@ Status CSVReader::more_rows() {
             }
 
         case ORDINARY:
-            //
-            if (UNLIKELY(_parse_options.trim_space)) {
-                if (preState == ENCLOSE) {
-                    if (*(_buff.position()) == ' ') {
-                        white_space_start = _buff.position_offset();
-                    }
-                    preState = ORDINARY;
+            if (UNLIKELY(_parse_options.trim_space && preState == ENCLOSE)) {
+                if (*(_buff.position()) == ' ') {
+                    white_space_start = _buff.position_offset();
                 }
+                preState = ORDINARY;   
             }
 
             // newrow
