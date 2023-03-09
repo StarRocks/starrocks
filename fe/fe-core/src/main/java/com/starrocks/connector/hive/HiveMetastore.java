@@ -107,7 +107,8 @@ public class HiveMetastore implements IHiveMetastore {
         for (int start = 0; start < partitionNames.size(); start += Config.max_hive_partitions_per_rpc) {
             int end = Math.min(start + Config.max_hive_partitions_per_rpc, partitionNames.size());
             List<String> namesPerRPC = partitionNames.subList(start, end);
-            List<org.apache.hadoop.hive.metastore.api.Partition> partsPerRPC = client.getPartitionsByNames(dbName, tblName, namesPerRPC);
+            List<org.apache.hadoop.hive.metastore.api.Partition> partsPerRPC =
+                    client.getPartitionsByNames(dbName, tblName, namesPerRPC);
             partitions.addAll(partsPerRPC);
         }
 
