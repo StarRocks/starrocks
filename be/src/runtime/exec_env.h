@@ -127,8 +127,6 @@ public:
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker; }
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
-    PriorityThreadPool* pipeline_scan_io_thread_pool() { return _pipeline_scan_io_thread_pool; }
-    PriorityThreadPool* pipeline_hdfs_scan_io_thread_pool() { return _pipeline_hdfs_scan_io_thread_pool; }
 
     size_t increment_num_scan_operators(size_t n) { return _num_scan_operators.fetch_add(n); }
     size_t decrement_num_scan_operators(size_t n) { return _num_scan_operators.fetch_sub(n); }
@@ -147,8 +145,10 @@ public:
     StreamContextMgr* stream_context_mgr() { return _stream_context_mgr; }
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
 
-    starrocks::workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
-    starrocks::workgroup::ScanExecutor* hdfs_scan_executor() { return _hdfs_scan_executor; }
+    workgroup::ScanExecutor* scan_executor_without_workgroup() { return _scan_executor_without_workgroup; }
+    workgroup::ScanExecutor* scan_executor_with_workgroup() { return _scan_executor_with_workgroup; }
+    workgroup::ScanExecutor* hdfs_scan_executor_without_workgroup() { return _hdfs_scan_executor_without_workgroup; }
+    workgroup::ScanExecutor* hdfs_scan_executor_with_workgroup() { return _hdfs_scan_executor_with_workgroup; }
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
     void set_store_paths(const std::vector<StorePath>& paths) { _store_paths = paths; }
@@ -222,8 +222,6 @@ private:
     MemTracker* _consistency_mem_tracker = nullptr;
 
     PriorityThreadPool* _thread_pool = nullptr;
-    PriorityThreadPool* _pipeline_scan_io_thread_pool = nullptr;
-    PriorityThreadPool* _pipeline_hdfs_scan_io_thread_pool = nullptr;
     std::atomic<size_t> _num_scan_operators{0};
     PriorityThreadPool* _udf_call_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
@@ -236,8 +234,10 @@ private:
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
 
-    starrocks::workgroup::ScanExecutor* _scan_executor = nullptr;
-    starrocks::workgroup::ScanExecutor* _hdfs_scan_executor = nullptr;
+    workgroup::ScanExecutor* _scan_executor_without_workgroup = nullptr;
+    workgroup::ScanExecutor* _scan_executor_with_workgroup = nullptr;
+    workgroup::ScanExecutor* _hdfs_scan_executor_without_workgroup = nullptr;
+    workgroup::ScanExecutor* _hdfs_scan_executor_with_workgroup = nullptr;
 
     BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;

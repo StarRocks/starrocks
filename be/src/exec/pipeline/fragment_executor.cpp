@@ -362,13 +362,18 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
                 if (auto* scan_operator = driver->source_scan_operator()) {
                     scan_operator->set_query_ctx(_query_ctx->get_shared_ptr());
                     if (_wg != nullptr) {
-                        // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
                         scan_operator->set_workgroup(_wg);
+
+                        if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
+                            scan_operator->set_scan_executor(state->exec_env()->hdfs_scan_executor_with_workgroup());
+                        } else {
+                            scan_operator->set_scan_executor(state->exec_env()->scan_executor_with_workgroup());
+                        }
                     } else {
                         if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
-                            scan_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
+                            scan_operator->set_scan_executor(state->exec_env()->hdfs_scan_executor_without_workgroup());
                         } else {
-                            scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                            scan_operator->set_scan_executor(state->exec_env()->scan_executor_without_workgroup());
                         }
                     }
                 }
