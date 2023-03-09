@@ -6,7 +6,7 @@ Release date: March 9, 2023
 
 ### Improvements
 
-Optimize the inference of `storage_medium`. When BEs use both SSD and HDD as storage devices,  if the property `storage_cooldown_time` is specified, StarRocks sets `storage_medium` to `SSD`. Otherwise, StarRocks sets `storage_medium` to HDD. [#18649](https://github.com/StarRocks/starrocks/pull/18649)
+Optimize the inference of `storage_medium`. When BEs use both SSD and HDD as storage devices,  if the property `storage_cooldown_time` is specified, StarRocks sets `storage_medium` to `SSD`. Otherwise, StarRocks sets `storage_medium` to `HDD`. [#18649](https://github.com/StarRocks/starrocks/pull/18649)
 
 ### Bug Fixes
 
