@@ -161,6 +161,18 @@ public class DateLiteral extends LiteralExpr {
         this.type = Type.DATETIME;
     }
 
+    public DateLiteral(long year, long month, long day,
+                       long hour, long minute, long second, long microsecond, Type type) {
+        this.year = year;
+        this.month = month;
+        this.day = day;
+        this.hour = hour;
+        this.minute = minute;
+        this.second = second;
+        this.microsecond = microsecond;
+        this.type = type;
+    }
+
     public DateLiteral(LocalDateTime dateTime, Type type) throws AnalysisException {
         this.year = dateTime.getYear();
         this.month = dateTime.getMonthValue();
@@ -271,7 +283,7 @@ public class DateLiteral extends LiteralExpr {
     // Date column and Datetime column's hash value is not same.
     @Override
     public ByteBuffer getHashValue(Type type) {
-        String value = convertToString(type.getPrimitiveType());
+        String value = convertToString(type.getPrimitiveType(), type.getPrecision());
         ByteBuffer buffer;
         try {
             buffer = ByteBuffer.wrap(value.getBytes(StandardCharsets.UTF_8));
@@ -317,16 +329,20 @@ public class DateLiteral extends LiteralExpr {
 
     @Override
     public String getStringValue() {
-        return convertToString(type.getPrimitiveType());
+        return convertToString(type.getPrimitiveType(), type.getPrecision());
     }
 
-    private String convertToString(PrimitiveType type) {
+    private String convertToString(PrimitiveType type, Integer precision) {
         if (type == PrimitiveType.DATE) {
             return String.format("%04d-%02d-%02d", year, month, day);
         } else if (microsecond == 0) {
             return String.format("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, second);
         } else {
-            return String.format("%04d-%02d-%02d %02d:%02d:%02d.%6d", year, month, day, hour, minute, second, microsecond);
+            if (precision != null && precision > 0 && precision < 6) {
+                int power = (int) Math.pow(10, 6 - precision);
+                microsecond /= power;
+            }
+            return String.format("%04d-%02d-%02d %02d:%02d:%02d.%d", year, month, day, hour, minute, second, microsecond);
         }
     }
 

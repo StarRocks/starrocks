@@ -114,6 +114,12 @@ public class ScalarType extends Type implements Cloneable {
         }
     }
 
+    public static ScalarType createPreciseDateTimeType(int precision) {
+        ScalarType dateTimeType = new ScalarType(PrimitiveType.DATETIME);
+        dateTimeType.precision = precision;
+        return dateTimeType;
+    }
+
     public static ScalarType createType(PrimitiveType type) {
         ScalarType res = PRIMITIVE_TYPE_SCALAR_TYPE_MAP.get(type);
         Preconditions.checkNotNull(res, "unknown type " + type);

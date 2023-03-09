@@ -150,6 +150,11 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return new ConstantOperator(value, Type.DATETIME);
     }
 
+    public static ConstantOperator createDatetime(LocalDateTime value, int precision) throws SemanticException {
+        requiredValid(value);
+        return new ConstantOperator(value, ScalarType.createPreciseDateTimeType(precision));
+    }
+
     public static ConstantOperator createDatetime(LocalDateTime value, Type dateType) {
         return new ConstantOperator(value, dateType);
     }

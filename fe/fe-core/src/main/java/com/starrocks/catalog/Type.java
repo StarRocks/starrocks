@@ -1327,6 +1327,8 @@ public abstract class Type implements Cloneable {
             case DECIMAL64:
             case DECIMAL128:
                 return t.decimalPrecision();
+            case DATETIME:
+                return t.getScalarPrecision();
             default:
                 return null;
         }
