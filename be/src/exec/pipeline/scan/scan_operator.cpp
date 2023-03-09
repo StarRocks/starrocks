@@ -308,12 +308,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     workgroup::ScanTask task;
     task.workgroup = _workgroup.get();
     // TODO: consider more factors, such as scan bytes and i/o time.
-<<<<<<< HEAD
     task.priority = vectorized::OlapScanNode::compute_priority(_submit_task_counter->value());
     task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
-=======
-    task.priority = OlapScanNode::compute_priority(_submit_task_counter->value());
->>>>>>> 5670c10a0 ([Enhancement] Add MultiLevelFeedScanTaskQueue (#18893))
     const auto io_task_start_nano = MonotonicNanos();
     task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
                           io_task_start_nano]() {
