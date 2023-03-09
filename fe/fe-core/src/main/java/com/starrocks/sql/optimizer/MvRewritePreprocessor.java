@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
@@ -48,6 +49,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getMvPartialPartitionPredicates;
+
 public class MvRewritePreprocessor {
     private final ConnectContext connectContext;
     private final ColumnRefFactory queryColumnRefFactory;
@@ -65,16 +68,29 @@ public class MvRewritePreprocessor {
     }
 
     public void prepareMvCandidatesForPlan() {
-        List<Table> tables = MvUtils.getAllTables(logicOperatorTree);
+        List<Table> queryTables = MvUtils.getAllTables(logicOperatorTree);
 
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
-                MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), tables);
+                MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
 
+        Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
             if (!mv.isActive()) {
                 continue;
             }
+
+            MaterializedView.MvRewriteContext mvRewriteContext = mv.getPlanContext();
+            if (mvRewriteContext == null) {
+                // build mv query logical plan
+                MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
+                mvRewriteContext = mvOptimizer.optimize(mv, connectContext);
+                mv.setPlanContext(mvRewriteContext);
+            }
+            if (!mvRewriteContext.isValidMvPlan()) {
+                continue;
+            }
+
             Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
             PartitionInfo partitionInfo = mv.getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {
@@ -87,19 +103,24 @@ public class MvRewritePreprocessor {
                 continue;
             }
 
-            // 1. build mv query logical plan
-            ColumnRefFactory mvColumnRefFactory = new ColumnRefFactory();
-            MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-            OptExpression mvPlan = mvOptimizer.optimize(mv, mvColumnRefFactory, connectContext, partitionNamesToRefresh);
-            if (!MvUtils.isValidMVPlan(mvPlan)) {
-                continue;
+            OptExpression mvPlan = mvRewriteContext.getLogicalPlan();
+            ScalarOperator mvPartialPartitionPredicates = null;
+            if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
+                // when mv is partitioned and there are some refreshed partitions,
+                // when should calculate latest partition range predicates for partition-by base table
+                mvPartialPartitionPredicates = getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
+                if (mvPartialPartitionPredicates == null) {
+                    continue;
+                }
             }
 
             List<Table> baseTables = MvUtils.getAllTables(mvPlan);
-            List<ColumnRefOperator> mvOutputColumns = mvOptimizer.getOutputExpressions();
+            List<Table> intersectingTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
             MaterializationContext materializationContext =
-                    new MaterializationContext(mv, mvPlan, queryColumnRefFactory,
-                            mvColumnRefFactory, partitionNamesToRefresh, baseTables);
+                    new MaterializationContext(context, mv, mvPlan, queryColumnRefFactory,
+                            mv.getPlanContext().getRefFactory(), partitionNamesToRefresh,
+                            baseTables, originQueryColumns, intersectingTables, mvPartialPartitionPredicates);
+            List<ColumnRefOperator> mvOutputColumns = mv.getPlanContext().getOutputColumns();
             // generate scan mv plan here to reuse it in rule applications
             LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext);
             materializationContext.setScanMvOperator(scanMvOp);
