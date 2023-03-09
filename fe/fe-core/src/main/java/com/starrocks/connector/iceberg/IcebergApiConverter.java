@@ -69,7 +69,7 @@ public class IcebergApiConverter {
                 LOG.error("Failed to convert iceberg type {}", field.type().toString(), e);
                 srType = Type.UNKNOWN_TYPE;
             }
-            Column column = new Column(field.name(), srType, true);
+            Column column = new Column(field.name(), srType, field.isOptional());
             fullSchema.add(column);
         }
         return fullSchema;
