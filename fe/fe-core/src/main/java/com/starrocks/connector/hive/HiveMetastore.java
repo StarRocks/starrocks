@@ -17,6 +17,7 @@ import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -88,8 +89,15 @@ public class HiveMetastore implements IHiveMetastore {
     }
 
     public Map<String, Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
-        List<org.apache.hadoop.hive.metastore.api.Partition> partitions =
-                client.getPartitionsByNames(dbName, tblName, partitionNames);
+        List<org.apache.hadoop.hive.metastore.api.Partition> partitions = new ArrayList<>();
+        // fetch partitions by batch per RPC
+        for (int start = 0; start < partitionNames.size(); start += Config.max_hive_partitions_per_rpc) {
+            int end = Math.min(start + Config.max_hive_partitions_per_rpc, partitionNames.size());
+            List<String> namesPerRPC = partitionNames.subList(start, end);
+            List<org.apache.hadoop.hive.metastore.api.Partition> partsPerRPC =
+                    client.getPartitionsByNames(dbName, tblName, namesPerRPC);
+            partitions.addAll(partsPerRPC);
+        }
 
         Map<String, List<String>> partitionNameToPartitionValues = partitionNames.stream()
                 .collect(Collectors.toMap(Function.identity(), PartitionUtil::toPartitionValues));
