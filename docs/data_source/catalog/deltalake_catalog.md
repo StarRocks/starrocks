@@ -11,9 +11,8 @@ To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cl
 
 ## Usage notes
 
-- The file formats of Delta Lake that StarRocks supports are Parquet, ORC, and CSV.
-- The data types of Delta Lake that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP data type for CSV-formatted Delta Lake tables.
-- You can only use Delta Lake catalogs to query data. You cannot use Delta Lake catalogs to drop, delete, or insert data into your Delta Lake cluster.
+- The file format of Delta Lake that StarRocks supports is Parquet. Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
+- The data types of Delta Lake that StarRocks does not support are MAP and STRUCT.
 
 ## Integration preparations
 
