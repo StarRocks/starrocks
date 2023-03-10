@@ -53,7 +53,7 @@ Hive 外表字符串支持的长度从 64 KB 扩展为 1 MB。长度超过 1 MB 
 
 修复了如下问题：
 
-- 表达式在初始阶段发生错误时可能导致 BE 停止服务。 ([#11395](https://github.com/StarRocks/starrocks/pull/11395))
+- 表达式在初始化阶段发生错误时可能导致 BE 停止服务。 ([#11395](https://github.com/StarRocks/starrocks/pull/11395))
 - 导入时无效的 JSON 可能会导致 BE 停止服务。（[#10804](https://github.com/StarRocks/starrocks/issues/10804)）
 - 开启 Pipeline 引擎会导致并行写入出错。（[#11451](https://github.com/StarRocks/starrocks/issues/11451)）
 - ORDER BY NULL LIMIT 会导致 BE 停止服务。（[#11648](https://github.com/StarRocks/starrocks/issues/11648)）

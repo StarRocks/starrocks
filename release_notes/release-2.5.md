@@ -1,5 +1,30 @@
 # StarRocks version 2.5
 
+## 2.5.3
+
+发布日期： 2023 年 3 月 10 日
+
+### 功能优化
+
+- 优化物化视图的查询改写：
+  - 支持对 Outer Join 和 Cross Join 的查询改写。 [#18629](https://github.com/StarRocks/starrocks/pull/18629)
+  - 优化物化视图数据扫描逻辑，进一步加速查询。 [#18629](https://github.com/StarRocks/starrocks/pull/18629)
+  - 增强了单表聚合查询的改写能力。 [#18629](https://github.com/StarRocks/starrocks/pull/18629)
+  - 增强了 View Delta 场景的改写能力。即，查询的关联表为物化视图的关联表的子集时的改写能力。 [#18800](https://github.com/StarRocks/starrocks/pull/18800)
+- 优化使用 Rank 窗口函数作为过滤条件或排序键的性能和内存占用。 [#17553](https://github.com/StarRocks/starrocks/issues/17553)
+
+### 问题修复
+
+修复了如下问题：
+
+- ARRAY 类型空字面量导致的问题。 [#18563](https://github.com/StarRocks/starrocks/pull/18563)
+- 某些复杂查询场景下，低基数字典可能被误用。增加了应用低基数字典优化前的检查来避免此类错误。 [#17318](https://github.com/StarRocks/starrocks/pull/17318)
+- 在单 BE 环境下，Local Shuffle 导致 GROUP BY 包含重复结果。 [#17845](https://github.com/StarRocks/starrocks/pull/17845)
+- 创建**非分区**物化视图时错误使用**分区**相关参数。增加物化视图创建检查，如果创建的是非分区物化视图，则自动禁用分区相关参数。 [#18741](https://github.com/StarRocks/starrocks/pull/18741)
+- Parquet Repetition Column 的解析问题。 [#17626](https://github.com/StarRocks/starrocks/pull/17626) [#17788](https://github.com/StarRocks/starrocks/pull/17788) [#18051](https://github.com/StarRocks/starrocks/pull/18051)
+- 列的 nullable 信息获取错误。在使用 CTAS 创建主键模型表时，仅将主键列设置为 non-nullable，非主键列设置为 nullable。 [#16431](https://github.com/StarRocks/starrocks/pull/16431)
+- 删除主键模型表数据可能导致的问题。 [#18768](https://github.com/StarRocks/starrocks/pull/18768)
+
 ## 2.5.2
 
 发布日期： 2023 年 2 月 21 日
