@@ -2,7 +2,7 @@
 
 ## Description
 
-This statement is used to show the history of successful delete tasks
+This statement is used to show the history of successful delete tasks of duplicate table in current database.
 
 ## Syntax
 
