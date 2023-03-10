@@ -133,7 +133,7 @@ block_cache_disk_size = 1288490188800
    - __MIN_OF_BytesRead: 0.00
 ```
 
-示例二：StarRocks 从外部存储系统直接读取的数据量为 0，即代表 Local Cache 完全命中。
+示例二：StarRocks 从 local cache 读取了 46.08 GB 数据，从外部存储系统直接读取的数据量为 0，即代表 Local Cache 完全命中。
 
 ```Plain
  Table: lineitem
