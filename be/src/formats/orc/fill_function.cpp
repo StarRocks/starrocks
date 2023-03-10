@@ -556,7 +556,7 @@ static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size
     auto* values = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(col);
 
     values->get_offset().reserve(col_start + size);
-    values->get_bytes().reserve(len);
+    values->get_bytes().reserve(values->get_bytes().size() + len);
 
     auto& vb = values->get_bytes();
     auto& vo = values->get_offset();
@@ -619,7 +619,7 @@ static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr&
     auto* nulls = c->null_column()->get_data().data();
     auto* values = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c->data_column());
 
-    values->get_offset().reserve(values->get_offset().size() + size);
+    values->get_offset().reserve(col_start + size);
     values->get_bytes().reserve(values->get_bytes().size() + len);
 
     auto& vb = values->get_bytes();
@@ -715,7 +715,7 @@ static void fill_varbinary_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, s
     auto* values = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(col);
 
     values->get_offset().reserve(col_start + size);
-    values->get_bytes().reserve(len);
+    values->get_bytes().reserve(values->get_bytes().size() + len);
 
     auto& vb = values->get_bytes();
     auto& vo = values->get_offset();
@@ -744,7 +744,7 @@ static void fill_varbinary_column_with_null(orc::ColumnVectorBatch* cvb, ColumnP
     auto* nulls = c->null_column()->get_data().data();
     auto* values = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(c->data_column());
 
-    values->get_offset().reserve(values->get_offset().size() + size);
+    values->get_offset().reserve(col_start + size);
     values->get_bytes().reserve(values->get_bytes().size() + len);
 
     auto& vb = values->get_bytes();
