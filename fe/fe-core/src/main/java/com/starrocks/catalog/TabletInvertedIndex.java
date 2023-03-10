@@ -163,6 +163,9 @@ public class TabletInvertedIndex {
                         TTablet backendTablet = backendTablets.get(tabletId);
                         Replica replica = entry.getValue();
                         for (TTabletInfo backendTabletInfo : backendTablet.getTablet_infos()) {
+                            if (backendTabletInfo.isSetIs_error_state()) {
+                                replica.setIsErrorState(backendTabletInfo.is_error_state);
+                            }
                             if (tabletMeta.containsSchemaHash(backendTabletInfo.getSchema_hash())) {
                                 foundTabletsWithValidSchema.add(tabletId);
                                 // 1. (intersection)
@@ -359,6 +362,14 @@ public class TabletInvertedIndex {
             // backend replica's version is equal to replica in FE, but replica in FE is bad, while backend replica is good, sync it
             return true;
         }
+
+        // error state need sync or not
+        /*
+        if (backendTabletInfo.isSetIs_error_state() && 
+            backendTabletInfo.isSetIs_error_state() != replicaInFe.isErrorState()) {
+            return true;
+        }
+        */
 
         return false;
     }
