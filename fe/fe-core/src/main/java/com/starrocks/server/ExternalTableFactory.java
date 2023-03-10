@@ -29,7 +29,7 @@ public abstract class ExternalTableFactory implements AbstractTableFactory {
     public static final String TABLE = "table";
     public static final String RESOURCE = "resource";
     public static final String PROPERTY_MISSING_MSG =
-            "Hive %s is null. Please add properties('%s'='xxx') when create table";
+            "Remote %s is null. Please add properties('%s'='xxx') when create table";
 
     protected static Table getTableFromResourceMappingCatalog(Map<String, String> properties,
                                                            Table.TableType tableType,
