@@ -312,7 +312,7 @@ public:
             return to_status(fs_st.status());
         }
         FileMeta meta;
-        auto st = (*fs_st)->list_dir(pair.first, false, [&](std::string_viw name) { return cb(name, meta); });
+        auto st = (*fs_st)->list_dir(pair.first, false, [&](std::string_view name) { return cb(name, meta); });
         return to_status(st);
     }
 
