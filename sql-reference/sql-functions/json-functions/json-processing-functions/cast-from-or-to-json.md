@@ -1,4 +1,4 @@
-# JSON 类型转换
+# cast
 
 ## 功能
 
@@ -62,7 +62,7 @@ mysql> select cast(parse_json('1') as int);
 |                            1 |
 +------------------------------+
 
--- 将JSON字符串转为 VARCHAR。
+-- 将 JSON 字符串转为 VARCHAR。
 mysql> select cast(parse_json('"star"') as varchar);
 +---------------------------------------+
 | CAST(parse_json('"star"') AS VARCHAR) |
@@ -98,7 +98,7 @@ mysql> select cast(1 as json);
 | 1               |
 +-----------------+
 
--- 将VARCHAR转为JSON。
+-- 将 VARCHAR 转为 JSON。
 mysql> select cast("star" as json);
 +----------------------+
 | CAST('star' AS JSON) |
@@ -106,7 +106,7 @@ mysql> select cast("star" as json);
 | "star"               |
 +----------------------+
 
--- 将BOOLEAN转为JSON。
+-- 将 BOOLEAN 转为 JSON。
 mysql> select cast(true as json);
 +--------------------+
 | CAST(TRUE AS JSON) |
