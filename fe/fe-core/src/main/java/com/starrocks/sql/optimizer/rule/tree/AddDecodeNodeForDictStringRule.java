@@ -44,7 +44,6 @@ import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -865,9 +864,9 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             return root;
         }
 
-        List<LogicalOlapScanOperator> scanOperators = taskContext.getAllScanOperators();
+        List<PhysicalOlapScanOperator> scanOperators = Utils.extractPhysicalOlapScanOperator(root);
 
-        for (LogicalOlapScanOperator scanOperator : scanOperators) {
+        for (PhysicalOlapScanOperator scanOperator : scanOperators) {
             OlapTable table = (OlapTable) scanOperator.getTable();
             long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo)
                     .orElse(0L);

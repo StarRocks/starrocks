@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -148,6 +149,25 @@ public class Utils {
 
     public static void extractOlapScanOperator(GroupExpression groupExpression, List<LogicalOlapScanOperator> list) {
         extractOperator(groupExpression, list, p -> OperatorType.LOGICAL_OLAP_SCAN.equals(p.getOpType()));
+    }
+
+    public static List<PhysicalOlapScanOperator> extractPhysicalOlapScanOperator(OptExpression root) {
+        List<PhysicalOlapScanOperator> list = Lists.newArrayList();
+        extractOperator(root, list, op -> OperatorType.PHYSICAL_OLAP_SCAN.equals(op.getOpType()));
+        return list;
+    }
+
+    private static <E extends Operator> void extractOperator(OptExpression root, List<E> list,
+                                                             Predicate<Operator> lambda) {
+        if (lambda.test(root.getOp())) {
+            list.add((E) root.getOp());
+            return;
+        }
+
+        List<OptExpression> inputs = root.getInputs();
+        for (OptExpression input : inputs) {
+            extractOperator(input, list, lambda);
+        }
     }
 
     private static <E extends Operator> void extractOperator(GroupExpression root, List<E> list,

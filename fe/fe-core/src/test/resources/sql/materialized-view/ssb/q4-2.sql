@@ -30,10 +30,11 @@ ORDER BY
   s_nation,
   p_category;
 [result]
-TOP-N (order by [[5: d_year ASC NULLS FIRST, 30: s_nation ASC NULLS FIRST, 36: p_category ASC NULLS FIRST]])
-    TOP-N (order by [[5: d_year ASC NULLS FIRST, 30: s_nation ASC NULLS FIRST, 36: p_category ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{60: sum=sum(60: sum)}] group by [[5: d_year, 30: s_nation, 36: p_category]] having [null]
-            EXCHANGE SHUFFLE[5, 30, 36]
-                AGGREGATE ([LOCAL] aggregate [{60: sum=sum(59: expr)}] group by [[5: d_year, 30: s_nation, 36: p_category]] having [null]
-                    SCAN (columns[73: LO_REVENUE, 74: LO_SUPPLYCOST, 82: C_REGION, 88: S_NATION, 89: S_REGION, 92: P_MFGR, 93: P_CATEGORY, 102: d_year] predicate[82: C_REGION = AMERICA AND 89: S_REGION = AMERICA AND 102: d_year IN (1997, 1998) AND 92: P_MFGR IN (MFGR#1, MFGR#2)])
+Decode
+    TOP-N (order by [[5: d_year ASC NULLS FIRST, 116: S_NATION ASC NULLS FIRST, 119: P_CATEGORY ASC NULLS FIRST]])
+        TOP-N (order by [[5: d_year ASC NULLS FIRST, 116: S_NATION ASC NULLS FIRST, 119: P_CATEGORY ASC NULLS FIRST]])
+            AGGREGATE ([GLOBAL] aggregate [{60: sum=sum(60: sum)}] group by [[5: d_year, 116: S_NATION, 119: P_CATEGORY]] having [null]
+                EXCHANGE SHUFFLE[5, 116, 119]
+                    AGGREGATE ([LOCAL] aggregate [{60: sum=sum(59: expr)}] group by [[5: d_year, 116: S_NATION, 119: P_CATEGORY]] having [null]
+                        SCAN (columns[115: C_REGION, 116: S_NATION, 117: S_REGION, 102: d_year, 118: P_MFGR, 119: P_CATEGORY, 73: LO_REVENUE, 74: LO_SUPPLYCOST] predicate[DictMapping(115: C_REGION{82: C_REGION = AMERICA}) AND DictMapping(117: S_REGION{89: S_REGION = AMERICA}) AND 102: d_year IN (1997, 1998) AND DictMapping(118: P_MFGR{92: P_MFGR IN (MFGR#1, MFGR#2)})])
 [end]
