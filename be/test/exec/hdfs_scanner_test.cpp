@@ -49,7 +49,7 @@ protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
     HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, const TupleDescriptor* tuple_desc);
-    void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc);
+    void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc, bool diff_case_sensitive = false);
 
     THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
@@ -122,10 +122,16 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     return param;
 }
 
-void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc) {
+void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc, bool diff_case_sensitive) {
     std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
     for (auto slot : tuple_desc->slots()) {
-        hive_column_names->emplace_back(slot->col_name());
+        std::string col_name = slot->col_name();
+        if (diff_case_sensitive && std::isupper(col_name[0])) {
+            std::transform(col_name.begin(), col_name.end(), col_name.begin(), ::tolower);
+        } else if (diff_case_sensitive && std::islower(col_name[0])) {
+            std::transform(col_name.begin(), col_name.end(), col_name.begin(), ::toupper);
+        }
+        hive_column_names->emplace_back(col_name);
     }
     params->hive_column_names = hive_column_names;
 }
@@ -1405,6 +1411,31 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
     }
 }
 
+TEST_F(HdfsScannerTest, TestCSVCaseIgnore) {
+    SlotDesc csv_descs[] = {{"USER_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"ACTION", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {""}};
+
+    const std::string small_file = "./be/test/exec/test_data/csv_scanner/small.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(small_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc, true);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        READ_SCANNER_ROWS(scanner, 2);
+        scanner->close(_runtime_state);
+    }
+}
 // =============================================================================
 
 /*
