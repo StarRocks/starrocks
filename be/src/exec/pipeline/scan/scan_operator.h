@@ -43,7 +43,7 @@ public:
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
+    void set_scan_executor(workgroup::ScanExecutor* scan_executor) { _scan_executor = scan_executor; }
 
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
 
@@ -101,8 +101,10 @@ private:
     const size_t _buffer_size = config::pipeline_io_buffer_size;
 
     const int32_t _dop;
+
     int32_t _io_task_retry_cnt = 0;
-    PriorityThreadPool* _io_threads = nullptr;
+    workgroup::ScanExecutor* _scan_executor = nullptr;
+
     std::atomic<int> _num_running_io_tasks = 0;
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
@@ -146,9 +148,13 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
 
+    std::shared_ptr<workgroup::ScanTaskGroup> scan_task_group() const { return _scan_task_group; }
+
 protected:
     ScanNode* const _scan_node;
     ChunkBufferLimiterPtr _buffer_limiter;
+
+    std::shared_ptr<workgroup::ScanTaskGroup> _scan_task_group;
 };
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,
