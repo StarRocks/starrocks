@@ -4,13 +4,13 @@
 
 This function analyzes and gets the strings from a specified path in json string.
 
-json_path must start with $ and use . as the path separator.
+json_path must start with `$` and use `.` as the path separator.
 
-If the path includes ., it could be circled by " and ".
+If the path includes `.`, it could be circled by `"` and `"`.
 
-[ ] is used as the array subscripts which start from 0.
+`[ ]` is used as the array subscripts which start from 0.
 
-Content in the path should not contain " , [ and ].
+Content in the path should not contain `"` , `[` and `]`.
 
 If the format of json_string or json_path is wrong, this function will return NULL.
 
@@ -19,7 +19,6 @@ If the format of json_string or json_path is wrong, this function will return NU
 ```Haskell
 VARCHAR get_json_string(VARCHAR json_str, VARCHAR json_path)
 ```
-
 
 ## Examples
 
