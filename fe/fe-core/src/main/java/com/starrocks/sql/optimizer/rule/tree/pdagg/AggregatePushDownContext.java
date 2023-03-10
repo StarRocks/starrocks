@@ -32,6 +32,8 @@ class AggregatePushDownContext {
     public final Map<ColumnRefOperator, CallOperator> aggregations;
     public final Map<ColumnRefOperator, ScalarOperator> groupBys;
 
+    public boolean hasWindow = false;
+
     // record push down path
     // the index of children which should push down
     public final List<Integer> pushPaths;

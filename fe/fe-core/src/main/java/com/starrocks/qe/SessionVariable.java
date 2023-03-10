@@ -254,6 +254,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
+
+    public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
@@ -960,6 +962,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorScanRangeShuffle = false;
 
+    @VariableMgr.VarAttr(name = CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW)
+    private boolean cboPushDownDistinctBelowWindow = true;
+
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
     }
@@ -1633,6 +1638,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPushDownAggregate(String cboPushDownAggregate) {
         this.cboPushDownAggregate = cboPushDownAggregate;
+    }
+
+    public void setCboPushDownDistinctBelowWindow(boolean flag) {
+        this.cboPushDownDistinctBelowWindow = flag;
+    }
+
+    public boolean isCboPushDownDistinctBelowWindow() {
+        return this.cboPushDownDistinctBelowWindow;
     }
 
     public boolean isEnableSQLDigest() {
