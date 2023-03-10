@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.hive.CachedClientPool;
 import com.starrocks.connector.iceberg.hive.HiveTableOperations;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
@@ -54,6 +55,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class IcebergCustomCatalogTest {
@@ -154,6 +156,12 @@ public class IcebergCustomCatalogTest {
         @Override
         public Table loadTable(TableIdentifier tableIdentifier) throws StarRocksConnectorException {
             return loadTable(tableIdentifier, null, null);
+        }
+
+        @Override
+        public Table loadTable(TableIdentifier tableIdentifier, Optional<IcebergMetricsReporter> metricsReporter)
+                throws StarRocksConnectorException {
+            return loadTable(tableIdentifier);
         }
 
         @Override
