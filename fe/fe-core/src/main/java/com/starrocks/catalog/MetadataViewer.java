@@ -203,8 +203,8 @@ public class MetadataViewer {
         db.readLock();
         try {
             Table tbl = db.getTable(tblName);
-            if (tbl == null || tbl.getType() != TableType.OLAP) {
-                throw new DdlException("Table does not exist or is not OLAP table: " + tblName);
+            if (tbl == null || !tbl.isNativeTable()) {
+                throw new DdlException("Table does not exist or is not native table: " + tblName);
             }
 
             OlapTable olapTable = (OlapTable) tbl;
@@ -238,11 +238,11 @@ public class MetadataViewer {
                 Partition partition = olapTable.getPartition(partId);
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                            if (!countMap.containsKey(replica.getBackendId())) {
+                        for (long beId : tablet.getBackendIds()) {
+                            if (!countMap.containsKey(beId)) {
                                 continue;
                             }
-                            countMap.put(replica.getBackendId(), countMap.get(replica.getBackendId()) + 1);
+                            countMap.put(beId, countMap.get(beId) + 1);
                             totalReplicaNum++;
                         }
                     }
