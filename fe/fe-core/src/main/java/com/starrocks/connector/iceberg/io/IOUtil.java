@@ -36,20 +36,29 @@ package com.starrocks.connector.iceberg.io;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
+import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Paths;
 import java.security.SecureRandom;
 
+import static com.starrocks.connector.iceberg.io.IcebergCachingFileIO.METADATA_CACHE_DISK_PATH;
+
 public class IOUtil {
+    private static final Logger LOG = LogManager.getLogger(IOUtil.class);
     public static final String FILE_PREFIX = "file://";
     public static final String FILE_SIMPLIFIED_PREFIX = "file:/";
     public static final String EMPTY_STRING = "";
     public static final String SLASH_STRING = "/";
+    public static final Configuration DEFAULT_CONF = new Configuration();
 
     public static SecureRandom rand = new SecureRandom();
 
@@ -88,16 +97,20 @@ public class IOUtil {
 
     public static OutputFile getTmpOutputFile(String localDir, String path) {
         String newPath = remoteToLocalTmpFilePath(localDir, path);
-        return HadoopOutputFile.fromLocation(newPath, new Configuration());
+        return HadoopOutputFile.fromLocation(newPath, DEFAULT_CONF);
     }
 
     public static OutputFile getOutputFile(Path path) {
-        return HadoopOutputFile.fromPath(path, new Configuration());
+        return HadoopOutputFile.fromPath(path, DEFAULT_CONF);
+    }
+
+    public static InputFile getInputFile(Path path) {
+        return HadoopInputFile.fromPath(path, DEFAULT_CONF);
     }
 
     public static OutputFile getOutputFile(String localDir, String path) {
         Path newPath = new Path(remoteToLocalFilePath(localDir, path));
-        return HadoopOutputFile.fromPath(newPath, new Configuration());
+        return HadoopOutputFile.fromPath(newPath, DEFAULT_CONF);
     }
 
     public static String localFileToRemote(Path localFile, String localDir) {
@@ -128,5 +141,31 @@ public class IOUtil {
         String prefix = remotePath.toUri().getScheme();
         String newPath = path.substring(path.indexOf("/"));
         return Paths.get(FILE_PREFIX + localDir, prefix, newPath).toString();
+    }
+
+    public static void deleteLocalFileWithRemotePath(String key) {
+        HadoopOutputFile hadoopOutputFile = (HadoopOutputFile) IOUtil.getOutputFile(
+                METADATA_CACHE_DISK_PATH, key);
+        try {
+            hadoopOutputFile.getFileSystem().delete(hadoopOutputFile.getPath(), false);
+        } catch (Exception e) {
+            LOG.warn("failed on deleting file: {}. msg: {}", hadoopOutputFile.getPath(), e);
+        }
+    }
+
+    public static void closeInputStreamIgnoreException(InputStream stream) {
+        try {
+            stream.close();
+        } catch (IOException e) {
+            //ignored
+        }
+    }
+
+    public static void closeOutputStreamIgnoreException(OutputStream stream) {
+        try {
+            stream.close();
+        } catch (IOException e) {
+            //ignored
+        }
     }
 }
