@@ -47,7 +47,7 @@ under the License.
         <spark.version>2.4.6</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.10.1</parquet.version>
-        <hadoop.version>3.3.3</hadoop.version>
+        <hadoop.version>3.1.0</hadoop.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>0.10.1</hudi.version>
         <hive-apache.version>3.1.2-13</hive-apache.version>
@@ -339,7 +339,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.thrift</groupId>
                 <artifactId>libthrift</artifactId>
-                <version>0.13.0</version>
+                <version>0.14.1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-api -->
