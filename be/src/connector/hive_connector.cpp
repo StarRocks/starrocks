@@ -123,6 +123,10 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
         _has_partition_conjuncts = true;
     }
 
+    if (hdfs_scan_node.__isset.case_sensitive) {
+        _case_sensitive = hdfs_scan_node.case_sensitive;
+    }
+
     RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_min_max_conjunct_ctxs, state));
