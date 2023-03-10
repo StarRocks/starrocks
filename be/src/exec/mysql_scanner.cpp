@@ -184,12 +184,12 @@ Status MysqlScanner::query(const std::string& table, const std::vector<std::stri
         }
     }
 
-    if (limit != -1) {
-        _sql_str += " limit " + std::to_string(limit) + " ";
-    }
-
     if (!temporal_clause.empty()) {
         _sql_str += " " + temporal_clause;
+    }
+
+    if (limit != -1) {
+        _sql_str += " limit " + std::to_string(limit) + " ";
     }
 
     return query(_sql_str);
