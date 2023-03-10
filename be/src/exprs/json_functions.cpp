@@ -137,6 +137,8 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
         }                                                                                                          \
     } while (false);
 
+    jsonpath.
+
     if (jsonpath.size() <= 1) {
         // The first elem of json path should be '$'.
         // A valid json path's size is >= 2.
@@ -164,29 +166,32 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
                         "extracting * from root-object is not supported, the json path: {}", jsonpath[i].key));
             } else {
                 HANDLE_SIMDJSON_ERROR(obj.find_field_unordered(col).get(tvalue),
-                                      fmt::format("unable to find field: {}", col));
+                                      fmt::format("unable to find key: {}", jsonpath[i].key));
             }
         } else {
+            // There are always two patterns.
+            // 1. {"field_name": null}
+            // 2. {"field_name": {"field_type": data}}
+            // For pattern1, we just return null value.
+            // For pattern2, we get the first field of object as next value.
+
+            if (tvalue.is_null()) {
+                return Status::NotFound(fmt::format("unable to find key: {}", jsonpath[i].key));
+            }
+
+            if (tvalue.type() != simdjson::ondemand::json_type::object) {
+                return Status::InvalidArgument(fmt::format(
+                        "extracting * from non-object type is not supported, the json path: {}", jsonpath[i].key));
+            }
+
             if (col == "*") {
-                // There are always two patterns.
-                // 1. {"field_name": null}
-                // 2. {"field_name": {"field_type": data}}
-                // For pattern1, we just return null value.
-                // For pattern2, we get the first field of object as next value.
-                if (tvalue.is_null()) {
-                    return Status::NotFound("null value");
-                }
-                if (tvalue.type() != simdjson::ondemand::json_type::object) {
-                    return Status::InvalidArgument(fmt::format(
-                            "extracting * from non-object type is not supported, the json path: {}", jsonpath[i].key));
-                }
                 for (auto field : tvalue.get_object()) {
                     tvalue = field.value();
                     break;
                 }
             } else {
                 HANDLE_SIMDJSON_ERROR(tvalue.find_field_unordered(col).get(tvalue),
-                                      fmt::format("unable to find field: {}", col));
+                                      fmt::format("unable to find key: {}", jsonpath[i].key));
             }
         }
 
