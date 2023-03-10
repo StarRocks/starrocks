@@ -458,6 +458,13 @@ public class Config extends ConfigBase {
     public static int bdbje_replay_cost_percent = 150;
 
     /**
+     * For the version of 5.7, bdb-je will reserve unprotected files (which can be deleted safely) as much as possible,
+     * this param (default is 0 in bdb-je, which means unlimited) controls the limit of reserved unprotected files.
+     */
+    @ConfField
+    public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
+
+    /**
      * the max txn number which bdbje can rollback when trying to rejoin the group
      */
     @ConfField

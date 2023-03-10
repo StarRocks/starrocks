@@ -166,9 +166,10 @@ under the License.
             <artifactId>jackson-mapper-asl</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.starrocks/starrocks-bdb-je -->
         <dependency>
-            <groupId>com.sleepycat</groupId>
-            <artifactId>je</artifactId>
+            <groupId>com.starrocks</groupId>
+            <artifactId>starrocks-bdb-je</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->
