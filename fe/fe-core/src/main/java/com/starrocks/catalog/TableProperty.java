@@ -85,6 +85,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public static final String BINLOG_PROPERTY_PREFIX = "binlog";
     public static final String BINLOG_PARTITION = "binlog_partition_";
+    public static final int DEFAULT_PARTITION_REFRESH_NUMBER = 1;
 
     public enum QueryRewriteConsistencyMode {
         DISABLE,    // 0: disable query rewrite
@@ -121,7 +122,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // This property only applies to materialized views
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
-    private int partitionRefreshNumber = INVALID;
+    private int partitionRefreshNumber = DEFAULT_PARTITION_REFRESH_NUMBER;
 
     // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
@@ -344,7 +345,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildPartitionRefreshNumber() {
         partitionRefreshNumber =
                 Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
-                        String.valueOf(INVALID)));
+                        String.valueOf(DEFAULT_PARTITION_REFRESH_NUMBER)));
         return this;
     }
 

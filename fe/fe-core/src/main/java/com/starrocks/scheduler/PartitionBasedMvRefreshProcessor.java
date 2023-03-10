@@ -312,6 +312,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     @VisibleForTesting
     public void filterPartitionByRefreshNumber(Set<String> partitionsToRefresh, MaterializedView materializedView) {
+        if (materializedView.getPartitionInfo() instanceof SinglePartitionInfo) {
+            // for non-partitioned mv, return directly
+            return;
+        }
         int partitionRefreshNumber = materializedView.getTableProperty().getPartitionRefreshNumber();
         if (partitionRefreshNumber <= 0) {
             return;
