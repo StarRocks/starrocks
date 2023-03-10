@@ -74,7 +74,8 @@ public class InsertLoadJob extends LoadJob {
         this.jobType = EtlJobType.INSERT;
     }
 
-    public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp, long estimateScanRow, TLoadJobType type) 
+    public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp,
+                         long estimateScanRow, TLoadJobType type, long timeout)
             throws MetaNotFoundException {
         super(dbId, label);
         this.tableId = tableId;
@@ -84,6 +85,7 @@ public class InsertLoadJob extends LoadJob {
         this.jobType = EtlJobType.INSERT;
         this.estimateScanRow = estimateScanRow;
         this.loadType = type;
+        this.timeoutSecond = timeout;
     }
 
     // only used for test
@@ -121,7 +123,6 @@ public class InsertLoadJob extends LoadJob {
                 this.failMsg = new FailMsg(CancelType.LOAD_RUN_FAIL, failMsg);
                 this.progress = 0;
             }
-            this.timeoutSecond = Config.insert_load_default_timeout_second;
             this.authorizationInfo = gatherAuthInfo();
             this.loadingStatus.setTrackingUrl(trackingUrl);
         } finally {
