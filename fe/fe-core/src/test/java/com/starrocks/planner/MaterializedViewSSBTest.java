@@ -48,7 +48,6 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery1_3() {
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
         runFileUnitTest("materialized-view/ssb/q1-3");
     }
 
