@@ -93,5 +93,7 @@ protected:
     // index: destination slot id
     // value: source slot desc
     std::vector<SlotDescriptor*> _dest_slot_desc_mappings;
+
+    bool _case_sensitive = true;
 };
 } // namespace starrocks
