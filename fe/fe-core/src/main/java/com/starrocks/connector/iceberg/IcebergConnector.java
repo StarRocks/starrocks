@@ -39,7 +39,9 @@ public class IcebergConnector implements Connector {
     public static final String ICEBERG_CATALOG_TYPE = "iceberg.catalog.type";
     @Deprecated
     public static final String ICEBERG_CATALOG_LEGACY = "starrocks.catalog-type";
+    @Deprecated
     public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
+    public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String ICEBERG_IMPL = "iceberg.catalog-impl";
 
     private final Map<String, String> properties;
@@ -63,7 +65,10 @@ public class IcebergConnector implements Connector {
 
         switch (nativeCatalogType) {
             case HIVE_CATALOG:
-                String metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
+                String metastoreURI = properties.get(HIVE_METASTORE_URIS);
+                if (metastoreURI == null) {
+                    metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
+                }
                 Util.validateMetastoreUris(metastoreURI);
                 properties.put(CatalogProperties.URI, metastoreURI);
                 catalogLoader = CatalogLoader.hive(icebergNativeCatalogName, conf, properties);
