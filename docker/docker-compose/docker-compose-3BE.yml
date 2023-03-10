@@ -10,6 +10,7 @@ services:
       - 1030:8030
       - 2020:9020
       - 3030:9030
+#    Make sure to substitute path left of the ":" to a directory of the host.
 #    volumes:
 #      - path/of/host/fe.conf:/opt/starrocks/fe/conf/fe.conf
 #      - path/of/host/fe/meta:/opt/starrocks/fe/meta
@@ -28,6 +29,7 @@ services:
     container_name: starrocks-be1
     depends_on:
       - "starrocks-fe"
+#    Make sure to substitute path left of the ":" to a directory of the host.
 #    volumes:
 #      - path/of/host/be.conf:/opt/starrocks/be/conf/be.conf
 #      - path/of/host/starrocks-be1/storage:/opt/starrocks/be/storage
@@ -45,6 +47,7 @@ services:
     container_name: starrocks-be2
     depends_on:
       - "starrocks-fe"
+#    Make sure to substitute path left of the ":" to a directory of the host.
 #    volumes:
 #      - path/of/host/be.conf:/opt/starrocks/be/conf/be.conf
 #      - path/of/host/starrocks-be2/storage:/opt/starrocks/be/storage
@@ -62,6 +65,7 @@ services:
     container_name: starrocks-be3
     depends_on:
       - "starrocks-fe"
+#    Make sure to substitute path left of the ":" to a directory of the host.
 #    volumes:
 #      - path/of/host/be.conf:/opt/starrocks/be/conf/be.conf
 #      - path/of/host/starrocks-be3/storage:/opt/starrocks/be/storage
