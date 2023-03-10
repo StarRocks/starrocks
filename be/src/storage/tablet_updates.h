@@ -13,6 +13,7 @@
 #include "storage/edit_version.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_writer.h"
+#include "storage/update_compaction_state.h"
 #include "util/blocking_queue.hpp"
 
 namespace starrocks {
@@ -30,7 +31,6 @@ class TTabletInfo;
 
 namespace vectorized {
 class ChunkIterator;
-class CompactionState;
 class RowsetReadOptions;
 class Schema;
 class TabletReader;
@@ -42,6 +42,8 @@ struct CompactionInfo {
     EditVersion start_version;
     std::vector<uint32_t> inputs;
     uint32_t output = UINT32_MAX;
+
+    size_t mem_usage() const { return sizeof(CompactionInfo) + inputs.capacity() * sizeof(uint32_t); }
 };
 
 // maintain all states for updatable tablets
@@ -221,6 +223,26 @@ public:
     void to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& rowset_metas,
                            std::vector<RowsetMetaPB>& rowset_metas_pb);
 
+    size_t mem_usage() const {
+        size_t size = sizeof(TabletUpdates);
+
+        size += _edit_version_infos.capacity() * sizeof(std::unique_ptr<EditVersionInfo>);
+        for (size_t i = 0; i < _edit_version_infos.capacity(); i++) {
+            size += _edit_version_infos[i]->mem_usage();
+        }
+
+        size += _pending_commits.size() * sizeof(RowsetSharedPtr);
+        size += _rowsets.size() * sizeof(RowsetSharedPtr);
+        size += _unused_rowsets.get_size() * sizeof(RowsetSharedPtr);
+        size += _rowset_stats.size() * (sizeof(uint32_t) + sizeof(std::unique_ptr<RowsetStats>) + sizeof(RowsetStats));
+
+        if (_compaction_state != nullptr) {
+            size += _compaction_state->memory_usage();
+        }
+        size += _error_msg.capacity();
+        return size;
+    }
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -238,6 +260,16 @@ private:
         std::vector<uint32_t> deltas;
         // used for compaction commit
         std::unique_ptr<CompactionInfo> compaction;
+
+        size_t mem_usage() const {
+            size_t size = sizeof(EditVersionInfo);
+            size += rowsets.capacity() * sizeof(uint32_t);
+            size += deltas.capacity() * sizeof(uint32_t);
+            if (compaction != nullptr) {
+                size += compaction->mem_usage();
+            }
+            return size;
+        }
     };
 
     struct RowsetStats {

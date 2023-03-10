@@ -122,6 +122,7 @@ public:
     MemTracker* segment_metadata_mem_tracker() { return _segment_metadata_mem_tracker; }
     MemTracker* column_metadata_mem_tracker() { return _column_metadata_mem_tracker; }
     MemTracker* tablet_schema_mem_tracker() { return _tablet_schema_mem_tracker; }
+    MemTracker* utablet_mem_tracker() { return _utablet_mem_tracker; }
     MemTracker* column_zonemap_index_mem_tracker() { return _column_zonemap_index_mem_tracker; }
     MemTracker* ordinal_index_mem_tracker() { return _ordinal_index_mem_tracker; }
     MemTracker* bitmap_index_mem_tracker() { return _bitmap_index_mem_tracker; }
@@ -218,6 +219,7 @@ private:
     MemTracker* _column_metadata_mem_tracker = nullptr;
 
     // metadata l2
+    MemTracker* _utablet_mem_tracker = nullptr;
     MemTracker* _tablet_schema_mem_tracker = nullptr;
     MemTracker* _segment_zonemap_mem_tracker = nullptr;
     MemTracker* _short_key_index_mem_tracker = nullptr;

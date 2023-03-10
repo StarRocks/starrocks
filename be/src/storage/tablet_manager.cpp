@@ -679,12 +679,19 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
 TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir* data_dir) {
     int64_t highest_score = 0;
     TabletSharedPtr best_tablet;
+    size_t mem_usage = 0;
+    size_t m_count = 0;
     for (const auto& tablets_shard : _tablets_shards) {
         std::shared_lock rlock(tablets_shard.lock);
         for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
             if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
                 continue;
             }
+            m_count++;
+            if (tablet_ptr->updates() != nullptr) {
+                mem_usage += tablet_ptr->updates()->mem_usage();
+            }
+
             AlterTabletTaskSharedPtr cur_alter_task = tablet_ptr->alter_task();
             if (cur_alter_task != nullptr && cur_alter_task->alter_state() != ALTER_FINISHED &&
                 cur_alter_task->alter_state() != ALTER_FAILED) {
@@ -723,6 +730,8 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
                   << " tablet_id=" << best_tablet->tablet_id() << " highest_score=" << highest_score;
         StarRocksMetrics::instance()->tablet_update_max_compaction_score.set_value(highest_score);
     }
+    LOG(INFO) << "PRIMARY MEM USAGE: " << m_count << ":" << mem_usage << ":" << sizeof(Tablet) << ":"
+              << sizeof(TabletUpdates);
     return best_tablet;
 }
 

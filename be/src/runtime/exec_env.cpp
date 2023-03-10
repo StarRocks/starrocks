@@ -307,6 +307,7 @@ Status ExecEnv::init_mem_tracker() {
     _column_metadata_mem_tracker = new MemTracker(-1, "column_metadata", _metadata_mem_tracker);
 
     _tablet_schema_mem_tracker = new MemTracker(-1, "tablet_schema", _tablet_metadata_mem_tracker);
+    _utablet_mem_tracker = new MemTracker(-1, "utablet", _tablet_metadata_mem_tracker);
     _segment_zonemap_mem_tracker = new MemTracker(-1, "segment_zonemap", _segment_metadata_mem_tracker);
     _short_key_index_mem_tracker = new MemTracker(-1, "short_key_index", _segment_metadata_mem_tracker);
     _column_zonemap_index_mem_tracker = new MemTracker(-1, "column_zonemap_index", _column_metadata_mem_tracker);
@@ -389,11 +390,12 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_segment_zonemap_mem_tracker);
     SAFE_DELETE(_short_key_index_mem_tracker);
     SAFE_DELETE(_tablet_schema_mem_tracker);
+    SAFE_DELETE(_utablet_mem_tracker);
 
     SAFE_DELETE(_column_metadata_mem_tracker);
     SAFE_DELETE(_segment_metadata_mem_tracker);
     SAFE_DELETE(_rowset_metadata_mem_tracker);
-    SAFE_DELETE(_tablet_schema_mem_tracker);
+    SAFE_DELETE(_tablet_metadata_mem_tracker);
 
     SAFE_DELETE(_metadata_mem_tracker);
 

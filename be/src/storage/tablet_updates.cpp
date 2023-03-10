@@ -52,10 +52,13 @@ std::string EditVersion::to_string() const {
 
 using IteratorList = TabletUpdates::IteratorList;
 
-TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {}
+TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->utablet_mem_tracker(), sizeof(TabletUpdates));
+}
 
 TabletUpdates::~TabletUpdates() {
     _stop_and_wait_apply_done();
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->utablet_mem_tracker(), sizeof(TabletUpdates));
 }
 
 template <class Itr1, class Itr2>
