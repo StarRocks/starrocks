@@ -116,6 +116,10 @@ public:
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
     Status init_query_once(workgroup::WorkGroup* wg);
+    /// Release the workgroup token only once to avoid double-free.
+    /// This method should only be invoked while the QueryContext is still valid,
+    /// to avoid double-free between the destruction and this method.
+    void release_workgroup_token_once();
 
     // Some statistic about the query, including cpu, scan_rows, scan_bytes
     int64_t mem_cost_bytes() const { return _mem_tracker->peak_consumption(); }
@@ -202,6 +206,7 @@ private:
 
     int64_t _scan_limit = 0;
     workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;
+    std::atomic<workgroup::RunningQueryToken*> _wg_running_query_token_atomic_ptr = nullptr;
 
     // STREAM MV
     std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
