@@ -1,4 +1,4 @@
-version: "3.9"
+version: "3.3"
 services:
   starrocks-fe:
     image: starrocks/fe-ubuntu:main
@@ -10,13 +10,10 @@ services:
       - 8030:8030
       - 9020:9020
       - 9030:9030
-    # volumes:
-    #   - ../../conf/fe.conf:/opt/starrocks/fe/conf/fe.conf
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9030"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
+#    volumes:
+#      - path/of/host/fe.conf:/opt/starrocks/fe/conf/fe.conf
+#      - path/of/host/fe/meta:/opt/starrocks/fe/meta
+
 
   starrocks-be:
     image: starrocks/be-ubuntu:main
@@ -32,5 +29,6 @@ services:
     container_name: starrocks-be
     depends_on:
       - starrocks-fe
-    # volumes:
-    #   - ../../conf/be.conf:/opt/starrocks/be/conf/be.conf
+#    volumes:
+#      - path/of/host/be.conf:/opt/starrocks/be/conf/be.conf
+#      - path/of/host/starrocks-be/storage:/opt/starrocks/be/storage
