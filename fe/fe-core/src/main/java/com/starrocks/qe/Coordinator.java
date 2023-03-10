@@ -547,6 +547,28 @@ public class Coordinator {
         for (TUniqueId instanceId : instanceIds) {
             profileDoneSignal.addMark(instanceId, -1L /* value is meaningless */);
         }
+<<<<<<< HEAD
+=======
+    }
+
+    private void handleErrorBackendExecState(BackendExecState errorBackendExecState, TStatusCode errorCode, String errMessage)
+            throws UserException, RpcException {
+        if (errorBackendExecState != null) {
+            cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+            switch (Objects.requireNonNull(errorCode)) {
+                case TIMEOUT:
+                    throw new UserException("query timeout. backend id: " + errorBackendExecState.backend.getId());
+                case THRIFT_RPC_ERROR:
+                    SimpleScheduler.addToBlacklist(errorBackendExecState.backend.getId());
+                    throw new RpcException(errorBackendExecState.backend.getHost(), "rpc failed");
+                default:
+                    throw new UserException(errMessage + " backend:" + errorBackendExecState.address.hostname);
+            }
+        }
+    }
+
+    private void deliverExecFragmentRequests(boolean enablePipelineEngine) throws Exception {
+>>>>>>> 6f0bd88fe ([BugFix] Release workgroup token immediately when fragment is cancelled (#19310))
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
         lock();
         try {
@@ -635,6 +657,10 @@ public class Coordinator {
                         }
                         futures.add(Pair.create(execState, execState.execRemoteFragmentAsync()));
                     }
+
+                    BackendExecState errorBackendExecState = null;
+                    TStatusCode errorCode = null;
+                    String errMessage = null;
                     for (Pair<BackendExecState, Future<PExecPlanFragmentResult>> pair : futures) {
                         TStatusCode code;
                         String errMsg = null;
@@ -664,6 +690,7 @@ public class Coordinator {
                             LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
                                     errMsg, code, fragment.getFragmentId(),
                                     pair.first.address.hostname, pair.first.address.port);
+<<<<<<< HEAD
                             cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
                             switch (Objects.requireNonNull(code)) {
                                 case TIMEOUT:
@@ -673,9 +700,24 @@ public class Coordinator {
                                     throw new RpcException(pair.first.backend.getHost(), "rpc failed");
                                 default:
                                     throw new UserException(errMsg);
+=======
+                            if (errorBackendExecState == null) {
+                                errorBackendExecState = pair.first;
+                                errorCode = code;
+                                errMessage = errMsg;
+                            }
+                            if (Objects.requireNonNull(code) == TStatusCode.TIMEOUT) {
+                                break;
+>>>>>>> 6f0bd88fe ([BugFix] Release workgroup token immediately when fragment is cancelled (#19310))
                             }
                         }
                     }
+
+                    // Handle error results and cancel fragment instances, excluding TIMEOUT errors,
+                    // until all the delivered fragment instances are completed.
+                    // Otherwise, the cancellation RPC may arrive at BE before the delivery fragment instance RPC,
+                    // causing the instances to become stale and only able to be released after a timeout.
+                    handleErrorBackendExecState(errorBackendExecState, errorCode, errMessage);
                 }
                 profileFragmentId += 1;
             }
@@ -697,6 +739,280 @@ public class Coordinator {
                 hostToNumbers.put(instance.host, ++number);
             }
         }
+<<<<<<< HEAD
+=======
+
+        if (fragments.size() != inDegrees.size()) {
+            for (PlanFragment fragment : fragments) {
+                if (!inDegrees.containsKey(fragment)) {
+                    LOG.warn("This fragment does not belong to the fragment tree: {}", fragment.getFragmentId());
+                }
+            }
+            throw new StarRocksPlannerException("Some fragments do not belong to the fragment tree",
+                    ErrorType.INTERNAL_ERROR);
+        }
+
+        // Compute fragment groups by BFS.
+        // `queue` contains the fragments whose in-degree is zero.
+        queue.add(root);
+        List<List<PlanFragment>> groups = Lists.newArrayList();
+        int numOutputFragments = 0;
+        while (!queue.isEmpty()) {
+            int groupSize = queue.size();
+            List<PlanFragment> group = new ArrayList<>(groupSize);
+            // The next `groupSize` fragments can be delivered concurrently, because zero in-degree indicates that
+            // they don't depend on each other and all the fragments depending on them have been delivered.
+            for (int i = 0; i < groupSize; ++i) {
+                PlanFragment fragment = queue.poll();
+                group.add(fragment);
+
+                for (PlanFragment child : fragment.getChildren()) {
+                    int degree = inDegrees.compute(child, (k, v) -> v - 1);
+                    if (degree == 0) {
+                        queue.add(child);
+                    }
+                }
+            }
+
+            groups.add(group);
+            numOutputFragments += groupSize;
+        }
+
+        if (fragments.size() != numOutputFragments) {
+            throw new StarRocksPlannerException("There are some circles in the fragment tree",
+                    ErrorType.INTERNAL_ERROR);
+        }
+
+        return groups;
+    }
+
+    /**
+     * Deliver multiple fragments concurrently according to the topological order,
+     * and all the instances of a fragment to the same destination host are delivered in the same request.
+     */
+    private void deliverExecBatchFragmentsRequests(boolean enablePipelineEngine) throws Exception {
+        long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
+        List<List<PlanFragment>> fragmentGroups = computeTopologicalOrderFragments();
+
+        lock();
+        try {
+            // execute all instances from up to bottom
+            int backendNum = 0;
+            int profileFragmentId = 0;
+
+            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
+
+            this.descTable.setIs_cached(false);
+            TDescriptorTable emptyDescTable = new TDescriptorTable();
+            emptyDescTable.setIs_cached(true);
+            emptyDescTable.setTupleDescriptors(Collections.emptyList());
+
+            // Record the first groupIndex of each host.
+            // Each host only sends descTable once in the first batch request.
+            Map<TNetworkAddress, Integer> host2firstGroupIndex = Maps.newHashMap();
+            for (int groupIndex = 0; groupIndex < fragmentGroups.size(); ++groupIndex) {
+                List<PlanFragment> fragmentGroup = fragmentGroups.get(groupIndex);
+
+                // Divide requests of fragments in the current group to two stages.
+                // If a request need send descTable, the other requests to the same host will be in the second stage.
+                // Otherwise, the request will be in the first stage, including
+                // - the request need send descTable.
+                // - the request to the host, where some request in the previous group has already sent descTable.
+                List<List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
+                        ImmutableList.of(new ArrayList<>(), new ArrayList<>());
+                for (PlanFragment fragment : fragmentGroup) {
+                    CoordinatorPreprocessor.FragmentExecParams params =
+                            coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
+                    Preconditions.checkState(!params.instanceExecParams.isEmpty());
+
+                    // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
+                    // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
+                    // contain shuffle join determine the ordinals of GRF components in the GRF. For a
+                    // shuffle join, its shuffle partitions and corresponding one-map-one GRF components
+                    // should have the same ordinals. so here assign monotonic unique backendIds to
+                    // Fragment instances to keep consistent order with Fragment instances in
+                    // FragmentExecParams.instanceExecParams.
+                    for (CoordinatorPreprocessor.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
+                        fInstanceExecParam.backendNum = backendNum++;
+                    }
+
+                    Map<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> requestsPerHost =
+                            params.instanceExecParams.stream()
+                                    .collect(Collectors.groupingBy(CoordinatorPreprocessor.FInstanceExecParam::getHost,
+                                            HashMap::new,
+                                            Collectors.mapping(Function.identity(), Collectors.toList())));
+                    // if pipeline is enable and current fragment contain olap table sink, in fe we will 
+                    // calculate the number of all tablet sinks in advance and assign them to each fragment instance
+                    boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+                    boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
+                    int tabletSinkTotalDop = 0;
+                    int accTabletSinkDop = 0;
+                    if (enablePipelineTableSinkDop) {
+                        for (Map.Entry<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
+                                requestsPerHost.entrySet()) {
+                            List<CoordinatorPreprocessor.FInstanceExecParam> requests = hostAndRequests.getValue();
+                            for (CoordinatorPreprocessor.FInstanceExecParam request : requests) {
+                                if (!forceSetTableSinkDop) {
+                                    tabletSinkTotalDop += request.getPipelineDop();
+                                } else {
+                                    tabletSinkTotalDop += fragment.getPipelineDop();
+                                }
+                            }
+                        }
+                    }
+
+                    if (tabletSinkTotalDop < 0) {
+                        throw new UserException(
+                                "tabletSinkTotalDop = " + tabletSinkTotalDop + " should be >= 0");
+                    }
+
+                    for (Map.Entry<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
+                            requestsPerHost.entrySet()) {
+                        TNetworkAddress host = hostAndRequests.getKey();
+                        List<CoordinatorPreprocessor.FInstanceExecParam> requests = hostAndRequests.getValue();
+                        if (requests.isEmpty()) {
+                            continue;
+                        }
+
+                        int inflightIndex = 0;
+                        TDescriptorTable curDescTable = this.descTable;
+                        if (enablePipelineEngine) {
+                            Integer firstGroupIndex = host2firstGroupIndex.get(host);
+                            if (firstGroupIndex == null) {
+                                // Hasn't sent descTable for this host,
+                                // so send descTable this time.
+                                host2firstGroupIndex.put(host, groupIndex);
+                            } else if (firstGroupIndex < groupIndex) {
+                                // Has sent descTable for this host in the previous fragment group,
+                                // so needn't wait and use cached descTable.
+                                curDescTable = emptyDescTable;
+                            } else {
+                                // The previous fragment for this host int the current fragment group will send descTable,
+                                // so this fragment need wait until the previous one finishes delivering.
+                                inflightIndex = 1;
+                                curDescTable = emptyDescTable;
+                            }
+                        }
+
+                        Set<TUniqueId> curInstanceIds = requests.stream()
+                                .map(CoordinatorPreprocessor.FInstanceExecParam::getInstanceId)
+                                .collect(Collectors.toSet());
+                        TExecBatchPlanFragmentsParams tRequest =
+                                params.toThriftInBatch(curInstanceIds, host, curDescTable, enablePipelineEngine,
+                                        accTabletSinkDop, tabletSinkTotalDop);
+                        if (enablePipelineTableSinkDop) {
+                            for (CoordinatorPreprocessor.FInstanceExecParam request : requests) {
+                                if (!forceSetTableSinkDop) {
+                                    accTabletSinkDop += request.getPipelineDop();
+                                } else {
+                                    accTabletSinkDop += fragment.getPipelineDop();
+                                }
+                            }
+                        }
+                        TExecPlanFragmentParams tCommonParams = tRequest.getCommon_param();
+                        List<TExecPlanFragmentParams> tUniqueParamsList = tRequest.getUnique_param_per_instance();
+                        Preconditions.checkState(!tUniqueParamsList.isEmpty());
+
+                        // this is a load process, and it is the first fragment.
+                        // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
+                        // so that we can check these backends' state when joining this Coordinator
+                        boolean needCheckBackendState = isLoadType() && profileFragmentId == 0;
+
+                        // Create ExecState for each fragment instance.
+                        List<BackendExecState> execStates = Lists.newArrayList();
+                        for (TExecPlanFragmentParams tUniquePrams : tUniqueParamsList) {
+                            // TODO: pool of pre-formatted BackendExecStates?
+                            BackendExecState execState = new BackendExecState(fragment.getFragmentId(), host,
+                                    profileFragmentId, tCommonParams, tUniquePrams,
+                                    coordinatorPreprocessor.getAddressToBackendID());
+                            execStates.add(execState);
+                            backendExecStates.put(tUniquePrams.backend_num, execState);
+                            if (needCheckBackendState) {
+                                needCheckBackendExecStates.add(execState);
+                                if (LOG.isDebugEnabled()) {
+                                    LOG.debug("add need check backend {} for fragment, {} job: {}",
+                                            execState.backend.getId(),
+                                            fragment.getFragmentId().asInt(), jobId);
+                                }
+                            }
+                        }
+
+                        inflightRequestsList.get(inflightIndex).add(Pair.create(execStates, tRequest));
+                    }
+
+                    profileFragmentId += 1;
+                }
+
+                for (List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>> inflightRequests :
+                        inflightRequestsList) {
+                    List<Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>>> futures = Lists.newArrayList();
+                    for (Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams> inflightRequest : inflightRequests) {
+                        List<BackendExecState> execStates = inflightRequest.first;
+                        execStates.forEach(execState -> execState.setInitiated(true));
+
+                        Preconditions.checkState(!execStates.isEmpty());
+                        // Just choose any instance ExecState to send the batch RPC request.
+                        BackendExecState firstExecState = execStates.get(0);
+                        futures.add(Pair.create(firstExecState,
+                                firstExecState.execRemoteBatchFragmentsAsync(inflightRequest.second)));
+                    }
+
+                    BackendExecState errorBackendExecState = null;
+                    TStatusCode errorCode = null;
+                    String errMessage = null;
+                    for (Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>> pair : futures) {
+                        TStatusCode code;
+                        String errMsg = null;
+                        try {
+                            PExecBatchPlanFragmentsResult result =
+                                    pair.second.get(queryDeliveryTimeoutMs, TimeUnit.MILLISECONDS);
+                            code = TStatusCode.findByValue(result.status.statusCode);
+                            if (result.status.errorMsgs != null && !result.status.errorMsgs.isEmpty()) {
+                                errMsg = result.status.errorMsgs.get(0);
+                            }
+                        } catch (ExecutionException e) {
+                            LOG.warn("catch a execute exception", e);
+                            code = TStatusCode.THRIFT_RPC_ERROR;
+                        } catch (InterruptedException e) {
+                            LOG.warn("catch a interrupt exception", e);
+                            code = TStatusCode.INTERNAL_ERROR;
+                        } catch (TimeoutException e) {
+                            LOG.warn("catch a timeout exception", e);
+                            code = TStatusCode.TIMEOUT;
+                        }
+
+                        if (code != TStatusCode.OK) {
+                            if (errMsg == null) {
+                                errMsg = "exec rpc error. backend id: " + pair.first.backend.getId();
+                            }
+                            queryStatus.setStatus(errMsg + " backend:" + pair.first.address.hostname);
+                            LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
+                                    errMsg, code, pair.first.fragmentId,
+                                    pair.first.address.hostname, pair.first.address.port);
+                            if (errorBackendExecState == null) {
+                                errorBackendExecState = pair.first;
+                                errorCode = code;
+                                errMessage = errMsg;
+                            }
+                            if (Objects.requireNonNull(code) == TStatusCode.TIMEOUT) {
+                                break;
+                            }
+                        }
+                    }
+
+                    // Handle error results and cancel fragment instances, excluding TIMEOUT errors,
+                    // until all the delivered fragment instances are completed.
+                    // Otherwise, the cancellation RPC may arrive at BE before the delivery fragment instance RPC,
+                    // causing the instances to become stale and only able to be released after a timeout.
+                    handleErrorBackendExecState(errorBackendExecState, errorCode, errMessage);
+                }
+            }
+
+            attachInstanceProfileToFragmentProfile();
+        } finally {
+            unlock();
+        }
+>>>>>>> 6f0bd88fe ([BugFix] Release workgroup token immediately when fragment is cancelled (#19310))
     }
 
     // choose at most num FInstances on difference BEs

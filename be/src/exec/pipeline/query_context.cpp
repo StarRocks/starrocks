@@ -97,6 +97,7 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
             auto maybe_token = wg->acquire_running_query_token();
             if (maybe_token.ok()) {
                 _wg_running_query_token_ptr = std::move(maybe_token.value());
+                _wg_running_query_token_atomic_ptr = _wg_running_query_token_ptr.get();
             } else {
                 st = maybe_token.status();
             }
@@ -106,6 +107,20 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
     return st;
 }
 
+<<<<<<< HEAD
+=======
+void QueryContext::release_workgroup_token_once() {
+    auto* old = _wg_running_query_token_atomic_ptr.load();
+    if (old != nullptr && _wg_running_query_token_atomic_ptr.compare_exchange_strong(old, nullptr)) {
+        _wg_running_query_token_ptr.reset();
+    }
+}
+
+void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace) {
+    std::call_once(_query_trace_init_flag, [this, &query_trace]() { _query_trace = std::move(query_trace); });
+}
+
+>>>>>>> 6f0bd88fe ([BugFix] Release workgroup token immediately when fragment is cancelled (#19310))
 std::shared_ptr<QueryStatisticsRecvr> QueryContext::maintained_query_recv() {
     return _sub_plan_query_statistics_recvr;
 }

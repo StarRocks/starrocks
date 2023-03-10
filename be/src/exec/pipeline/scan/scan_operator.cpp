@@ -286,6 +286,20 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 
             auto& chunk_source = _chunk_sources[chunk_source_index];
+<<<<<<< HEAD
+=======
+            [[maybe_unused]] std::string category;
+            category = fmt::sprintf("chunk_source_%d_0x%x", get_plan_node_id(), query_trace_ctx.id);
+            QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
+
+            DeferOp timer_defer([chunk_source]() {
+                COUNTER_SET(chunk_source->scan_timer(),
+                            chunk_source->io_task_wait_timer()->value() + chunk_source->io_task_exec_timer()->value());
+            });
+            COUNTER_UPDATE(chunk_source->io_task_wait_timer(), MonotonicNanos() - io_task_start_nano);
+            SCOPED_TIMER(chunk_source->io_task_exec_timer());
+
+>>>>>>> 6f0bd88fe ([BugFix] Release workgroup token immediately when fragment is cancelled (#19310))
             int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
             int64_t prev_scan_rows = chunk_source->get_scan_rows();
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
