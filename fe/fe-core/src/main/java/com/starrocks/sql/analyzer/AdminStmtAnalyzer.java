@@ -110,12 +110,6 @@ public class AdminStmtAnalyzer {
                 }
             }
             adminShowReplicaDistributionStmt.setDbName(dbName);
-
-            try {
-                CatalogUtils.checkIsLakeTable(dbName, tblName);
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage(), pos);
-            }
             return null;
         }
 
