@@ -1749,6 +1749,12 @@ public class Config extends ConfigBase {
     public static long iceberg_metadata_disk_cache_capacity = 2147483648L;
 
     /**
+     * iceberg metadata disk cache expire after access
+     */
+    @ConfField
+    public static long iceberg_metadata_disk_cache_expiration_seconds = 7L * 24L * 60L * 60L;
+
+    /**
      * iceberg metadata cache max entry size, default 8MB
      */
     @ConfField(mutable = true)
