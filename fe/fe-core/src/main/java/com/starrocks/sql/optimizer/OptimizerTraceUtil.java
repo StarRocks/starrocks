@@ -568,13 +568,8 @@ public class OptimizerTraceUtil {
 
     public static class RelationTracePrinter extends AstVisitor<String, String> {
         @Override
-        public String visit(ParseNode node) {
-            return node == null ? "null" : node.toSql();
-        }
-
-        @Override
         public String visit(ParseNode node, String indent) {
-            return node == null ? "null" : node.accept(this, indent);
+            return node == null ? "null" : node.toSql();
         }
 
         @Override
@@ -591,15 +586,15 @@ public class OptimizerTraceUtil {
                     indent + "  fromRelation=" +
                     visit(node.getRelation(), indent + "  ") + "\n" +
                     indent + "  predicate=" +
-                    visit(node.getPredicate()) + "\n" +
+                    visit(node.getPredicate(), null) + "\n" +
                     indent + "  groupByClause=" +
-                    visit(node.getGroupByClause()) + "\n" +
+                    visit(node.getGroupByClause(), null) + "\n" +
                     indent + "  having=" +
-                    visit(node.getHaving()) + "\n" +
+                    visit(node.getHaving(), null) + "\n" +
                     indent + "  sortClause=" +
                     node.getOrderBy() + "\n" +
                     indent + "  limit=" +
-                    visit(node.getLimit()) + "\n" +
+                    visit(node.getLimit(), null) + "\n" +
                     indent + "}";
         }
 

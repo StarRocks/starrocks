@@ -194,7 +194,7 @@ public class AnalyzerUtils {
     // Get all the db used, the query needs to add locks to them
     public static Map<String, Database> collectAllDatabase(ConnectContext context, StatementBase statementBase) {
         Map<String, Database> dbs = Maps.newHashMap();
-        new AnalyzerUtils.DBCollector(dbs, context).visit(statementBase);
+        new AnalyzerUtils.DBCollector(dbs, context).visit(statementBase, null);
         return dbs;
     }
 
@@ -210,7 +210,7 @@ public class AnalyzerUtils {
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
             getDB(node.getTableName());
-            return visit(node.getQueryStatement());
+            return visit(node.getQueryStatement(), context);
         }
 
         @Override
@@ -231,21 +231,21 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitQueryStatement(QueryStatement node, Void context) {
-            return visit(node.getQueryRelation());
+            return visit(node.getQueryRelation(), context);
         }
 
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
             if (node.hasWithClause()) {
-                node.getCteRelations().forEach(this::visit);
+                node.getCteRelations().forEach(r -> visit(r, context));
             }
 
-            return visit(node.getRelation());
+            return visit(node.getRelation(), context);
         }
 
         @Override
         public Void visitSubquery(SubqueryRelation node, Void context) {
-            return visit(node.getQueryStatement());
+            return visit(node.getQueryStatement(), context);
         }
 
         public Void visitView(ViewRelation node, Void context) {
@@ -256,22 +256,22 @@ public class AnalyzerUtils {
         @Override
         public Void visitSetOp(SetOperationRelation node, Void context) {
             if (node.hasWithClause()) {
-                node.getRelations().forEach(this::visit);
+                node.getRelations().forEach(r -> visit(r, context));
             }
-            node.getRelations().forEach(this::visit);
+            node.getRelations().forEach(r -> visit(r, context));
             return null;
         }
 
         @Override
         public Void visitJoin(JoinRelation node, Void context) {
-            visit(node.getLeft());
-            visit(node.getRight());
+            visit(node.getLeft(), context);
+            visit(node.getRight(), context);
             return null;
         }
 
         @Override
         public Void visitCTE(CTERelation node, Void context) {
-            return visit(node.getCteQueryStatement());
+            return visit(node.getCteQueryStatement(), context);
         }
 
         @Override
@@ -308,7 +308,7 @@ public class AnalyzerUtils {
     //Get all the table used
     public static Map<TableName, Table> collectAllTable(StatementBase statementBase) {
         Map<TableName, Table> tables = Maps.newHashMap();
-        new AnalyzerUtils.TableCollector(tables).visit(statementBase);
+        new AnalyzerUtils.TableCollector(tables).visit(statementBase, null);
         return tables;
     }
 
@@ -326,7 +326,7 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitQueryStatement(QueryStatement statement, Void context) {
-            return visit(statement.getQueryRelation());
+            return visit(statement.getQueryRelation(), context);
         }
 
         // ------------------------------------------- DML Statement -------------------------------------------------------
@@ -362,47 +362,47 @@ public class AnalyzerUtils {
 
     public static Map<TableName, Table> collectAllTableWithAlias(StatementBase statementBase) {
         Map<TableName, Table> tables = Maps.newHashMap();
-        new AnalyzerUtils.TableCollectorWithAlias(tables).visit(statementBase);
+        new AnalyzerUtils.TableCollectorWithAlias(tables).visit(statementBase, null);
         return tables;
     }
 
     public static Map<TableName, Table> collectAllTableAndViewWithAlias(StatementBase statementBase) {
         Map<TableName, Table> tables = Maps.newHashMap();
-        new AnalyzerUtils.TableAndViewCollectorWithAlias(tables).visit(statementBase);
+        new AnalyzerUtils.TableAndViewCollectorWithAlias(tables).visit(statementBase, null);
         return tables;
     }
 
     public static Map<TableName, Table> collectAllTableAndViewWithAlias(SelectRelation statementBase) {
         Map<TableName, Table> tables = Maps.newHashMap();
-        new AnalyzerUtils.TableAndViewCollectorWithAlias(tables).visit(statementBase);
+        new AnalyzerUtils.TableAndViewCollectorWithAlias(tables).visit(statementBase, null);
         return tables;
     }
 
     public static Map<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
         Map<String, TableRelation> tableRelations = Maps.newHashMap();
-        new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase);
+        new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase, null);
         return tableRelations;
     }
 
     public static boolean isOnlyHasOlapTables(StatementBase statementBase) {
         Map<TableName, Table> nonOlapTables = Maps.newHashMap();
-        new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase);
+        new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase, null);
         return nonOlapTables.isEmpty();
     }
 
     public static void copyOlapTable(StatementBase statementBase, Set<OlapTable> olapTables) {
-        new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
+        new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase, null);
     }
 
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
-        new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
+        new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement, null);
         return subQueryRelations;
     }
 
     public static Map<TableName, Table> collectAllTableAndView(StatementBase statementBase) {
         Map<TableName, Table> tables = Maps.newHashMap();
-        new AnalyzerUtils.TableAndViewCollector(tables).visit(statementBase);
+        new AnalyzerUtils.TableAndViewCollector(tables).visit(statementBase, null);
         return tables;
     }
 
@@ -504,7 +504,7 @@ public class AnalyzerUtils {
         @Override
         public Void visitSubquery(SubqueryRelation node, Void context) {
             subQueryRelations.put(node.getResolveTableName(), node);
-            return visit(node.getQueryStatement());
+            return visit(node.getQueryStatement(), null);
         }
 
         @Override

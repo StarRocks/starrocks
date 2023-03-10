@@ -98,7 +98,7 @@ public class AggregationAnalyzer {
     }
 
     private void analyze(Expr expression) {
-        if (!new VerifyExpressionVisitor().visit(expression)) {
+        if (!new VerifyExpressionVisitor().visit(expression, null)) {
             throw new SemanticException(PARSER_ERROR_MSG.shouldBeAggFunc(expression.toSql()), expression.getPos());
         }
     }
@@ -108,11 +108,11 @@ public class AggregationAnalyzer {
      */
     private class VerifyExpressionVisitor extends AstVisitor<Boolean, Void> {
         @Override
-        public Boolean visit(ParseNode expr) {
+        public Boolean visit(ParseNode expr, Void context) {
             if (groupingExpressions.stream().anyMatch(expr::equals)) {
                 return true;
             }
-            return super.visit(expr);
+            return super.visit(expr, context);
         }
 
         @Override
@@ -146,69 +146,69 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitArithmeticExpr(ArithmeticExpr node, Void context) {
-            return visit(node.getChild(0)) && visit(node.getChild(1));
+            return visit(node.getChild(0), context) && visit(node.getChild(1), context);
         }
 
         @Override
         public Boolean visitAnalyticExpr(AnalyticExpr node, Void context) {
-            if (!node.getFnCall().getChildren().stream().allMatch(this::visit)) {
+            if (!node.getFnCall().getChildren().stream().allMatch(c -> visit(c, context))) {
                 return false;
             }
 
-            if (!node.getOrderByElements().stream().map(OrderByElement::getExpr).allMatch(this::visit)) {
+            if (!node.getOrderByElements().stream().map(OrderByElement::getExpr).allMatch(e -> visit(e, context))) {
                 return false;
             }
 
-            return node.getPartitionExprs().stream().allMatch(this::visit);
+            return node.getPartitionExprs().stream().allMatch(e -> visit(e, context));
         }
 
         @Override
         public Boolean visitArrayExpr(ArrayExpr node, Void context) {
-            return node.getChildren().stream().allMatch(this::visit);
+            return node.getChildren().stream().allMatch(c -> visit(c, context));
         }
 
         // only check lambda body here.
         @Override
         public Boolean visitLambdaFunctionExpr(LambdaFunctionExpr node, Void context) {
-            return visit(node.getChild(0));
+            return visit(node.getChild(0), context);
         }
 
         @Override
         public Boolean visitCollectionElementExpr(CollectionElementExpr node, Void context) {
-            return visit(node.getChild(0));
+            return visit(node.getChild(0), context);
         }
 
         @Override
         public Boolean visitArrowExpr(ArrowExpr node, Void context) {
-            return node.getChildren().stream().allMatch(this::visit);
+            return node.getChildren().stream().allMatch(c -> visit(c, context));
         }
 
         @Override
         public Boolean visitBetweenPredicate(BetweenPredicate node, Void context) {
-            return visit(node.getChild(0)) && visit(node.getChild(1)) && visit(node.getChild(2));
+            return visit(node.getChild(0), context) && visit(node.getChild(1), context) && visit(node.getChild(2), context);
         }
 
         @Override
         public Boolean visitBinaryPredicate(BinaryPredicate node, Void context) {
-            return visit(node.getChild(0)) && visit(node.getChild(1));
+            return visit(node.getChild(0), context) && visit(node.getChild(1), context);
         }
 
         @Override
         public Boolean visitCaseWhenExpr(CaseExpr node, Void context) {
-            return node.getChildren().stream().allMatch(this::visit);
+            return node.getChildren().stream().allMatch(c -> visit(c, context));
         }
 
         @Override
         public Boolean visitCastExpr(CastExpr node, Void context) {
-            return visit(node.getChild(0));
+            return visit(node.getChild(0), context);
         }
 
         @Override
         public Boolean visitCompoundPredicate(CompoundPredicate node, Void context) {
             if (node.getOp() == CompoundPredicate.Operator.NOT) {
-                return visit(node.getChild(0));
+                return visit(node.getChild(0), context);
             } else {
-                return visit(node.getChild(0)) && visit(node.getChild(1));
+                return visit(node.getChild(0), context) && visit(node.getChild(1), context);
             }
         }
 
@@ -219,7 +219,7 @@ public class AggregationAnalyzer {
             if (subqueries.size() != 1) {
                 throw new SemanticException(PARSER_ERROR_MSG.canOnlyOneExistSub(), node.getPos());
             }
-            return visit(subqueries.get(0));
+            return visit(subqueries.get(0), context);
         }
 
         @Override
@@ -243,7 +243,7 @@ public class AggregationAnalyzer {
 
                 return true;
             }
-            return expr.getChildren().stream().allMatch(this::visit);
+            return expr.getChildren().stream().allMatch(c -> visit(c, context));
         }
 
         @Override
@@ -268,17 +268,17 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitInPredicate(InPredicate node, Void context) {
-            return node.getChildren().stream().allMatch(this::visit);
+            return node.getChildren().stream().allMatch(c -> visit(c, context));
         }
 
         @Override
         public Boolean visitIsNullPredicate(IsNullPredicate node, Void context) {
-            return visit(node.getChild(0));
+            return visit(node.getChild(0), context);
         }
 
         @Override
         public Boolean visitLikePredicate(LikePredicate node, Void context) {
-            return visit(node.getChild(0));
+            return visit(node.getChild(0), context);
         }
 
         @Override
@@ -311,12 +311,12 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Void context) {
-            return visit(node.getChild(0)) && visit(node.getChild(1));
+            return visit(node.getChild(0), context) && visit(node.getChild(1), context);
         }
 
         @Override
         public Boolean visitCloneExpr(CloneExpr node, Void context) {
-            return visit(node.getChild(0));
+            return visit(node.getChild(0), context);
         }
     }
 }

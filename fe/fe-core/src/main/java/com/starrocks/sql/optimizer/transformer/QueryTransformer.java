@@ -148,7 +148,7 @@ class QueryTransformer {
         CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
         return new RelationTransformer(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCteContext)
-                .visit(node).getRootBuilder();
+                .visit(node, null).getRootBuilder();
     }
 
     private OptExprBuilder projectForOrder(OptExprBuilder subOpt,

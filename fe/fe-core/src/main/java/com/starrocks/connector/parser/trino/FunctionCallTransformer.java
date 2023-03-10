@@ -58,7 +58,7 @@ public class FunctionCallTransformer {
 
     private void init() {
         // collect the all placeholderExprs which defined by targetCall
-        new PlaceholderCollector(placeholderExprs, variableArgument).visit(targetCall);
+        new PlaceholderCollector(placeholderExprs, variableArgument).visit(targetCall, null);
     }
 
     private static class PlaceholderCollector extends AstVisitor<Void, Void> {
@@ -72,7 +72,7 @@ public class FunctionCallTransformer {
         @Override
         public Void visitExpression(Expr node, Void context) {
             for (Expr child : node.getChildren()) {
-                visit(child);
+                visit(child, context);
             }
             return null;
         }
@@ -110,7 +110,7 @@ public class FunctionCallTransformer {
     }
 
     public Expr transform(List<Expr> sourceArguments) {
-        return new FunctionCallRewriter(placeholderExprs, variableArgument, sourceArguments).visit(targetCall.clone());
+        return new FunctionCallRewriter(placeholderExprs, variableArgument, sourceArguments).visit(targetCall.clone(), null);
     }
 
     private static class FunctionCallRewriter extends AstVisitor<Expr, Void> {
@@ -129,7 +129,7 @@ public class FunctionCallTransformer {
         public Expr visitExpression(Expr node, Void context) {
             if (!variableArgument) {
                 for (int index = 0; index < node.getChildren().size(); ++index) {
-                    node.setChild(index, visit(node.getChild(index)));
+                    node.setChild(index, visit(node.getChild(index), context));
                 }
             } else {
                 // If variableArgument is true, use all source arguments to replace placeholders.

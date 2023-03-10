@@ -56,7 +56,7 @@ public class QueryConverter extends AstVisitor<QueryBuilders.QueryBuilder, Void>
 
     // used for test
     public QueryBuilders.QueryBuilder convert(Expr conjunct) {
-        return visit(conjunct);
+        return visit(conjunct, null);
     }
 
     public QueryBuilders.QueryBuilder convert(List<Expr> conjuncts) {
@@ -68,7 +68,7 @@ public class QueryConverter extends AstVisitor<QueryBuilders.QueryBuilder, Void>
         for (Expr conjunct : conjuncts) {
             // maybe use filter is better, but at this time we keep consistent with BE's logic
             try {
-                boolQueryBuilder.must(visit(conjunct));
+                boolQueryBuilder.must(visit(conjunct, null));
                 remoteConjuncts.add(conjunct.clone());
             } catch (Exception e) {
                 localConjuncts.add(conjunct.clone());

@@ -172,11 +172,11 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             Pair<OptExprBuilder, OptExprBuilder> cteRootAndMostDeepAnchor =
                     buildCTEAnchorAndProducer((QueryRelation) relation);
             optExprBuilder = cteRootAndMostDeepAnchor.first;
-            LogicalPlan logicalPlan = visit(relation);
+            LogicalPlan logicalPlan = visit(relation, null);
             cteRootAndMostDeepAnchor.second.addChild(logicalPlan.getRootBuilder());
             return new LogicalPlan(optExprBuilder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
         } else {
-            return visit(relation);
+            return visit(relation, null);
         }
     }
 
@@ -217,7 +217,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitQueryStatement(QueryStatement node, ExpressionMapping context) {
-        return visit(node.getQueryRelation());
+        return visit(node.getQueryRelation(), context);
     }
 
     @Override
@@ -257,7 +257,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
          */
         List<List<ColumnRefOperator>> childOutputColumnList = new ArrayList<>();
         for (QueryRelation relation : setOperationRelation.getRelations()) {
-            LogicalPlan setPlan = visit(relation);
+            LogicalPlan setPlan = visit(relation, null);
             OptExprBuilder optExprBuilder = setPlan.getRootBuilder();
             List<ColumnRefOperator> childOutputColumn = setPlan.getOutputColumn();
 
@@ -599,7 +599,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     @Override
     public LogicalPlan visitJoin(JoinRelation node, ExpressionMapping context) {
         if (node.isLateral() || node.getRight() instanceof TableFunctionRelation) {
-            LogicalPlan leftPlan = visit(node.getLeft());
+            LogicalPlan leftPlan = visit(node.getLeft(), null);
             LogicalPlan rightPlan = visit(node.getRight(), leftPlan.getRootBuilder().getExpressionMapping());
 
             ExpressionMapping expressionMapping = new ExpressionMapping(new Scope(RelationId.of(node),
@@ -618,8 +618,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                             expressionMapping), expressionMapping.getFieldMappings(), null);
         }
 
-        LogicalPlan leftPlan = visit(node.getLeft());
-        LogicalPlan rightPlan = visit(node.getRight());
+        LogicalPlan leftPlan = visit(node.getLeft(), null);
+        LogicalPlan rightPlan = visit(node.getRight(), null);
         OptExprBuilder leftOpt = leftPlan.getRootBuilder();
         OptExprBuilder rightOpt = rightPlan.getRootBuilder();
 

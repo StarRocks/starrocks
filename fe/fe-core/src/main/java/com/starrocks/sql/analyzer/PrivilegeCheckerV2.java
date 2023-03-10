@@ -15,14 +15,11 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.SchemaTable;
@@ -63,11 +60,12 @@ import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
-import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -89,10 +87,13 @@ import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
@@ -106,6 +107,7 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
@@ -123,14 +125,17 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
+import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
+import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.SetWarehouseStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -140,11 +145,16 @@ import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowClustersStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowDeleteStmt;
+import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
@@ -152,6 +162,7 @@ import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
+import com.starrocks.sql.ast.ShowLoadWarningsStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
@@ -166,15 +177,22 @@ import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
+import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.ShowWarehousesStmt;
+import com.starrocks.sql.ast.ShowWarningStmt;
+import com.starrocks.sql.ast.ShowWhiteListStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.SuspendWarehouseStmt;
+import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -471,6 +489,11 @@ public class PrivilegeCheckerV2 {
             visit(statement, context);
         }
 
+        @Override
+        public Void visitStatement(StatementBase statement, ConnectContext context) {
+            throw new SemanticException("The statement needs to add the logic of permission verification in PrivilegeChecker");
+        }
+
         // --------------------------------- Query Statement -------------------------------------
 
         @Override
@@ -481,157 +504,53 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
-        // ------------------------------------------- DML Statement -------------------------------------------------------
+        // ---------------------------------------- Warehouse Statement ----------------------------------------------------
 
         @Override
-        public Void visitInsertStatement(InsertStmt statement, ConnectContext context) {
-            // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
-            if (!statement.isForCTAS()) {
-                checkTableAction(context, statement.getTableName(), PrivilegeType.INSERT);
-            }
-
-            visit(statement.getQueryStatement(), context);
+        public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
+            //TODO : Add permission verification logic when the function is released
             return null;
         }
 
         @Override
-        public Void visitDeleteStatement(DeleteStmt statement, ConnectContext context) {
-            checkTableAction(context, statement.getTableName(), PrivilegeType.DELETE);
-            Map<TableName, Table> allTouchedTables = AnalyzerUtils.collectAllTableAndView(statement);
-            allTouchedTables.remove(statement.getTableName());
-            checkSelectTableAction(context, allTouchedTables);
+        public Void visitShowWarehousesStatement(ShowWarehousesStmt statement, ConnectContext context) {
+            //TODO : Add permission verification logic when the function is released
             return null;
         }
 
         @Override
-        public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
-            checkTableAction(context, statement.getTableName(), PrivilegeType.UPDATE);
-            Map<TableName, Table> allTouchedTables = AnalyzerUtils.collectAllTableAndView(statement);
-            allTouchedTables.remove(statement.getTableName());
-            checkSelectTableAction(context, allTouchedTables);
-            return null;
-        }
-
-        static void checkSelectTableAction(ConnectContext context, Map<TableName, Table> allTouchedTables) {
-            for (Map.Entry<TableName, Table> tableToBeChecked : allTouchedTables.entrySet()) {
-                TableName tableName = tableToBeChecked.getKey();
-                Table table = tableToBeChecked.getValue();
-
-                if (table instanceof View) {
-                    if (!PrivilegeActions.checkViewAction(context, tableName.getDb(), tableName.getTbl(), PrivilegeType.SELECT)) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_TABLE_DENIED,
-                                context.getQualifiedUser(), tableName);
-                    }
-                } else if (table instanceof SchemaTable && ((SchemaTable) table).isBeSchemaTable()) {
-                    checkStmtOperatePrivilege(context);
-                } else if (table.isMaterializedView()) {
-                    checkMvAction(context, tableName, PrivilegeType.SELECT);
-                } else {
-                    checkTableAction(context, tableName, PrivilegeType.SELECT);
-                }
-            }
-        }
-
-        // --------------------------------- Routine Load Statement ---------------------------------
-
-        public Void visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, ConnectContext context) {
-            checkTableAction(context, statement.getDBName(), statement.getTableName(), PrivilegeType.INSERT);
+        public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
+            //TODO : Add permission verification logic when the function is released
             return null;
         }
 
         @Override
-        public Void visitAlterRoutineLoadStatement(AlterRoutineLoadStmt statement, ConnectContext context) {
-            String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbName(), statement.getLabel());
-            checkTableAction(context, statement.getDbName(), tableName, PrivilegeType.INSERT);
+        public Void visitShowClusterStatement(ShowClustersStmt statement, ConnectContext context) {
+            //TODO : Add permission verification logic when the function is released
             return null;
         }
 
         @Override
-        public Void visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, ConnectContext context) {
-            String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbFullName(), statement.getName());
-            checkTableAction(context, statement.getDbFullName(), tableName, PrivilegeType.INSERT);
+        public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
+            //TODO : Add permission verification logic when the function is released
             return null;
         }
 
         @Override
-        public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext context) {
-            String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbFullName(), statement.getName());
-            checkTableAction(context, statement.getDbFullName(), tableName, PrivilegeType.INSERT);
+        public Void visitResumeWarehouseStatement(ResumeWarehouseStmt statement, ConnectContext context) {
+            //TODO : Add permission verification logic when the function is released
             return null;
         }
 
         @Override
-        public Void visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, ConnectContext context) {
-            String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbFullName(), statement.getName());
-            checkTableAction(context, statement.getDbFullName(), tableName, PrivilegeType.INSERT);
+        public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
+            //TODO : Add permission verification logic when the function is released
             return null;
         }
 
         @Override
-        public Void visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, ConnectContext context) {
-            // `show routine load` only show tables that user has any privilege on, we will check it in
-            // the execution logic, not here, see `ShowExecutor#handleShowRoutineLoad()` for details.
-            return null;
-        }
-
-        @Override
-        public Void visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt statement, ConnectContext context) {
-            // `show routine load task` only show tables that user has any privilege on, we will check it in
-            // the execution logic, not here, see `ShowExecutor#handleShowRoutineLoadTask()` for details.
-            return null;
-        }
-
-        @Override
-        public Void visitShowDataStatement(ShowDataStmt statement, ConnectContext context) {
-            // `show data` only show tables that user has any privilege on, we will check it in
-            // the execution logic, not here, see `ShowExecutor#handleShowData()` for details.
-            return null;
-        }
-
-        // --------------------------------- Load Statement -------------------------------------
-        @Override
-        public Void visitAlterLoadStatement(AlterLoadStmt statement, ConnectContext context) {
-            checkOperateLoadPrivilege(context, statement.getDbName(), statement.getLabel());
-            return null;
-        }
-
-        @Override
-        public Void visitLoadStatement(LoadStmt statement, ConnectContext context) {
-            // check resource privilege
-            if (null != statement.getResourceDesc()) {
-                String resourceName = statement.getResourceDesc().getName();
-                if (!PrivilegeActions.checkResourceAction(context, resourceName, PrivilegeType.USAGE)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USAGE");
-                }
-            }
-            // check table privilege
-            String dbName = statement.getLabel().getDbName();
-            List<String> forbiddenInsertTableList = new ArrayList<>();
-            statement.getDataDescriptions().forEach(dataDescription -> {
-                String tableName = dataDescription.getTableName();
-                if (!PrivilegeActions.checkTableAction(context, dbName, tableName, PrivilegeType.INSERT)) {
-                    forbiddenInsertTableList.add(tableName);
-                }
-            });
-            if (forbiddenInsertTableList.size() > 0) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
-                        PrivilegeType.INSERT.toString(),
-                        context.getQualifiedUser(),
-                        context.getRemoteIP(),
-                        forbiddenInsertTableList.toString());
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowLoadStatement(ShowLoadStmt statement, ConnectContext context) {
-            // No authorization required
-            return null;
-        }
-
-        @Override
-        public Void visitCancelLoadStatement(CancelLoadStmt statement, ConnectContext context) {
-            checkOperateLoadPrivilege(context, statement.getDbName(), statement.getLabel());
+        public Void visitSetWarehouseStatement(SetWarehouseStmt statement, ConnectContext context) {
+            //TODO : Add permission verification logic when the function is released
             return null;
         }
 
@@ -640,6 +559,12 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitUseDbStatement(UseDbStmt statement, ConnectContext context) {
             checkAnyActionOnOrInDb(context, statement.getCatalogName(), statement.getDbName());
+            return null;
+        }
+
+        @Override
+        public Void visitShowDatabasesStatement(ShowDbStmt statement, ConnectContext context) {
+            // Privilege is checked in execution logic, see `StatementExecutor#handleShowDb()` for details.
             return null;
         }
 
@@ -677,503 +602,6 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitCreateDbStatement(CreateDbStmt statement, ConnectContext context) {
             checkCatalogAction(context, context.getCurrentCatalog(), PrivilegeType.CREATE_DATABASE);
-            return null;
-        }
-
-        // --------------------------------- External Resource Statement ----------------------------------
-
-        @Override
-        public Void visitCreateResourceStatement(CreateResourceStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.CREATE_RESOURCE)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE RESOURCE");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitDropResourceStatement(DropResourceStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkResourceAction(
-                    context, statement.getResourceName(), PrivilegeType.DROP)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitAlterResourceStatement(AlterResourceStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkResourceAction(
-                    context, statement.getResourceName(), PrivilegeType.ALTER)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowResourceStatement(ShowResourcesStmt statement, ConnectContext context) {
-            // `show resources` only show resource that user has any privilege on, we will check it in
-            // the execution logic, not here, see `handleShowResources()` for details.
-            return null;
-        }
-
-        // --------------------------------- Resource Group Statement -------------------------------------
-        public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(
-                    context, PrivilegeType.CREATE_RESOURCE_GROUP)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "CREATE RESOURCE GROUP");
-            }
-            return null;
-        }
-
-        public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkResourceGroupAction(
-                    context, statement.getName(), PrivilegeType.DROP)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
-            }
-            return null;
-        }
-
-        public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkResourceGroupAction(
-                    context, statement.getName(), PrivilegeType.ALTER)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
-            }
-            return null;
-        }
-
-        public Void visitShowResourceGroupStatement(ShowResourceGroupStmt statement, ConnectContext context) {
-            // we don't check privilege for `show resource groups` statement
-            return null;
-        }
-
-        // --------------------------------- Catalog Statement --------------------------------------------
-
-        @Override
-        public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
-            String catalogName = statement.getCatalogName();
-            // No authorization check for using default_catalog
-            if (CatalogMgr.isInternalCatalog(catalogName)) {
-                return null;
-            }
-            if (!PrivilegeActions.checkAnyActionOnOrInCatalog(context, catalogName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
-                        context.getQualifiedUser(), catalogName);
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
-            String catalogName = statement.getCatalogName();
-            // No authorization check for using default_catalog
-            if (CatalogMgr.isInternalCatalog(catalogName)) {
-                return null;
-            }
-            if (!PrivilegeActions.checkAnyActionOnCatalog(context, catalogName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
-                        context.getQualifiedUser(), catalogName);
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.CREATE_EXTERNAL_CATALOG)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
-                        context.getQualifiedUser(), statement.getCatalogName());
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkCatalogAction(context, statement.getName(), PrivilegeType.DROP)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
-                        context.getQualifiedUser(), statement.getName());
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
-            // `show catalogs` only show catalog that user has any privilege on, we will check it in
-            // the execution logic, not here, see `handleShowCatalogs()` for details.
-            return null;
-        }
-
-        // --------------------------------------- Plugin Statement ---------------------------------------
-
-        @Override
-        public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.PLUGIN)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "PLUGIN");
-            }
-            return null;
-        }
-
-        // ---------------------------------------- Show Node Info Statement-------------------------------
-        @Override
-        public Void visitShowBackendsStatement(ShowBackendsStmt statement, ConnectContext context) {
-            return checkShowNodePrivilege(context);
-        }
-
-        @Override
-        public Void visitShowFrontendsStatement(ShowFrontendsStmt statement, ConnectContext context) {
-            return checkShowNodePrivilege(context);
-        }
-
-        @Override
-        public Void visitShowBrokerStatement(ShowBrokerStmt statement, ConnectContext context) {
-            return checkShowNodePrivilege(context);
-        }
-
-        @Override
-        public Void visitShowComputeNodes(ShowComputeNodesStmt statement, ConnectContext context) {
-            return checkShowNodePrivilege(context);
-        }
-
-        private Void checkShowNodePrivilege(ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.OPERATE)
-                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.NODE)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "OPERATE/NODE");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitUninstallPluginStatement(UninstallPluginStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.PLUGIN)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "PLUGIN");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowPluginsStatement(ShowPluginsStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.PLUGIN)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "PLUGIN");
-            }
-            return null;
-        }
-
-        // --------------------------------------- File Statement ----------------------------------------
-
-        @Override
-        public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {
-            checkAnyActionOnOrInDb(context, context.getCurrentCatalog(), statement.getDbName());
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.FILE)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitDropFileStatement(DropFileStmt statement, ConnectContext context) {
-            checkAnyActionOnOrInDb(context, context.getCurrentCatalog(), statement.getDbName());
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.FILE)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
-            checkAnyActionOnOrInDb(context, context.getCurrentCatalog(), statement.getDbName());
-            return null;
-        }
-
-        // --------------------------------------- Analyze related statements -----------------------------
-
-        @Override
-        public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext context) {
-            checkTableAction(context, statement.getTableName(), PrivilegeType.SELECT);
-            checkTableAction(context, statement.getTableName(), PrivilegeType.INSERT);
-            return null;
-        }
-
-        @Override
-        public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext context) {
-            Set<TableName> tableNames = getAllTableNamesForAnalyzeJobStmt(statement.getDbId(), statement.getTableId());
-            tableNames.forEach(tableName -> {
-                checkTableAction(context, tableName, PrivilegeType.SELECT);
-                checkTableAction(context, tableName, PrivilegeType.INSERT);
-            });
-            return null;
-        }
-
-        @Override
-        public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext context) {
-            checkTableAction(context, statement.getTableName(), PrivilegeType.SELECT);
-            checkTableAction(context, statement.getTableName(), PrivilegeType.INSERT);
-            return null;
-        }
-
-        @Override
-        public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext context) {
-            checkTableAction(context, statement.getTableName(), PrivilegeType.SELECT);
-            checkTableAction(context, statement.getTableName(), PrivilegeType.INSERT);
-            return null;
-        }
-
-        @Override
-        public Void visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, ConnectContext context) {
-            // `show analyze job` only show tables that user has any privilege on, we will check it in
-            // the execution logic, not here, see `ShowAnalyzeJobStmt#showAnalyzeJobs()` for details.
-            return null;
-        }
-
-        @Override
-        public Void visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt statement, ConnectContext context) {
-            // `show analyze status` only show tables that user has any privilege on, we will check it in
-            // the execution logic, not here, see `ShowAnalyzeStatusStmt#showAnalyzeStatus()` for details.
-            return null;
-        }
-
-        @Override
-        public Void visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt statement, ConnectContext context) {
-            // `show stats meta` only show tables that user has any privilege on, we will check it in
-            // the execution logic, not here, see `ShowBasicStatsMetaStmt#showBasicStatsMeta()` for details.
-            return null;
-        }
-
-        @Override
-        public Void visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, ConnectContext context) {
-            // `show histogram meta` only show tables that user has any privilege on, we will check it in
-            // the execution logic, not here, see `ShowHistogramStatsMetaStmt#showHistogramStatsMeta()` for details.
-            return null;
-        }
-
-        @Override
-        public Void visitKillAnalyzeStatement(KillAnalyzeStmt statement, ConnectContext context) {
-            // `kill analyze {id}` can only kill analyze job that user has privileges(SELECT + INSERT) on,
-            // we will check it in the execution logic, not here, see `ShowExecutor#handleKillAnalyzeStmt()`
-            // for details.
-            return null;
-        }
-
-        // --------------------------------------- Sql BlackList And WhiteList Statement ------------------
-
-        @Override
-        public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.BLACKLIST)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BLACKLIST");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitDelSqlBlackListStatement(DelSqlBlackListStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.BLACKLIST)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BLACKLIST");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.BLACKLIST)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BLACKLIST");
-            }
-            return null;
-        }
-
-        // ---------------------------------------- Privilege Statement -----------------------------------
-
-        @Override
-        public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitDropUserStatement(DropUserStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowUserStatement(ShowUserStmt statement, ConnectContext context) {
-            if (statement.isAll() && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
-            UserIdentity user = statement.getUserIdent();
-            if ((user != null && !user.equals(context.getCurrentUserIdentity()) || statement.isAll())
-                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitExecuteAsStatement(ExecuteAsStmt statement, ConnectContext context) {
-            PrivilegeManager privilegeManager = context.getGlobalStateMgr().getPrivilegeManager();
-            if (!privilegeManager.canExecuteAs(context, statement.getToUser())) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "IMPERSONATE");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitCreateRoleStatement(CreateRoleStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitDropRoleStatement(DropRoleStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowRolesStatement(ShowRolesStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitGrantRoleStatement(GrantRoleStmt statement, ConnectContext context) {
-            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
-                    || r.equalsIgnoreCase(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
-                UserIdentity userIdentity = context.getCurrentUserIdentity();
-                if (!userIdentity.equals(UserIdentity.ROOT)) {
-                    throw new SemanticException("Can not grant root or cluster_admin role except root user");
-                }
-            }
-
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitRevokeRoleStatement(RevokeRoleStmt statement, ConnectContext context) {
-            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
-                    || r.equalsIgnoreCase(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
-                UserIdentity userIdentity = context.getCurrentUserIdentity();
-                if (!userIdentity.equals(UserIdentity.ROOT)) {
-                    throw new SemanticException("Can not grant root or cluster_admin role except root user");
-                }
-            }
-
-            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME))) {
-                if (statement.getUserIdentity() != null && statement.getUserIdentity().equals(UserIdentity.ROOT)) {
-                    throw new SemanticException("Can not revoke root role from root user");
-                }
-            }
-
-            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt statement, ConnectContext context) {
-            UserIdentity user = statement.getUserIdentity();
-            if (user != null && !user.equals(context.getCurrentUserIdentity())
-                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext context) {
-            PrivilegeManager privilegeManager = context.getGlobalStateMgr().getPrivilegeManager();
-            if (!privilegeManager.allowGrant(context, stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList())) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext context) {
-            UserIdentity user = statement.getUserIdent();
-            if (user != null && !user.equals(context.getCurrentUserIdentity())
-                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            } else if (statement.getRole() != null) {
-                PrivilegeManager privilegeManager = context.getGlobalStateMgr().getPrivilegeManager();
-                try {
-                    List<String> roleNames = privilegeManager.getRoleNamesByUser(context.getCurrentUserIdentity());
-                    if (!roleNames.contains(statement.getRole())
-                            && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-                    }
-                } catch (PrivilegeException e) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-                }
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowUserPropertyStatement(ShowUserPropertyStmt statement, ConnectContext context) {
-            String user = statement.getUser();
-            if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())
-                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext context) {
-            String user = statement.getUser();
-            if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())
-                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
-        // ---------------------------------------- View Statement ---------------------------------------
-
-        @Override
-        public Void visitCreateViewStatement(CreateViewStmt statement, ConnectContext context) {
-            // 1. check if user can create view in this db
-            TableName tableName = statement.getTableName();
-            String catalog = tableName.getCatalog();
-            if (catalog == null) {
-                catalog = context.getCurrentCatalog();
-            }
-            checkDbAction(context, catalog, tableName.getDb(), PrivilegeType.CREATE_VIEW);
-            // 2. check if user can query
-            check(statement.getQueryStatement(), context);
-            return null;
-        }
-
-        // ---------------------------------------- Show Transaction Statement ---------------------------
-
-        @Override
-        public Void visitShowTransactionStatement(ShowTransactionStmt statement, ConnectContext context) {
-            // No authorization required
-            return null;
-        }
-
-        @Override
-        public Void visitAlterViewStatement(AlterViewStmt statement, ConnectContext context) {
-            // 1. check if user can alter view in this db
-            checkViewAction(context, statement.getTableName(), PrivilegeType.ALTER);
-            // 2. check if user can query
-            check(statement.getQueryStatement(), context);
             return null;
         }
 
@@ -1288,6 +716,12 @@ public class PrivilegeCheckerV2 {
         }
 
         @Override
+        public Void visitShowTableStatement(ShowTableStmt statement, ConnectContext context) {
+            // Privilege is checked in execution logic, see `StatementExecutor#handleShowProcesslist()` for details.
+            return null;
+        }
+
+        @Override
         public Void visitDescTableStmt(DescribeStmt statement, ConnectContext context) {
             checkAnyActionOnTable(context, statement.getDbTableName());
             return null;
@@ -1306,17 +740,43 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
-        @Override
-        public Void visitShowIndexStatement(ShowIndexStmt statement, ConnectContext context) {
-            checkAnyActionOnTable(context, statement.getTableName());
-            return null;
-        }
 
         @Override
         public Void visitShowColumnStatement(ShowColumnStmt statement, ConnectContext context) {
             checkAnyActionOnTable(context, statement.getTableName());
             return null;
         }
+
+        @Override
+        public Void visitShowAlterStatement(ShowAlterStmt statement, ConnectContext context) {
+            // `show alter table` only show tables/views/mvs that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowExecutor#handleShowAlter()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        // ---------------------------------------- View Statement ---------------------------------------
+
+        @Override
+        public Void visitCreateViewStatement(CreateViewStmt statement, ConnectContext context) {
+            // 1. check if user can create view in this db
+            TableName tableName = statement.getTableName();
+            String catalog = tableName.getCatalog();
+            if (catalog == null) {
+                catalog = context.getCurrentCatalog();
+            }
+            checkDbAction(context, catalog, tableName.getDb(), PrivilegeType.CREATE_VIEW);
+            // 2. check if user can query
+            check(statement.getQueryStatement(), context);
+            return null;
+        }
+
+        // ---------------------------------------- Partition Statement ----------------------------------------------------
 
         @Override
         public Void visitRecoverPartitionStatement(RecoverPartitionStmt statement, ConnectContext context) {
@@ -1331,32 +791,257 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
+        // ---------------------------------------- Index Statement --------------------------------------------------------
+
+        @Override
+        public Void visitShowIndexStatement(ShowIndexStmt statement, ConnectContext context) {
+            checkAnyActionOnTable(context, statement.getTableName());
+            return null;
+        }
+
+        // ---------------------------------------- Task Statement --------------------------------------------------------
+
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
             visitCreateTableAsSelectStatement(statement.getCreateTableAsSelectStmt(), context);
             return null;
         }
 
+        // ---------------------------------------- Materialized View stmt --------------------------------
         @Override
-        public Void visitShowAlterStatement(ShowAlterStmt statement, ConnectContext context) {
-            // `show alter table` only show tables/views/mvs that user has any privilege on, we will check it in
-            // the execution logic, not here, see `ShowExecutor#handleShowAlter()` for details.
+        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
+                                                         ConnectContext context) {
+            if (!PrivilegeActions.checkDbAction(context, statement.getTableName().getDb(),
+                    PrivilegeType.CREATE_MATERIALIZED_VIEW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "CREATE MATERIALIZED VIEW");
+            }
             return null;
         }
 
-        // ---------------------------------------- Show Variables Statement ------------------------------
-
         @Override
-        public Void visitShowVariablesStatement(ShowVariablesStmt statement, ConnectContext context) {
-            // No authorization required
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkMaterializedViewAction(context,
+                    statement.getMvName().getDb(),
+                    statement.getMvName().getTbl(),
+                    PrivilegeType.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "ALTER MATERIALIZED VIEW");
+            }
             return null;
         }
 
-        // ---------------------------------------- Show tablet Statement ---------------------------------
+        @Override
+        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
+                                                          ConnectContext context) {
+            if (!PrivilegeActions.checkMaterializedViewAction(context,
+                    statement.getMvName().getDb(),
+                    statement.getMvName().getTbl(),
+                    PrivilegeType.REFRESH)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "REFRESH MATERIALIZED VIEW");
+            }
+            return null;
+        }
 
         @Override
-        public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
-            checkStmtOperatePrivilege(context);
+        public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt statement,
+                                                                ConnectContext context) {
+            if (!PrivilegeActions.checkMaterializedViewAction(context,
+                    statement.getMvName().getDb(),
+                    statement.getMvName().getTbl(),
+                    PrivilegeType.REFRESH)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "REFRESH MATERIALIZED VIEW");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext context) {
+            // `show Materialized Views` show tables user (has select privilege & show mv user has any privilege),
+            // we will check it in the execution logic, not here,
+            // see `ShowExecutor#handleShowMaterializedView()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
+            // To keep compatibility with old mv, drop mv will be checked in execution logic, and only new mv is checked
+            return null;
+        }
+
+        // --------------------------------- Catalog Statement --------------------------------------------
+
+        @Override
+        public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+            String catalogName = statement.getCatalogName();
+            // No authorization check for using default_catalog
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                return null;
+            }
+            if (!PrivilegeActions.checkAnyActionOnOrInCatalog(context, catalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), catalogName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
+            String catalogName = statement.getCatalogName();
+            // No authorization check for using default_catalog
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                return null;
+            }
+            if (!PrivilegeActions.checkAnyActionOnCatalog(context, catalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), catalogName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.CREATE_EXTERNAL_CATALOG)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), statement.getCatalogName());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkCatalogAction(context, statement.getName(), PrivilegeType.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), statement.getName());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
+            // `show catalogs` only show catalog that user has any privilege on, we will check it in
+            // the execution logic, not here, see `handleShowCatalogs()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt statement, ConnectContext context) {
+            //TODO
+            return null;
+        }
+
+        // ------------------------------------------- DML Statement -------------------------------------------------------
+
+        @Override
+        public Void visitInsertStatement(InsertStmt statement, ConnectContext context) {
+            // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
+            if (!statement.isForCTAS()) {
+                checkTableAction(context, statement.getTableName(), PrivilegeType.INSERT);
+            }
+
+            visit(statement.getQueryStatement(), context);
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getTableName(), PrivilegeType.DELETE);
+            Map<TableName, Table> allTouchedTables = AnalyzerUtils.collectAllTableAndView(statement);
+            allTouchedTables.remove(statement.getTableName());
+            checkSelectTableAction(context, allTouchedTables);
+            return null;
+        }
+
+        @Override
+        public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getTableName(), PrivilegeType.UPDATE);
+            Map<TableName, Table> allTouchedTables = AnalyzerUtils.collectAllTableAndView(statement);
+            allTouchedTables.remove(statement.getTableName());
+            checkSelectTableAction(context, allTouchedTables);
+            return null;
+        }
+
+        static void checkSelectTableAction(ConnectContext context, Map<TableName, Table> allTouchedTables) {
+            for (Map.Entry<TableName, Table> tableToBeChecked : allTouchedTables.entrySet()) {
+                TableName tableName = tableToBeChecked.getKey();
+                Table table = tableToBeChecked.getValue();
+
+                if (table instanceof View) {
+                    if (!PrivilegeActions.checkViewAction(context, tableName.getDb(), tableName.getTbl(), PrivilegeType.SELECT)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_TABLE_DENIED,
+                                context.getQualifiedUser(), tableName);
+                    }
+                } else if (table instanceof SchemaTable && ((SchemaTable) table).isBeSchemaTable()) {
+                    checkStmtOperatePrivilege(context);
+                } else if (table.isMaterializedView()) {
+                    checkMvAction(context, tableName, PrivilegeType.SELECT);
+                } else {
+                    checkTableAction(context, tableName, PrivilegeType.SELECT);
+                }
+            }
+        }
+
+        // --------------------------------- Routine Load Statement ---------------------------------
+
+        public Void visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getDBName(), statement.getTableName(), PrivilegeType.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterRoutineLoadStatement(AlterRoutineLoadStmt statement, ConnectContext context) {
+            String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbName(), statement.getLabel());
+            checkTableAction(context, statement.getDbName(), tableName, PrivilegeType.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, ConnectContext context) {
+            String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbFullName(), statement.getName());
+            checkTableAction(context, statement.getDbFullName(), tableName, PrivilegeType.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext context) {
+            String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbFullName(), statement.getName());
+            checkTableAction(context, statement.getDbFullName(), tableName, PrivilegeType.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, ConnectContext context) {
+            String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbFullName(), statement.getName());
+            checkTableAction(context, statement.getDbFullName(), tableName, PrivilegeType.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, ConnectContext context) {
+            // `show routine load` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowExecutor#handleShowRoutineLoad()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt statement, ConnectContext context) {
+            // `show routine load task` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowExecutor#handleShowRoutineLoadTask()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitShowStreamLoadStatement(ShowStreamLoadStmt statement, ConnectContext context) {
+            //TODO : Add permission verification logic when the function is released
+            return null;
+        }
+
+        @Override
+        public Void visitShowDataStatement(ShowDataStmt statement, ConnectContext context) {
+            // `show data` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowExecutor#handleShowData()` for details.
             return null;
         }
 
@@ -1418,6 +1103,13 @@ public class PrivilegeCheckerV2 {
         }
 
         @Override
+        public Void visitSyncStatement(SyncStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        // ---------------------------------------- Cluster Management Statement -------------------------------------------
+
+        @Override
         public Void visitAlterSystemStatement(AlterSystemStmt statement, ConnectContext context) {
             checkStmtNodePrivilege(context);
             return null;
@@ -1426,6 +1118,246 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitCancelAlterSystemStatement(CancelAlterSystemStmt statement, ConnectContext context) {
             checkStmtNodePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowComputeNodes(ShowComputeNodesStmt statement, ConnectContext context) {
+            return checkShowNodePrivilege(context);
+        }
+
+        // --------------------------------------- Analyze related statements -----------------------------
+
+        @Override
+        public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getTableName(), PrivilegeType.SELECT);
+            checkTableAction(context, statement.getTableName(), PrivilegeType.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext context) {
+            Set<TableName> tableNames = getAllTableNamesForAnalyzeJobStmt(statement.getDbId(), statement.getTableId());
+            tableNames.forEach(tableName -> {
+                checkTableAction(context, tableName, PrivilegeType.SELECT);
+                checkTableAction(context, tableName, PrivilegeType.INSERT);
+            });
+            return null;
+        }
+
+        @Override
+        public Void visitDropAnalyzeStatement(DropAnalyzeJobStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getTableName(), PrivilegeType.SELECT);
+            checkTableAction(context, statement.getTableName(), PrivilegeType.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getTableName(), PrivilegeType.SELECT);
+            checkTableAction(context, statement.getTableName(), PrivilegeType.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, ConnectContext context) {
+            // `show analyze job` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowAnalyzeJobStmt#showAnalyzeJobs()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt statement, ConnectContext context) {
+            // `show analyze status` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowAnalyzeStatusStmt#showAnalyzeStatus()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt statement, ConnectContext context) {
+            // `show stats meta` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowBasicStatsMetaStmt#showBasicStatsMeta()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, ConnectContext context) {
+            // `show histogram meta` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowHistogramStatsMetaStmt#showHistogramStatsMeta()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitKillAnalyzeStatement(KillAnalyzeStmt statement, ConnectContext context) {
+            // `kill analyze {id}` can only kill analyze job that user has privileges(SELECT + INSERT) on,
+            // we will check it in the execution logic, not here, see `ShowExecutor#handleKillAnalyzeStmt()`
+            // for details.
+            return null;
+        }
+
+        // --------------------------------- Resource Group Statement -------------------------------------
+
+        public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(
+                    context, PrivilegeType.CREATE_RESOURCE_GROUP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "CREATE RESOURCE GROUP");
+            }
+            return null;
+        }
+
+        public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkResourceGroupAction(
+                    context, statement.getName(), PrivilegeType.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+            }
+            return null;
+        }
+
+        public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkResourceGroupAction(
+                    context, statement.getName(), PrivilegeType.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
+            }
+            return null;
+        }
+
+        public Void visitShowResourceGroupStatement(ShowResourceGroupStmt statement, ConnectContext context) {
+            // we don't check privilege for `show resource groups` statement
+            return null;
+        }
+
+        // --------------------------------- External Resource Statement ----------------------------------
+
+        @Override
+        public Void visitCreateResourceStatement(CreateResourceStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.CREATE_RESOURCE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE RESOURCE");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropResourceStatement(DropResourceStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkResourceAction(
+                    context, statement.getResourceName(), PrivilegeType.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAlterResourceStatement(AlterResourceStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkResourceAction(
+                    context, statement.getResourceName(), PrivilegeType.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowResourceStatement(ShowResourcesStmt statement, ConnectContext context) {
+            // `show resources` only show resource that user has any privilege on, we will check it in
+            // the execution logic, not here, see `handleShowResources()` for details.
+            return null;
+        }
+
+        // ---------------------------------------- UDF Statement-----------------------------------------------------------
+
+        @Override
+        public Void visitShowFunctionsStatement(ShowFunctionsStmt statement, ConnectContext context) {
+            // Privilege is checked in execution logic, see `StatementExecutor#handleShowFunctions()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkFunctionAction(context, statement.getFunctionName().getDb(),
+                    statement.getFunction().toString(), PrivilegeType.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, PrivilegeType.DROP);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkDbAction(context, statement.getFunctionName().getDb(),
+                    statement.getFunction().toString(), PrivilegeType.CREATE_FUNCTION)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, PrivilegeType.CREATE_FUNCTION);
+            }
+            return null;
+        }
+
+        // --------------------------------- Load Statement -------------------------------------
+
+        @Override
+        public Void visitAlterLoadStatement(AlterLoadStmt statement, ConnectContext context) {
+            checkOperateLoadPrivilege(context, statement.getDbName(), statement.getLabel());
+            return null;
+        }
+
+        @Override
+        public Void visitLoadStatement(LoadStmt statement, ConnectContext context) {
+            // check resource privilege
+            if (null != statement.getResourceDesc()) {
+                String resourceName = statement.getResourceDesc().getName();
+                if (!PrivilegeActions.checkResourceAction(context, resourceName, PrivilegeType.USAGE)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USAGE");
+                }
+            }
+            // check table privilege
+            String dbName = statement.getLabel().getDbName();
+            List<String> forbiddenInsertTableList = new ArrayList<>();
+            statement.getDataDescriptions().forEach(dataDescription -> {
+                String tableName = dataDescription.getTableName();
+                if (!PrivilegeActions.checkTableAction(context, dbName, tableName, PrivilegeType.INSERT)) {
+                    forbiddenInsertTableList.add(tableName);
+                }
+            });
+            if (forbiddenInsertTableList.size() > 0) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
+                        PrivilegeType.INSERT.toString(),
+                        context.getQualifiedUser(),
+                        context.getRemoteIP(),
+                        forbiddenInsertTableList.toString());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowLoadStatement(ShowLoadStmt statement, ConnectContext context) {
+            // The permission verification of show load should be consistent with the insert permission of the table.
+            // Due to historical reasons, it is difficult to obtain information.
+            // The permission verification will not be performed for the time being.
+            return null;
+        }
+
+        @Override
+        public Void visitShowLoadWarningsStatement(ShowLoadWarningsStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitCancelLoadStatement(CancelLoadStmt statement, ConnectContext context) {
+            checkOperateLoadPrivilege(context, statement.getDbName(), statement.getLabel());
+            return null;
+        }
+
+        @Override
+        public Void visitShowWarningStatement(ShowWarningStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        // ---------------------------------------- Show Statement -----------------------------------------
+
+        @Override
+        public Void visitShowVariablesStatement(ShowVariablesStmt statement, ConnectContext context) {
+            // No authorization required
             return null;
         }
 
@@ -1442,70 +1374,220 @@ public class PrivilegeCheckerV2 {
         }
 
         @Override
-        public Void visitSetStatement(SetStmt statement, ConnectContext context) {
-            List<SetListItem> varList = statement.getSetListItems();
-            varList.forEach(setVar -> {
-                if ((setVar instanceof SetPassVar)) {
-                    UserIdentity prepareChangeUser = ((SetPassVar) setVar).getUserIdent();
-                    if (!context.getCurrentUserIdentity().equals(prepareChangeUser)) {
-                        if (prepareChangeUser.equals(UserIdentity.ROOT)) {
-                            throw new SemanticException("Can not set password for root user, except root itself");
-                        }
+        public Void visitShowBackendsStatement(ShowBackendsStmt statement, ConnectContext context) {
+            return checkShowNodePrivilege(context);
+        }
 
-                        if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
-                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-                        }
-                    }
-                } else if (setVar instanceof SystemVariable) {
-                    SetType type = ((SystemVariable) setVar).getType();
-                    if (type != null && type.equals(SetType.GLOBAL)) {
-                        checkStmtOperatePrivilege(context);
-                    }
+        @Override
+        public Void visitShowFrontendsStatement(ShowFrontendsStmt statement, ConnectContext context) {
+            return checkShowNodePrivilege(context);
+        }
+
+        @Override
+        public Void visitShowBrokerStatement(ShowBrokerStmt statement, ConnectContext context) {
+            return checkShowNodePrivilege(context);
+        }
+
+        @Override
+        public Void visitShowDeleteStatement(ShowDeleteStmt statement, ConnectContext context) {
+            // TODO:
+            // The permission verification of show load should be consistent with the insert permission of the table.
+            // Due to historical reasons, it is difficult to obtain information.
+            // The permission verification will not be performed for the time being.
+            return null;
+        }
+
+        @Override
+        public Void visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, ConnectContext context) {
+            // Privilege is checked in execution logic, see `StatementExecutor#handleShowDynamicPartition()` for details.
+            return null;
+        }
+
+        private Void checkShowNodePrivilege(ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.OPERATE)
+                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.NODE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "OPERATE/NODE");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowTransactionStatement(ShowTransactionStmt statement, ConnectContext context) {
+            // No authorization required
+            return null;
+        }
+
+        // ---------------------------------------- Privilege Statement -----------------------------------
+
+        @Override
+        public Void visitCreateUserStatement(CreateUserStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropUserStatement(DropUserStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAlterUserStatement(AlterUserStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowUserStatement(ShowUserStmt statement, ConnectContext context) {
+            if (statement.isAll() && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdent();
+            if ((user != null && !user.equals(context.getCurrentUserIdentity()) || statement.isAll())
+                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitExecuteAsStatement(ExecuteAsStmt statement, ConnectContext context) {
+            PrivilegeManager privilegeManager = context.getGlobalStateMgr().getPrivilegeManager();
+            if (!privilegeManager.canExecuteAs(context, statement.getToUser())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "IMPERSONATE");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRoleStatement(CreateRoleStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropRoleStatement(DropRoleStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowRolesStatement(ShowRolesStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRoleStatement(GrantRoleStmt statement, ConnectContext context) {
+            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
+                    || r.equalsIgnoreCase(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
+                UserIdentity userIdentity = context.getCurrentUserIdentity();
+                if (!userIdentity.equals(UserIdentity.ROOT)) {
+                    throw new SemanticException("Can not grant root or cluster_admin role except root user");
                 }
-            });
-            return null;
-        }
+            }
 
-        // ---------------------------------------- restore & backup Statement --------------------------------
-        @Override
-        public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkTableAction(context,
-                    statement.getTblName().getDb(),
-                    statement.getTblName().getTbl(),
-                    PrivilegeType.EXPORT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "EXPORT");
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
             return null;
         }
 
         @Override
-        public Void visitCancelExportStatement(CancelExportStmt statement, ConnectContext context) {
-            ExportJob exportJob = null;
-            try {
-                exportJob = GlobalStateMgr.getCurrentState().getExportMgr().getExportJob(statement.getDbName(),
-                        statement.getQueryId());
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
+        public Void visitRevokeRoleStatement(RevokeRoleStmt statement, ConnectContext context) {
+            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
+                    || r.equalsIgnoreCase(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
+                UserIdentity userIdentity = context.getCurrentUserIdentity();
+                if (!userIdentity.equals(UserIdentity.ROOT)) {
+                    throw new SemanticException("Can not grant root or cluster_admin role except root user");
+                }
             }
-            if (null == exportJob) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_EXPORT_JOB_NOT_FOUND,
-                        statement.getQueryId().toString());
+
+            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME))) {
+                if (statement.getUserIdentity() != null && statement.getUserIdentity().equals(UserIdentity.ROOT)) {
+                    throw new SemanticException("Can not revoke root role from root user");
+                }
             }
-            if (!PrivilegeActions.checkTableAction(context,
-                    exportJob.getTableName().getDb(),
-                    exportJob.getTableName().getTbl(),
-                    PrivilegeType.EXPORT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "EXPORT");
+
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
             return null;
         }
 
         @Override
-        public Void visitShowExportStatement(ShowExportStmt statement, ConnectContext context) {
-            // `show export` only show tables that user has export privilege on, we will check it in
-            // the execution logic, not here, see `ExportMgr#getExportJobInfosByIdOrState()` for details.
+        public Void visitSetRoleStatement(SetRoleStmt statement, ConnectContext context) {
             return null;
         }
+
+        @Override
+        public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdentity();
+            if (user != null && !user.equals(context.getCurrentUserIdentity())
+                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext context) {
+            PrivilegeManager privilegeManager = context.getGlobalStateMgr().getPrivilegeManager();
+            if (!privilegeManager.allowGrant(context, stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdent();
+            if (user != null && !user.equals(context.getCurrentUserIdentity())
+                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            } else if (statement.getRole() != null) {
+                PrivilegeManager privilegeManager = context.getGlobalStateMgr().getPrivilegeManager();
+                try {
+                    List<String> roleNames = privilegeManager.getRoleNamesByUser(context.getCurrentUserIdentity());
+                    if (!roleNames.contains(statement.getRole())
+                            && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                    }
+                } catch (PrivilegeException e) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowUserPropertyStatement(ShowUserPropertyStmt statement, ConnectContext context) {
+            String user = statement.getUser();
+            if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())
+                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        // ---------------------------------------- Backup Restore Statement -----------------------------------------------
 
         @Override
         public Void visitCreateRepositoryStatement(CreateRepositoryStmt statement, ConnectContext context) {
@@ -1623,124 +1705,175 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
-        // ---------------------------------------- Materialized View stmt --------------------------------
+        // --------------------------------------- Sql BlackList And WhiteList Statement ------------------
+
         @Override
-        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
-                                                         ConnectContext context) {
-            if (!PrivilegeActions.checkDbAction(context, statement.getTableName().getDb(),
-                    PrivilegeType.CREATE_MATERIALIZED_VIEW)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "CREATE MATERIALIZED VIEW");
+        public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.BLACKLIST)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BLACKLIST");
             }
             return null;
         }
 
         @Override
-        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkMaterializedViewAction(context,
-                    statement.getMvName().getDb(),
-                    statement.getMvName().getTbl(),
-                    PrivilegeType.ALTER)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "ALTER MATERIALIZED VIEW");
+        public Void visitDelSqlBlackListStatement(DelSqlBlackListStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.BLACKLIST)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BLACKLIST");
             }
             return null;
         }
 
         @Override
-        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
-                                                          ConnectContext context) {
-            if (!PrivilegeActions.checkMaterializedViewAction(context,
-                    statement.getMvName().getDb(),
-                    statement.getMvName().getTbl(),
-                    PrivilegeType.REFRESH)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "REFRESH MATERIALIZED VIEW");
+        public Void visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.BLACKLIST)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BLACKLIST");
             }
             return null;
         }
 
         @Override
-        public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt statement,
-                                                                ConnectContext context) {
-            if (!PrivilegeActions.checkMaterializedViewAction(context,
-                    statement.getMvName().getDb(),
-                    statement.getMvName().getTbl(),
-                    PrivilegeType.REFRESH)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "REFRESH MATERIALIZED VIEW");
+        public Void visitShowWhiteListStatement(ShowWhiteListStmt statement, ConnectContext context) {
+            return null;
+        }
+
+
+        // --------------------------------------- Export Statement --------------------------------------------------------
+
+        @Override
+        public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkTableAction(context,
+                    statement.getTblName().getDb(),
+                    statement.getTblName().getTbl(),
+                    PrivilegeType.EXPORT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "EXPORT");
             }
             return null;
         }
 
         @Override
-        public Void visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext context) {
-            // `show Materialized Views` show tables user (has select privilege & show mv user has any privilege),
-            // we will check it in the execution logic, not here,
-            // see `ShowExecutor#handleShowMaterializedView()` for details.
-            return null;
-        }
-
-        @Override
-        public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
-            // To keep compatibility with old mv, drop mv will be checked in execution logic, and only new mv is checked
-            return null;
-        }
-
-        // ------------------------------------------- UDF Statement ----------------------------------------------------
-
-        @Override
-        public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
-            FunctionName name = statement.getFunctionName();
-            if (name.isGlobalFunction()) {
-                if (!PrivilegeActions.checkSystemAction(
-                        context, PrivilegeType.CREATE_GLOBAL_FUNCTION)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                            "CREATE GLOBAL FUNCTION");
-                }
-            } else {
-                if (!PrivilegeActions.checkDbAction(context, name.getDb(), PrivilegeType.CREATE_FUNCTION)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE FUNCTION");
-                }
+        public Void visitCancelExportStatement(CancelExportStmt statement, ConnectContext context) {
+            ExportJob exportJob = null;
+            try {
+                exportJob = GlobalStateMgr.getCurrentState().getExportMgr().getExportJob(statement.getDbName(),
+                        statement.getQueryId());
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
+            }
+            if (null == exportJob) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_EXPORT_JOB_NOT_FOUND,
+                        statement.getQueryId().toString());
+            }
+            if (!PrivilegeActions.checkTableAction(context,
+                    exportJob.getTableName().getDb(),
+                    exportJob.getTableName().getTbl(),
+                    PrivilegeType.EXPORT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "EXPORT");
             }
             return null;
         }
 
         @Override
-        public Void visitShowFunctionsStatement(ShowFunctionsStmt statement, ConnectContext context) {
-            // Don't do any privilege check on show functions
+        public Void visitShowExportStatement(ShowExportStmt statement, ConnectContext context) {
+            // `show export` only show tables that user has export privilege on, we will check it in
+            // the execution logic, not here, see `ExportMgr#getExportJobInfosByIdOrState()` for details.
+            return null;
+        }
+
+        // --------------------------------------- Plugin Statement ---------------------------------------
+
+        @Override
+        public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.PLUGIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "PLUGIN");
+            }
             return null;
         }
 
         @Override
-        public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
-            FunctionName functionName = statement.getFunctionName();
-            // global function.
-            if (functionName.isGlobalFunction()) {
-                FunctionSearchDesc desc = statement.getFunction();
-                Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(desc);
-                if (function != null && !PrivilegeActions.checkGlobalFunctionAction(context, function.signatureString(),
-                        PrivilegeType.DROP)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                            "DROP GLOBAL FUNCTION");
-                }
-                return null;
+        public Void visitUninstallPluginStatement(UninstallPluginStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.PLUGIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "PLUGIN");
             }
+            return null;
+        }
 
-            // db function.
-            Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
-            if (db != null) {
-                try {
-                    db.readLock();
-                    Function function = db.getFunction(statement.getFunction());
-                    if (null != function && !PrivilegeActions.checkFunctionAction(context, functionName.getDb(),
-                            function.signatureString(), PrivilegeType.DROP)) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                                "DROP FUNCTION");
+        @Override
+        public Void visitShowPluginsStatement(ShowPluginsStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.PLUGIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "PLUGIN");
+            }
+            return null;
+        }
+
+        // --------------------------------------- File Statement ----------------------------------------
+
+        @Override
+        public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {
+            checkAnyActionOnOrInDb(context, context.getCurrentCatalog(), statement.getDbName());
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.FILE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropFileStatement(DropFileStmt statement, ConnectContext context) {
+            checkAnyActionOnOrInDb(context, context.getCurrentCatalog(), statement.getDbName());
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.FILE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
+            checkAnyActionOnOrInDb(context, context.getCurrentCatalog(), statement.getDbName());
+            return null;
+        }
+
+
+        @Override
+        public Void visitAlterViewStatement(AlterViewStmt statement, ConnectContext context) {
+            // 1. check if user can alter view in this db
+            checkViewAction(context, statement.getTableName(), PrivilegeType.ALTER);
+            // 2. check if user can query
+            check(statement.getQueryStatement(), context);
+            return null;
+        }
+
+        // ------------------------------------------  Set Statement -----------------------------------------------------------------
+
+        @Override
+        public Void visitSetStatement(SetStmt statement, ConnectContext context) {
+            List<SetListItem> varList = statement.getSetListItems();
+            varList.forEach(setVar -> {
+                if ((setVar instanceof SetPassVar)) {
+                    UserIdentity prepareChangeUser = ((SetPassVar) setVar).getUserIdent();
+                    if (!context.getCurrentUserIdentity().equals(prepareChangeUser)) {
+                        if (prepareChangeUser.equals(UserIdentity.ROOT)) {
+                            throw new SemanticException("Can not set password for root user, except root itself");
+                        }
+
+                        if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                        }
                     }
-                } finally {
-                    db.readUnlock();
+                } else if (setVar instanceof SystemVariable) {
+                    SetType type = ((SystemVariable) setVar).getType();
+                    if (type != null && type.equals(SetType.GLOBAL)) {
+                        checkStmtOperatePrivilege(context);
+                    }
                 }
+            });
+            return null;
+        }
+
+        @Override
+        public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext context) {
+            String user = statement.getUser();
+            if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())
+                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
             return null;
         }

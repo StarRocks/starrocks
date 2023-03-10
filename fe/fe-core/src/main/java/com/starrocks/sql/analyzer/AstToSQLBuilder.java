@@ -46,11 +46,11 @@ public class AstToSQLBuilder {
     public static String buildSimple(StatementBase statement) {
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(statement);
         boolean sameCatalogDb = tables.keySet().stream().map(TableName::getCatalogAndDb).distinct().count() == 1;
-        return new AST2SQLBuilderVisitor(sameCatalogDb).visit(statement);
+        return new AST2SQLBuilderVisitor(sameCatalogDb).visit(statement, null);
     }
 
     public static String toSQL(StatementBase statement) {
-        return new AST2SQLBuilderVisitor(false).visit(statement);
+        return new AST2SQLBuilderVisitor(false).visit(statement, null);
     }
 
     private static class AST2SQLBuilderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
@@ -149,14 +149,14 @@ public class AstToSQLBuilder {
                 } else {
                     selectListString.add(
                             expr.getFn() == null || expr.getFn().getFunctionName().getDb() == null ?
-                                    visit(expr) + " AS `" + columnName + "`" :
-                                    visit(expr) + " AS `" + expr.getFn().getFunctionName().getFunction() + "`");
+                                    visit(expr, context) + " AS `" + columnName + "`" :
+                                    visit(expr, context) + " AS `" + expr.getFn().getFunctionName().getFunction() + "`");
                 }
             }
 
             sqlBuilder.append(Joiner.on(", ").join(selectListString));
 
-            String fromClause = visit(stmt.getRelation());
+            String fromClause = visit(stmt.getRelation(), context);
             if (fromClause != null) {
                 sqlBuilder.append("\nFROM ");
                 sqlBuilder.append(fromClause);
@@ -164,17 +164,17 @@ public class AstToSQLBuilder {
 
             if (stmt.hasWhereClause()) {
                 sqlBuilder.append("\nWHERE ");
-                sqlBuilder.append(visit(stmt.getWhereClause()));
+                sqlBuilder.append(visit(stmt.getWhereClause(), context));
             }
 
             if (stmt.hasGroupByClause()) {
                 sqlBuilder.append("\nGROUP BY ");
-                sqlBuilder.append(visit(stmt.getGroupByClause()));
+                sqlBuilder.append(visit(stmt.getGroupByClause(), context));
             }
 
             if (stmt.hasHavingClause()) {
                 sqlBuilder.append("\nHAVING ");
-                sqlBuilder.append(visit(stmt.getHavingClause()));
+                sqlBuilder.append(visit(stmt.getHavingClause(), context));
             }
 
             return sqlBuilder.toString();
@@ -198,7 +198,7 @@ public class AstToSQLBuilder {
                                 relation.getColumnOutputNames().stream().map(c -> "`" + c + "`").collect(toList())))
                         .append(")");
             }
-            sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
+            sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement(), context)).append(") ");
             return sqlBuilder.toString();
         }
 

@@ -41,8 +41,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
-import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TNormalPlanNode;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
@@ -102,6 +102,7 @@ public class FragmentNormalizer {
 
     private Set<Integer> cachedPlanNodeIds = Sets.newHashSet();
     private boolean assignScanRangesAcrossDrivers = false;
+
     public FragmentNormalizer(ExecPlan execPlan, PlanFragment fragment) {
         this.execPlan = execPlan;
         this.fragment = fragment;
@@ -249,8 +250,8 @@ public class FragmentNormalizer {
 
         @Override
         public String visitBetweenPredicate(BetweenPredicate node, Void context) {
-            String lhs = visit(node.getChild(0));
-            List<String> rhsList = node.getChildren().stream().skip(1).map(this::visit).collect(Collectors.toList());
+            String lhs = visit(node.getChild(0), context);
+            List<String> rhsList = node.getChildren().stream().skip(1).map(c -> visit(c, context)).collect(Collectors.toList());
             if (lhs == null || rhsList.stream().anyMatch(Objects::isNull)) {
                 return null;
             }
@@ -704,7 +705,7 @@ public class FragmentNormalizer {
         // Get leftmost path
         List<PlanNode> leftNodesTopDown = Lists.newArrayList();
         for (PlanNode currNode = root; currNode != null && currNode.getFragment() == fragment;
-                currNode = currNode.getChild(0)) {
+             currNode = currNode.getChild(0)) {
             leftNodesTopDown.add(currNode);
         }
 
@@ -793,7 +794,7 @@ public class FragmentNormalizer {
         normalizeSubTree(leftNodeIds, topMostDigestNode, Sets.newHashSet());
         List<PlanNode> cachedPlanNodes = leftNodesTopDown.stream().skip(firstAggNodeIdx).collect(Collectors.toList());
         fragment.setAssignScanRangesPerDriverSeq(canAssignScanRangesAcrossDrivers(cachedPlanNodes));
-        cachedPlanNodeIds = cachedPlanNodes.stream().map(node->node.getId().asInt()).collect(Collectors.toSet());
+        cachedPlanNodeIds = cachedPlanNodes.stream().map(node -> node.getId().asInt()).collect(Collectors.toSet());
         return computeDigest(firstAggNode);
     }
 

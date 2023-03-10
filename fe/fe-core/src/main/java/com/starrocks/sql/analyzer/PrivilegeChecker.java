@@ -548,7 +548,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitQueryStatement(QueryStatement stmt, ConnectContext session) {
-            new TablePrivilegeChecker(session).visit(stmt);
+            new TablePrivilegeChecker(session).visit(stmt, null);
             return null;
         }
 
@@ -1446,12 +1446,12 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitQueryStatement(QueryStatement node, Void context) {
-            return visit(node.getQueryRelation());
+            return visit(node.getQueryRelation(), context);
         }
 
         @Override
         public Void visitSubquery(SubqueryRelation node, Void context) {
-            return visit(node.getQueryStatement());
+            return visit(node.getQueryStatement(), context);
         }
 
         @Override
@@ -1460,37 +1460,37 @@ public class PrivilegeChecker {
             if (checkTblPriv(session, node.getName(), PrivPredicate.SELECT)) {
                 return null;
             }
-            return visit(node.getQueryStatement());
+            return visit(node.getQueryStatement(), context);
         }
 
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
             if (node.hasWithClause()) {
-                node.getCteRelations().forEach(this::visit);
+                node.getCteRelations().forEach(c -> visit(c, context));
             }
 
-            return visit(node.getRelation());
+            return visit(node.getRelation(), context);
         }
 
         @Override
         public Void visitSetOp(SetOperationRelation node, Void context) {
             if (node.hasWithClause()) {
-                node.getRelations().forEach(this::visit);
+                node.getRelations().forEach(r -> visit(r, context));
             }
-            node.getRelations().forEach(this::visit);
+            node.getRelations().forEach(r -> visit(r, context));
             return null;
         }
 
         @Override
         public Void visitJoin(JoinRelation node, Void context) {
-            visit(node.getLeft());
-            visit(node.getRight());
+            visit(node.getLeft(), context);
+            visit(node.getRight(), context);
             return null;
         }
 
         @Override
         public Void visitCTE(CTERelation node, Void context) {
-            return visit(node.getCteQueryStatement());
+            return visit(node.getCteQueryStatement(), context);
         }
 
         @Override
