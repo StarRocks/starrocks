@@ -107,12 +107,15 @@ public class AdminStmtAnalyzer {
                 }
             }
             adminShowReplicaDistributionStmt.setDbName(dbName);
+<<<<<<< HEAD
 
             try {
                 CatalogUtils.checkIsLakeTable(dbName, tblName);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
+=======
+>>>>>>> e70e2390a ([Enhancement] Support admin show replica distribution from lake table (#19316))
             return null;
         }
 
