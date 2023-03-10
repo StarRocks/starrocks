@@ -47,6 +47,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -448,8 +449,23 @@ public class StarOSAgent {
                             .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
 
                     if (backendId == -1L) {
-                        LOG.warn("backendId for {} is -1", workerAddr);
-                        continue;
+                        LOG.info("can't find backendId with starletPort for {}.", workerAddr);
+                        // FIXME: workaround fix of missing starletPort due to Backend::write() missing the field during
+                        //  saveImage(). Refer to: https://starrocks.atlassian.net/browse/SR-16340
+                        if (workerInfo.getWorkerPropertiesMap().containsKey("be_port")) {
+                            int bePort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_port"));
+                            Backend be = GlobalStateMgr.getCurrentSystemInfo()
+                                    .getBackendWithBePort(pair[0], bePort);
+                            if (be == null) {
+                                LOG.warn("can't find backendId with bePort:{} for {}.", bePort, workerAddr);
+                            } else {
+                                backendId = be.getId();
+                            }
+                        }
+                        // Can't find the backendId, give up
+                        if (backendId == -1L) {
+                            continue;
+                        }
                     }
 
                     // put it into map
