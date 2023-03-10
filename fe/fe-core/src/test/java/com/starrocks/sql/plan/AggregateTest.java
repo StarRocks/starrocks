@@ -1112,7 +1112,7 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setSqlMode(0);
         String sql = "select v1, v2 from t0 group by v1";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+        Assert.assertTrue(plan, plan.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:1: v1 | 4: any_value\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
