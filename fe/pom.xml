@@ -280,12 +280,13 @@ under the License.
                 <version>0.11-a-czt02-cdh</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/com.starrocks/starrocks-bdb-je -->
             <dependency>
-                <groupId>com.sleepycat</groupId>
-                <artifactId>je</artifactId>
-                <version>7.3.7</version>
+                <groupId>com.starrocks</groupId>
+                <artifactId>starrocks-bdb-je</artifactId>
+                <version>18.3.13</version>
             </dependency>
-
+            
             <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->
             <dependency>
                 <groupId>de.jflex</groupId>
