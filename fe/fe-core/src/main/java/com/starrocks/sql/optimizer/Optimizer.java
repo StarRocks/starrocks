@@ -60,6 +60,7 @@ import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
+import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
@@ -347,6 +348,12 @@ public class Optimizer {
 
     private OptExpression pushDownAggregation(OptExpression tree, TaskContext rootTaskContext,
                                               ColumnRefSet requiredColumns) {
+        if (context.getSessionVariable().isCboPushDownDistinctBelowWindow()) {
+            // TODO(by satanson): in future, PushDownDistinctAggregateRule and PushDownAggregateRule should be
+            //  fused one rule to tackle with all scenarios of agg push-down.
+            tree = new PushDownDistinctAggregateRule().rewrite(tree, rootTaskContext);
+        }
+
         if (context.getSessionVariable().getCboPushDownAggregateMode() == -1) {
             return tree;
         }
