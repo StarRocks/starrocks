@@ -562,7 +562,7 @@ As shown in the preceding query result, the record whose `id` is `101` in `examp
 
 ## Conditional updates
 
-From StarRocks v2.5 onwards, tables of the Primary Key model support conditional updates. You can specify a non-primary key column as the condition to determine whether updates can take effect. As such, the update from a source record to a destination record takes effect only when the source data record has a larger or equal value than the destination data record in the specified column.
+From StarRocks v2.5 onwards, tables of the Primary Key model support conditional updates. You can specify a non-primary key column as the condition to determine whether updates can take effect. As such, the update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column.
 
 The conditional update feature is designed to resolve data disorder. If the source data is disordered, you can use this feature to ensure that new data will not be overwritten by old data.
 
@@ -611,7 +611,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 
 ### Load data
 
-Run a load to update the records whose `id` values are `101` and `102`, respectively, from `example5.csv` into `table5`, and specify that the updates take effect only when the `verion` value in each of the two records is greater than their current `version` values.
+Run a load to update the records whose `id` values are `101` and `102`, respectively, from `example5.csv` into `table5`, and specify that the updates take effect only when the `verion` value in each of the two records is greater or equal to their current `version` values.
 
 - Run a Stream Load job:
 
