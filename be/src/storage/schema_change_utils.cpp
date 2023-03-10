@@ -208,7 +208,7 @@ const MaterializeTypeConverter* ChunkChanger::get_materialize_type_converter(con
 bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const TabletMetaSharedPtr& base_tablet_meta,
                                 const TabletMetaSharedPtr& new_tablet_meta, MemPool* mem_pool) {
     if (new_chunk->num_columns() != _schema_mapping.size()) {
-        LOG(WARNING) << "new chunk does not match with schema mapping rules. "
+        LOG(WARNING) << "[SchemaChange failed]: new chunk does not match with schema mapping rules. "
                      << "chunk_schema_size=" << new_chunk->num_columns()
                      << ", mapping_schema_size=" << _schema_mapping.size();
         return false;
@@ -225,7 +225,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                         get_materialize_type_converter(materialized_function, ref_type);
                 VLOG(3) << "_schema_mapping[" << i << "].materialized_function: " << materialized_function;
                 if (converter == nullptr) {
-                    LOG(WARNING) << "error materialized view function : " << materialized_function;
+                    LOG(WARNING) << "[SchemaChange failed]: error materialized view function : "
+                                 << materialized_function;
                     return false;
                 }
                 ColumnPtr& base_col = base_chunk->get_column_by_index(ref_column);
@@ -263,7 +264,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                         slice.size = new_tablet_meta->tablet_schema().column(i).length();
                         slice.data = reinterpret_cast<char*>(mem_pool->allocate(slice.size));
                         if (slice.data == nullptr) {
-                            LOG(WARNING) << "failed to allocate memory in mem_pool";
+                            LOG(WARNING) << "[SchemaChange failed]: failed to allocate memory in mem_pool";
                             return false;
                         }
                         memset(slice.data, 0, slice.size);
@@ -280,7 +281,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
             } else if (ConvertTypeResolver::instance()->convert_type_exist(ref_type, new_type)) {
                 auto converter = get_type_converter(ref_type, new_type);
                 if (converter == nullptr) {
-                    LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type" << new_type;
+                    LOG(WARNING) << "[SchemaChange failed]: failed to get type converter, from_type=" << ref_type
+                                 << ", to_type" << new_type;
                     return false;
                 }
 
@@ -291,8 +293,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                 Status st = converter->convert_column(ref_field.type().get(), *base_col, new_field.type().get(),
                                                       new_col.get(), mem_pool);
                 if (!st.ok()) {
-                    LOG(WARNING) << "failed to convert " << logical_type_to_string(ref_type) << " to "
-                                 << logical_type_to_string(new_type);
+                    LOG(WARNING) << "[SchemaChange failed]: failed to convert " << logical_type_to_string(ref_type)
+                                 << " to " << logical_type_to_string(new_type);
                     return false;
                 }
             } else {
@@ -315,12 +317,12 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                 case TYPE_UNSIGNED_BIGINT:
                     CONVERT_FROM_TYPE(uint64_t);
                 default:
-                    LOG(WARNING) << "the column type which was altered from was unsupported."
+                    LOG(WARNING) << "[SchemaChange failed]: the column type which was altered from was unsupported."
                                  << " from_type=" << ref_type << ", to_type=" << new_type;
                     return false;
                 }
                 if (new_type < ref_type) {
-                    LOG(INFO) << "type degraded while altering column. "
+                    LOG(INFO) << "[SchemaChange process]: type degraded while altering column. "
                               << "column=" << new_tablet_meta->tablet_schema().column(i).name()
                               << ", origin_type=" << logical_type_to_string(ref_type)
                               << ", alter_type=" << logical_type_to_string(new_type);
@@ -339,7 +341,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
 bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema,
                                    const Schema& new_schema, MemPool* mem_pool) {
     if (new_chunk->num_columns() != _schema_mapping.size()) {
-        LOG(WARNING) << "new chunk does not match with schema mapping rules. "
+        LOG(WARNING) << "[SchemaChange failed]: new chunk does not match with schema mapping rules. "
                      << "chunk_schema_size=" << new_chunk->num_columns()
                      << ", mapping_schema_size=" << _schema_mapping.size();
         return false;
@@ -360,7 +362,8 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                         get_materialize_type_converter(materialized_function, ref_type_info->type());
                 VLOG(3) << "_schema_mapping[" << i << "].materialized_function: " << materialized_function;
                 if (converter == nullptr) {
-                    LOG(WARNING) << "error materialized view function : " << materialized_function;
+                    LOG(WARNING) << "[SchemaChange failed]: error materialized view function : "
+                                 << materialized_function;
                     return false;
                 }
                 Status st = converter->convert_materialized(base_col, new_col, ref_type_info.get());
@@ -387,14 +390,15 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             } else if (ConvertTypeResolver::instance()->convert_type_exist(ref_type, new_type)) {
                 auto converter = get_type_converter(ref_type, new_type);
                 if (converter == nullptr) {
-                    LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type" << new_type;
+                    LOG(WARNING) << "[SchemaChange failed]: failed to get type converter, from_type=" << ref_type
+                                 << ", to_type" << new_type;
                     return false;
                 }
                 Status st = converter->convert_column(ref_type_info.get(), *base_col, new_type_info.get(),
                                                       new_col.get(), mem_pool);
                 if (!st.ok()) {
-                    LOG(WARNING) << "failed to convert " << logical_type_to_string(ref_type) << " to "
-                                 << logical_type_to_string(new_type);
+                    LOG(WARNING) << "[SchemaChange failed]: failed to convert " << logical_type_to_string(ref_type)
+                                 << " to " << logical_type_to_string(new_type);
                     return false;
                 }
             } else {
@@ -417,12 +421,12 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                 case TYPE_UNSIGNED_BIGINT:
                     CONVERT_FROM_TYPE(uint64_t);
                 default:
-                    LOG(WARNING) << "the column type which was altered from was unsupported."
+                    LOG(WARNING) << "[SchemaChange failed]: the column type which was altered from was unsupported."
                                  << " from_type=" << ref_type << ", to_type=" << new_type;
                     return false;
                 }
                 if (new_type < ref_type) {
-                    LOG(INFO) << "type degraded while altering column. "
+                    LOG(INFO) << "[SchemaChange process]: type degraded while altering column. "
                               << "column=" << new_schema.field(i)->name()
                               << ", origin_type=" << logical_type_to_string(ref_type)
                               << ", alter_type=" << logical_type_to_string(new_type);
@@ -499,7 +503,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
                 base_to_new[column_index] = i;
                 continue;
             } else {
-                LOG(WARNING) << "referenced column was missing. "
+                LOG(WARNING) << "[SchemaChange failed]: referenced column was missing. "
                              << "[column=" << column_name << " referenced_column=" << column_index << "]";
                 return Status::InternalError("referenced column was missing");
             }
@@ -521,7 +525,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
             }
 
             if (!init_column_mapping(column_mapping, new_column, new_column.default_value()).ok()) {
-                LOG(WARNING) << "init column mapping failed. column=" << new_column.name();
+                LOG(WARNING) << "[SchemaChange failed]: init column mapping failed. column=" << new_column.name();
                 return Status::InternalError("init column mapping failed");
             }
 
