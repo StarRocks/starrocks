@@ -137,8 +137,6 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
         }                                                                                                          \
     } while (false);
 
-    jsonpath.
-
     if (jsonpath.size() <= 1) {
         // The first elem of json path should be '$'.
         // A valid json path's size is >= 2.
@@ -160,6 +158,10 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
         // we have to do some special treatment for the second elem of json path.
         // If the key is not found in json object, simdjson::NO_SUCH_FIELD would be returned.
         if (i == 1) {
+            if (obj.is_empty()) {
+                return Status::NotFound(fmt::format("unable to find key: {}", jsonpath[i].key));
+            }
+
             if (col == "*") {
                 // There should be no jsonpath for this pattern, $.*
                 return Status::InvalidArgument(fmt::format(
@@ -180,8 +182,7 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
             }
 
             if (tvalue.type() != simdjson::ondemand::json_type::object) {
-                return Status::InvalidArgument(fmt::format(
-                        "extracting * from non-object type is not supported, the json path: {}", jsonpath[i].key));
+                return Status::NotFound(fmt::format("unable to find key: {}", jsonpath[i].key));
             }
 
             if (col == "*") {
@@ -205,6 +206,10 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
             HANDLE_SIMDJSON_ERROR(arr.at(index).get(tvalue),
                                   fmt::format("failed to access array field: {}, index: {}", col, index));
         }
+    }
+
+    if (tvalue.is_null()) {
+        return Status::NotFound(fmt::format("unable to find key: {}", "somekey"));
     }
 
     std::swap(*value, tvalue);
