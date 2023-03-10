@@ -332,7 +332,7 @@ Status CSVReader::more_rows() {
                 if (*(_buff.position()) == ' ') {
                     white_space_start = _buff.position_offset();
                 }
-                preState = ORDINARY;   
+                preState = ORDINARY;
             }
 
             // newrow
