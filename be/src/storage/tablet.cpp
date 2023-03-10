@@ -717,16 +717,6 @@ bool Tablet::check_migrate(const TabletSharedPtr& tablet) {
     return false;
 }
 
-bool Tablet::_check_versions_completeness() {
-    const RowsetSharedPtr lastest_delta = rowset_with_max_version();
-    if (lastest_delta == nullptr) {
-        return false;
-    }
-
-    Version test_version = Version(0, lastest_delta->end_version());
-    return capture_consistent_versions(test_version, nullptr).ok();
-}
-
 const uint32_t Tablet::calc_cumulative_compaction_score() const {
     uint32_t score = 0;
     bool base_rowset_exist = false;
