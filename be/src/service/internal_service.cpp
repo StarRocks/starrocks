@@ -142,7 +142,7 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
                         " node=" + std::to_string(request->node_id());
     };
     if (VLOG_ROW_IS_ON) {
-        gen_transmit_info;
+        gen_transmit_info();
     }
     VLOG_ROW << transmit_info << " begin";
     // NOTE: we should give a default value to response to avoid concurrent risk
@@ -156,9 +156,7 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
     st.to_protobuf(response->mutable_status());
     DeferOp defer([&]() {
         if (!st.ok()) {
-            if (!VLOG_ROW_IS_ON) {
-                gen_transmit_info;
-            }
+            gen_transmit_info();
             LOG(WARNING) << "failed to " << transmit_info;
         }
         if (done != nullptr) {
