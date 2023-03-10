@@ -254,11 +254,10 @@ public:
         return Status::NotSupported("HdfsFileSystem::get_children");
     }
 
-    Status list_path(const std::string& dir, std::vector<FileStatus>* result) override;
+    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
 
-    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
-        return Status::NotSupported("HdfsFileSystem::iterate_dir");
-    }
+    Status iterate_dir2(const std::string& dir,
+                        const std::function<bool(std::string_view, const FileMeta&)>& cb) override;
 
     Status delete_file(const std::string& path) override { return Status::NotSupported("HdfsFileSystem::delete_file"); }
 
@@ -320,7 +319,7 @@ Status HdfsFileSystem::path_exists(const std::string& path) {
     return _path_exists(handle.hdfs_fs, path);
 }
 
-Status HdfsFileSystem::list_path(const std::string& dir, std::vector<FileStatus>* result) {
+Status HdfsFileSystem::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
     std::string namenode;
     RETURN_IF_ERROR(get_namenode_from_path(dir, &namenode));
     HdfsFsHandle handle;
@@ -345,9 +344,49 @@ Status HdfsFileSystem::list_path(const std::string& dir, std::vector<FileStatus>
             dir_size = dir.size() + 1;
         }
         std::string_view name(fileinfo[i].mName + dir_size);
-        bool is_dir = fileinfo[i].mKind == tObjectKind::kObjectKindDirectory;
-        int64_t file_size = fileinfo[i].mSize;
-        result->emplace_back(name, is_dir, file_size);
+        if (!cb(name)) {
+            break;
+        }
+    }
+    if (fileinfo) {
+        hdfsFreeFileInfo(fileinfo, numEntries);
+    }
+    return Status::OK();
+}
+
+Status HdfsFileSystem::iterate_dir2(const std::string& dir,
+                                    const std::function<bool(std::string_view, const FileMeta&)>& cb) {
+    std::string namenode;
+    RETURN_IF_ERROR(get_namenode_from_path(dir, &namenode));
+    HdfsFsHandle handle;
+    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
+    Status status = _path_exists(handle.hdfs_fs, dir);
+    if (!status.ok()) {
+        return status;
+    }
+
+    hdfsFileInfo* fileinfo;
+    int numEntries;
+    fileinfo = hdfsListDirectory(handle.hdfs_fs, dir.data(), &numEntries);
+    if (fileinfo == nullptr) {
+        return Status::InvalidArgument("hdfs list directory error {}"_format(dir));
+    }
+    for (int i = 0; i < numEntries && fileinfo; ++i) {
+        // obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size()
+        int32_t dir_size;
+        if (dir[dir.size() - 1] == '/') {
+            dir_size = dir.size();
+        } else {
+            dir_size = dir.size() + 1;
+        }
+        std::string_view name(fileinfo[i].mName + dir_size);
+        FileMeta meta;
+        meta.with_is_dir(fileinfo[i].mKind == tObjectKind::kObjectKindDirectory)
+                .with_size(fileinfo[i].mSize)
+                .with_modify_time(fileinfo[i].mLastMod);
+        if (!cb(name, meta)) {
+            break;
+        }
     }
     if (fileinfo) {
         hdfsFreeFileInfo(fileinfo, numEntries);

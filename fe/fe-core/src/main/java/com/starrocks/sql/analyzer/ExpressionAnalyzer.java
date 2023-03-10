@@ -652,6 +652,10 @@ public class ExpressionAnalyzer {
                     rhsType = Type.NULL;
                 }
 
+                if (lhsType.isInvalid() || rhsType.isInvalid()) {
+                    throw new SemanticException("Any function type can not cast to " + Type.INVALID.toSql());
+                }
+
                 if (!Type.NULL.equals(node.getChild(0).getType()) && !Type.canCastTo(t1, lhsType)) {
                     throw new SemanticException(
                             "cast type " + node.getChild(0).getType().toSql() + " with type " + lhsType.toSql()
@@ -666,6 +670,11 @@ public class ExpressionAnalyzer {
 
                 Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {lhsType, rhsType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
+
+                if (fn == null) {
+                    throw new SemanticException(String.format(
+                            "No matching function '%s' with operand types %s and %s", node.getOp().getName(), t1, t2));
+                }
 
                 /*
                  * commonType is the common type of the parameters of the function,

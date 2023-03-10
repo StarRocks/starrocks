@@ -1618,7 +1618,7 @@ public class Config extends ConfigBase {
      * The maximum number of partitions to fetch from the metastore in one RPC.
      */
     @ConfField
-    public static int max_hive_partitions_per_rpc = 1000;
+    public static int max_hive_partitions_per_rpc = 5000;
 
     /**
      * The interval of lazy refreshing remote file's metadata cache
@@ -1747,6 +1747,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long iceberg_metadata_disk_cache_capacity = 2147483648L;
+
+    /**
+     * iceberg metadata disk cache expire after access
+     */
+    @ConfField
+    public static long iceberg_metadata_disk_cache_expiration_seconds = 7L * 24L * 60L * 60L;
 
     /**
      * iceberg metadata cache max entry size, default 8MB

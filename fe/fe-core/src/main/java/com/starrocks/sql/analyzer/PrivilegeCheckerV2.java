@@ -15,11 +15,14 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.SchemaTable;
@@ -79,6 +82,7 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -808,6 +812,7 @@ public class PrivilegeCheckerV2 {
         }
 
         // ---------------------------------------- Materialized View stmt --------------------------------
+
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
@@ -816,6 +821,11 @@ public class PrivilegeCheckerV2 {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                         "CREATE MATERIALIZED VIEW");
             }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement, ConnectContext context) {
             return null;
         }
 
@@ -894,7 +904,7 @@ public class PrivilegeCheckerV2 {
             if (CatalogMgr.isInternalCatalog(catalogName)) {
                 return null;
             }
-            if (!PrivilegeActions.checkAnyActionOnCatalog(context, catalogName)) {
+            if (!PrivilegeActions.checkAnyActionOnOrInCatalog(context, catalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
                         context.getQualifiedUser(), catalogName);
             }
@@ -1277,18 +1287,50 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkFunctionAction(context, statement.getFunctionName().getDb(),
-                    statement.getFunction().toString(), PrivilegeType.DROP)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, PrivilegeType.DROP);
+            FunctionName functionName = statement.getFunctionName();
+            // global function.
+            if (functionName.isGlobalFunction()) {
+                FunctionSearchDesc desc = statement.getFunction();
+                Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(desc);
+                if (function != null && !PrivilegeActions.checkGlobalFunctionAction(context, function.signatureString(),
+                        PrivilegeType.DROP)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                            "DROP GLOBAL FUNCTION");
+                }
+                return null;
+            }
+
+            // db function.
+            Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
+            if (db != null) {
+                try {
+                    db.readLock();
+                    Function function = db.getFunction(statement.getFunction());
+                    if (null != function && !PrivilegeActions.checkFunctionAction(context, functionName.getDb(),
+                            function.signatureString(), PrivilegeType.DROP)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                                "DROP FUNCTION");
+                    }
+                } finally {
+                    db.readUnlock();
+                }
             }
             return null;
         }
 
         @Override
         public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
-            if (!PrivilegeActions.checkDbAction(context, statement.getFunctionName().getDb(),
-                    statement.getFunction().toString(), PrivilegeType.CREATE_FUNCTION)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, PrivilegeType.CREATE_FUNCTION);
+            FunctionName name = statement.getFunctionName();
+            if (name.isGlobalFunction()) {
+                if (!PrivilegeActions.checkSystemAction(
+                        context, PrivilegeType.CREATE_GLOBAL_FUNCTION)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                            "CREATE GLOBAL FUNCTION");
+                }
+            } else {
+                if (!PrivilegeActions.checkDbAction(context, name.getDb(), PrivilegeType.CREATE_FUNCTION)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE FUNCTION");
+                }
             }
             return null;
         }

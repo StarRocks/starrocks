@@ -569,7 +569,7 @@ public class OptimizerTraceUtil {
     public static class RelationTracePrinter extends AstVisitor<String, String> {
         @Override
         public String visit(ParseNode node, String indent) {
-            return node == null ? "null" : node.toSql();
+            return node == null ? "null" : node.accept(this, indent);
         }
 
         @Override
