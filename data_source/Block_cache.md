@@ -103,7 +103,7 @@ block_cache_disk_size = 1288490188800
 
 - `BlockCacheReadBytes`：从内存和磁盘中读取的数据量。
 - `BlockCacheWriteBytes`：从外部存储系统加载到内存和磁盘的数据量。
-- `BytesRead`：从外部存储系统直接读取的数据量。
+- `BytesRead`：总共读取的数据量，包括从内存、磁盘以及外部存储读取的数据量。
 
 示例一：StarRocks 从外部存储系统中读取了大量的数据 (7.65 GB)，从内存和磁盘中读取的数据量 (518.73 MB) 较少，即代表 Local Cache 命中较少。
 
@@ -133,24 +133,26 @@ block_cache_disk_size = 1288490188800
    - __MIN_OF_BytesRead: 0.00
 ```
 
-示例二：StarRocks 从外部存储系统直接读取的数据量为 0，即代表 Local Cache 完全命中。
+示例二：StarRocks 从 local cache 读取了 46.08 GB 数据，从外部存储系统直接读取的数据量为 0，即代表 Local Cache 完全命中。
 
 ```Plain
-- Table: lineorder
- - BlockCacheReadBytes: 7.37 GB
-   - __MAX_OF_BlockCacheReadBytes: 60.73 MB
-   - __MIN_OF_BlockCacheReadBytes: 16.00 KB
- - BlockCacheReadCounter: 8.571K (8571)
-   - __MAX_OF_BlockCacheReadCounter: 68
-   - __MIN_OF_BlockCacheReadCounter: 1
- - BlockCacheReadTimer: 174.362ms
-   - __MAX_OF_BlockCacheReadTimer: 753.745ms
-   - __MIN_OF_BlockCacheReadTimer: 15.840us
- - BlockCacheWriteBytes: 0.00 
- - BlockCacheWriteCounter: 0
- - BlockCacheWriteTimer: 0ns
- - BufferUnplugCount: 103
-   - __MAX_OF_BufferUnplugCount: 5
-   - __MIN_OF_BufferUnplugCount: 0
- - BytesRead: 0.00 
+ Table: lineitem
+- BlockCacheReadBytes: 46.08 GB
+ - __MAX_OF_BlockCacheReadBytes: 194.99 MB
+ - __MIN_OF_BlockCacheReadBytes: 81.25 MB
+- BlockCacheReadCounter: 72.237K (72237)
+ - __MAX_OF_BlockCacheReadCounter: 299
+ - __MIN_OF_BlockCacheReadCounter: 118
+- BlockCacheReadTimer: 856.481ms
+ - __MAX_OF_BlockCacheReadTimer: 1s547ms
+ - __MIN_OF_BlockCacheReadTimer: 261.824ms
+- BlockCacheWriteBytes: 0.00 
+- BlockCacheWriteCounter: 0
+- BlockCacheWriteTimer: 0ns
+- BufferUnplugCount: 1.231K (1231)
+ - __MAX_OF_BufferUnplugCount: 81
+ - __MIN_OF_BufferUnplugCount: 35
+- BytesRead: 46.08 GB
+ - __MAX_OF_BytesRead: 194.99 MB
+ - __MIN_OF_BytesRead: 81.25 MB
 ```

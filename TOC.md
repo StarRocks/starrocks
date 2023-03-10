@@ -108,7 +108,6 @@
     + [性能优化](/administration/Profiling.md)
 + 参考手册
   + SQL参考
-    + [关键字](/sql-reference/sql-statements/keywords.md)
     + 用户账户管理
       + [ALTER USER](/sql-reference/sql-statements/account-management/ALTER%20USER.md)
       + [CREATE ROLE](/sql-reference/sql-statements/account-management/CREATE%20ROLE.md)
@@ -274,6 +273,7 @@
         + [BITMAP](/sql-reference/sql-statements/data-types/BITMAP.md)
         + [JSON](/sql-reference/sql-statements/data-types/JSON.md)
         + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
+    + [关键字](/sql-reference/sql-statements/keywords.md)
   + 函数参考
     + [Java UDF](/sql-reference/sql-functions/JAVA_UDF.md)
     + [窗口函数](/sql-reference/sql-functions/Window_function.md)
@@ -412,7 +412,7 @@
         + [parse_json](/sql-reference/sql-functions/json-functions/json-creation-functions/parse_json.md)
       + JSON 查询和处理函数
         + [箭头函数](/sql-reference/sql-functions/json-functions/json-processing-functions/arrow-function.md)
-        + [JSON 类型转换](/sql-reference/sql-functions/json-functions/json-processing-functions/cast-from-or-to-json.md)
+        + [cast](/sql-reference/sql-functions/json-functions/json-processing-functions/cast-from-or-to-json.md)
         + [get_json_double](/sql-reference/sql-functions/json-functions/json-processing-functions/get_json_double.md)
         + [get_json_int](/sql-reference/sql-functions/json-functions/json-processing-functions/get_json_int.md)
         + [get_json_string](/sql-reference/sql-functions/json-functions/json-processing-functions/get_json_string.md)
