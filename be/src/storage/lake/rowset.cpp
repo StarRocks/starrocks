@@ -53,6 +53,7 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const Schema& schema, const RowsetReadOp
     seg_options.chunk_size = options.chunk_size;
     seg_options.global_dictmaps = options.global_dictmaps;
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
+    seg_options.runtime_range_pruner = options.runtime_range_pruner;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet->update_mgr(), nullptr);
