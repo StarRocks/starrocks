@@ -42,7 +42,7 @@ Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::s
     std::unique_ptr<RandomAccessFile> file;
     ASSIGN_OR_RETURN(file, _fs->new_random_access_file(delete_file_path));
 
-    auto input_stream = std::make_unique<ORCHdfsFileStream>(file.get(), file_length);
+    auto input_stream = std::make_unique<ORCHdfsFileStream>(file.get(), file_length, nullptr);
     std::unique_ptr<orc::Reader> reader;
     try {
         orc::ReaderOptions options;

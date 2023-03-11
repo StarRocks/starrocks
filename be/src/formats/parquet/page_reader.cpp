@@ -15,7 +15,6 @@
 #include "formats/parquet/page_reader.h"
 
 #include "common/config.h"
-// #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "util/thrift_util.h"
 
@@ -23,7 +22,7 @@ namespace starrocks::parquet {
 
 static constexpr size_t kHeaderInitSize = 1024;
 
-PageReader::PageReader(IBufferedInputStream* stream, uint64_t start_offset, uint64_t length)
+PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, uint64_t length)
         : _stream(stream), _finish_offset(start_offset + length) {}
 
 Status PageReader::next_header() {
@@ -36,14 +35,17 @@ Status PageReader::next_header() {
         return Status::EndOfFile("");
     }
 
-    const uint8_t* page_buf = nullptr;
+    std::vector<uint8_t> page_buffer;
+    page_buffer.reserve(config::parquet_header_max_size);
+    uint8_t* page_buf = page_buffer.data();
 
-    uint32_t header_length = 0;
     size_t nbytes = kHeaderInitSize;
     size_t remaining = _finish_offset - _offset;
+    uint32_t header_length = 0;
+
     do {
         nbytes = std::min(nbytes, remaining);
-        RETURN_IF_ERROR(_stream->get_bytes(&page_buf, _offset, &nbytes, true));
+        RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buf, nbytes));
 
         header_length = nbytes;
         auto st = deserialize_thrift_msg(page_buf, &header_length, TProtocolType::COMPACT, &_cur_header);
@@ -59,18 +61,15 @@ Status PageReader::next_header() {
 
     _offset += header_length;
     _next_header_pos = _offset + _cur_header.compressed_page_size;
-    _stream->skip(header_length);
     return Status::OK();
 }
 
-Status PageReader::read_bytes(const uint8_t** buffer, size_t size) {
+Status PageReader::read_bytes(void* buffer, size_t size) {
     if (_offset + size > _next_header_pos) {
         return Status::InternalError("Size to read exceed page size");
     }
-    uint64_t nbytes = size;
-    RETURN_IF_ERROR(_stream->get_bytes(buffer, _offset, &nbytes, false));
-    DCHECK_EQ(nbytes, size);
-    _offset += nbytes;
+    RETURN_IF_ERROR(_stream->read_at_fully(_offset, buffer, size));
+    _offset += size;
     return Status::OK();
 }
 
@@ -78,6 +77,19 @@ Status PageReader::skip_bytes(size_t size) {
     if (_offset + size > _next_header_pos) {
         return Status::InternalError("Size to skip exceed page size");
     }
+    _offset += size;
+    return Status::OK();
+}
+
+bool PageReader::can_zero_copy_read_bytes(size_t size) {
+    return _stream->can_zero_copy_read_at_fully(_offset, size);
+}
+
+Status PageReader::zero_copy_read_bytes(void** buf, size_t size) {
+    if (_offset + size > _next_header_pos) {
+        return Status::InternalError("Size to read exceed page size");
+    }
+    RETURN_IF_ERROR(_stream->zero_copy_read_at_fully(_offset, buf, size));
     _offset += size;
     return Status::OK();
 }

@@ -68,6 +68,9 @@ public:
     Status skip(int64_t count) override;
 
     virtual void set_size(int64_t);
+
+    virtual bool can_zero_copy_read_at_fully(int64_t offset, int64_t count);
+    virtual Status zero_copy_read_at_fully(int64_t offset, void** buf, int64_t count);
 };
 
 class SeekableInputStreamWrapper : public SeekableInputStream {
@@ -117,6 +120,13 @@ public:
     Status seek(int64_t offset) override { return _impl->seek(offset); }
 
     void set_size(int64_t value) override { return _impl->set_size(value); }
+
+    bool can_zero_copy_read_at_fully(int64_t offset, int64_t count) {
+        return _impl->can_zero_copy_read_at_fully(offset, count);
+    }
+    Status zero_copy_read_at_fully(int64_t offset, void** buf, int64_t count) {
+        return _impl->zero_copy_read_at_fully(offset, buf, count);
+    }
 
 private:
     SeekableInputStream* _impl;

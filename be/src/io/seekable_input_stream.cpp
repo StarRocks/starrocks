@@ -35,4 +35,12 @@ Status SeekableInputStream::skip(int64_t count) {
 
 void SeekableInputStream::set_size(int64_t count) {}
 
+bool SeekableInputStream::can_zero_copy_read_at_fully(int64_t offset, int64_t count) {
+    return false;
+}
+
+Status SeekableInputStream::zero_copy_read_at_fully(int64_t offset, void** buf, int64_t count) {
+    return Status::NotSupported("zero_copy_read_at_fully");
+}
+
 } // namespace starrocks::io
