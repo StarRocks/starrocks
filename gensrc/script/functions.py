@@ -894,4 +894,12 @@ vectorized_functions = [
 
     # struct functions
     [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
+
+    # unix timestamp extended version to int64
+    # [170700, 'unix_timestamp_ex', 'BIGINT', [], 'TimeFunctions::to_unix_for_now_64'],
+    # [170701, 'unix_timestamp_ex', 'BIGINT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime_64'],
+    # [170702, 'unix_timestamp_ex', 'BIGINT', ['DATE'], 'TimeFunctions::to_unix_from_date_64'],
+    # [170701, 'unix_timestamp_ex', 'BIGINT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format_64'],
+    [170704, 'from_unixtime_ex', 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_64'],
+    # [170705, 'from_unixtime_ex', 'VARCHAR', ['BIGINT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format_64', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
 ]

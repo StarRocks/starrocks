@@ -807,8 +807,8 @@ public class Load {
                 FunctionCallExpr newFn = new FunctionCallExpr("if", exprs);
                 return newFn;
             } else if (funcName.equalsIgnoreCase(FunctionSet.STRFTIME)) {
-                // FROM_UNIXTIME(val)
-                FunctionName fromUnixName = new FunctionName(FunctionSet.FROM_UNIXTIME);
+                // FROM_UNIXTIME_EX(val)
+                FunctionName fromUnixName = new FunctionName(FunctionSet.FROM_UNIXTIME_EX);
                 List<Expr> fromUnixArgs = Lists.newArrayList(funcExpr.getChild(1));
                 FunctionCallExpr fromUnixFunc = new FunctionCallExpr(
                         fromUnixName, new FunctionParams(false, fromUnixArgs));
@@ -834,8 +834,8 @@ public class Load {
                  *
                  */
 
-                // FROM_UNIXTIME
-                FunctionName fromUnixName = new FunctionName(FunctionSet.FROM_UNIXTIME);
+                // FROM_UNIXTIME_EX
+                FunctionName fromUnixName = new FunctionName(FunctionSet.FROM_UNIXTIME_EX);
                 List<Expr> fromUnixArgs = Lists.newArrayList(funcExpr.getChild(1));
                 FunctionCallExpr fromUnixFunc = new FunctionCallExpr(
                         fromUnixName, new FunctionParams(false, fromUnixArgs));

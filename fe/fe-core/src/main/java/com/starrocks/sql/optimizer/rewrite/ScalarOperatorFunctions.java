@@ -331,6 +331,17 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(dl.toString());
     }
 
+    @ConstantFunction(name = "from_unixtime_ex", argTypes = {BIGINT}, returnType = VARCHAR)
+    public static ConstantOperator fromUnixTime64(ConstantOperator unixTime) throws AnalysisException {
+        // if unixTime < 0, we should return null, throw a exception and let BE process
+        if (unixTime.getBigint() < 0) {
+            throw new AnalysisException("unixtime should larger than zero");
+        }
+        ConstantOperator dl = ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(unixTime.getBigint()), TimeUtils.getTimeZone().toZoneId()));
+        return ConstantOperator.createVarchar(dl.toString());
+    }
+
     @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR)
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime, ConstantOperator fmtLiteral)
             throws AnalysisException {
