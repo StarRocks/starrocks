@@ -676,8 +676,8 @@ public class AnalyzeSingleTest {
 
     @Test
     public void testColumnAlias() {
-        analyzeFail("select * from test.t0 as t(a,b,c)", "Getting syntax error at line 1, column 27. " +
-                "Detail message: Input 'a' is not valid at this position.");
+        analyzeFail("select * from test.t0 as t(a,b,c)", "Getting syntax error at line 1, column 26. " +
+                "Detail message: Input '(' is not valid at this position.");
         analyzeSuccess("select * from (select * from test.t0) as t(a,b,c)");
         QueryRelation query = ((QueryStatement) analyzeSuccess("select t.a from (select * from test.t0) as t(a,b,c)"))
                 .getQueryRelation();
