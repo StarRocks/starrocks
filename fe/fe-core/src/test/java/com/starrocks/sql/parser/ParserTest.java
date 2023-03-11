@@ -17,6 +17,7 @@ package com.starrocks.sql.parser;
 
 import com.clearspring.analytics.util.Lists;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -175,6 +176,22 @@ class ParserTest {
             Assert.assertTrue(e instanceof ParsingException);
         }
     }
+
+    @ParameterizedTest
+    @MethodSource("multipleStatements")
+    void testMultipleStatements(String sql, boolean isValid) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            if (!isValid) {
+                fail("sql should fail.");
+            }
+        } catch (Exception e) {
+            if (isValid) {
+                fail("sql should success. errMsg: " +  e.getMessage());
+            }
+        }
+    }
     
     private static Stream<Arguments> keyWordSqls() {
         List<String> sqls = Lists.newArrayList();
@@ -190,6 +207,7 @@ class ParserTest {
         sqls.add("trace optimizer select 1");
         sqls.add("select anti from t1 left anti join t2 on true");
         sqls.add("select anti, semi from t1 left semi join t2 on true");
+        sqls.add("select * from tbl1 MINUS select * from tbl2");
         return sqls.stream().map(e -> Arguments.of(e));
     }
 
@@ -199,6 +217,20 @@ class ParserTest {
         sqls.add("select * from current_role ");
         sqls.add("select * from full full join anti anti on anti.col join t1 on true");
         return sqls.stream().map(e -> Arguments.of(e));
+    }
+
+    private static Stream<Arguments> multipleStatements() {
+        List<Pair<String, Boolean>> sqls = Lists.newArrayList();
+        sqls.add(Pair.create("select 1;;;;;;select 2", true));
+        sqls.add(Pair.create("select 1;;;;;select 2 ; ; ;;  select 3;; ;", true));
+        sqls.add(Pair.create("select 1, abc from--comments\n tbl;; select 1 -- comments\n from tbl;", true));
+        sqls.add(Pair.create("select abc from tbl", true));
+        sqls.add(Pair.create("select abc from tbl--comments", true));
+        sqls.add(Pair.create(";;;;;;-----;;;;", true));
+
+        sqls.add(Pair.create("select 1 select 2", false));
+        sqls.add(Pair.create("select 1 xxx select 2 xxx", false));
+        return sqls.stream().map(e -> Arguments.of(e.first, e.second));
     }
 }
 
