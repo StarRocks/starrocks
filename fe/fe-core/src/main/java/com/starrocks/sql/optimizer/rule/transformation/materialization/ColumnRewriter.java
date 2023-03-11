@@ -56,8 +56,8 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
-    public ScalarOperator rewriteViewToQuery(ScalarOperator predicate) {
-        if (predicate == null) {
+    public ColumnRefOperator rewriteViewToQuery(ColumnRefOperator colRef) {
+        if (colRef == null) {
             return null;
         }
         ColumnRewriteVisitor visitor =
@@ -66,7 +66,11 @@ public class ColumnRewriter {
                         .withEnableRelationRewrite(true)
                         .withViewToQuery(true)
                         .build();
-        return predicate.accept(visitor, null);
+        ScalarOperator target = colRef.accept(visitor, null);
+        if (target == null || target == colRef) {
+            return null;
+        }
+        return (ColumnRefOperator) target;
     }
 
     public ScalarOperator rewriteViewToQueryWithQueryEc(ScalarOperator predicate) {
@@ -98,21 +102,6 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
-    public ScalarOperator rewriteViewToQueryWithViewEcAfterFound(ScalarOperator predicate) {
-        if (predicate == null) {
-            return null;
-        }
-        ColumnRewriteVisitor visitor =
-                new ColumnWriterBuilder()
-                        .withRewriteContext(rewriteContext)
-                        .withEnableRelationRewrite(true)
-                        .withViewToQuery(true)
-                        .withEnableEquivalenceClassesRewrite(true)
-                        .withOnlyRewriteEquivalenceClassesRewriteAfterFound(true)
-                        .build();
-        return predicate.accept(visitor, null);
-    }
-
     public ScalarOperator rewriteQueryToView(ScalarOperator predicate) {
         if (predicate == null) {
             return null;
@@ -130,8 +119,6 @@ public class ColumnRewriter {
         private boolean viewToQuery;
         private boolean enableEquivalenceClassesRewrite;
         private boolean useQueryEquivalenceClasses;
-
-        private boolean rewriteEquivalenceClassesRewriteAfterFound;
 
         ColumnWriterBuilder withRewriteContext(RewriteContext rewriteContext) {
             this.rewriteContext = rewriteContext;
@@ -156,34 +143,26 @@ public class ColumnRewriter {
             this.useQueryEquivalenceClasses = useQueryEquivalenceClasses;
             return this;
         }
-        ColumnWriterBuilder withOnlyRewriteEquivalenceClassesRewriteAfterFound(
-                boolean rewriteEquivalenceClassesRewriteAfterFound) {
-            this.rewriteEquivalenceClassesRewriteAfterFound = rewriteEquivalenceClassesRewriteAfterFound;
-            return this;
-        }
 
         ColumnRewriteVisitor build() {
             return new ColumnRewriteVisitor(this.rewriteContext,
                     this.enableRelationRewrite,
                     this.viewToQuery,
                     this.enableEquivalenceClassesRewrite,
-                    this.useQueryEquivalenceClasses,
-                    this.rewriteEquivalenceClassesRewriteAfterFound);
+                    this.useQueryEquivalenceClasses);
         }
     }
 
     private static class ColumnRewriteVisitor extends BaseScalarOperatorShuttle {
         private final boolean enableRelationRewrite;
         private final boolean enableEquivalenceClassesRewrite;
-        private final boolean rewriteEquivalenceClassesRewriteAfterFound;
         private Map<Integer, Integer> srcToDstRelationIdMapping;
         private ColumnRefFactory srcRefFactory;
         private Map<Integer, Map<String, ColumnRefOperator>> dstRelationIdToColumns;
         private EquivalenceClasses equivalenceClasses;
 
         public ColumnRewriteVisitor(RewriteContext rewriteContext, boolean enableRelationRewrite, boolean viewToQuery,
-                                    boolean enableEquivalenceClassesRewrite, boolean useQueryEquivalenceClasses,
-                                    boolean rewriteEquivalenceClassesRewriteAfterFound) {
+                                    boolean enableEquivalenceClassesRewrite, boolean useQueryEquivalenceClasses) {
             this.enableRelationRewrite = enableRelationRewrite;
             this.enableEquivalenceClassesRewrite = enableEquivalenceClassesRewrite;
 
@@ -199,13 +178,11 @@ public class ColumnRewriter {
                 equivalenceClasses = useQueryEquivalenceClasses ?
                         rewriteContext.getQueryEquivalenceClasses() : rewriteContext.getQueryBasedViewEquivalenceClasses();
             }
-            this.rewriteEquivalenceClassesRewriteAfterFound = rewriteEquivalenceClassesRewriteAfterFound;
         }
 
         @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator columnRef, Void context) {
             ColumnRefOperator result = columnRef;
-            boolean found = false;
             if (enableRelationRewrite && srcToDstRelationIdMapping != null) {
                 Integer srcRelationId = srcRefFactory.getRelationId(columnRef.getId());
                 if (srcRelationId < 0) {
@@ -217,9 +194,6 @@ public class ColumnRewriter {
                     return null;
                 }
                 result = relationColumns.getOrDefault(columnRef.getName(), columnRef);
-            }
-            if (rewriteEquivalenceClassesRewriteAfterFound && !found) {
-                return result;
             }
             if (enableEquivalenceClassesRewrite && equivalenceClasses != null) {
                 Set<ColumnRefOperator> equalities = equivalenceClasses.getEquivalenceClass(result);

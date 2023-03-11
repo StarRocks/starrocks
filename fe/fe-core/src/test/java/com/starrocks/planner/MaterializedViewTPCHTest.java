@@ -19,7 +19,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -103,6 +102,11 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testQuery8_1() {
+        runFileUnitTest("materialized-view/tpch/q8-1");
+    }
+
+    @Test
     public void testQuery9() {
         runFileUnitTest("materialized-view/tpch/q9");
     }
@@ -110,6 +114,11 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @Test
     public void testQuery10() {
         runFileUnitTest("materialized-view/tpch/q10");
+    }
+
+    @Test
+    public void testQuery10_1() {
+        runFileUnitTest("materialized-view/tpch/q10-1");
     }
 
     @Test

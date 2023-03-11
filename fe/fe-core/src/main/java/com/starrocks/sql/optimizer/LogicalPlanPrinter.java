@@ -16,7 +16,6 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
@@ -246,11 +245,11 @@ public class LogicalPlanPrinter {
             StringBuilder sb = new StringBuilder("SCAN (");
             if (isPrintTableName) {
                 Table scanTable = scan.getTable();
-                String mvTableName = scan.getTable().getName();
-                if (scanTable instanceof MaterializedView) {
-                    sb.append("mv[").append(mvTableName).append("] ");
+                String tableName = scan.getTable().getName();
+                if (scanTable.isMaterializedView()) {
+                    sb.append("mv[").append(tableName).append("] ");
                 } else {
-                    sb.append("table[").append(mvTableName).append("] ");
+                    sb.append("table[").append(tableName).append("] ");
                 }
             }
             sb.append("columns").append(scan.getColRefToColumnMetaMap().keySet());

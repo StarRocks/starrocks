@@ -426,6 +426,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         List<ScalarOperator> newGroupByKeys = Lists.newArrayList();
         for (ScalarOperator key : groupKeys) {
             ScalarOperator newGroupByKey = replaceExprWithTarget(key, queryExprToMvExprRewriter, mapping);
+            if (key.isVariable() && key == newGroupByKey) {
+                return null;
+            }
             if (newGroupByKey == null || !isAllExprReplaced(newGroupByKey, queryColumnSet)) {
                 // it means there is some column that can not be rewritten by outputs of mv
                 return null;

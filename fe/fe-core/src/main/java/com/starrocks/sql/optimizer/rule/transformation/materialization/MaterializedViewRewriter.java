@@ -206,11 +206,11 @@ public class MaterializedViewRewriter {
             return null;
         }
 
+        // used to judge whether query scalar ops can be rewritten
         final List<ColumnRefOperator> scanMvOutputColumns =
                 materializationContext.getScanMvOperator().getOutputColumns();
         final Set<ColumnRefOperator> queryColumnSet = queryRelationIdToColumns.values()
-                .stream()
-                .flatMap(x -> x.values().stream())
+                .stream().flatMap(x -> x.values().stream())
                 .filter(columnRef -> !scanMvOutputColumns.contains(columnRef))
                 .collect(Collectors.toSet());
         final EquivalenceClasses queryEc =
@@ -231,9 +231,11 @@ public class MaterializedViewRewriter {
                 ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
                 // convert mv-based compensation join columns into query based after we get relationId mapping
                 for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : compensationJoinColumns.entries()) {
-                    ColumnRefOperator newKey = (ColumnRefOperator) columnRewriter.rewriteViewToQuery(entry.getKey());
-                    ColumnRefOperator newValue = (ColumnRefOperator) columnRewriter.rewriteViewToQuery(entry.getValue());
-                    newQueryEc.addEquivalence(newKey, newValue);
+                    ColumnRefOperator newKey = columnRewriter.rewriteViewToQuery(entry.getKey());
+                    ColumnRefOperator newValue = columnRewriter.rewriteViewToQuery(entry.getValue());
+                    if (newKey != null && newValue != null) {
+                        newQueryEc.addEquivalence(newKey, newValue);
+                    }
                 }
                 rewriteContext.setQueryEquivalenceClasses(newQueryEc);
             }
@@ -518,13 +520,22 @@ public class MaterializedViewRewriter {
         deriveLogicalProperty(mvScanOptExpression);
 
         // construct query based view EC
-        EquivalenceClasses queryBaseViewEc = new EquivalenceClasses();
+        EquivalenceClasses queryBasedViewEqualPredicate = new EquivalenceClasses();
         if (rewriteContext.getMvPredicateSplit().getEqualPredicates() != null) {
             ScalarOperator equalPredicates = rewriteContext.getMvPredicateSplit().getEqualPredicates();
-            ScalarOperator queryBasedViewEqualPredicate = columnRewriter.rewriteViewToQuery(equalPredicates);
-            queryBaseViewEc = createEquivalenceClasses(queryBasedViewEqualPredicate);
+            for (ScalarOperator equalPredicate : Utils.extractConjuncts(equalPredicates)) {
+                Preconditions.checkState(equalPredicate.getChild(0).isColumnRef());
+                ColumnRefOperator left = (ColumnRefOperator) equalPredicate.getChild(0);
+                Preconditions.checkState(equalPredicate.getChild(1).isColumnRef());
+                ColumnRefOperator right = (ColumnRefOperator) equalPredicate.getChild(1);
+                ColumnRefOperator leftTarget = columnRewriter.rewriteViewToQuery(left);
+                ColumnRefOperator rightTarget = columnRewriter.rewriteViewToQuery(right);
+                if (leftTarget != null && rightTarget != null) {
+                    queryBasedViewEqualPredicate.addEquivalence(leftTarget, rightTarget);
+                }
+            }
         }
-        rewriteContext.setQueryBasedViewEquivalenceClasses(queryBaseViewEc);
+        rewriteContext.setQueryBasedViewEquivalenceClasses(queryBasedViewEqualPredicate);
 
         final PredicateSplit compensationPredicates = getCompensationPredicates(rewriteContext, true);
         if (compensationPredicates == null) {
@@ -814,7 +825,7 @@ public class MaterializedViewRewriter {
                     // columnRefMap is still based on MV's column ref factory but MV's EC is based
                     // on query's column ref factory. So cannot use MV's EC directly which may cause
                     // wrong mappings, only rewrite with MV's EC after column ref is found in query's relations.
-                    rewriteScalarOp = columnRewriter.rewriteViewToQueryWithViewEcAfterFound(rewritten);
+                    rewriteScalarOp = columnRewriter.rewriteViewToQueryWithViewEc(rewritten);
                 } else {
                     rewriteScalarOp = columnRewriter.rewriteViewToQueryWithQueryEc(rewritten);
                 }
@@ -1017,7 +1028,6 @@ public class MaterializedViewRewriter {
                     //  a -> a1
                     //  a -> a2
                     ImmutableList.Builder<BiMap<Integer, Integer>> newResult = ImmutableList.builder();
-                    List<Integer> mvTableList = new ArrayList<>(mvTableIds);
                     Iterator<Integer> mvTableIdsIter = mvTableIds.iterator();
                     while (mvTableIdsIter.hasNext()) {
                         Integer mvTableId = mvTableIdsIter.next();

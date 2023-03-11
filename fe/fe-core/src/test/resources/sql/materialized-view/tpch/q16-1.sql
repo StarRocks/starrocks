@@ -13,6 +13,9 @@ where
   and p_type not like 'PROMO BURNISHED%'
   and p_size in (31, 43, 9, 6, 18, 11, 25, 1)
 [result]
-SCAN (mv[partsupp_mv] columns[26: p_size, 27: p_type, 29: ps_suppkey, 36: s_nationkey] predicate[cast(36: s_nationkey as varchar(1048576)) != Brand#43 AND NOT 27: p_type LIKE PROMO BURNISHED% AND 26: p_size IN (31, 43, 9, 6, 18, 11, 25, 1)])
+INNER JOIN (join-predicate [6: p_partkey = 1: ps_partkey] post-join-predicate [null])
+    SCAN (table[part] columns[6: p_partkey, 9: p_brand, 10: p_type, 11: p_size] predicate[9: p_brand != Brand#43 AND NOT 10: p_type LIKE PROMO BURNISHED% AND 11: p_size IN (31, 43, 9, 6, 18, 11, 25, 1)])
+    EXCHANGE SHUFFLE[1]
+        SCAN (table[partsupp] columns[1: ps_partkey, 2: ps_suppkey] predicate[null])
 [end]
 
