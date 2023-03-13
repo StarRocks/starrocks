@@ -94,6 +94,12 @@ struct DataDirInfo {
     int64_t data_used_capacity{0};
     bool is_used{false};
     TStorageMedium::type storage_medium; // storage medium: SSD|HDD
+
+#ifdef USE_STAROS
+    int64_t cache_capacity{1};
+    int64_t cache_available{0};
+    int64_t cache_used_capacity{0};
+#endif
 };
 
 struct TabletInfo {

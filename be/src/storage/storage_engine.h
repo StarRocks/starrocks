@@ -116,6 +116,11 @@ public:
 
     Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
+#ifdef USE_STAROS
+    Status get_all_starlet_cache_dir_info(std::vector<DataDirInfo>* cache_dir_infos);
+    Status get_starlet_cache_path_used_capacity(const std::string& path, uint64_t* cache_used_capacity);
+#endif
+
     // get root path for creating tablet. The returned vector of root path should be random,
     // for avoiding that all the tablet would be deployed one disk.
     std::vector<DataDir*> get_stores_for_create_tablet(TStorageMedium::type storage_medium);
@@ -239,6 +244,10 @@ private:
 
     Status _init_store_map();
 
+#ifdef USE_STAROS
+    Status _init_starlet_cache_map();
+#endif
+
     void _update_storage_medium_type_count();
 
     // Some check methods
@@ -327,6 +336,9 @@ private:
     EngineOptions _options;
     std::mutex _store_lock;
     std::map<std::string, DataDir*> _store_map;
+#ifdef USE_STAROS
+    std::map<std::string, DataDir*> _starlet_cache_map;
+#endif
     uint32_t _available_storage_medium_type_count;
 
     bool _is_all_cluster_id_exist;

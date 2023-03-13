@@ -60,6 +60,9 @@ Status parse_conf_store_paths(const std::string& config_path, std::vector<StoreP
 struct EngineOptions {
     // list paths that tablet will be put into.
     std::vector<StorePath> store_paths;
+#ifdef USE_STAROS
+    std::vector<StorePath> starlet_cache_paths;
+#endif
     // BE's UUID. It will be reset every time BE restarts.
     UniqueId backend_uid{0, 0};
     MemTracker* compaction_mem_tracker = nullptr;

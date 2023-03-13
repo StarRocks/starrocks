@@ -84,6 +84,10 @@ public:
         info.available = _available_bytes;
         info.is_used = _is_used;
         info.storage_medium = _storage_medium;
+#ifdef USE_STAROS
+        info.cache_capacity = _cache_capacity_bytes;
+        info.cache_available = _cache_available_bytes;
+#endif
         return info;
     }
 
@@ -133,6 +137,11 @@ public:
 
     Status update_capacity();
 
+#ifdef USE_STAROS
+    Status update_cache_capacity();
+    void set_cache_used_bytes(int64_t cache_used_bytes) { _cache_used_bytes = cache_used_bytes; }
+#endif
+
 private:
     Status _init_data_dir();
     Status _init_tmp_dir();
@@ -153,6 +162,11 @@ private:
     int64_t _disk_capacity_bytes;
     TStorageMedium::type _storage_medium;
     bool _is_used;
+#ifdef USE_STAROS
+    int64_t _cache_available_bytes;
+    int64_t _cache_capacity_bytes;
+    int64_t _cache_used_bytes;
+#endif
 
     TabletManager* _tablet_manager;
     TxnManager* _txn_manager;

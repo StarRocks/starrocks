@@ -92,6 +92,7 @@ import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TResourceUsage;
+import com.starrocks.thrift.TStarletCache;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -191,6 +192,7 @@ public class ReportHandler extends Daemon {
         List<TWorkGroup> activeWorkGroups = null;
         TResourceUsage resourceUsage = null;
         long reportVersion = -1;
+        Map<String, TStarletCache> starletCaches = null;
 
         ReportType reportType = ReportType.UNKNOWN_REPORT;
         if (request.isSetTasks()) {
@@ -206,6 +208,9 @@ public class ReportHandler extends Daemon {
             }
             disks = request.getDisks();
             reportType = ReportType.DISK_REPORT;
+            if (request.isSetStarlet_caches()) {
+                starletCaches = request.getStarlet_caches();
+            }
         }
 
         if (request.isSetTablets()) {
@@ -259,7 +264,8 @@ public class ReportHandler extends Daemon {
         result.setWorkgroup_ops(workGroupOps);
 
         ReportTask reportTask =
-                new ReportTask(beId, reportType, tasks, disks, tablets, reportVersion, activeWorkGroups, resourceUsage);
+                new ReportTask(beId, reportType, tasks, disks, tablets, reportVersion, activeWorkGroups,
+                        resourceUsage, starletCaches);
         try {
             putToQueue(reportTask);
         } catch (Exception e) {
@@ -323,12 +329,13 @@ public class ReportHandler extends Daemon {
         private long reportVersion;
         private List<TWorkGroup> activeWorkGroups;
         private TResourceUsage resourceUsage;
+        private Map<String, TStarletCache> starletCaches;
 
         public ReportTask(long beId, ReportType type, Map<TTaskType, Set<Long>> tasks,
                           Map<String, TDisk> disks,
                           Map<Long, TTablet> tablets, long reportVersion,
                           List<TWorkGroup> activeWorkGroups,
-                          TResourceUsage resourceUsage) {
+                          TResourceUsage resourceUsage, Map<String, TStarletCache> starletCaches) {
             this.beId = beId;
             this.type = type;
             this.tasks = tasks;
@@ -337,6 +344,7 @@ public class ReportHandler extends Daemon {
             this.reportVersion = reportVersion;
             this.activeWorkGroups = activeWorkGroups;
             this.resourceUsage = resourceUsage;
+            this.starletCaches = starletCaches;
         }
 
         @Override
@@ -355,6 +363,9 @@ public class ReportHandler extends Daemon {
             }
             if (resourceUsage != null) {
                 ReportHandler.resourceUsageReport(beId, resourceUsage);
+            }
+            if (starletCaches != null) {
+                ReportHandler.starletCacheReport(beId, starletCaches);
             }
         }
     }
@@ -499,7 +510,7 @@ public class ReportHandler extends Daemon {
         long start = System.currentTimeMillis();
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
-            LOG.warn("backend doesn't exist. id: " + backendId);
+            LOG.warn("backend doesn't exist. id: {}", backendId);
             return;
         }
 
@@ -516,7 +527,7 @@ public class ReportHandler extends Daemon {
         long start = System.currentTimeMillis();
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
-            LOG.warn("backend does't exist. id: " + backendId);
+            LOG.warn("backend does't exist. id: {}", backendId);
         }
         GlobalStateMgr.getCurrentState().getResourceGroupMgr().saveActiveResourceGroupsForBe(backendId, workGroups);
         LOG.debug("finished to handle workgroup report from backend{}, cost: {} ms, num: {}",
@@ -537,6 +548,23 @@ public class ReportHandler extends Daemon {
         GlobalStateMgr.getCurrentState().updateResourceUsage(backendId, usage);
         LOG.debug("finished to handle resource usage report from backend {}, cost: {} ms",
                 backendId, (System.currentTimeMillis() - start));
+    }
+
+    private static void starletCacheReport(long backendId, Map<String, TStarletCache> starletCaches) {
+        LOG.error("begin to handle starlet cache report from backend {}", backendId);
+        long start = System.currentTimeMillis();
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        if (backend == null) {
+            LOG.warn("backend doesn't exist. id: {}", backendId);
+            return;
+        }
+
+        backend.updateStarletCaches(starletCaches);
+        long cost = System.currentTimeMillis() - start;
+        if (cost > MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS) {
+            LOG.info("finished to handle disk report from backend {}, cost: {} ms",
+                    backendId, cost);
+        }
     }
 
     private static void sync(Map<Long, TTablet> backendTablets, ListMultimap<Long, Long> tabletSyncMap,

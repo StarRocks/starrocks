@@ -101,6 +101,14 @@ struct TDisk {
     7: optional Types.TStorageMedium storage_medium
 }
 
+struct TStarletCache {
+    1: optional string cache_path
+    2: optional Types.TSize cache_total_capacity
+    3: optional Types.TSize cache_used_capacity
+    4: optional Types.TSize cache_available_capacity
+    5: optional Types.TStorageMedium storage_medium
+}
+
 struct TPluginInfo {
     1: required string plugin_name
     2: required i32 type
@@ -120,6 +128,8 @@ struct TReportRequest {
     // active workgroup on this backend
     9: optional list<WorkGroup.TWorkGroup> active_workgroups
     10: optional ResourceUsage.TResourceUsage resource_usage
+    // starlet cache
+    11: optional map<string, TStarletCache> starlet_caches // string cache_path
 }
 
 struct TMasterResult {

@@ -174,6 +174,10 @@ Status StorageEngine::_open() {
     // init store_map
     RETURN_IF_ERROR_WITH_WARN(_init_store_map(), "_init_store_map failed");
 
+#ifdef USE_STAROS
+    RETURN_IF_ERROR_WITH_WARN(_init_starlet_cache_map(), "_init_starlet_cache_map failed");
+#endif
+
     _effective_cluster_id = config::cluster_id;
     RETURN_IF_ERROR_WITH_WARN(_check_all_root_path_cluster_id(), "fail to check cluster id");
 
@@ -255,6 +259,16 @@ Status StorageEngine::_init_store_map() {
     release_guard.cancel();
     return Status::OK();
 }
+
+#ifdef USE_STAROS
+Status StorageEngine::_init_starlet_cache_map() {
+    for (auto& path : _options.starlet_cache_paths) {
+        auto* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
+        _starlet_cache_map.emplace(store->path(), store);
+    }
+    return Status::OK();
+}
+#endif
 
 void StorageEngine::_update_storage_medium_type_count() {
     std::set<TStorageMedium::type> available_storage_medium_types;
@@ -342,6 +356,57 @@ Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos,
 
     return Status::OK();
 }
+
+#ifdef USE_STAROS
+Status StorageEngine::get_starlet_cache_path_used_capacity(const std::string& path, uint64_t* cache_used_capacity) {
+    std::function<bool(std::string_view)> cb = [&](std::string_view start_path) -> bool {
+        std::string relative_path(start_path.data(), start_path.size());
+        std::string abs_path = path;
+        abs_path += "/";
+        abs_path += relative_path;
+
+        auto is_directory = FileSystem::Default()->is_directory(abs_path);
+        if (!is_directory.ok()) {
+            return false;
+        }
+        if (*is_directory) {
+            get_starlet_cache_path_used_capacity(abs_path, cache_used_capacity);
+        }
+
+        auto file_size_or = FileSystem::Default()->get_file_size(abs_path);
+        if (file_size_or.ok()) {
+            *cache_used_capacity += *file_size_or;
+        }
+        return true;
+    };
+
+    return FileSystem::Default()->iterate_dir(path, cb);
+}
+
+Status StorageEngine::get_all_starlet_cache_dir_info(vector<DataDirInfo>* cache_dir_infos) {
+    cache_dir_infos->clear();
+    std::map<std::string, DataDirInfo> path_map;
+    for (auto& it : _starlet_cache_map) {
+        it.second->update_cache_capacity();
+        path_map.emplace(it.first, it.second->get_dir_info());
+    }
+
+    for (auto& entry : path_map) {
+        uint64_t cache_used_capacity = 0;
+        auto st = get_starlet_cache_path_used_capacity(entry.first, &cache_used_capacity);
+        if (st.ok()) {
+            entry.second.cache_used_capacity += cache_used_capacity;
+        }
+    }
+
+    // add path info to cache_dir_infos
+    for (auto& entry : path_map) {
+        cache_dir_infos->emplace_back(entry.second);
+    }
+
+    return Status::OK();
+}
+#endif
 
 void StorageEngine::_start_disk_stat_monitor() {
     for (auto& it : _store_map) {

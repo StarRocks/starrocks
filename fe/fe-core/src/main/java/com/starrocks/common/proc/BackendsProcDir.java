@@ -73,6 +73,7 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct");
         if (RunMode.allowCreateLakeTable()) {
             builder.add("StarletPort").add("WorkerId");
+            builder.add("CacheUsedCapacity").add("CacheAvailCapacity").add("CacheTotalCapacity");
         }
         TITLE_NAMES = builder.build();
     }
@@ -198,6 +199,21 @@ public class BackendsProcDir implements ProcDirInterface {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(backendId);
                 backendInfo.add(String.valueOf(workerId));
+
+                long cacheUsedB = backend.getCacheUsedCapacityB();
+                Pair<Double, String> cacheUsedCapacity = DebugUtil.getByteUint(cacheUsedB);
+                backendInfo.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(cacheUsedCapacity.first)
+                        + " " + cacheUsedCapacity.second);
+                // available
+                long cacheAvailB = backend.getCacheAvailableCapacityB();
+                Pair<Double, String> cacheAvailCapacity = DebugUtil.getByteUint(cacheAvailB);
+                backendInfo.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(cacheAvailCapacity.first)
+                        + " " + cacheAvailCapacity.second);
+                // total
+                long cacheTotalB = backend.getCacheTotalCapacityB();
+                Pair<Double, String> cacheTotalCapacity = DebugUtil.getByteUint(cacheTotalB);
+                backendInfo.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(cacheTotalCapacity.first)
+                        + " " + cacheTotalCapacity.second);
             }
 
             comparableBackendInfos.add(backendInfo);

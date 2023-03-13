@@ -68,6 +68,7 @@ static const char* const kTestFilePath = "/.testfile";
 DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, TabletManager* tablet_manager,
                  TxnManager* txn_manager)
         : _path(path),
+          _path_hash(0),
           _available_bytes(0),
           _disk_capacity_bytes(0),
           _storage_medium(storage_medium),
@@ -533,6 +534,15 @@ Status DataDir::update_capacity() {
     _disk_capacity_bytes = space_info.capacity;
     return Status::OK();
 }
+
+#ifdef USE_STAROS
+Status DataDir::update_cache_capacity() {
+    ASSIGN_OR_RETURN(auto space_info, FileSystem::Default()->space(_path));
+    _cache_available_bytes = space_info.available;
+    _cache_capacity_bytes = space_info.capacity;
+    return Status::OK();
+}
+#endif
 
 bool DataDir::capacity_limit_reached(int64_t incoming_data_size) {
     double used_pct = (_disk_capacity_bytes - _available_bytes + incoming_data_size) / (double)_disk_capacity_bytes;

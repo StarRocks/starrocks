@@ -44,9 +44,11 @@ import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
+import com.starrocks.lake.StarletCacheInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TStarletCache;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -76,6 +78,8 @@ public class Backend extends ComputeNode {
     // rootPath -> DiskInfo
     private volatile ImmutableMap<String, DiskInfo> disksRef;
 
+    private volatile ImmutableMap<String, StarletCacheInfo> starletCacheRef;
+
     // This is used for the first time we init pathHashToDishInfo in SystemInfoService.
     // after init it, this variable is set to true.
     private boolean initPathInfo = false;
@@ -90,11 +94,13 @@ public class Backend extends ComputeNode {
     public Backend() {
         super();
         this.disksRef = ImmutableMap.of();
+        this.starletCacheRef = ImmutableMap.of();
     }
 
     public Backend(long id, String host, int heartbeatPort) {
         super(id, host, heartbeatPort);
         this.disksRef = ImmutableMap.of();
+        this.starletCacheRef = ImmutableMap.of();
     }
 
     public void setDisks(ImmutableMap<String, DiskInfo> disks) {
@@ -103,6 +109,10 @@ public class Backend extends ComputeNode {
 
     public ImmutableMap<String, DiskInfo> getDisks() {
         return this.disksRef;
+    }
+
+    public ImmutableMap<String, StarletCacheInfo> getStarletCaches() {
+        return this.starletCacheRef;
     }
 
     public boolean hasPathHash() {
@@ -154,6 +164,34 @@ public class Backend extends ComputeNode {
             if (diskInfo.getState() == DiskState.ONLINE) {
                 dataUsedCapacityB += diskInfo.getDataUsedCapacityB();
             }
+        }
+        return dataUsedCapacityB;
+    }
+
+    // starlet cache
+    public long getCacheTotalCapacityB() {
+        ImmutableMap<String, StarletCacheInfo> caches = starletCacheRef;
+        long cacheTotalCapacityB = 0L;
+        for (StarletCacheInfo cacheInfo : caches.values()) {
+            cacheTotalCapacityB += cacheInfo.getTotalCapacityB();
+        }
+        return cacheTotalCapacityB;
+    }
+
+    public long getCacheAvailableCapacityB() {
+        ImmutableMap<String, StarletCacheInfo> caches = starletCacheRef;
+        long availableCapacityB = 1L;
+        for (StarletCacheInfo cacheInfo : caches.values()) {
+            availableCapacityB += cacheInfo.getAvailableCapacityB();
+        }
+        return availableCapacityB;
+    }
+
+    public long getCacheUsedCapacityB() {
+        ImmutableMap<String, StarletCacheInfo> caches = starletCacheRef;
+        long dataUsedCapacityB = 0L;
+        for (StarletCacheInfo cacheInfo : caches.values()) {
+            dataUsedCapacityB += cacheInfo.getUsedCapacityB();
         }
         return dataUsedCapacityB;
     }
@@ -266,6 +304,7 @@ public class Backend extends ComputeNode {
                     isChanged = true;
                 }
             }
+
             LOG.debug("update disk info. backendId: {}, diskInfo: {}", getId(), diskInfo.toString());
         }
 
@@ -286,6 +325,31 @@ public class Backend extends ComputeNode {
             // log disk changing
             GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(this);
         }
+    }
+
+    public void updateStarletCaches(Map<String, TStarletCache> starletCaches) {
+        ImmutableMap<String, StarletCacheInfo> caches = starletCacheRef;
+        Map<String, StarletCacheInfo> newCacheInfos = Maps.newHashMap();
+        for (TStarletCache tCache : starletCaches.values()) {
+            String cachePath = tCache.getCache_path();
+            long totalCapacityB = tCache.getCache_total_capacity();
+            long cacheUsedCapacityB = tCache.getCache_used_capacity();
+            long cacheAvailableCapacityB = tCache.getCache_available_capacity();
+
+            StarletCacheInfo cacheInfo = caches.get(cachePath);
+            if (cacheInfo == null) {
+                cacheInfo = new StarletCacheInfo(cachePath);
+            }
+            newCacheInfos.put(cachePath, cacheInfo);
+            cacheInfo.setTotalCapacityB(totalCapacityB);
+            cacheInfo.setUsedCapacityB(cacheUsedCapacityB);
+            cacheInfo.setAvailableCapacityB(cacheAvailableCapacityB);
+
+            if (tCache.isSetStorage_medium()) {
+                cacheInfo.setStorageMedium(tCache.getStorage_medium());
+            }
+        }
+        starletCacheRef = ImmutableMap.copyOf(newCacheInfos);
     }
 
     public void setStorageMediumForAllDisks(TStorageMedium m) {

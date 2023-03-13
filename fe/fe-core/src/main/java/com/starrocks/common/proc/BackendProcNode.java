@@ -41,7 +41,9 @@ import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.lake.StarletCacheInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 
@@ -50,7 +52,8 @@ import java.util.Map;
 
 public class BackendProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("RootPath").add("DataUsedCapacity").add("OtherUsedCapacity").add("AvailCapacity")
+            .add(RunMode.allowCreateLakeTable() ? "CachePath" : "RootPath")
+            .add("DataUsedCapacity").add("OtherUsedCapacity").add("AvailCapacity")
             .add("TotalCapacity").add("TotalUsedPct").add("State").add("PathHash").add("StorageMedium")
             .add("TabletNum").add("DataTotalCapacity").add("DataUsedPct").build();
 
@@ -66,6 +69,17 @@ public class BackendProcNode implements ProcNodeInterface {
 
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
+
+        if (RunMode.allowCreateLakeTable()) {
+            for (Map.Entry<String, StarletCacheInfo> entry : backend.getStarletCaches().entrySet()) {
+                StarletCacheInfo cacheInfo = entry.getValue();
+
+                List<String> info = cacheInfo.toBackendProcNodeInfo();
+
+                result.addRow(info);
+            }
+            return result;
+        }
 
         for (Map.Entry<String, DiskInfo> entry : backend.getDisks().entrySet()) {
             DiskInfo diskInfo = entry.getValue();

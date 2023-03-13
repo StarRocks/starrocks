@@ -272,6 +272,14 @@ int main(int argc, char** argv) {
         }
     }
 
+#ifdef USE_STAROS
+    std::vector<starrocks::StorePath> starlet_cache_paths;
+    auto parse_res = starrocks::parse_conf_store_paths(starrocks::config::starlet_cache_dir, &starlet_cache_paths);
+    if (!parse_res.ok()) {
+        LOG(WARNING) << "parse config starlet cache dir path failed, path=" << starrocks::config::starlet_cache_dir;
+    }
+#endif
+
     // Initilize libcurl here to avoid concurrent initialization.
     auto curl_ret = curl_global_init(CURL_GLOBAL_ALL);
     if (curl_ret != 0) {
@@ -298,6 +306,9 @@ int main(int argc, char** argv) {
     // Init and open storage engine.
     starrocks::EngineOptions options;
     options.store_paths = paths;
+#ifdef USE_STAROS
+    options.starlet_cache_paths = starlet_cache_paths;
+#endif
     options.backend_uid = starrocks::UniqueId::gen_uid();
     options.compaction_mem_tracker = exec_env->compaction_mem_tracker();
     options.update_mem_tracker = exec_env->update_mem_tracker();
