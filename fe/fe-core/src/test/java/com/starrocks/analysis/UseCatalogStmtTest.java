@@ -15,7 +15,9 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.Sets;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -74,6 +76,7 @@ public class UseCatalogStmtTest {
 
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         StmtExecutor executor = new StmtExecutor(ctx, "use 'catalog hive_catalog'");
         executor.execute();
 
