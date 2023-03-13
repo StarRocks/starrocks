@@ -557,10 +557,30 @@ public class MaterializedViewAnalyzer {
             Table table = tableNameTableMap.get(tableName);
             List<BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                if (baseTableInfo.getTable().equals(table)) {
-                    slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
-                            baseTableInfo.getDbName(), table.getName()));
-                    break;
+                if (table.isNativeTable()) {
+                    if (baseTableInfo.getTable().equals(table)) {
+                        slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                                baseTableInfo.getDbName(), table.getName()));
+                        break;
+                    }
+                } else if (table.isHiveTable() || table.isHudiTable()) {
+                    HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+                    if (hiveMetaStoreTable.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
+                            hiveMetaStoreTable.getDbName().equals(baseTableInfo.getDbName()) &&
+                            table.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
+                        slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                                baseTableInfo.getDbName(), table.getName()));
+                        break;
+                    }
+                } else if (table.isIcebergTable()) {
+                    IcebergTable icebergTable = (IcebergTable) table;
+                    if (icebergTable.getCatalog().equals(baseTableInfo.getCatalogName()) &&
+                            icebergTable.getDb().equals(baseTableInfo.getDbName()) &&
+                            table.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
+                        slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                                baseTableInfo.getDbName(), table.getName()));
+                        break;
+                    }
                 }
             }
         }
