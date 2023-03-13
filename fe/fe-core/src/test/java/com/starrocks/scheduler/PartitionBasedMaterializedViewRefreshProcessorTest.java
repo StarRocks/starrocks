@@ -233,7 +233,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
     }
 
     @Test
-    public void test() {
+    public void testWithPartition() {
         new MockUp<StmtExecutor>() {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
@@ -460,6 +460,149 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
     }
 
     @Test
+    public void testAutoRefreshPartitionLimit() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    for (Partition partition : tbl.getPartitions()) {
+                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                        }
+                    }
+                }
+            }
+        };
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test.base2\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p0 values [('2021-12-01'),('2022-01-01')),\n" +
+                "    PARTITION p1 values [('2022-01-01'),('2022-02-01')),\n" +
+                "    PARTITION p2 values [('2022-02-01'),('2022-03-01')),\n" +
+                "    PARTITION p3 values [('2022-03-01'),('2022-04-01')),\n" +
+                "    PARTITION p4 values [('2022-04-01'),('2022-05-01'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.useDatabase("test").withMaterializedView("create materialized view test.mv_with_test_refresh2\n" +
+                "partition by k1\n" +
+                "distributed by hash(k2) buckets 10\n" +
+                "refresh async\n" +
+                "PROPERTIES (\n" +
+                    "\"auto_refresh_partitions_limit\"=\"2\"\n" +
+                ") " +
+                "as select k1, k2, sum(v1) as total_sum from base2 group by k1, k2;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_with_test_refresh2"));
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        task.setType(Constants.TaskType.EVENT_TRIGGERED);
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+
+        String insertSql = "insert into base2 partition(p0) values('2021-12-02',21,102);";
+        new StmtExecutor(connectContext, insertSql).execute();
+        insertSql = "insert into base2 partition(p1) values('2022-01-02',81,182);";
+        new StmtExecutor(connectContext, insertSql).execute();
+        insertSql = "insert into base2 partition(p2) values('2022-02-02',81,182);";
+        new StmtExecutor(connectContext, insertSql).execute();
+        insertSql = "insert into base2 partition(p3) values('2022-03-02',81,182);";
+        new StmtExecutor(connectContext, insertSql).execute();
+        insertSql = "insert into base2 partition(p4) values('2022-04-02',81,182);";
+        new StmtExecutor(connectContext, insertSql).execute();
+        // refresh by EVENT_TRIGGERED
+        taskRun.executeTaskRun();
+
+        Collection<Partition> partitions = materializedView.getPartitions();
+        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(1, materializedView.getPartition("p0").getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p1").getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p2").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p3").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p4").getVisibleVersion());
+
+        task.setType(Constants.TaskType.MANUAL);
+        taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        // refresh by MANUAL
+        taskRun.executeTaskRun();
+
+        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(2, materializedView.getPartition("p0").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p1").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p2").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p3").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p4").getVisibleVersion());
+
+        starRocksAssert.useDatabase("test").dropMaterializedView("mv_with_test_refresh2");
+    }
+
+    public void testAutoRefreshPartitionLimitWithHiveTable() throws Exception {
+        starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_parttbl_mv1`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`l_shipdate`)\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH manual\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_parttbl_mv1"));
+        materializedView.getTableProperty().setAutoRefreshPartitionsLimit(2);
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        task.setType(Constants.TaskType.PERIODICAL);
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+
+        Collection<Partition> partitions = materializedView.getPartitions();
+        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(1, materializedView.getPartition("p19980101").getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980102").getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980103").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+
+        MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+        mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
+                ImmutableList.of("l_shipdate=1998-01-02", "l_shipdate=1998-01-03"));
+        taskRun.executeTaskRun();
+        Assert.assertEquals(1, materializedView.getPartition("p19980101").getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980102").getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980103").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+
+        task.setType(Constants.TaskType.MANUAL);
+        taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+
+        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980102").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980103").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+
+        starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
+    }
+
+    @Test
     public void testRefreshWithHiveTableJoin() throws Exception {
         new MockUp<StmtExecutor>() {
             @Mock
@@ -522,6 +665,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         testPartitionRefreshWithUpperCaseDb();
         testPartitionRefreshWithLowerCase();
 
+        testAutoRefreshPartitionLimitWithHiveTable();
     }
 
     @Test

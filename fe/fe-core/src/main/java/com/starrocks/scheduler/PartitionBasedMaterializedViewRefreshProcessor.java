@@ -221,7 +221,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         }
         String nextPartitionStart = null;
         String endPartitionName = null;
-        if (partitionNameIter.hasNext())  {
+        if (partitionNameIter.hasNext()) {
             String startPartitionName = partitionNameIter.next();
             Range<PartitionKey> partitionKeyRange = mappedPartitionsToRefresh.get(startPartitionName);
             LiteralExpr lowerExpr = partitionKeyRange.lowerEndpoint().getKeys().get(0);
@@ -530,7 +530,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             Expr partitionExpr = MaterializedView.getPartitionExpr(materializedView);
             Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
             Table partitionTable = partitionTableAndColumn.first;
-            Set<String> mvRangePartitionNames = SyncPartitionUtils.getPartitionNamesByRange(materializedView, start, end);
+            Set<String> mvRangePartitionNames = SyncPartitionUtils.getPartitionNamesByRangeWithPartitionLimit(
+                    materializedView, start, end, mvContext.type);
 
             if (needToRefreshNonPartitionTable(partitionTable)) {
                 if (start == null && end == null) {
