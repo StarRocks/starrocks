@@ -66,7 +66,7 @@ Release date: October 17, 2022
 
 The following bugs are fixed:
 
-- BEs may crash if an expression encounters an error in the initial stage. [#11395](https://github.com/StarRocks/starrocks/pull/11395)
+- BEs may crash if an expression encounters an error in the initialization stage. [#11395](https://github.com/StarRocks/starrocks/pull/11395)
 
 - BEs may crash if invalid JSON data is loaded. [#10804](https://github.com/StarRocks/starrocks/issues/10804)
 
