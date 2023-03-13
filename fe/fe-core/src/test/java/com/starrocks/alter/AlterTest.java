@@ -367,7 +367,6 @@ public class AlterTest {
         Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
                 "FROM `test`.`testTable1`", task.getDefinition());
         ConnectContext.get().setCurrentUserIdentity(UserIdentity.ROOT);
-        ConnectContext.get().setCurrentRoleIds(UserIdentity.ROOT);
         dropMaterializedView("drop materialized view test.mv2");
     }
 
@@ -409,8 +408,6 @@ public class AlterTest {
                 ") " +
                 "as select k1, k2 from test.testTable1;";
         createMaterializedView(sql);
-        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getPrivilegeManager().getRoleIdsByUser(
-                starRocksAssert.getCtx().getCurrentUserIdentity()));
         dropMaterializedView("drop materialized view test.mv1");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("testTable1");
         // this for mock olapTable.getIndexNameById(mvIdx.getId()) == Null
@@ -473,7 +470,6 @@ public class AlterTest {
         alterStmt = "alter materialized view mv1 refresh manual";
         alterMaterializedView(alterStmt, false);
         ConnectContext.get().setCurrentUserIdentity(UserIdentity.ROOT);
-        ConnectContext.get().setCurrentRoleIds(UserIdentity.ROOT);
         dropMaterializedView("drop materialized view test.mv1");
     }
 
@@ -504,8 +500,6 @@ public class AlterTest {
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
         refreshMaterializedView(alterStmt);
-        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getPrivilegeManager().getRoleIdsByUser(
-                starRocksAssert.getCtx().getCurrentUserIdentity()));
         dropMaterializedView("drop materialized view test.mv1");
     }
 
@@ -533,8 +527,6 @@ public class AlterTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, k2 from test.testTable4;";
-        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getPrivilegeManager().getRoleIdsByUser(
-                starRocksAssert.getCtx().getCurrentUserIdentity()));
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
         refreshMaterializedView(alterStmt);
@@ -1754,8 +1746,6 @@ public class AlterTest {
 
         starRocksAssert.getCtx().setQualifiedUser("testuser");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
-        starRocksAssert.getCtx().setCurrentRoleIds(
-                GlobalStateMgr.getCurrentState().getPrivilegeManager().getRoleIdsByUser(testUser));
         starRocksAssert.getCtx().setRemoteIP("%");
 
         String renameDb = "alter database test rename test0";
