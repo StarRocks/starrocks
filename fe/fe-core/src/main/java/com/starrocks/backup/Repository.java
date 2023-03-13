@@ -701,16 +701,23 @@ public class Repository implements Writable {
         storage = BlobStorage.read(in);
         createTime = in.readLong();
 
-        // list __palo_repository_ first, if success, prefixRepo = __palo_repository_
-        String listPath = Joiner.on(PATH_DELIMITER).join(location, joinPrefix("__palo_repository_", name), PREFIX_SNAPSHOT_DIR)
-                + "*";
-        List<RemoteFile> result = Lists.newArrayList();
-        Status st = storage.list(listPath, result);
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            // check __palo_repository_ first, if success, prefixRepo = __palo_repository_
+            String listPath = Joiner.on(PATH_DELIMITER).join(location, joinPrefix("__palo_repository_", name));
+            Status st;
+            try {
+                st = storage.checkPathExist(listPath);
+            } catch (Exception e) {
+                LOG.warn("check path exist fail");
+                prefixRepo = "__starrocks_repository_";
+                return;
+            }
 
-        if (st.ok()) {
-            prefixRepo = "__palo_repository_";
-        } else {
-            prefixRepo = "__starrocks_repository_";
+            if (st.ok()) {
+                prefixRepo = "__palo_repository_";
+            } else {
+                prefixRepo = "__starrocks_repository_";
+            }
         }
     }
 }
