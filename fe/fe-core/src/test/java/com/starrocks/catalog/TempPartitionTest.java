@@ -572,6 +572,41 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db3.tbl3", true, 0);
     }
 
+    @Test
+    public void testTempPartitionPrune() throws Exception {
+        starRocksAssert.withDatabase("db4").useDatabase("db4").withTable(
+                "create table db4.tbl4 (k1 int, k2 int)\n" +
+                        "partition by range(k1)\n" +
+                        "(\n" +
+                        "partition p1 values less than('10'),\n" +
+                        "partition p2 values less than('20')\n" +
+                        ")\n" +
+                        "distributed by hash(k2) buckets 1\n" +
+                        "properties('replication_num' = '1');");
+
+        String stmtStr = "alter table db4.tbl4 add temporary partition tp1 values [('10'), ('15'))";
+        alterTableWithNewAnalyzer(stmtStr, false);
+        stmtStr = "alter table db4.tbl4 add temporary partition tp2 values [('15'), ('25'))";
+        alterTableWithNewAnalyzer(stmtStr, false);
+        stmtStr = "alter table db4.tbl4 add temporary partition tp3 values [('25'), ('31'))";
+        alterTableWithNewAnalyzer(stmtStr, false);
+
+        String sql = "select * from db4.tbl4 temporary partitions(tp1, tp2)";
+        boolean flag = FeConstants.runningUnitTest;
+        try {
+            FeConstants.runningUnitTest = true;
+            String plan = UtFrameUtils.getFragmentPlan(UtFrameUtils.createDefaultCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("0:OlapScanNode\n" +
+                    "     TABLE: tbl4\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=2/2\n" +
+                    "     rollup: tbl4"));
+        } finally {
+            FeConstants.runningUnitTest = flag;
+        }
+
+    }
+
     private void testSerializeOlapTable(OlapTable tbl) throws IOException, AnalysisException {
         // 1. Write objects to file
         File file = new File(tempPartitionFile);
