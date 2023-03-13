@@ -37,6 +37,11 @@
 namespace starrocks::pipeline {
 
 using PTransmitChunkParamsPtr = std::shared_ptr<PTransmitChunkParams>;
+struct ClosureContext {
+    TUniqueId instance_id;
+    int64_t sequence;
+    int64_t send_timestamp;
+};
 
 struct TransmitChunkInfo {
     // For BUCKET_SHUFFLE_HASH_PARTITIONED, multiple channels may be related to
@@ -47,12 +52,9 @@ struct TransmitChunkInfo {
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
     int64_t attachment_physical_bytes;
-};
-
-struct ClosureContext {
-    TUniqueId instance_id;
-    int64_t sequence;
-    int64_t send_timestamp;
+    const TNetworkAddress brpc_addr;
+    // send by rpc or http
+    Status send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure, int64_t rpc_http_min_size);
 };
 
 // TimeTrace is introduced to estimate time more accurately.
@@ -184,6 +186,7 @@ private:
     // Non-atomic type is enough because the concurrency inconsistency is acceptable
     int64_t _first_send_time = -1;
     int64_t _last_receive_time = -1;
+    int64_t _rpc_http_min_size = 0;
 };
 
 } // namespace starrocks::pipeline

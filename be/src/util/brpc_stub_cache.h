@@ -84,6 +84,36 @@ public:
         return stub;
     }
 
+    static std::shared_ptr<doris::PBackendService_Stub> create_http_stub(const TNetworkAddress& taddr) {
+        butil::EndPoint endpoint;
+        std::string realhost;
+        realhost = taddr.hostname;
+        if (!is_valid_ip(taddr.hostname)) {
+            realhost = hostname_to_ip(taddr.hostname);
+            if (realhost == "") {
+                LOG(WARNING) << "failed to get ip from host";
+                return nullptr;
+            }
+        }
+        if (str2endpoint(realhost.c_str(), taddr.port, &endpoint)) {
+            LOG(WARNING) << "unknown endpoint, host = " << taddr.hostname;
+            return nullptr;
+        }
+        // create
+        brpc::ChannelOptions options;
+        options.connect_timeout_ms = 3000;
+        options.protocol = "http";
+        // Explicitly set the max_retry
+        // TODO(meegoo): The retry strategy can be customized in the future
+        options.max_retry = 3;
+        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
+        if (channel->Init(endpoint, &options)) {
+            return nullptr;
+        }
+        return std::make_shared<doris::PBackendService_Stub>(channel.release(),
+                                                             google::protobuf::Service::STUB_OWNS_CHANNEL);
+    }
+
     doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr) { return get_stub(taddr.hostname, taddr.port); }
 
     doris::PBackendService_Stub* get_stub(const std::string& host, int port) {
