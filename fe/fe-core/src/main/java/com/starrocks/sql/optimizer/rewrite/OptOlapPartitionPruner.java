@@ -318,6 +318,10 @@ public class OptOlapPartitionPruner {
             probeResult = false;
         } else if (((RangePartitionInfo) partitionInfo).getPartitionColumns().size() > 1) {
             probeResult = false;
+        } else if (((RangePartitionInfo) partitionInfo).getIdToRange(true)
+                .containsKey(candidatePartitions.get(0))) {
+            // it's a temp partition list, no need to do the further prune
+            probeResult = false;
         } else if (olapScanOperator.getPredicate() == null) {
             probeResult = false;
         }
