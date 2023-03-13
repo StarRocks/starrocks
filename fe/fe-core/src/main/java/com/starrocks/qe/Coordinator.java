@@ -1428,9 +1428,8 @@ public class Coordinator {
             if (ctx != null) {
                 ctx.setErrorCodeOnce(status.getErrorCodeString());
             }
-            LOG.warn("one instance report fail {}, params={} query_id={} instance_id={}",
-                    status, params, DebugUtil.printId(queryId),
-                    DebugUtil.printId(params.getFragment_instance_id()));
+            LOG.warn("exec state report failed status={}, query_id={}, instance_id={}",
+                    status, DebugUtil.printId(queryId), DebugUtil.printId(params.getFragment_instance_id()));
             updateStatus(status, params.getFragment_instance_id());
         }
         if (execState.done) {
