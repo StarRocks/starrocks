@@ -66,13 +66,14 @@ import static java.lang.Double.POSITIVE_INFINITY;
 
 public class MockedHiveMetadata implements ConnectorMetadata {
     // db -> tableName -> table
-    private static final Map<String, Map<String, HiveTableInfo>> MOCK_TABLE_MAP = Maps.newHashMap();
+    private static final Map<String, Map<String, HiveTableInfo>> MOCK_TABLE_MAP = new CaseInsensitiveMap<>();
     private final AtomicLong idGen = new AtomicLong(0L);
     private static final List<RemoteFileInfo> MOCKED_FILES = ImmutableList.of(
             new RemoteFileInfo(null, ImmutableList.of(), null));
     public static final String MOCKED_HIVE_CATALOG_NAME = "hive0";
     public static final String MOCKED_TPCH_DB_NAME = "tpch";
     public static final String MOCKED_PARTITIONED_DB_NAME = "partitioned_db";
+    public static final String MOCKED_PARTITIONED_DB_NAME_UPPER_CASE = "partitioned_DB2";
 
     private static ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     static {
@@ -223,7 +224,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     }
 
     public static void mockTPCHTable() {
-        MOCK_TABLE_MAP.putIfAbsent(MOCKED_TPCH_DB_NAME, Maps.newHashMap());
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_TPCH_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_TPCH_DB_NAME);
         MOCK_TABLE_MAP.put(MOCKED_TPCH_DB_NAME, mockTables);
 
@@ -456,11 +457,12 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         mockLineItem();
         mockLineItemWithMultiPartitionColumns();
         mockT1();
+        mockT2();
         mockT1WithMultiPartitionColumns();
     }
 
     public static void mockLineItem() {
-        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, Maps.newHashMap());
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME);
 
         List<FieldSchema> cols = Lists.newArrayList();
@@ -524,7 +526,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     }
 
     public static void mockLineItemWithMultiPartitionColumns() {
-        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, Maps.newHashMap());
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME);
 
         List<FieldSchema> cols = Lists.newArrayList();
@@ -603,9 +605,9 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                 lineItemPar, MOCKED_HIVE_CATALOG_NAME), partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
     }
 
-    public static void mockT1() {
-        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, Maps.newHashMap());
-        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME);
+    public static void mockSimpleTable(String dbName, String tableName) {
+        MOCK_TABLE_MAP.putIfAbsent(dbName, new CaseInsensitiveMap<>());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(dbName);
 
         List<FieldSchema> cols = Lists.newArrayList();
         cols.add(new FieldSchema("c1", "int", null));
@@ -613,7 +615,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("c3", "string", null));
         StorageDescriptor sd = new StorageDescriptor(cols, "", "",  "", false, -1, null, Lists.newArrayList(),
                 Lists.newArrayList(), Maps.newHashMap());
-        Table t1 = new Table("t1", "partitioned_db", null, 0, 0, 0,  sd,
+        Table mockTable = new Table(tableName, dbName, null, 0, 0, 0,  sd,
                 ImmutableList.of(new FieldSchema("par_col", "int", null)), Maps.newHashMap(),
                 null, null, "EXTERNAL_TABLE");
         List<String> partitionNames = ImmutableList.of("par_col=0", "par_col=1", "par_col=2");
@@ -639,12 +641,21 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
         partitionNames.forEach(k -> remoteFileInfos.add(new RemoteFileInfo(null, ImmutableList.of(), null)));
 
-        mockTables.put(t1.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(t1, MOCKED_HIVE_CATALOG_NAME),
-                partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
+        mockTables.put(mockTable.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.
+                toHiveTable(mockTable, MOCKED_HIVE_CATALOG_NAME), partitionNames, (long) rowCount, columnStatisticMap,
+                remoteFileInfos));
+    }
+
+    public static void mockT1() {
+        mockSimpleTable(MOCKED_PARTITIONED_DB_NAME, "t1");
+    }
+
+    public static void mockT2() {
+        mockSimpleTable(MOCKED_PARTITIONED_DB_NAME_UPPER_CASE, "T2");
     }
 
     public static void mockT1WithMultiPartitionColumns() {
-        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, Maps.newHashMap());
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME);
 
         List<FieldSchema> cols = Lists.newArrayList();
