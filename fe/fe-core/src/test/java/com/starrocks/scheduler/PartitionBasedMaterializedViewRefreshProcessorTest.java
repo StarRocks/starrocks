@@ -518,6 +518,10 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         testAutoPartitionRefreshWithHiveTableJoin1();
         testAutoPartitionRefreshWithHiveTableJoin2();
 
+        testPartitionRefreshWithUpperCaseTable();
+        testPartitionRefreshWithUpperCaseDb();
+        testPartitionRefreshWithLowerCase();
+
     }
 
     @Test
@@ -808,6 +812,149 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         Assert.assertEquals(3, materializedView.getPartition("hive_tbl_mv2").getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_tbl_mv2");
+    }
+
+    public void testPartitionRefreshWithUpperCaseTable() throws Exception {
+        starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_parttbl_mv1`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`l_shipdate`)\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`LINEITEM_PAR` as " +
+                "`LINEITEM_PAR_ALIAS`;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_parttbl_mv1"));
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+                taskRun.getProcessor();
+
+        MvTaskRunContext mvContext = processor.getMvContext();
+        ExecPlan execPlan = mvContext.getExecPlan();
+        assertPlanContains(execPlan, "partitions=5/5");
+
+        MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+        mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
+                ImmutableList.of("l_shipdate=1998-01-02", "l_shipdate=1998-01-03"));
+
+        taskRun.executeTaskRun();
+        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        mvContext = processor.getMvContext();
+        execPlan = mvContext.getExecPlan();
+        assertPlanContains(execPlan, "PARTITION PREDICATES: 16: l_shipdate >= '1998-01-02', 16: l_shipdate < '1998-01-04'",
+                "partitions=2/5");
+
+        Collection<Partition> partitions = materializedView.getPartitions();
+        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980102").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980103").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+
+        starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
+    }
+
+    public void testPartitionRefreshWithUpperCaseDb() throws Exception {
+        starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_parttbl_mv1`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`l_shipdate`)\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_DB`.`LINEITEM_PAR` as " +
+                "`LINEITEM_PAR_ALIAS`;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_parttbl_mv1"));
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+                taskRun.getProcessor();
+
+        MvTaskRunContext mvContext = processor.getMvContext();
+        ExecPlan execPlan = mvContext.getExecPlan();
+        assertPlanContains(execPlan, "partitions=5/5");
+
+        MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+        mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
+                ImmutableList.of("l_shipdate=1998-01-02", "l_shipdate=1998-01-03"));
+
+        taskRun.executeTaskRun();
+        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        mvContext = processor.getMvContext();
+        execPlan = mvContext.getExecPlan();
+        assertPlanContains(execPlan, "PARTITION PREDICATES: 16: l_shipdate >= '1998-01-02', 16: l_shipdate < '1998-01-04'",
+                "partitions=2/5");
+
+        Collection<Partition> partitions = materializedView.getPartitions();
+        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980102").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980103").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+
+        starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
+    }
+
+    public void testPartitionRefreshWithLowerCase() throws Exception {
+        starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv1`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`par_col`)\n" +
+                "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT c1, c2, par_col FROM `hive0`.`partitioned_db2`.`t2`;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_parttbl_mv1"));
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+                taskRun.getProcessor();
+
+        MvTaskRunContext mvContext = processor.getMvContext();
+        ExecPlan execPlan = mvContext.getExecPlan();
+        assertPlanContains(execPlan, "partitions=3/3");
+
+        MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+        mockedHiveMetadata.updatePartitions("partitioned_db2", "t2",
+                ImmutableList.of("par_col=0"));
+
+        taskRun.executeTaskRun();
+        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        mvContext = processor.getMvContext();
+        execPlan = mvContext.getExecPlan();
+        assertPlanContains(execPlan, "par_col >= 0, 4: par_col < 1", "partitions=1/3");
+
+        Collection<Partition> partitions = materializedView.getPartitions();
+        Assert.assertEquals(3, partitions.size());
+        Assert.assertEquals(3, materializedView.getPartition("p0").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p1").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p2").getVisibleVersion());
+
+        starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
 
     @Test
