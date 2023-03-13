@@ -19,7 +19,7 @@ CREATE ROUTINE LOAD <database_name>.<job_name> ON <table_name>
 [load_properties]
 [job_properties]
 FROM data_source
-[data_source_properties]
+[data_source_properties];
 ```
 
 ## 参数说明
@@ -40,44 +40,33 @@ FROM data_source
 
 ### `load_properties`
 
-选填。源数据的属性。语法：
+选填。待导入数据的属性。语法：
 
 ```SQL
-[COLUMNS TERMINATED BY '<column_separator>'],
-[ROWS TERMINATED BY '<row_separator>'],
-[COLUMNS (<column1_name>[,<column2_name>,<column_assignment>,... ])],
+[COLUMNS TERMINATED BY '<terminator>'],
+[COLUMNS ([<column_name>[,...]][,column_assignment[,...]])],
 [WHERE <expr>],
-[PARTITION (<partition1_name>[,<partition2_name>...])]
+[PARTITION ([<partition_name>[,...]])]
+COLUMNS TERMINATED BY
 ```
 
 `COLUMNS TERMINATED BY`
-
 如果导入 CSV 格式的数据，则可以指定列分隔符，默认为`\t`，即 Tab。例如可以输入 `COLUMNS TERMINATED BY ","`。指定列分隔符为逗号(,)。
 
 > **说明**
 >
-<<<<<<< HEAD
 > - 必须确保这里指定的列分隔符与待导入数据文件中的列分隔符一致。
 > - StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
 
 `ROWS TERMINATED BY`
 
 用于指定待导入数据文件中的行分隔符。如果不指定该参数，则默认为 `\n`。
-=======
-> - 必须确保这里指定的列分隔符与源数据中的列分隔符一致。
-> - StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
-> - 空值用 `\N` 表示。比如，源数据一共有三列，其中某行数据的第一列、第三列数据分别为 `a` 和 `b`，第二列没有数据，则第二列需要用 `\N` 来表示空值，写作 `a,\N,b`，而不是 `a,,b`。`a,,b` 表示第二列是一个空字符串。
-
-`ROWS TERMINATED BY`
-
-用于指定源数据中的行分隔符。如果不指定该参数，则默认为 `\n`。
->>>>>>> 1b69a60b (modify examples in create routine load (#4716))
 
 `COLUMNS`
 
-源数据和目标表之间的列映射和转换关系。详细说明，请参见[列映射和转换关系](#列映射和转换关系)。
+待导入数据和目标表之间的列映射和转换关系。详细说明，请参见[列映射和转换关系](#列映射和转换关系)。
 
-- `column_name`：映射列，源数据中这类列的值可以直接落入目标表的列中，不需要进行计算。
+- `column_name`：映射列，待导入数据中这类列的值可以直接落入目标表的列中，不需要进行计算。
 - `column_assignment`：衍生列，格式为 `column_name = expr`，源数据中这类列的值需要基于表达式 `expr` 进行计算后，才能落入目标表的列中。 建议将衍生列排在映射列之后，因为 StarRocks 先解析映射列，再解析衍生列。
 
 > **说明**
@@ -93,7 +82,7 @@ FROM data_source
 
 > **说明**
 >
-> 过滤条件中指定的列可以是源数据中本来就存在的列，也可以是基于源数据的列生成的衍生列。
+> 过滤条件中指定的列可以是待导入数据中本来就存在的列，也可以是基于待导入数据的列生成的衍生列。
 
 `PARTITION`
 
@@ -119,19 +108,12 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | max_batch_interval        | 否           | 任务的调度间隔，即任务多久执行一次。单位：秒。取值范围：`5`～`60`。默认值：`10`。建议取值为导入间隔 10s 以上，否则会因为导入频率过高可能会报错版本数过多。 |
 | max_batch_rows            | 否           | 该参数只用于定义错误检测窗口范围，错误检测窗口范围为单个 Routine Load 导入任务所消费的 `10 * max-batch-rows` 行数据，默认为 `10 * 200000 = 2000000`。导入任务时会检测窗口中数据是否存在错误。错误数据是指 StarRocks 无法解析的数据，比如非法的 JSON。 |
 | max_error_number          | 否           | 错误检测窗口范围内允许的错误数据行数的上限。当错误数据行数超过该值时，导入作业会暂停，此时您需要执行 [SHOW ROUTINE LOAD](../data-manipulation/SHOW%20ROUTINE%20LOAD.md)，根据 `ErrorLogUrls`，检查 Kafka 中的消息并且更正错误。默认为 `0`，表示不允许有错误行。错误行不包括通过 WHERE 子句过滤掉的数据。 |
-| strict_mode               | 否           | 是否开启严格模式。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。开启后，如果源数据某列的值为 `NULL`，但是目标表中该列不允许为 `NULL`，则该行数据会被过滤掉。 |
+| strict_mode               | 否           | 是否开启严格模式。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。开启后，如果待导入数据某列的值为 `NULL`，但是目标表中该列不允许为 `NULL`，则该行数据会被过滤掉。 |
 | timezone                  | 否           | 该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应[设置时区](../../../administration/timezone.md)中所述的会话级时区。 |
-<<<<<<< HEAD
 | merge_condition           | 否           | 用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于当前值的时候，更新才会生效。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md)。指定的列必须为非主键列，且仅主键模型表支持条件更新。 |
 | format                    | 否           | 待导入数据的格式，取值范围：`CSV` 或者 `JSON`。默认值：`CSV`。 |
 | strip_outer_array         | 否           | 是否裁剪 JSON 数据最外层的数组结构。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。真实业务场景中，待导入的 JSON 数据可能在最外层有一对表示数组结构的中括号 `[]`。这种情况下，一般建议您指定该参数取值为 `true`，这样 StarRocks 会剪裁掉外层的中括号 `[]`，并把中括号 `[]` 里的每个内层数组都作为一行单独的数据导入。如果您指定该参数取值为 `false`，则 StarRocks 会把整个 JSON 数据文件解析成一个数组，并作为一行数据导入。例如，待导入的 JSON 数据为 `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`，如果指定该参数取值为 `true`，则 StarRocks 会把 `{"category" : 1, "author" : 2}` 和 `{"category" : 3, "author" : 4}` 解析成两行数据，并导入到目标表中对应的数据行。 |
 | jsonpaths                 | 否           | 导入时指定待导入 JSON 数据的 Key，该模式称为匹配模式，适用于 JSON 数据的 Key 名与目标表的列名不一致的场景。具体请参见本文提供的示例[目标表存在基于 JSON 数据进行计算生成的衍生列](#目标表存在基于-json-数据进行计算生成的衍生列)。如果 JSON 数据的 Key 名与目标表的列名一致，则可以不设置 `jsonpaths` ，该模式称为简单模式。例如 `{"category": 1, "author": 2, "price": "3"}` 中，`category`、`author`、`price` 是字段的名称，按名称直接对应目标表中的 `category`、`author`、`price` 三列。具体请参见本文提供的示例[目标表的列名与 JSON 数据的 key 一致](#目标表的列名与-json-数据的-key-一致) |
-=======
-| merge_condition           | 否           | 用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md)。指定的列必须为非主键列，且仅主键模型表支持条件更新。 |
-| format                    | 否           | 源数据的格式，取值范围：`CSV` 或者 `JSON`。默认值：`CSV`。 |
-| strip_outer_array         | 否           | 是否裁剪 JSON 数据最外层的数组结构。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。真实业务场景中，待导入的 JSON 数据可能在最外层有一对表示数组结构的中括号 `[]`。这种情况下，一般建议您指定该参数取值为 `true`，这样 StarRocks 会剪裁掉外层的中括号 `[]`，并把中括号 `[]` 里的每个内层数组都作为一行单独的数据导入。如果您指定该参数取值为 `false`，则 StarRocks 会把整个 JSON 数据解析成一个数组，并作为一行数据导入。例如，待导入的 JSON 数据为 `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`，如果指定该参数取值为 `true`，则 StarRocks 会把 `{"category" : 1, "author" : 2}` 和 `{"category" : 3, "author" : 4}` 解析成两行数据，并导入到目标表中对应的数据行。 |
-| jsonpaths                 | 否           | 用于指定待导入的字段的名称。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为 JSON 格式。参见[目标表存在基于 JSON 数据进行计算生成的衍生列](#目标表存在基于-json-数据进行计算生成的衍生列)。|
->>>>>>> 1b69a60b (modify examples in create routine load (#4716))
 | json_root                 | 否           | 如果不需要导入整个 JSON 数据，则指定实际待导入 JSON 数据的根节点。参数取值为合法的 JsonPath。默认值为空，表示会导入整个 JSON 数据。具体请参见本文提供的示例[指定实际待导入 JSON 数据的根节点](#指定实际待导入-json-数据的根节点)。 |
 
 ### `data_source`、`data_source_properties`
@@ -141,6 +123,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 ```Bash
 FROM <data_source>
  ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
+data_source
 ```
 
 `data_source`
@@ -215,7 +198,6 @@ Routine Load 相关配置项，请参见[配置参数](../../../administration/C
 
 ### 导入 CSV 数据
 
-<<<<<<< HEAD
 **如果 CSV 格式的数据中的列与目标表中的列的数量或顺序不一致**，则需要通过 `COLUMNS` 参数来指定待导入数据文件和目标表之间的列映射和转换关系。一般包括如下两种场景：
 
 - **待导入数据文件中的列与目标表中的列数量一致，但是顺序不一致**。并且数据不需要通过函数计算、可以直接落入目标表中对应的列。
@@ -229,27 +211,10 @@ Routine Load 相关配置项，请参见[配置参数](../../../administration/C
     比如目标表中有三列，按顺序依次为 `col1`、`col2` 和 `col3` ；待导入数据文件中有四列，前三列按顺序依次对应目标表中的 `col1`、`col2` 和 `col3`，第四列在目标表中无对应的列。这种情况下，需要指定 `COLUMNS(col1, col2, col3, temp)`，其中，最后一列可随意指定一个名称（如 `temp`）用于占位即可。
   - **目标表存在基于待导入数据的列进行计算后生成的衍生列**。
     例如待导入数据中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。目标表中有三列，按顺序依次为 `year`、`month` 和 `day`，均是基于待导入数据中包含时间数据的列进行计算后生成的衍生列。这种情况下，可以指定 `COLUMNS(col, year = year(col), month=month(col), day=day(col)`。其中，`col` 是待导入数据文件中所包含的列的临时命名，`year = year(col)`、`month=month(col)` 和 `day=day(col)` 用于指定从待导入数据文件中的 `col` 列提取对应的数据并落入目标表中对应的衍生列，如 `year = year(col)` 表示通过 `year` 函数提取待导入数据中 `col` 列的 `yyyy` 部分的数据并落入目标表中的 `year` 列。更多示例，请参见[设置列的映射和转换关系](#列映射和转换关系)。
-=======
-**如果 CSV 格式的数据中的列与目标表中的列的数量或顺序不一致**，则需要通过 `COLUMNS` 参数来指定源数据和目标表之间的列映射和转换关系。一般包括如下两种场景：
-
-- **源数据中的列与目标表中的列数量一致，但是顺序不一致**。并且数据不需要通过函数计算、可以直接落入目标表中对应的列。
-  您需要在 `COLUMNS` 参数中按照源数据中的列顺序、使用目标表中对应的列名来配置列映射和转换关系。
-
-  例如，目标表中有三列，按顺序依次为 `col1`、`col2` 和 `col3`；源数据中也有三列，按顺序依次对应目标表中的 `col3`、`col2` 和 `col1`。这种情况下，需要指定 `COLUMNS(col3, col2, col1)`。
-- **源数据中的列与目标表中的列数量不一致，甚至某些列的数据需要通过转换（函数计算以后）才能落入目标表中对应的列。**
-  您不仅需要在 `COLUMNS` 参数中按照源数据中的列顺序、使用目标表中对应的列名来配置列映射关系，还需要指定参与数据计算的函数。以下为两个示例：
-
-  - **源数据比目标表多列**。
-    比如目标表中有三列，按顺序依次为 `col1`、`col2` 和 `col3` ；源数据中有四列，前三列按顺序依次对应目标表中的 `col1`、`col2` 和 `col3`，第四列在目标表中无对应的列。这种情况下，需要指定 `COLUMNS(col1, col2, col3, temp)`，其中，最后一列可随意指定一个名称（如 `temp`）用于占位即可。
-  - **目标表存在基于源数据的列进行计算后生成的衍生列**。
-    例如源数据中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。目标表中有三列，按顺序依次为 `year`、`month` 和 `day`，均是基于源数据中包含时间数据的列进行计算后生成的衍生列。这种情况下，可以指定 `COLUMNS(col, year = year(col), month=month(col), day=day(col)`。其中，`col` 是源数据中所包含的列的临时命名，`year = year(col)`、`month=month(col)` 和 `day=day(col)` 用于指定从源数据中的 `col` 列提取对应的数据并落入目标表中对应的衍生列，如 `year = year(col)` 表示通过 `year` 函数提取源数据中 `col` 列的 `yyyy` 部分的数据并落入目标表中的 `year` 列。
-
-  有关操作示例，请参见[设置列的映射和转换关系](#设置列的映射和转换关系)。
->>>>>>> 1b69a60b (modify examples in create routine load (#4716))
 
 ### 导入 JSON 数据
 
-**如果 JSON 格式的数据中的 Key 名与目标表中的列名不一致**，则需要使用匹配模式导入 JSON 数据，即通过 `jsonpaths` 和 `COLUMNS` 两个参数来指定源数据和目标表之间的列映射和转换关系：
+**如果 JSON 格式的数据中的 Key 名与目标表中的列名不一致**，则需要使用匹配模式导入 JSON 数据，即通过 `jsonpaths` 和 `COLUMNS` 两个参数来指定待导入数据和目标表之间的列映射和转换关系：
 
 - `jsonpaths` 参数指定待导入 JSON 数据的 Key，并进行排序（就像新生成了 CSV 数据）。
 - `COLUMNS`参数指定待导入 JSON 数据的 Key 与目标表的列的映射关系和数据转换关系。
@@ -318,7 +283,7 @@ FROM KAFKA
 
 如果需要提高导入性能，避免出现消费积压等情况，则可以通过设置单个 Routine Load 导入作业的期望任务并发度`desired_concurrent_number`，增加实际任务并行度，将一个导入作业拆分成尽可能多的导入任务并行执行。
 
-> 更多提升导入性能的方式，请参见 [Routine Load常见问题](../../../faq/loading/Routine_load_faq.md)。
+> 更多提升导入性能的方式，请参见 [Routine Load常见问题](../../../faq/loading/Routine_load_faq.md)
 
 请注意，实际任务并行度由如下多个参数组成的公式决定，上限为 BE 节点的数量或者消费分区的数量。
 
@@ -347,15 +312,11 @@ FROM KAFKA
 
 #### 设置列的映射和转换关系
 
-<<<<<<< HEAD
 如果 CSV 格式的数据中的列与目标表中的列的数量或顺序不一致，假设无需导入 CSV 数据的第五列至目标表，则需要通过 `COLUMNS` 参数来指定待导入数据文件和目标表之间的列映射和转换关系。
-=======
-如果 CSV 格式的数据中的列与目标表中的列的数量或顺序不一致，假设无需导入 CSV 数据的第五列至目标表，则需要通过 `COLUMNS` 参数来指定源数据和目标表之间的列映射和转换关系。
->>>>>>> 1b69a60b (modify examples in create routine load (#4716))
 
 **目标数据库和表**
 
-根据 CSV 数据中需要导入的几列（例如除第五列性别外的其余五列需要导入至 StarRocks）， 在 StarRocks 集群的目标数据库 `example_db` 中创建表 `example_tbl2`。
+根据 CSV 数据中需要导入的几列（例如除第五列性别外的其余五列需要导入至 StarRocks）， 在 StarRocks 集群的目标数据库 `example_db` 中创建表 `example_tbl1`。
 
 ```SQL
 CREATE TABLE example_db.example_tbl2 ( 
@@ -363,7 +324,7 @@ CREATE TABLE example_db.example_tbl2 (
     `pay_dt` date NOT NULL COMMENT "支付日期", 
     `customer_name` varchar(26) NULL COMMENT "顾客姓名", 
     `nationality` varchar(26) NULL COMMENT "国籍", 
-    `price` double NULL COMMENT "支付金额"
+    `price`double NULL COMMENT "支付金额"
 ) 
 PRIMARY KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
@@ -388,10 +349,10 @@ FROM KAFKA
 
 如果仅导入满足条件的数据，则可以在 WHERE 子句中设置过滤条件，例如`price > 100`。
 
-```SQL
-CREATE ROUTINE LOAD example_db.example_tbl1_ordertest1 ON example_tbl1
+```Plain
+CREATE ROUTINE LOAD example_db.example_tbl2_ordertest1 ON example_tbl2
 COLUMNS TERMINATED BY ",",
-COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price),
+COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
 WHERE price > 100
 FROM KAFKA
 (
@@ -402,7 +363,7 @@ FROM KAFKA
 
 #### 设置导入任务为严格模式
 
-在`PROPERTIES`中设置`"strict_mode" = "true"`，表示导入作业为严格模式。如果源数据某列的值为 NULL，但是目标表中该列不允许为 NULL，则该行数据会被过滤掉。
+在`PROPERTIES`中设置`"strict_mode" = "true"`，表示导入作业为严格模式。如果待导入数据某列的值为 NULL，但是目标表中该列不允许为 NULL，则该行数据会被过滤掉。
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl1_ordertest1 ON example_tbl1
@@ -493,7 +454,7 @@ CREATE TABLE example_db.example_tbl3 (
     `customer_name` varchar(26) NULL COMMENT "顾客姓名", 
     `country` varchar(26) NULL COMMENT "顾客国籍", 
     `pay_time` bigint(20) NULL COMMENT "支付时间", 
-    `price` double SUM NULL COMMENT "支付金额") 
+    `price`double SUM NULL COMMENT "支付金额") 
 AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`) 
 DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
 ```
@@ -536,17 +497,17 @@ FROM KAFKA
 
 **目标数据库和表**
 
-假设在 StarRocks 集群的目标数据库 `example_db` 中存在目标表 `example_tbl4` 其中有一列衍生列 `pay_dt`，是基于 JSON 数据的Key `pay_time` 进行计算后的数据。其建表语句如下：
+假设在 StarRocks 集群的目标数据库 `example_db` 中存在目标表 `example_tbl3` 其中有一列衍生列 `pay_dt`，是基于 JSON 数据的Key `pay_time` 进行计算后的数据。其建表语句如下：
 
 ```SQL
-CREATE TABLE example_db.example_tbl4 ( 
+CREATE TABLE example_db.example_tbl3 ( 
     `commodity_id` varchar(26) NULL COMMENT "品类ID", 
     `customer_name` varchar(26) NULL COMMENT "顾客姓名", 
     `country` varchar(26) NULL COMMENT "顾客国籍",
     `pay_time` bigint(20) NULL COMMENT "支付时间",  
     `pay_dt` date NULL COMMENT "支付日期", 
     `price`double SUM NULL COMMENT "支付金额") 
-AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`,`pay_dt`) 
+AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_dt`) 
 DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
 ```
 
@@ -555,7 +516,7 @@ DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5;
 提交导入作业时使用匹配模式。使用 `jsonpaths` 指定待导入 JSON 数据的 Key。并且由于 JSON 数据中 key `pay_time` 需要转换为 DATE 类型，才能导入到目标表的列 `pay_dt`，因此 `COLUMNS` 中需要使用函数`from_unixtime`进行转换。JSON 数据的其他 key 都能直接映射至表 `example_tbl3` 中。
 
 ```SQL
-CREATE ROUTINE LOAD example_db.example_tbl4_ordertest2 ON example_tbl4
+CREATE ROUTINE LOAD example_db.example_tbl3_ordertest2 ON example_tbl3
 COLUMNS(commodity_id, customer_name, country, pay_time, pay_dt=from_unixtime(pay_time, '%Y%m%d'), price)
 PROPERTIES
 (
@@ -580,10 +541,16 @@ FROM KAFKA
 
 **数据集**
 
-假设 Kafka 集群的 Topic `ordertest3` 中存在如下 JSON 格式的数据，实际导入时仅需要导入 key `RECORDS`的值。
+假设 Kafka 集群的 Topic `ordertest2` 中存在如下 JSON 格式的数据，实际导入时仅需要导入 key `RECORDS`的值。
 
 ```JSON
-{"RECORDS":[{"commodity_id": "1", "customer_name": "Mark Twain", "country": "US","pay_time": 1589191487,"price": 875},{"commodity_id": "2", "customer_name": "Oscar Wilde", "country": "UK","pay_time": 1589191487,"price": 895},{"commodity_id": "3", "customer_name": "Antoine de Saint-Exupéry","country": "France","pay_time": 1589191487,"price": 895}]}
+{
+"RECORDS":[
+{"commodity_id": "1", "customer_name": "Mark Twain", "country": "US","pay_time": 1589191487,"price": 875},
+{"commodity_id": "2", "customer_name": "Oscar Wilde", "country": "UK","pay_time": 1589191487,"price": 895},
+{"commodity_id": "3", "customer_name": "Antoine de Saint-Exupéry","country": "France","pay_time": 1589191487,"price": 895}
+]
+}
 ```
 
 **目标数据库和表**
@@ -606,7 +573,7 @@ DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5;
 提交导入作业，设置`"json_root" = "$.RECORDS"`指定实际待导入的json 数据的根节点。并且由于实际待导入的 JSON 数据是数组结构，因此还需要设置`"strip_outer_array" = "true"`，裁剪外层的数组结构。
 
 ```SQL
-CREATE ROUTINE LOAD example_db.example_tbl3_ordertest3 ON example_tbl3
+CREATE ROUTINE LOAD example_db.example_tbl3_ordertest2 ON example_tbl3
 PROPERTIES
 (
     "format" ="json",
