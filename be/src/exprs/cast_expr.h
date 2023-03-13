@@ -149,4 +149,6 @@ private:
     std::vector<std::unique_ptr<Expr>> _field_casts;
 };
 
+StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column);
+
 } // namespace starrocks

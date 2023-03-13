@@ -16,6 +16,7 @@
 
 #include <ryu/ryu.h>
 
+#include <stdexcept>
 #include <utility>
 
 #include "column/column_builder.h"
@@ -136,58 +137,72 @@ DEFINE_UNARY_FN_WITH_IMPL(TimeToNumber, value) {
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
-    ColumnViewer<FromType> viewer(column);
-    ColumnBuilder<TYPE_JSON> builder(viewer.size());
-
-    for (int row = 0; row < viewer.size(); ++row) {
-        if (viewer.is_null(row)) {
-            builder.append_null();
-            continue;
+    if constexpr (lt_is_map<FromType> || lt_is_struct<FromType>) {
+        auto maybe_ret = cast_nested_to_json(column);
+        if (maybe_ret.ok()) {
+            return maybe_ret.value();
         }
-
-        JsonValue value;
-        bool overflow = false;
-        if constexpr (lt_is_integer<FromType>) {
-            constexpr int64_t min = RunTimeTypeLimits<TYPE_BIGINT>::min_value();
-            constexpr int64_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
-            overflow = viewer.value(row) < min || viewer.value(row) > max;
-            value = JsonValue::from_int(viewer.value(row));
-        } else if constexpr (lt_is_float<FromType>) {
-            constexpr double min = RunTimeTypeLimits<TYPE_DOUBLE>::min_value();
-            constexpr double max = RunTimeTypeLimits<TYPE_DOUBLE>::max_value();
-            overflow = viewer.value(row) < min || viewer.value(row) > max;
-            value = JsonValue::from_double(viewer.value(row));
-        } else if constexpr (lt_is_boolean<FromType>) {
-            value = JsonValue::from_bool(viewer.value(row));
-        } else if constexpr (lt_is_string<FromType>) {
-            auto maybe = JsonValue::parse_json_or_string(viewer.value(row));
-            if (maybe.ok()) {
-                value = maybe.value();
-            } else {
-                overflow = true;
-            }
+        if constexpr (AllowThrowException) {
+            throw std::runtime_error("cast failed: " + maybe_ret.status().get_error_msg());
         } else {
-            if constexpr (AllowThrowException) {
-                THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
-            }
-            DCHECK(false) << "not supported type " << FromType;
+            ColumnBuilder<TYPE_JSON> builder(column->size());
+            builder.append_nulls(column->size());
+            return builder.build(column->is_constant());
         }
-        if (overflow || value.is_null()) {
-            if constexpr (AllowThrowException) {
-                if constexpr (FromType == TYPE_LARGEINT) {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType,
-                                                             LargeIntValue::to_string(viewer.value(row)));
+    } else {
+        ColumnViewer<FromType> viewer(column);
+        ColumnBuilder<TYPE_JSON> builder(viewer.size());
+
+        for (int row = 0; row < viewer.size(); ++row) {
+            if (viewer.is_null(row)) {
+                builder.append_null();
+                continue;
+            }
+
+            JsonValue value;
+            bool overflow = false;
+            if constexpr (lt_is_integer<FromType>) {
+                constexpr int64_t min = RunTimeTypeLimits<TYPE_BIGINT>::min_value();
+                constexpr int64_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
+                overflow = viewer.value(row) < min || viewer.value(row) > max;
+                value = JsonValue::from_int(viewer.value(row));
+            } else if constexpr (lt_is_float<FromType>) {
+                constexpr double min = RunTimeTypeLimits<TYPE_DOUBLE>::min_value();
+                constexpr double max = RunTimeTypeLimits<TYPE_DOUBLE>::max_value();
+                overflow = viewer.value(row) < min || viewer.value(row) > max;
+                value = JsonValue::from_double(viewer.value(row));
+            } else if constexpr (lt_is_boolean<FromType>) {
+                value = JsonValue::from_bool(viewer.value(row));
+            } else if constexpr (lt_is_string<FromType>) {
+                auto maybe = JsonValue::parse_json_or_string(viewer.value(row));
+                if (maybe.ok()) {
+                    value = maybe.value();
                 } else {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
+                    overflow = true;
                 }
+            } else {
+                if constexpr (AllowThrowException) {
+                    THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
+                }
+                DCHECK(false) << "not supported type " << FromType;
             }
-            builder.append_null();
-        } else {
-            builder.append(std::move(value));
+            if (overflow || value.is_null()) {
+                if constexpr (AllowThrowException) {
+                    if constexpr (FromType == TYPE_LARGEINT) {
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType,
+                                                                 LargeIntValue::to_string(viewer.value(row)));
+                    } else {
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
+                    }
+                }
+                builder.append_null();
+            } else {
+                builder.append(std::move(value));
+            }
         }
+        return builder.build(column->is_constant());
     }
-
-    return builder.build(column->is_constant());
+    return {};
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
@@ -1246,6 +1261,8 @@ CUSTOMIZE_FN_CAST(TYPE_FLOAT, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_DOUBLE, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_CHAR, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_MAP, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_STRUCT, TYPE_JSON, cast_to_json_fn);
 
 /**
  * Resolve cast to string
@@ -1560,6 +1577,8 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_TO_JSON(TYPE_DECIMAL32, allow_throw_exception);
                 CASE_TO_JSON(TYPE_DECIMAL64, allow_throw_exception);
                 CASE_TO_JSON(TYPE_DECIMAL128, allow_throw_exception);
+                CASE_TO_JSON(TYPE_STRUCT, allow_throw_exception);
+                CASE_TO_JSON(TYPE_MAP, allow_throw_exception);
             default:
                 LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
                              << ", to type: " << type_to_string(to_type);

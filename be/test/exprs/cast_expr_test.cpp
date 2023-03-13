@@ -21,7 +21,11 @@
 
 #include "butil/time.h"
 #include "column/fixed_length_column.h"
+#include "column/map_column.h"
+#include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
@@ -2046,6 +2050,158 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     EXPECT_EQ(R"([null,{"a": 2}])", cast_json_to_array(cast_expr, TYPE_JSON, R"( [null, {"a": 2}] )"));
     EXPECT_EQ(R"([])", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
 }
+
+TTypeDesc gen_struct_type_desc(const std::vector<std::string>& names, const std::vector<LogicalType>& field_types) {
+    std::vector<TTypeNode> types_list;
+    TTypeDesc type_desc;
+    TTypeNode type_array;
+    type_array.type = TTypeNodeType::STRUCT;
+
+    for (auto name : names) {
+        TStructField struct_field;
+        struct_field.name = name;
+        type_array.struct_fields.push_back(struct_field);
+    }
+    type_array.__isset.struct_fields = true;
+    types_list.push_back(type_array);
+
+    for (auto field_type : field_types) {
+        TScalarType scalar_type;
+        scalar_type.__set_type(to_thrift(field_type));
+        scalar_type.__set_precision(0);
+        scalar_type.__set_scale(0);
+        scalar_type.__set_len(0);
+
+        TTypeNode type_scalar;
+        type_scalar.__set_scalar_type(scalar_type);
+        types_list.push_back(type_scalar);
+    }
+
+    type_desc.__set_types(types_list);
+    return type_desc;
+}
+
+TTypeDesc gen_map_type_desc(LogicalType key_type, LogicalType value_type) {
+    TTypeDesc type_desc;
+    TTypeNode type_array;
+    type_array.type = TTypeNodeType::MAP;
+    std::vector<TTypeNode> types_list;
+    types_list.push_back(type_array);
+
+    // key
+    {
+        TScalarType scalar_type;
+        scalar_type.__set_type(to_thrift(key_type));
+        scalar_type.__set_precision(0);
+        scalar_type.__set_scale(0);
+        scalar_type.__set_len(0);
+
+        TTypeNode type_scalar;
+        type_scalar.__set_scalar_type(scalar_type);
+        types_list.push_back(type_scalar);
+    }
+
+    // value
+    {
+        TScalarType scalar_type;
+        scalar_type.__set_type(to_thrift(value_type));
+        scalar_type.__set_precision(0);
+        scalar_type.__set_scale(0);
+        scalar_type.__set_len(0);
+
+        TTypeNode type_scalar;
+        type_scalar.__set_scalar_type(scalar_type);
+        types_list.push_back(type_scalar);
+    }
+
+    type_desc.__set_types(types_list);
+    return type_desc;
+}
+
+TEST_F(VectorizedCastExprTest, struct_to_json) {
+    // Struct{id: xxx, name: yyy}
+    std::vector<std::string> names{"id", "name"};
+    std::vector<LogicalType> types{TYPE_INT, TYPE_VARCHAR};
+
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+    // cast_expr.child_type = gen_struct_type_desc(names, types);
+    // cast_expr.child_type = TPrimitiveType::;
+    // cast_expr.type = to_thrift(TYPE_JSON);
+    cast_expr.type = gen_type_desc(TPrimitiveType::JSON);
+
+    // Build struct column
+    Columns fields{NullableColumn::create(UInt64Column::create(), NullColumn::create()),
+                   NullableColumn::create(BinaryColumn::create(), NullColumn::create())};
+    auto struct_column = StructColumn::create(fields, names);
+    struct_column->append_datum(DatumStruct{uint64_t(1), Slice("murphy")});
+    struct_column->append_datum(DatumStruct{uint64_t(2), Slice("murphy")});
+
+    // Cast to JSON
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+    ASSERT_TRUE(expr);
+    MockExpr col1(cast_expr, struct_column);
+    expr->_children.push_back(&col1);
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+    ASSERT_EQ(2, ptr->size());
+    Datum json1 = ptr->get(0);
+    ASSERT_FALSE(json1.is_null());
+    ASSERT_EQ("hehe", json1.get_json()->to_string_uncheck());
+
+    Datum json2 = ptr->get(0);
+    ASSERT_FALSE(json2.is_null());
+    ASSERT_EQ("hehe", json2.get_json()->to_string_uncheck());
+}
+
+/*
+TEST_F(VectorizedCastExprTest, map_to_json) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+    cast_expr.child_type = gen_map_type_desc(TYPE_INT, TYPE_VARCHAR);
+    cast_expr.type = to_thrift(TYPE_JSON);
+
+    // Build struct column
+    auto key_column = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+    auto val_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto struct_column = MapColumn::create(key_column, val_column, UInt32Column::create());
+    
+    DatumMap map1;
+    map1[uint64_t(1)] = Slice("murphy");
+    map1[uint64_t(2)] = Slice("murphy");
+    struct_column->append_datum(map1);
+    DatumMap map2;
+    map2[uint64_t(3)] = Slice("wang");
+    map2[uint64_t(4)] = Slice("wang");
+    struct_column->append_datum(map2);
+
+    // Cast to JSON
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+    ASSERT_TRUE(expr);
+    MockExpr col1(cast_expr, struct_column);
+    expr->_children.push_back(&col1);
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+    ASSERT_EQ(2, ptr->size());
+    Datum json1 = ptr->get(0);
+    ASSERT_FALSE(json1.is_null());
+    ASSERT_EQ("hehe", json1.get_json()->to_string_uncheck());
+
+    Datum json2 = ptr->get(0);
+    ASSERT_FALSE(json2.is_null());
+    ASSERT_EQ("hehe", json2.get_json()->to_string_uncheck());
+}
+*/
 
 TEST_F(VectorizedCastExprTest, unsupported_test) {
     // can't cast arry<array<int>> to array<bool> rather than crash
