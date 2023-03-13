@@ -500,15 +500,7 @@ StatusOr<ColumnPtr> BitmapFunctions::sub_bitmap(FunctionContext* context, const 
 
     ColumnViewer<TYPE_OBJECT> bitmap_viewer(columns[0]);
     ColumnViewer<TYPE_BIGINT> offset_viewer(columns[1]);
-
-    ColumnPtr len_column = nullptr;
-    if (columns.size() > 2) {
-        len_column = columns[2];
-    } else {
-        len_column = ColumnHelper::create_const_column<TYPE_BIGINT>(INT32_MAX, bitmap_viewer.size());
-    }
-
-    ColumnViewer<TYPE_BIGINT> len_viewer(len_column);
+    ColumnViewer<TYPE_BIGINT> len_viewer(columns[2]);
 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
@@ -569,4 +561,46 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context, 
     }
     return builder.build(ColumnHelper::is_all_const(columns));
 }
+
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_subset_limit(FunctionContext* context, const starrocks::Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TYPE_OBJECT> bitmap_viewer(columns[0]);
+    ColumnViewer<TYPE_BIGINT> range_start_viewer(columns[1]);
+    ColumnViewer<TYPE_BIGINT> limit_viewer(columns[2]);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+
+    for (int row = 0; row < size; row++) {
+        if (bitmap_viewer.is_null(row) || range_start_viewer.is_null(row) || limit_viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        auto bitmap = bitmap_viewer.value(row);
+        auto range_start = range_start_viewer.value(row);
+        auto limit = limit_viewer.value(row);
+
+        if (range_start < 0) {
+            range_start = 0;
+        }
+
+        if (bitmap->cardinality() == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        BitmapValue ret_bitmap;
+        if (bitmap->bitmap_subset_limit_internal(range_start, limit, &ret_bitmap) == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        builder.append(std::move(ret_bitmap));
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
 } // namespace starrocks
