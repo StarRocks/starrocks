@@ -40,7 +40,7 @@ struct TypeDescriptor {
     PrimitiveType type{INVALID_TYPE};
     /// Only meaningful for type TYPE_CHAR/TYPE_VARCHAR/TYPE_HLL
     int len{-1};
-    static constexpr int MAX_VARCHAR_LENGTH = 4 * 1024 * 1024;
+    static constexpr int MAX_VARCHAR_LENGTH = 2 * 1024 * 1024;
     static constexpr int MAX_CHAR_LENGTH = 255;
     static constexpr int MAX_CHAR_INLINE_LENGTH = 128;
     static constexpr int DEFAULT_BITMAP_LENGTH = 128;
