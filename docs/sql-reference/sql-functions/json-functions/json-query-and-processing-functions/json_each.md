@@ -26,38 +26,22 @@ The json_each function is a table function that returns a table. The returned ta
 
 ```Plain%20Text
 -- A table named tj is used as an example. In the tj table, the j column is a JSON object.
-
 mysql> SELECT * FROM tj;
-
 +------+------------------+
-
 | id   | j                |
-
 +------+------------------+
-
 |    1 | {"a": 1, "b": 2} |
-
 |    3 | {"a": 3}         |
-
 +------+------------------+
-
-
 
 -- Expand the j column of the tj table into two columns by key and value to obtain a result set that consists of multiple rows. In this example, the LATERAL keyword is used to join the result set to the tj table.
 
 mysql> SELECT * FROM tj, LATERAL json_each(j);
-
 +------+------------------+------+-------+
-
 | id   | j                | key  | value |
-
 +------+------------------+------+-------+
-
 |    1 | {"a": 1, "b": 2} | a    | 1     |
-
 |    1 | {"a": 1, "b": 2} | b    | 2     |
-
 |    3 | {"a": 3}         | a    | 3     |
-
 +------+------------------+------+-------+
 ```
