@@ -54,26 +54,10 @@ namespace starrocks {
 class Field;
 class Tablet;
 
-class ChunkAllocator {
-public:
-    ChunkAllocator(const TabletSchema& tablet_schema, size_t memory_limitation);
-    virtual ~ChunkAllocator() = default;
-
-    static Status allocate(ChunkPtr& chunk, size_t num_rows, Schema& schema);
-    bool is_memory_enough_to_sort(size_t num_rows) const;
-    void set_cur_mem_usage(size_t mem_usage) { _memory_allocated = mem_usage; }
-    void set_row_len(size_t row_len) { _row_len = row_len; }
-
-private:
-    size_t _memory_allocated = 0;
-    size_t _row_len;
-    size_t _memory_limitation;
-};
-
 class ChunkSorter {
 public:
-    explicit ChunkSorter(ChunkAllocator* allocator);
-    virtual ~ChunkSorter();
+    ChunkSorter() = default;
+    virtual ~ChunkSorter() = default;
 
     bool sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet);
 
@@ -87,8 +71,8 @@ public:
     SchemaChange() = default;
     virtual ~SchemaChange() = default;
 
-    virtual Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
-                              TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
+    virtual Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
+                           TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
 };
 
 class LinkedSchemaChange : public SchemaChange {
@@ -96,8 +80,8 @@ public:
     explicit LinkedSchemaChange(ChunkChanger* chunk_changer) : SchemaChange(), _chunk_changer(chunk_changer) {}
     ~LinkedSchemaChange() override = default;
 
-    Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+    Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
@@ -110,8 +94,8 @@ public:
     explicit SchemaChangeDirectly(ChunkChanger* chunk_changer) : SchemaChange(), _chunk_changer(chunk_changer) {}
     ~SchemaChangeDirectly() override = default;
 
-    Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+    Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
@@ -124,8 +108,8 @@ public:
     explicit SchemaChangeWithSorting(ChunkChanger* chunk_changer, size_t memory_limitation);
     ~SchemaChangeWithSorting() override = default;
 
-    Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+    Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
     static bool _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
                                   TabletSharedPtr tablet);
@@ -146,7 +130,6 @@ public:
 
 private:
     struct SchemaChangeParams {
-        AlterTabletType alter_tablet_type;
         TabletSharedPtr base_tablet;
         TabletSharedPtr new_tablet;
         std::vector<std::unique_ptr<TabletReader>> rowset_readers;
