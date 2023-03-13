@@ -2,7 +2,7 @@
 
 ## Description
 
-This statement is used to show the history of successful delete tasks of duplicate table in current database.
+This statement is used to show historical DELETE tasks that are successful performed on Duplicate Key tables in the current database.
 
 ## Syntax
 
@@ -12,7 +12,7 @@ SHOW DELETE [FROM <db_name>]
 
 ## Examples
 
-Show all historical delete tasks of `database`.
+Show all historical DELETE tasks of `database`.
 
 ```sql
 SHOW DELETE FROM database;
