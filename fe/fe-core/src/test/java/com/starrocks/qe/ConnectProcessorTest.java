@@ -34,7 +34,6 @@
 
 package com.starrocks.qe;
 
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -46,7 +45,6 @@ import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
@@ -325,7 +323,6 @@ public class ConnectProcessorTest extends DDLTestBase {
     public void testInitDb() throws IOException {
         ConnectContext ctx = initMockContext(mockChannel(initDbPacket), GlobalStateMgr.getCurrentState());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ctx.setQualifiedUser(AuthenticationManager.ROOT_USER);
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
@@ -337,7 +334,6 @@ public class ConnectProcessorTest extends DDLTestBase {
     public void testInitDbFail() throws IOException {
         ConnectContext ctx = initMockContext(mockChannel(initDbPacket), GlobalStateMgr.getCurrentState());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ctx.setQualifiedUser(AuthenticationManager.ROOT_USER);
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
