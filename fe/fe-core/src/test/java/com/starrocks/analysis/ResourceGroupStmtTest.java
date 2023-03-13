@@ -464,6 +464,11 @@ public class ResourceGroupStmtTest {
         String remoteIp = "192.168.2.4";
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        starRocksAssert.getCtx().setCurrentRoleIds(
+                starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager().getRoleIdsByUser(
+                        new UserIdentity(qualifiedUser, "%")
+                )
+        );
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
         TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                 starRocksAssert.getCtx(),
