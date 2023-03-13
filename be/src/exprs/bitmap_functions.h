@@ -160,6 +160,13 @@ public:
      * @return TYPE_OBJECT
      */
     DEFINE_VECTORIZED_FN(bitmap_to_base64);
+
+    /**
+     * @param:
+     * @paramType columns: [TYPE_OBJECT, TYPE_BIGINT, TYPE_BIGINT]
+     * @return TYPE_OBJECT
+     */
+    DEFINE_VECTORIZED_FN(bitmap_subset_limit);
 };
 
 } // namespace starrocks
