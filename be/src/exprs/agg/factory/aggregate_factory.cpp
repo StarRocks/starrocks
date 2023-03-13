@@ -30,6 +30,7 @@ namespace starrocks {
 
 AggregateFuncResolver::AggregateFuncResolver() {
     register_avg();
+    register_array();
     register_minmaxany();
     register_bitmap();
     register_sumcount();

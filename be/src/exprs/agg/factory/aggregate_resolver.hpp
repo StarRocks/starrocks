@@ -46,6 +46,7 @@ class AggregateFuncResolver {
 
 public:
     void register_avg();
+    void register_array();
     void register_bitmap();
     void register_minmaxany();
     void register_sumcount();
