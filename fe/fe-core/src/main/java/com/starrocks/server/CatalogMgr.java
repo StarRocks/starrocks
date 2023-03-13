@@ -256,6 +256,10 @@ public class CatalogMgr {
         return procNode.fetchResult().getRows();
     }
 
+    public Catalog getCatalogByName(String name) {
+        return catalogs.get(name);
+    }
+
     public CatalogProcNode getProcNode() {
         return procNode;
     }

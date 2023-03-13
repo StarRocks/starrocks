@@ -1343,7 +1343,8 @@ public class StmtExecutor {
                     EtlJobType.INSERT,
                     createTime,
                     estimateScanRows,
-                    type);
+                    type,
+                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
             coord.setJobId(jobId);
 
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
