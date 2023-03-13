@@ -1,6 +1,6 @@
 # Overview
 
-This topic describes what the catalog is, and how to manage and query internal data and external data by using the catalog.
+This topic describes what catalog is, and how to manage and query internal data and external data by using A catalog.
 
 > **Note**
 >
@@ -9,7 +9,7 @@ This topic describes what the catalog is, and how to manage and query internal d
 ## Basic concepts
 
 - **Internal data**: refers to the data stored in StarRocks.
-- **External data**: refers to the data stored in external data sources, such as Apache Hive™, Apache Iceberg, and Apache Hudi.
+- **External data**: refers to the data stored in an external data source, such as Apache Hive™, Apache Iceberg, and Apache Hudi.
 
 ## Catalog
 
@@ -17,9 +17,9 @@ Catalogs enable you to manage internal and external data in one system. They off
 
 ![figure1](../../assets/3.8.1.png)
 
-- **Internal catalog**: manages internal data of StarRocks. For example, if you execute the CREATE DATABASE or CREATE TABLE statements to create a database or a table, the database or table is stored in the internal catalog. Each StarRocks cluster has only one internal catalog named [default catalog](../catalog/default_catalog.md).
+- **Internal catalog** manages internal data of StarRocks. For example, if you execute the CREATE DATABASE or CREATE TABLE statements to create a database or a table, the database or table is stored in the internal catalog. Each StarRocks cluster has only one internal catalog named [default catalog](../catalog/default_catalog.md).
 
-- **External catalog**: manages the access information of external data sources, such as the type of external data source. You can query external data by using external catalogs without the need to create external tables or load data into StarRocks. Currently, you can create the following three types of external catalogs:
+- **External catalog** acts like a link to externally managed metastores, which grants StarRocks direct access to external data sources. You can query external data directly with zero data loading or migration. Currently, StarRocks supports the following types of external catalogs:
   - [Hive catalog](../catalog/hive_catalog.md): used to query data from Hive.
   - [Iceberg catalog](../catalog/iceberg_catalog.md): used to query data from Iceberg.
   - [Hudi catalog](../catalog/hudi_catalog.md): used to query data from Hudi.

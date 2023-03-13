@@ -33,7 +33,7 @@ JSON query functions and processing functions are used to query and process JSON
 
 ## JSON operators
 
-StarRocks supports the following JSON operators: `<`, `<=`, `>`, `>=`, `=`, and `!=`. You can use these operators to query JSON data. StarRocks does not support the `IN` operator. For more information about the JSON operators, see [JSON operators](./json-operators.md).
+StarRocks supports the following JSON comparison operators: `<`, `<=`, `>`, `>=`, `=`, and `!=`. You can use these operators to query JSON data. However, it does not allow you to use `IN` to query JSON data. For more information about JSON operators, see [JSON operators](./json-operators.md).
 
 ## JSON path expressions
 
