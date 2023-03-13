@@ -190,6 +190,39 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
     TRY_CATCH_ALL(st, _exec_env->stream_mgr()->transmit_chunk(*request, &done));
 }
 
+// TODO: try...catch bthread std::bad_alloc exception
+template <typename T>
+void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcController* cntl_base,
+                                                          const PHttpRequest* request, PTransmitChunkResult* response,
+                                                          google::protobuf::Closure* done) {
+    auto task = [=]() {
+        auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+        butil::IOBuf& iobuf = cntl->request_attachment();
+        size_t params_size = 0;
+        iobuf.cutn(&params_size, sizeof(params_size));
+        butil::IOBuf params_from;
+        iobuf.cutn(&params_from, params_size);
+        butil::IOBufAsZeroCopyInputStream wrapper(params_from);
+        auto params = std::make_shared<PTransmitChunkParams>();
+        params->ParseFromZeroCopyStream(&wrapper);
+        // the left size
+        size_t attachment_size = 0;
+        iobuf.cutn(&attachment_size, sizeof(attachment_size));
+        if (attachment_size != iobuf.size()) {
+            Status st = Status::InternalError(
+                    fmt::format("{} != {} during deserialization via http", attachment_size, iobuf.size()));
+            st.to_protobuf(response->mutable_status());
+            return;
+        }
+        this->_transmit_chunk(cntl_base, params.get(), response, done);
+    };
+    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+        ClosureGuard closure_guard(done);
+        Status::ServiceUnavailable("submit transmit_chunk_via_http task failed")
+                .to_protobuf(response->mutable_status());
+    }
+}
+
 template <typename T>
 void PInternalServiceImplBase<T>::transmit_runtime_filter(google::protobuf::RpcController* cntl_base,
                                                           const PTransmitRuntimeFilterParams* request,

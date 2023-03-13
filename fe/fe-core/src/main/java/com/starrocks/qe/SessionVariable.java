@@ -333,6 +333,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String QUERY_CACHE_AGG_CARDINALITY_LIMIT = "query_cache_agg_cardinality_limit";
     public static final String TRANSMISSION_ENCODE_LEVEL = "transmission_encode_level";
+    public static final String RPC_HTTP_MIN_SIZE = "rpc_http_min_size";
 
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
@@ -753,6 +754,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "NO_COMPRESSION";
+
+    @VariableMgr.VarAttr(name = RPC_HTTP_MIN_SIZE)
+    private long rpcHttpMinSize = ((1L << 31) - (1L << 20));
 
     @VariableMgr.VarAttr(name = TRANSMISSION_ENCODE_LEVEL)
     private int transmissionEncodeLevel = 7;
@@ -1952,6 +1956,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setTransmission_encode_level(transmissionEncodeLevel);
+        tResult.setRpc_http_min_size(rpcHttpMinSize);
 
         TCompressionType loadCompressionType = CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
         if (loadCompressionType != null) {
