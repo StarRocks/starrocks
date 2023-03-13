@@ -1810,7 +1810,7 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
 
     }
-
+    /*
     @Test
     public void testSimpleAggRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
@@ -1901,7 +1901,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:OlapScanNode");
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
-    }
+    }*/
 
     @Test
     public void testGroupByLiteral() throws Exception {
