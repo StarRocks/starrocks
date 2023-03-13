@@ -969,4 +969,50 @@ int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& l
     return count;
 }
 
+int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit,
+
+                                                  BitmapValue* ret_bitmap) {
+    bool is_reverse = false;
+
+    int64_t abs_limit = limit;
+    if (limit < 0) {
+        is_reverse = true;
+        abs_limit = -limit;
+    }
+
+    int64_t count = 0;
+
+    if (is_reverse) {
+        detail::Roaring64Map::const_iterator start = _bitmap->begin();
+        detail::Roaring64Map::const_iterator end = _bitmap->begin();
+
+        int64_t offset = 0;
+        for (; end != _bitmap->end() && offset < abs_limit && *end <= range_start;) {
+            ++end;
+            ++offset;
+        }
+        if (offset == abs_limit) {
+            for (; end != _bitmap->end() && *end <= range_start;) {
+                ++start;
+                ++end;
+            }
+        }
+
+        for (; start != end; ++start, ++count) {
+            ret_bitmap->add(*start);
+        }
+    }
+
+    else {
+        auto it = _bitmap->begin();
+        for (; it != _bitmap->end() && *it < range_start;) {
+            ++it;
+        }
+        for (; it != _bitmap->end() && count < abs_limit; ++it, ++count) {
+            ret_bitmap->add(*it);
+        }
+    }
+
+    return count;
+}
 } // namespace starrocks
