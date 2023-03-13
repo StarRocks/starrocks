@@ -235,4 +235,9 @@ public class JsonTypeTest extends PlanTestBase {
                 "Getting analyzing error from line 1, column 7 to line 1, column 50. Detail message: " +
                         "Invalid type cast from json to ARRAY<ARRAY<int(11)>> in sql `json_array(1, 2, 3)`.");
     }
+
+    @Test
+    public void testCastStructToJson() throws Exception {
+        assertPlanContains("select cast(row(1, 2) as json)", "CAST(row(1, 2) AS JSON)");
+    }
 }
