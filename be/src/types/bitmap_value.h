@@ -149,6 +149,8 @@ public:
 
     int64_t sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap);
 
+    int64_t bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit, BitmapValue* ret_bitmap);
+
 private:
     void _convert_to_smaller_type();
     void _from_set_to_bitmap();
