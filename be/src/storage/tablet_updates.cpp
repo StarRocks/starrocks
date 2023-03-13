@@ -2830,7 +2830,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     std::vector<ChunkPtr> chunk_arr;
 
     Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
-    ChunkSorter chunk_sorter(_chunk_allocator);
+    ChunkSorter chunk_sorter;
 
     OlapReaderStatistics stats;
 

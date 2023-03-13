@@ -312,8 +312,6 @@ private:
     Status _capture_consistent_rowsets_unlocked(const vector<Version>& version_path,
                                                 vector<RowsetSharedPtr>* rowsets) const;
 
-    bool _check_versions_completeness();
-
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
 
