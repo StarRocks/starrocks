@@ -148,7 +148,7 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
     // Skip the first $.
     for (int i = 1; i < jsonpath.size(); i++) {
         if (UNLIKELY(!jsonpath[i].is_valid)) {
-            return Status::InvalidArgument(fmt::format("invalid json path: {}", jsonpath[i].key));
+            return Status::InvalidArgument(fmt::format("invalid json path: {}", jsonpaths_to_string(jsonpath)));
         }
 
         const std::string& col = jsonpath[i].key;
@@ -159,16 +159,17 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
         // If the key is not found in json object, simdjson::NO_SUCH_FIELD would be returned.
         if (i == 1) {
             if (obj.is_empty()) {
-                return Status::NotFound(fmt::format("unable to find key: {}", jsonpath[i].key));
+                return Status::NotFound(fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath)));
             }
 
             if (col == "*") {
                 // There should be no jsonpath for this pattern, $.*
-                return Status::InvalidArgument(fmt::format(
-                        "extracting * from root-object is not supported, the json path: {}", jsonpath[i].key));
+                return Status::InvalidArgument(
+                        fmt::format("extracting * from root-object is not supported, the json path: {}",
+                                    jsonpaths_to_string(jsonpath)));
             } else {
                 HANDLE_SIMDJSON_ERROR(obj.find_field_unordered(col).get(tvalue),
-                                      fmt::format("unable to find key: {}", jsonpath[i].key));
+                                      fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath)));
             }
         } else {
             // There are always two patterns.
@@ -178,11 +179,11 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
             // For pattern2, we get the first field of object as next value.
 
             if (tvalue.is_null()) {
-                return Status::NotFound(fmt::format("unable to find key: {}", jsonpath[i].key));
+                return Status::NotFound(fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath)));
             }
 
             if (tvalue.type() != simdjson::ondemand::json_type::object) {
-                return Status::NotFound(fmt::format("unable to find key: {}", jsonpath[i].key));
+                return Status::NotFound(fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath)));
             }
 
             if (col == "*") {
@@ -192,7 +193,7 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
                 }
             } else {
                 HANDLE_SIMDJSON_ERROR(tvalue.find_field_unordered(col).get(tvalue),
-                                      fmt::format("unable to find key: {}", jsonpath[i].key));
+                                      fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath)));
             }
         }
 
@@ -201,15 +202,17 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
             // If the index is beyond the length of array, simdjson::INDEX_OUT_OF_BOUNDS would be returned.
             simdjson::ondemand::array arr;
             HANDLE_SIMDJSON_ERROR(tvalue.get_array().get(arr),
-                                  fmt::format("failed to access field as array, field: {}", col));
+                                  fmt::format("failed to access field as array, field: {}, jsonpath: {}", col,
+                                              jsonpaths_to_string(jsonpath)));
 
             HANDLE_SIMDJSON_ERROR(arr.at(index).get(tvalue),
-                                  fmt::format("failed to access array field: {}, index: {}", col, index));
+                                  fmt::format("failed to access array field: {}, index: {}, jsonpath: {}", col, index,
+                                              jsonpaths_to_string(jsonpath)));
         }
     }
 
     if (tvalue.is_null()) {
-        return Status::NotFound(fmt::format("unable to find key: {}", "somekey"));
+        return Status::NotFound(fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath)));
     }
 
     std::swap(*value, tvalue);
@@ -227,6 +230,14 @@ void JsonFunctions::parse_json_paths(const std::string& path_string, std::vector
                                                               boost::escaped_list_separator<char>("\\", ".", "\""));
     std::vector<std::string> paths(tok.begin(), tok.end());
     _get_parsed_paths(paths, parsed_paths);
+}
+
+std::string JsonFunctions::jsonpaths_to_string(const std::vector<SimpleJsonPath>& paths) {
+    std::string output;
+    for (auto const& path : paths) {
+        output.append(".").append(path.to_string());
+    }
+    return output;
 }
 
 JsonFunctionType JsonTypeTraits<TYPE_INT>::JsonType = JSON_FUN_INT;
