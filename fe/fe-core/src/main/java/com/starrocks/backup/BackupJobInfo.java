@@ -413,7 +413,6 @@ public class BackupJobInfo implements Writable {
             try {
                 tblInfo.autoIncrementId = tbl.getLong("autoIncrementId");
             } catch (Exception e) {
-                LOG.warn("read from older BackJobInfo.", e);
                 tblInfo.autoIncrementId = null;
             }
             JSONObject parts = tbl.getJSONObject("partitions");
