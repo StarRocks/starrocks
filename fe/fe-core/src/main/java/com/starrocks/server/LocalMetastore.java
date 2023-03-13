@@ -64,14 +64,12 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DynamicPartitionProperty;
-import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InfoSchemaDb;
-import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -79,7 +77,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
-import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -283,7 +280,7 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.unlock();
     }
 
-    private long getNextId() {
+    long getNextId() {
         return stateMgr.getNextId();
     }
 
@@ -793,34 +790,14 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
 
-        if (stmt.isOlapEngine()) {
-            createOlapOrLakeTable(db, stmt);
-            return;
-        } else if (engineName.equalsIgnoreCase("mysql")) {
-            createMysqlTable(db, stmt);
-            return;
-        } else if (engineName.equalsIgnoreCase("elasticsearch") || engineName.equalsIgnoreCase("es")) {
-            createEsTable(db, stmt);
-            return;
-        } else if (engineName.equalsIgnoreCase("hive")) {
-            createHiveTable(db, stmt);
-            return;
-        } else if (engineName.equalsIgnoreCase("file")) {
-            createFileTable(db, stmt);
-            return;
-        } else if (engineName.equalsIgnoreCase("iceberg")) {
-            createIcebergTable(db, stmt);
-            return;
-        } else if (engineName.equalsIgnoreCase("hudi")) {
-            createHudiTable(db, stmt);
-            return;
-        } else if (engineName.equalsIgnoreCase("jdbc")) {
-            createJDBCTable(db, stmt);
-            return;
-        } else {
+        AbstractTableFactory tableFactory = TableFactoryProvider.getFactory(engineName);
+        if (tableFactory == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, engineName);
         }
-        Preconditions.checkState(false);
+        Table table = tableFactory.createTable(this, db, stmt);
+        if (!(table instanceof OlapTable)) { // Special case: OlapTable has been added into the metastore before return.
+            registerTable(db, table, stmt);
+        }
     }
 
     @Override
@@ -1915,7 +1892,7 @@ public class LocalMetastore implements ConnectorMetadata {
     /*
      * generate and check columns' order and key's existence
      */
-    private void validateColumns(List<Column> columns) throws DdlException {
+    void validateColumns(List<Column> columns) throws DdlException {
         if (columns.isEmpty()) {
             ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_MUST_HAVE_COLUMNS);
         }
@@ -2008,7 +1985,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     // Create olap table and related base index synchronously.
     // when run on shared-data mode, olap table needs to get storage group from StarMgr.
-    private void createOlapOrLakeTable(Database db, CreateTableStmt stmt) throws DdlException {
+    public Table createOlapOrLakeTable(Database db, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
         LOG.debug("begin create olap table: {}", tableName);
 
@@ -2477,7 +2454,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                 .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
                     } else {
                         LOG.info("Create table[{}] which already exists", tableName);
-                        return;
+                        return table;
                     }
                 }
             } finally {
@@ -2523,6 +2500,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }, "BackgroundDynamicPartitionThread").start();
         }
+
+        return table;
     }
 
     private void processConstraint(
@@ -2539,140 +2518,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private void createMysqlTable(Database db, CreateTableStmt stmt) throws DdlException {
-        String tableName = stmt.getTableName();
-
-        List<Column> columns = stmt.getColumns();
-
-        long tableId = GlobalStateMgr.getCurrentState().getNextId();
-        MysqlTable mysqlTable = new MysqlTable(tableId, tableName, columns, stmt.getProperties());
-        mysqlTable.setComment(stmt.getComment());
-
-        // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-        }
-        try {
-            if (getDb(db.getId()) == null) {
-                throw new DdlException("database has been dropped when creating table");
-            }
-            if (!db.createTableWithLock(mysqlTable, false)) {
-                if (!stmt.isSetIfNotExists()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
-                } else {
-                    LOG.info("Create table[{}] which already exists", tableName);
-                    return;
-                }
-            }
-        } finally {
-            unlock();
-        }
-
-        LOG.info("Successfully create table[{}-{}]", tableName, tableId);
-    }
-
-    private void createEsTable(Database db, CreateTableStmt stmt) throws DdlException {
-        String tableName = stmt.getTableName();
-
-        // create columns
-        List<Column> baseSchema = stmt.getColumns();
-        validateColumns(baseSchema);
-
-        // create partition info
-        PartitionDesc partitionDesc = stmt.getPartitionDesc();
-        PartitionInfo partitionInfo = null;
-        Map<String, Long> partitionNameToId = Maps.newHashMap();
-        if (partitionDesc != null) {
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false, false);
-        } else {
-            long partitionId = getNextId();
-            // use table name as single partition name
-            partitionNameToId.put(tableName, partitionId);
-            partitionInfo = new SinglePartitionInfo();
-        }
-
-        long tableId = GlobalStateMgr.getCurrentState().getNextId();
-        EsTable esTable = new EsTable(tableId, tableName, baseSchema, stmt.getProperties(), partitionInfo);
-        esTable.setComment(stmt.getComment());
-
-        // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-        }
-        try {
-            if (getDb(db.getId()) == null) {
-                throw new DdlException("database has been dropped when creating table");
-            }
-            if (!db.createTableWithLock(esTable, false)) {
-                if (!stmt.isSetIfNotExists()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
-                } else {
-                    LOG.info("create table[{}] which already exists", tableName);
-                    return;
-                }
-            }
-        } finally {
-            unlock();
-        }
-
-        LOG.info("successfully create table {} with id {}", tableName, tableId);
-    }
-
-    private void createHiveTable(Database db, CreateTableStmt stmt) throws DdlException {
-        Table hiveTable = TableFactory.createTable(stmt, Table.TableType.HIVE);
-        registerTable(db, hiveTable, stmt);
-        LOG.info("successfully create table[{}-{}]", stmt.getTableName(), hiveTable.getId());
-    }
-
-    private void createIcebergTable(Database db, CreateTableStmt stmt) throws DdlException {
-        Table icebergTable = TableFactory.createTable(stmt, Table.TableType.ICEBERG);
-        registerTable(db, icebergTable, stmt);
-        LOG.info("successfully create table[{}-{}]", stmt.getTableName(), icebergTable.getId());
-    }
-
-    private void createHudiTable(Database db, CreateTableStmt stmt) throws DdlException {
-        Table hudiTable = TableFactory.createTable(stmt, Table.TableType.HUDI);
-        registerTable(db, hudiTable, stmt);
-        LOG.info("successfully create table[{}-{}]", stmt.getTableName(), hudiTable.getId());
-    }
-
-    private void createFileTable(Database db, CreateTableStmt stmt) throws DdlException {
-        Table fileTable = TableFactory.createTable(stmt, Table.TableType.FILE);
-        registerTable(db, fileTable, stmt);
-        LOG.info("successfully create table[{}-{}]", stmt.getTableName(), fileTable.getId());
-    }
-
-    private void createJDBCTable(Database db, CreateTableStmt stmt) throws DdlException {
-        String tableName = stmt.getTableName();
-        List<Column> columns = stmt.getColumns();
-        Map<String, String> properties = stmt.getProperties();
-        long tableId = getNextId();
-        JDBCTable jdbcTable = new JDBCTable(tableId, tableName, columns, properties);
-
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-        }
-
-        try {
-            if (getDb(db.getFullName()) == null) {
-                throw new DdlException("database has been dropped when creating table");
-            }
-            if (!db.createTableWithLock(jdbcTable, false)) {
-                if (!stmt.isSetIfNotExists()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
-                } else {
-                    LOG.info("create table [{}] which already exists", tableName);
-                    return;
-                }
-            }
-        } finally {
-            unlock();
-        }
-
-        LOG.info("successfully create jdbc table[{}-{}]", tableName, tableId);
-    }
-
-    private void registerTable(Database db, Table table, CreateTableStmt stmt) throws DdlException {
+    void registerTable(Database db, Table table, CreateTableStmt stmt) throws DdlException {
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
