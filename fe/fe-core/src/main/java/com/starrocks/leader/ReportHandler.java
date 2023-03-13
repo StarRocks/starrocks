@@ -551,7 +551,7 @@ public class ReportHandler extends Daemon {
     }
 
     private static void starletCacheReport(long backendId, Map<String, TStarletCache> starletCaches) {
-        LOG.error("begin to handle starlet cache report from backend {}", backendId);
+        LOG.debug("begin to handle starlet cache report from backend {}", backendId);
         long start = System.currentTimeMillis();
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {

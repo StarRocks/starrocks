@@ -111,6 +111,10 @@ public class Backend extends ComputeNode {
         return this.disksRef;
     }
 
+    public void setStarletCaches(ImmutableMap<String, StarletCacheInfo> caches) {
+        this.starletCacheRef = caches;
+    }
+
     public ImmutableMap<String, StarletCacheInfo> getStarletCaches() {
         return this.starletCacheRef;
     }

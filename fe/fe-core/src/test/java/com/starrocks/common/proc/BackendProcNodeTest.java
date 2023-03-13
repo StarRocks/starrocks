@@ -40,10 +40,14 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.lake.StarletCacheInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
@@ -106,6 +110,11 @@ public class BackendProcNodeTest {
         disks.put("/home/disk1", new DiskInfo("/home/disk1"));
         ImmutableMap<String, DiskInfo> immutableMap = ImmutableMap.copyOf(disks);
         b1.setDisks(immutableMap);
+
+        Map<String, StarletCacheInfo> caches = Maps.newHashMap();
+        caches.put("/home/disk1/cache", new StarletCacheInfo("/home/disk1/cache"));
+        ImmutableMap<String, StarletCacheInfo> immutableMap1 = ImmutableMap.copyOf(caches);
+        b1.setStarletCaches(immutableMap1);
     }
 
     @After
@@ -114,6 +123,13 @@ public class BackendProcNodeTest {
 
     @Test
     public void testResultNormal() throws AnalysisException {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+
         BackendProcNode node = new BackendProcNode(b1);
         ProcResult result;
 
@@ -130,4 +146,28 @@ public class BackendProcNodeTest {
                 result.getColumnNames());
     }
 
+    @Test
+    public void testResulLake() throws AnalysisException {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        BackendProcNode node = new BackendProcNode(b1);
+        ProcResult result;
+
+        // fetch result
+        result = node.fetchResult();
+        Assert.assertNotNull(result);
+        Assert.assertTrue(result instanceof BaseProcResult);
+
+        Assert.assertTrue(result.getRows().size() == 1);
+        Assert.assertEquals(
+                Lists.newArrayList("CachePath", "DataUsedCapacity", "OtherUsedCapacity", "AvailCapacity",
+                        "TotalCapacity", "TotalUsedPct", "State", "PathHash", "StorageMedium", "TabletNum",
+                        "DataTotalCapacity", "DataUsedPct"),
+                result.getColumnNames());
+    }
 }

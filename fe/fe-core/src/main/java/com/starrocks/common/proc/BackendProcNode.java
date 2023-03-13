@@ -51,16 +51,22 @@ import java.util.List;
 import java.util.Map;
 
 public class BackendProcNode implements ProcNodeInterface {
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add(RunMode.allowCreateLakeTable() ? "CachePath" : "RootPath")
-            .add("DataUsedCapacity").add("OtherUsedCapacity").add("AvailCapacity")
-            .add("TotalCapacity").add("TotalUsedPct").add("State").add("PathHash").add("StorageMedium")
-            .add("TabletNum").add("DataTotalCapacity").add("DataUsedPct").build();
+    public ImmutableList<String> titleNames;
 
     private Backend backend;
 
     public BackendProcNode(Backend backend) {
         this.backend = backend;
+        createTitleNames();
+    }
+
+    private void createTitleNames() {
+        ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
+                .add(RunMode.allowCreateLakeTable() ? "CachePath" : "RootPath")
+                .add("DataUsedCapacity").add("OtherUsedCapacity").add("AvailCapacity")
+                .add("TotalCapacity").add("TotalUsedPct").add("State").add("PathHash").add("StorageMedium")
+                .add("TabletNum").add("DataTotalCapacity").add("DataUsedPct");
+        this.titleNames = builder.build();
     }
 
     @Override
@@ -68,7 +74,7 @@ public class BackendProcNode implements ProcNodeInterface {
         Preconditions.checkNotNull(backend);
 
         BaseProcResult result = new BaseProcResult();
-        result.setNames(TITLE_NAMES);
+        result.setNames(titleNames);
 
         if (RunMode.allowCreateLakeTable()) {
             for (Map.Entry<String, StarletCacheInfo> entry : backend.getStarletCaches().entrySet()) {

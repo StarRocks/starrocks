@@ -26,9 +26,11 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TResourceUsage;
+import com.starrocks.thrift.TStarletCache;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
@@ -264,5 +266,46 @@ public class ReportHandlerTest {
             TMasterResult res = handler.handleReport(req);
             Assert.assertEquals(TStatusCode.INTERNAL_ERROR, res.getStatus().getStatus_code());
         }
+    }
+
+    @Test
+    public void testHandleStarletCacheReport() throws TException {
+        Backend be = new Backend(10001, "host1", 8000);
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackendWithBePort(String host, int bePort) {
+                if (host.equals(be.getHost()) && bePort == be.getBePort()) {
+                    return be;
+                }
+                return null;
+            }
+        };
+
+        ReportHandler handler = new ReportHandler();
+
+        TReportRequest req = new TReportRequest();
+
+        TBackend tBackend = new TBackend();
+        tBackend.setHost(be.getHost());
+        tBackend.setBe_port(be.getBePort());
+        req.setBackend(tBackend);
+
+        TDisk disk = new TDisk();
+        Map<String, TDisk> disks = new HashMap<>();
+        disks.put("disk1", disk);
+        req.setDisks(disks);
+
+        TStarletCache starletCache = new TStarletCache();
+        starletCache.setCache_path("cache_path");
+        starletCache.setCache_available_capacity(1000);
+        starletCache.setCache_total_capacity(2000);
+        starletCache.setCache_used_capacity(1000);
+        Map<String, TStarletCache> caches = new HashMap<>();
+        caches.put("cache1", starletCache);
+        req.setStarlet_caches(caches);
+
+        TMasterResult res = handler.handleReport(req);
+        Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
     }
 }
