@@ -133,7 +133,7 @@ uint32_t BinaryDictPageBuilder::count() const {
 }
 
 uint64_t BinaryDictPageBuilder::size() const {
-    return _pool.total_allocated_bytes() + _data_page_builder->size();
+    return _data_page_builder->size();
 }
 
 faststring* BinaryDictPageBuilder::get_dictionary_page() {
