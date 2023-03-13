@@ -88,7 +88,7 @@ public:
 
     void expire_cache();
 
-    void try_evict_cache();
+    void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
 
     MemTracker* mem_tracker() const { return _update_mem_tracker; }
 

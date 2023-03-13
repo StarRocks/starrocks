@@ -182,9 +182,22 @@ void UpdateManager::expire_cache() {
     }
 }
 
-void UpdateManager::try_evict_cache() {
-    _index_cache.try_evict();
-    _update_state_cache.try_evict();
+void UpdateManager::evict_cache(int64_t memory_urgent_level, int64_t memory_high_level) {
+    int64_t capacity = _update_state_cache.capacity();
+    int64_t size = _update_state_cache.size();
+    int64_t memory_urgent = capacity * memory_urgent_level / 100;
+    int64_t memory_high = capacity * memory_high_level / 100;
+
+    if (size > memory_urgent) {
+        _update_state_cache.try_evict(memory_urgent);
+    }
+
+    size = _update_state_cache.size();
+    if (size > memory_high) {
+        int64_t target_memory = std::max((size * 9 / 10), memory_high);
+        _update_state_cache.try_evict(target_memory);
+    }
+    return;
 }
 
 string UpdateManager::memory_stats() {

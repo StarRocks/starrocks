@@ -305,20 +305,14 @@ public:
         return ret;
     }
 
-    void try_evict() {
+    void try_evict(size_t target_capacity) {
         std::lock_guard<std::mutex> lg(_lock);
-        _evict();
+        _evict(target_capacity);
         return;
     }
 
 private:
-    bool _evict() {
-        // Limit usage to 80% of capacity if possible. If usage is larger than capacity,
-        // we will release all entry which can be release to recycle memory.
-        size_t target_capacity = _capacity * 0.8;
-        if (_size > _capacity) {
-            target_capacity = 0;
-        }
+    bool _evict(size_t target_capacity) {
         auto itr = _list.begin();
         while (_size > target_capacity && itr != _list.end()) {
             Entry* entry = (*itr);
@@ -338,6 +332,8 @@ private:
         }
         return _size <= _capacity;
     }
+
+    bool _evict() { return _evict(_capacity); }
 
     mutable std::mutex _lock;
     List _list;

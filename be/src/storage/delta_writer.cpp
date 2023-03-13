@@ -112,18 +112,15 @@ Status DeltaWriter::_init() {
     if (_tablet->updates() != nullptr) {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
-            _storage_engine->update_manager()->try_evict_cache();
-            if (tracker->limit_exceeded()) {
-                auto msg = strings::Substitute(
-                        "Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
-                        " Memory stats of top five tablets: $3",
-                        _opt.tablet_id, tracker->consumption(), tracker->limit(),
-                        _storage_engine->update_manager()->topn_memory_stats(5));
-                LOG(WARNING) << msg;
-                Status st = Status::MemoryLimitExceeded(msg);
-                _set_state(kUninitialized, st);
-                return st;
-            }
+            auto msg = strings::Substitute(
+                    "Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
+                    " Memory stats of top five tablets: $3",
+                    _opt.tablet_id, tracker->consumption(), tracker->limit(),
+                    _storage_engine->update_manager()->topn_memory_stats(5));
+            LOG(WARNING) << msg;
+            Status st = Status::MemoryLimitExceeded(msg);
+            _set_state(kUninitialized, st);
+            return st;
         }
         if (_tablet->updates()->is_error()) {
             auto msg = fmt::format("Tablet is in error state, tablet_id: {} {}", _tablet->tablet_id(),

@@ -260,6 +260,8 @@ private:
     // All these xxx_callback() functions are for Background threads
     // update cache expire thread
     void* _update_cache_expire_thread_callback(void* arg);
+    // update cache evict thread
+    void* _update_cache_evict_thread_callback(void* arg);
 
     // unused rowset monitor thread
     void* _unused_rowset_monitor_thread_callback(void* arg);
@@ -338,6 +340,7 @@ private:
     std::atomic<bool> _bg_worker_stopped{false};
     // thread to expire update cache;
     std::thread _update_cache_expire_thread;
+    std::thread _update_cache_evict_thread;
     std::thread _unused_rowset_monitor_thread;
     // thread to monitor snapshot expiry
     std::thread _garbage_sweeper_thread;
