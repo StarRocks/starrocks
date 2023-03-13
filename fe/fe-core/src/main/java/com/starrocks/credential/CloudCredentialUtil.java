@@ -54,16 +54,16 @@ public class CloudCredentialUtil {
         });
     }
 
-
-
-    // Supported URI:
-    // ADLS Gen2:
-    // abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<path>/<file_name>
-    // ADLS Gen1:
-    // ADLS Gen1's path don't need to be parsed, storage account and container is unnecessary for it.
-    // adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>
-    // Blob
-    // wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<path>/<file_name>
+    /**
+     *  Supported URI:
+     *  ADLS Gen2:
+     *      abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<path>/<file_name>
+     *  ADLS Gen1:
+     *  ADLS Gen1's path don't need to be parsed, storage account and container is unnecessary for it.
+     *      adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>
+     *  Blob
+     *      wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<path>/<file_name>
+     */
     public static AzureStoragePath parseAzureStoragePath(String path) {
         try {
             URI uri = new URI(path);
