@@ -177,15 +177,7 @@ private:
 
     int64_t _scan_limit = 0;
     workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;
-<<<<<<< HEAD
-=======
     std::atomic<workgroup::RunningQueryToken*> _wg_running_query_token_atomic_ptr = nullptr;
-
-    // STREAM MV
-    std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
-
-    std::unique_ptr<QuerySpillManager> _spill_manager;
->>>>>>> 6f0bd88fe ([BugFix] Release workgroup token immediately when fragment is cancelled (#19310))
 };
 
 class QueryContextManager {
