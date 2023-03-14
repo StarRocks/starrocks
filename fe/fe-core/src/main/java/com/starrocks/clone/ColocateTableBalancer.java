@@ -22,7 +22,6 @@
 package com.starrocks.clone;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -268,6 +267,21 @@ public class ColocateTableBalancer extends MasterDaemon {
         cleanRelocationInfoMap(groupIds);
     }
 
+    public static boolean needToForceRepair(TabletStatus st, LocalTablet tablet, Set<Long> backendsSet) {
+        boolean hasBad = false;
+        for (Replica replica : tablet.getImmutableReplicas()) {
+            if (!backendsSet.contains(replica.getBackendId())) {
+                continue;
+            }
+            if (replica.isBad()) {
+                hasBad = true;
+                break;
+            }
+        }
+
+        return hasBad && st == TabletStatus.COLOCATE_REDUNDANT;
+    }
+
     /*
      * Check every tablet of a group, if replica's location does not match backends in group, relocating those
      * replicas, and mark that group as unstable.
@@ -342,7 +356,7 @@ public class ColocateTableBalancer extends MasterDaemon {
                         // So it does not matter if tablets of other indexes are not matched.
                         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                             Preconditions.checkState(backendBucketsSeq.size() == index.getTablets().size(),
-                                    backendBucketsSeq.size() + " vs. " + index.getTablets().size());
+                                    backendBucketsSeq.size() + " v.s. " + index.getTablets().size());
                             int idx = 0;
                             for (Long tabletId : index.getTabletIdsInOrder()) {
                                 LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
@@ -361,6 +375,7 @@ public class ColocateTableBalancer extends MasterDaemon {
                                         // clone in situation like temporarily restart BE Nodes.
                                         if (tablet.readyToBeRepaired(st, colocateUnhealthyPrio)) {
                                             LOG.debug("get unhealthy tablet {} in colocate table. status: {}",
+<<<<<<< HEAD
                                                     tablet.getId(),
                                                     st);
 
@@ -370,12 +385,15 @@ public class ColocateTableBalancer extends MasterDaemon {
                                             adjustBackendSetIfReplicaBad(idx, tablet, st, groupId, db.getClusterName(),
                                                     ignoreSingleReplicaCheck);
 
+=======
+                                                    tablet.getId(), st);
+>>>>>>> 0b33f1ee5 ([BugFix] Fix colocate table cannot repair after set bad (#19443))
                                             TabletSchedCtx tabletCtx = new TabletSchedCtx(
                                                     TabletSchedCtx.Type.REPAIR, db.getClusterName(),
                                                     db.getId(), tableId, partition.getId(), index.getId(),
                                                     tablet.getId(),
                                                     System.currentTimeMillis());
-                                            // the tablet status will be set again when being scheduled
+                                            // the tablet status will be checked and set again when being scheduled
                                             tabletCtx.setTabletStatus(st);
                                             // using HIGH priority, because we want to stabilize the colocate group
                                             // as soon as possible
@@ -384,14 +402,13 @@ public class ColocateTableBalancer extends MasterDaemon {
                                             tabletCtx.setColocateGroupId(groupId);
                                             tabletCtx.setTablet(tablet);
                                             ColocateRelocationInfo info = group2ColocateRelocationInfo.get(groupId);
-                                            if (info != null && info.getRelocationForRepair() &&
-                                                    st == TabletStatus.COLOCATE_MISMATCH) {
-                                                tabletCtx.setRelocationForRepair(true);
-                                            } else {
-                                                tabletCtx.setRelocationForRepair(false);
-                                            }
+                                            tabletCtx.setRelocationForRepair(info != null
+                                                    && info.getRelocationForRepair()
+                                                    && st == TabletStatus.COLOCATE_MISMATCH);
 
-                                            AddResult res = tabletScheduler.addTablet(tabletCtx, false /* not force */);
+                                            // For bad replica, we ignore the size limit of scheduler queue
+                                            AddResult res = tabletScheduler.addTablet(tabletCtx,
+                                                    needToForceRepair(st, tablet, bucketsSeq) /* forcefully add or not */);
                                             if (res == AddResult.LIMIT_EXCEED) {
                                                 // tablet in scheduler exceed limit, skip this group and check next one.
                                                 LOG.info("number of scheduling tablets in tablet scheduler"
@@ -791,6 +808,7 @@ public class ColocateTableBalancer extends MasterDaemon {
             return Sets.newHashSet();
         }
     }
+<<<<<<< HEAD
 
     void adjustBackendSetIfReplicaBad(int tabletOrderIdx, LocalTablet tablet, TabletStatus st, GroupId groupId,
                                       String clusterName, boolean ignoreSingleReplicaCheck) {
@@ -870,4 +888,6 @@ public class ColocateTableBalancer extends MasterDaemon {
                     tablet.getId(), badReplicaIdList, savedBackendSet, currentBackendsSet);
         }
     }
+=======
+>>>>>>> 0b33f1ee5 ([BugFix] Fix colocate table cannot repair after set bad (#19443))
 }
