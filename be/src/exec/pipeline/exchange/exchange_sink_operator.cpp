@@ -278,8 +278,8 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
         delta_statistic->to_pb(chunk_request->mutable_query_statistics());
     }
 
-    TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment,
-                              attachment_physical_bytes, _brpc_dest_addr};
+    TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(chunk_request), attachment,
+                              attachment_physical_bytes,   _brpc_dest_addr};
     RETURN_IF_ERROR(_parent->_buffer->add_request(info));
 
     return Status::OK();
