@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.ExceptionChecker;
@@ -43,6 +42,8 @@ public class JsonTypeTest extends PlanTestBase {
                 " v_FLOAT FLOAT," +
                 " v_VARCHAR VARCHAR," +
                 " v_CHAR CHAR," +
+                " v_DATE DATE," +
+                " v_DATETIME DATETIME, " +
                 " v_decimal decimal128(32,1)" +
                 ") DUPLICATE KEY (v_id) " +
                 "DISTRIBUTED BY HASH (v_id) " +
@@ -167,26 +168,16 @@ public class JsonTypeTest extends PlanTestBase {
             assertPlanContains("select cast(v_json as DECIMAL128(32,1)) from tjson_test",
                     "CAST(2: v_json AS DECIMAL128(32,1))");
             assertPlanContains("select cast(v_decimal AS JSON) from tjson_test",
-                    "CAST(13: v_decimal AS JSON)");
+                    "CAST(15: v_decimal AS JSON)");
         }
 
-        List<String> notAllowedCastTypes = Arrays.asList("date", "datetime");
-        for (String notAllowType : notAllowedCastTypes) {
-            String columnCastSql = String.format("select cast(v_json as %s) from tjson_test", notAllowType);
-            ExceptionChecker.expectThrowsWithMsg(
-                    SemanticException.class,
-                    String.format(
-                            "Invalid type cast from json to %s in sql `test.tjson_test.v_json`",
-                            notAllowType),
-                    () -> getFragmentPlan(columnCastSql)
-            );
-
-            String functionCastSql = String.format("select cast(parse_json('') as %s)", notAllowType);
-            ExceptionChecker.expectThrowsWithMsg(
-                    SemanticException.class,
-                    String.format("Invalid type cast from json to %s in sql `parse_json('')`", notAllowType),
-                    () -> getFragmentPlan(functionCastSql)
-            );
+        {
+            // Temporal types
+            List<String> temporalTypeList = Arrays.asList("date", "datetime");
+            for (String temporalType : temporalTypeList) {
+                String columnCastSql = String.format("select cast(v_%s as JSON) from tjson_test", temporalType);
+                getFragmentPlan(columnCastSql);
+            }
         }
 
     }
