@@ -35,7 +35,6 @@
 package com.starrocks.clone;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -276,6 +275,21 @@ public class ColocateTableBalancer extends LeaderDaemon {
         cleanRelocationInfoMap(groupIds);
     }
 
+    public static boolean needToForceRepair(TabletStatus st, LocalTablet tablet, Set<Long> backendsSet) {
+        boolean hasBad = false;
+        for (Replica replica : tablet.getImmutableReplicas()) {
+            if (!backendsSet.contains(replica.getBackendId())) {
+                continue;
+            }
+            if (replica.isBad()) {
+                hasBad = true;
+                break;
+            }
+        }
+
+        return hasBad && st == TabletStatus.COLOCATE_REDUNDANT;
+    }
+
     /*
      * Check every tablet of a group, if replica's location does not match backends in group, relocating those
      * replicas, and mark that group as unstable.
@@ -350,7 +364,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                         // So it does not matter if tablets of other indexes are not matched.
                         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                             Preconditions.checkState(backendBucketsSeq.size() == index.getTablets().size(),
-                                    backendBucketsSeq.size() + " vs. " + index.getTablets().size());
+                                    backendBucketsSeq.size() + " v.s. " + index.getTablets().size());
                             int idx = 0;
                             for (Long tabletId : index.getTabletIdsInOrder()) {
                                 LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
@@ -369,21 +383,13 @@ public class ColocateTableBalancer extends LeaderDaemon {
                                         // clone in situation like temporarily restart BE Nodes.
                                         if (tablet.readyToBeRepaired(st, colocateUnhealthyPrio)) {
                                             LOG.debug("get unhealthy tablet {} in colocate table. status: {}",
-                                                    tablet.getId(),
-                                                    st);
-
-                                            // If tablet has bad replica, `getColocateHealthStatus()` will also return
-                                            // COLOCATE_MISMATCH, we need to replace the backend which owns the bad
-                                            // replica.
-                                            adjustBackendSetIfReplicaBad(idx, tablet, st, groupId,
-                                                    ignoreSingleReplicaCheck);
-
+                                                    tablet.getId(), st);
                                             TabletSchedCtx tabletCtx = new TabletSchedCtx(
                                                     TabletSchedCtx.Type.REPAIR,
                                                     db.getId(), tableId, partition.getId(), index.getId(),
                                                     tablet.getId(),
                                                     System.currentTimeMillis());
-                                            // the tablet status will be set again when being scheduled
+                                            // the tablet status will be checked and set again when being scheduled
                                             tabletCtx.setTabletStatus(st);
                                             // using HIGH priority, because we want to stabilize the colocate group
                                             // as soon as possible
@@ -392,14 +398,13 @@ public class ColocateTableBalancer extends LeaderDaemon {
                                             tabletCtx.setColocateGroupId(groupId);
                                             tabletCtx.setTablet(tablet);
                                             ColocateRelocationInfo info = group2ColocateRelocationInfo.get(groupId);
-                                            if (info != null && info.getRelocationForRepair() &&
-                                                    st == TabletStatus.COLOCATE_MISMATCH) {
-                                                tabletCtx.setRelocationForRepair(true);
-                                            } else {
-                                                tabletCtx.setRelocationForRepair(false);
-                                            }
+                                            tabletCtx.setRelocationForRepair(info != null
+                                                    && info.getRelocationForRepair()
+                                                    && st == TabletStatus.COLOCATE_MISMATCH);
 
-                                            AddResult res = tabletScheduler.addTablet(tabletCtx, false /* not force */);
+                                            // For bad replica, we ignore the size limit of scheduler queue
+                                            AddResult res = tabletScheduler.addTablet(tabletCtx,
+                                                    needToForceRepair(st, tablet, bucketsSeq) /* forcefully add or not */);
                                             if (res == AddResult.LIMIT_EXCEED) {
                                                 // tablet in scheduler exceed limit, skip this group and check next one.
                                                 LOG.info("number of scheduling tablets in tablet scheduler"
@@ -797,77 +802,6 @@ public class ColocateTableBalancer extends LeaderDaemon {
             return Sets.newHashSet(info.getLastBackendsPerBucketSeq().get(ctx.getTabletOrderIdx()));
         } else {
             return Sets.newHashSet();
-        }
-    }
-
-    void adjustBackendSetIfReplicaBad(int tabletOrderIdx, LocalTablet tablet, TabletStatus st, GroupId groupId,
-                                      boolean ignoreSingleReplicaCheck) {
-        if (st != TabletStatus.COLOCATE_MISMATCH) {
-            return;
-        }
-
-        List<Replica> replicas = tablet.getImmutableReplicas();
-        if (!ignoreSingleReplicaCheck && replicas.size() <= 1) {
-            return;
-        }
-
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
-        ClusterLoadStatistic statistic = globalStateMgr.getTabletScheduler().getLoadStatistic();
-        ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
-
-        Set<Long> currentBackendsSet = colocateIndex.getTabletBackendsByGroup(groupId, tabletOrderIdx);
-        Set<Long> savedBackendSet = ImmutableSet.copyOf(currentBackendsSet);
-        List<Long> badReplicaIdList = Lists.newArrayList();
-        Set<Long> unavailableBeIdsInGroup = getUnavailableBeIdsInGroup(infoService, colocateIndex, groupId);
-        List<Long> availableBeIds = getAvailableBeIds(infoService);
-        Set<Long> removedBackendIdSet = Sets.newHashSet();
-        boolean isBackendSetChanged = false;
-
-        // Traverse all replicas of the tablet to check if we need to replace backend of bad replica.
-        for (Replica replica : replicas) {
-            long backendId = replica.getBackendId();
-            if (replica.isBad() && currentBackendsSet.contains(backendId)) {
-                badReplicaIdList.add(replica.getId());
-                long replaceBackendId = -1;
-                List<List<Long>> backendsPerBucketSeq =
-                        Lists.newArrayList(colocateIndex.getBackendsPerBucketSeq(groupId));
-                List<Long> flatBackendsPerBucketSeq =
-                        backendsPerBucketSeq.stream().flatMap(List::stream).collect(Collectors.toList());
-                // Get the aggregated number of replicas per backend and sort it in desc order, if we have to replace
-                // some backend in the current backend set, we will choose the backend with the least number
-                // of replicas first. The returned list only contains available backend.
-                List<Map.Entry<Long, Long>> backendWithReplicaNum =
-                        getSortedBackendReplicaNumPairs(availableBeIds, unavailableBeIdsInGroup, statistic,
-                                flatBackendsPerBucketSeq);
-
-                int idx = backendWithReplicaNum.size() - 1;
-                while (idx >= 0) {
-                    long chosenBackendId = backendWithReplicaNum.get(idx).getKey();
-                    if (chosenBackendId != backendId && !currentBackendsSet.contains(chosenBackendId) &&
-                            !removedBackendIdSet.contains(chosenBackendId)) {
-                        replaceBackendId = chosenBackendId;
-                        removedBackendIdSet.add(backendId);
-                        break;
-                    }
-                    idx--;
-                }
-
-                if (replaceBackendId != -1) {
-                    currentBackendsSet.add(replaceBackendId);
-                    currentBackendsSet.remove(backendId);
-                    isBackendSetChanged = true;
-                }
-            }
-        }
-
-        if (isBackendSetChanged) {
-            // Backend set changed, update metadata in ColocateIndex, ColocateBalancer will arrange tablet migration
-            // based on the new backend set.
-            colocateIndex.setBackendsSetByIdxForGroup(groupId, tabletOrderIdx, currentBackendsSet);
-            LOG.info("backend set changed because of bad replica, tablet id: {}, bad replica: {}," +
-                    " old backend set: {}, new backend set: {}",
-                    tablet.getId(), badReplicaIdList, savedBackendSet, currentBackendsSet);
         }
     }
 }
