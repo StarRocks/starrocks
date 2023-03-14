@@ -181,6 +181,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
                     overflow = true;
                 }
             } else if constexpr (CastToString::extend_type<RunTimeCppType<FromType>>()) {
+                // Cast these types to string in json
                 auto v = viewer.value(row);
                 std::string str = CastToString::apply<RunTimeCppType<FromType>, std::string>(v);
                 value = JsonValue::from_string(str);

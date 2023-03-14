@@ -157,7 +157,7 @@ private:
 struct CastToString {
     template <typename Type, typename ResultType>
     static std::string apply(const Type& v) {
-        if constexpr (IsDate<Type> || IsTimestamp<Type> || IsDecimal<Type>) {
+        if constexpr (IsTemporal<Type>() || IsDecimal<Type>) {
             // DateValue, TimestampValue, DecimalV2
             return v.to_string();
         } else if constexpr (IsInt128<Type>) {
@@ -171,7 +171,7 @@ struct CastToString {
 
     template <typename Type>
     static bool constexpr extend_type() {
-        return (IsDate<Type> || IsTimestamp<Type> || IsDecimal<Type> || IsInt128<Type>);
+        return (IsTemporal<Type>() || IsDecimal<Type> || IsInt128<Type>);
     }
 };
 

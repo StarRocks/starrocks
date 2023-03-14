@@ -21,6 +21,7 @@
 #include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "exprs/cast_expr.h"
+#include "exprs/decimal_cast_expr.h"
 
 namespace starrocks {
 
@@ -54,6 +55,7 @@ public:
     template <class T, typename = std::enable_if<is_type_complete_v<typename ColumnTraits<T>::ColumnType>, void>>
     Status do_visit(const FixedLengthColumn<T>& col) {
         if constexpr (CastToString::extend_type<T>()) {
+            // Cast extended type to string in JSON
             auto value = col.get(_row).template get<T>();
             std::string str = CastToString::apply<T, std::string>(value);
             _add_element(std::move(str));
@@ -63,6 +65,16 @@ public:
         } else {
             return Status::NotSupported("not supported");
         }
+        return {};
+    }
+
+    template <class T>
+    Status do_visit(const DecimalV3Column<T>& col) {
+        int precision = col.precision();
+        int scale = col.scale();
+        auto value = col.get(_row).template get<T>();
+        auto str = DecimalV3Cast::to_string<T>(value, precision, scale);
+        _add_element(std::move(str));
         return {};
     }
 

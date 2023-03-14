@@ -29,8 +29,11 @@
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/datetime_value.h"
 #include "runtime/time_types.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/timestamp_value.h"
 #include "util/json.h"
 #include "util/slice.h"
 
@@ -1840,6 +1843,12 @@ TEST_F(VectorizedCastExprTest, sqlToJson) {
         JsonValue json = JsonValue::from_int(1);
         EXPECT_EQ(R"(1)", evaluateCastToJson<TYPE_JSON>(cast_expr, &json));
     }
+    // temporal
+    {
+        EXPECT_EQ(R"("2023-03-14")", evaluateCastToJson<TYPE_DATE>(cast_expr, DateValue::create(2023, 3, 14)));
+        EXPECT_EQ(R"("2023-03-14 01:02:03")",
+                  evaluateCastToJson<TYPE_DATETIME>(cast_expr, TimestampValue::create(2023, 3, 14, 1, 2, 3)));
+    }
 }
 
 TTypeDesc gen_multi_array_type_desc(const TPrimitiveType::type field_type, size_t dim) {
@@ -2150,11 +2159,11 @@ TEST_F(VectorizedCastExprTest, struct_to_json) {
     ASSERT_EQ(2, ptr->size());
     Datum json1 = ptr->get(0);
     ASSERT_FALSE(json1.is_null());
-    ASSERT_EQ("{\"id\": 1, \"name\": \"park\"}", json1.get_json()->to_string_uncheck());
+    ASSERT_EQ(R"({"id": 1, "name": "park"})", json1.get_json()->to_string_uncheck());
 
     Datum json2 = ptr->get(1);
     ASSERT_FALSE(json2.is_null());
-    ASSERT_EQ("{\"id\": 2, \"name\": \"menlo\"}", json2.get_json()->to_string_uncheck());
+    ASSERT_EQ(R"({"id": 2, "name": "menlo"})", json2.get_json()->to_string_uncheck());
 }
 
 TEST_F(VectorizedCastExprTest, map_to_json) {
@@ -2192,11 +2201,11 @@ TEST_F(VectorizedCastExprTest, map_to_json) {
     ASSERT_EQ(2, ptr->size());
     Datum json1 = ptr->get(0);
     ASSERT_FALSE(json1.is_null());
-    ASSERT_EQ("{\"1\": \"menlo\", \"2\": \"park\"}", json1.get_json()->to_string_uncheck());
+    ASSERT_EQ(R"({"1": "menlo", "2": "park"})", json1.get_json()->to_string_uncheck());
 
     Datum json2 = ptr->get(1);
     ASSERT_FALSE(json2.is_null());
-    ASSERT_EQ("{\"3\": \"palo\", \"4\": \"alto\"}", json2.get_json()->to_string_uncheck());
+    ASSERT_EQ(R"({"3": "palo", "4": "alto"})", json2.get_json()->to_string_uncheck());
 }
 
 TEST_F(VectorizedCastExprTest, unsupported_test) {
