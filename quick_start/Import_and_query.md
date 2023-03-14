@@ -86,7 +86,7 @@ StarRocks 拓展支持多种函数、视图、以及外部表。
 
 ### 函数
 
-StarRocks 中支持多种函数，包括：[日期函数](/sql-reference/sql-functions/date-time-functions/convert_tz.md)，[地理位置函数](/sql-reference/sql-functions/spatial-functions/st_astext.md)，[字符串函数](/sql-reference/sql-functions/string-functions/append_trailing_char_if_absent.md)，[聚合函数](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)，[Bitmap 函数](/sql-reference/sql-functions/bitmap-functions/bitmap_and.md)，[数组函数](/sql-reference/sql-functions/array-functions/array_append.md)，[cast 函数](/sql-reference/sql-functions/cast.md)，[hash 函数](/sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)，[加密函数](/sql-reference/sql-functions/encryption-functions/md5.md)，[窗口函数](/sql-reference/sql-functions/Window_function.md) 等。
+StarRocks 中支持多种函数，包括：[日期函数](/sql-reference/sql-functions/date-time-functions/convert_tz.md)，[地理位置函数](/sql-reference/sql-functions/spatial-functions/st_astext.md)，[字符串函数](/sql-reference/sql-functions/string-functions/append_trailing_char_if_absent.md)，[聚合函数](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)，[Bitmap 函数](/sql-reference/sql-functions/bitmap-functions/bitmap_and.md)，[数组函数](/sql-reference/sql-functions/array-functions/array_append.md)，[cast 函数](/sql-reference/sql-functions/cast.md)，[hash 函数](/sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)，[加密函数](/sql-reference/sql-functions/crytographic-functions/md5.md)，[窗口函数](/sql-reference/sql-functions/Window_function.md) 等。
 
 ### 视图
 
