@@ -227,8 +227,10 @@ public:
         size_t size = sizeof(TabletUpdates);
 
         size += _edit_version_infos.capacity() * sizeof(std::unique_ptr<EditVersionInfo>);
-        for (size_t i = 0; i < _edit_version_infos.capacity(); i++) {
-            size += _edit_version_infos[i]->mem_usage();
+        for (size_t i = 0; i < _edit_version_infos.size(); i++) {
+            if (_edit_version_infos[i] != nullptr) {
+                size += _edit_version_infos[i]->mem_usage();
+            }
         }
 
         size += _pending_commits.size() * sizeof(RowsetSharedPtr);
