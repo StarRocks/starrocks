@@ -1567,6 +1567,9 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_TO_JSON(TYPE_DECIMAL128, allow_throw_exception);
                 CASE_TO_JSON(TYPE_STRUCT, allow_throw_exception);
                 CASE_TO_JSON(TYPE_MAP, allow_throw_exception);
+                CASE_TO_JSON(TYPE_DATE, allow_throw_exception);
+                CASE_TO_JSON(TYPE_TIME, allow_throw_exception);
+                CASE_TO_JSON(TYPE_DATETIME, allow_throw_exception);
             default:
                 LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
                              << ", to type: " << type_to_string(to_type);
