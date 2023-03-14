@@ -142,7 +142,7 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
         return Status::InvalidArgument("LIST-annotated list should be repeated");
     }
 
-    // This indicate if this list is nullable.
+    // This indicates if this list is nullable.
     bool is_optional = schema_is_optional(level1_schema);
     if (is_optional) {
         cur_level_info.max_def_level++;
