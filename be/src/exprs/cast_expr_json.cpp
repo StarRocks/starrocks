@@ -108,22 +108,31 @@ public:
         } else {
             _builder->add(_field_name, vpack::Value(vpack::ValueType::Object));
         }
-        size_t map_size = col.get_map_size(_row);
-        size_t map_start = col.get_map_size(_row - 1);
+        auto [map_start, map_size] = col.get_map_offset_size(_row);
         auto key_col = col.keys_column();
         auto val_col = col.values_column();
 
-        for (int i = 0; i < map_size; i++) {
-            int index = map_start + i;
-            // TODO(murphy) cast to string instead of debug
+        if (key_col->has_null()) {
+            return Status::NotSupported("key of Map should not be nullable");
+        }
+        if (key_col->is_nullable()) {
+            key_col = ColumnHelper::as_column<NullableColumn>(key_col)->data_column();
+        }
+
+        for (int i = map_start; i < map_start + map_size; i++) {
             std::string name;
             if (key_col->is_binary()) {
                 auto binary_col = ColumnHelper::as_column<BinaryColumn>(key_col);
-                name = binary_col->get_slice(index);
+                name = binary_col->get_slice(i);
+            } else if (key_col->is_large_binary()) {
+                auto binary_col = ColumnHelper::as_column<LargeBinaryColumn>(key_col);
+                name = binary_col->get_slice(i);
             } else {
-                name = key_col->debug_item(index);
+                // TODO(murphy) cast to string instead of debug
+                name = key_col->debug_item(i);
             }
-            RETURN_IF_ERROR(cast_datum_to_json(val_col, index, name, _builder));
+            // VLOG(2) << "map key: " << key_col->debug_item(i) << " , name=" << name;
+            RETURN_IF_ERROR(cast_datum_to_json(val_col, i, name, _builder));
         }
 
         if (!_builder->isClosed()) {

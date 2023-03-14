@@ -186,6 +186,7 @@ public:
     ColumnPtr values_column() const { return _values; }
 
     size_t get_map_size(size_t idx) const;
+    std::pair<size_t, size_t> get_map_offset_size(size_t idx) const;
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 
