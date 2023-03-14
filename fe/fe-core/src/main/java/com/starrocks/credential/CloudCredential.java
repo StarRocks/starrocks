@@ -37,4 +37,7 @@ public interface CloudCredential {
      * Write credential into thrift.
      */
     void toThrift(List<TCloudProperty> properties);
+
+    // Generate unique credential string, used in FileSystem cache
+    String getCredentialString();
 }
