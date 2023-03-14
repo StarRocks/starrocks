@@ -109,7 +109,7 @@ public class TablePEntryObject implements PEntryObject {
                 tblUUID = ALL_TABLES_UUID;
             } else {
                 Table table = mgr.getMetadataMgr().getTable(catalogName, database.getOriginName(), tokens.get(1));
-                if (table == null) {
+                if (table == null || table.isView() || table.isMaterializedView()) {
                     throw new PrivObjNotFoundException("cannot find table " +
                             tokens.get(1) + " in db " + tokens.get(0));
                 }
