@@ -543,7 +543,7 @@ Your StarRocks database `test_db` contains a table named `table8`. The table con
 
 Your data file `example8.csv` also consists of three columns, which are mapped in sequence onto `col2`, `col1`, and `col3` of `table8`.
 
-If you want to load all data from `example3.csv` into `table3`, run the following command:
+If you want to load all data from `example8.csv` into `table8`, run the following command:
 
 ```SQL
 LOAD LABEL test_db.label8
