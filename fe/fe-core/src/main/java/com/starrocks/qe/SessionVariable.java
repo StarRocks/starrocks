@@ -35,6 +35,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
@@ -518,7 +519,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
-    private boolean enableProfile = false;
+    private boolean enableProfile = Config.profile_enable;
 
     // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
