@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.credential;
+package com.starrocks.credential.aws;
 
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudProperty;
 import com.starrocks.thrift.TCloudType;
@@ -23,7 +25,7 @@ import java.util.LinkedList;
 import java.util.List;
 public class AWSCloudConfiguration implements CloudConfiguration {
 
-    private AWSCloudCredential awsCloudCredential;
+    private final AWSCloudCredential awsCloudCredential;
 
     private boolean enablePathStyleAccess = false;
 
@@ -65,7 +67,7 @@ public class AWSCloudConfiguration implements CloudConfiguration {
     }
 
     @Override
-    public String toString() {
+    public String getCredentialString() {
         return "AWSCloudConfiguration{" +
                 "awsCloudCredential=" + awsCloudCredential +
                 ", enablePathStyleAccess=" + enablePathStyleAccess +

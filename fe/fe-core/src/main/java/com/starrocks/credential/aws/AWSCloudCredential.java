@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.credential;
+package com.starrocks.credential.aws;
 
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
@@ -23,6 +23,8 @@ import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
 import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
 import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
 import com.google.common.base.Preconditions;
+import com.starrocks.credential.CloudConfigurationConstants;
+import com.starrocks.credential.CloudCredential;
 import com.starrocks.credential.provider.AssumedRoleCredentialProvider;
 import com.starrocks.thrift.TCloudProperty;
 import org.apache.hadoop.conf.Configuration;
@@ -210,7 +212,7 @@ public class AWSCloudCredential implements CloudCredential {
     }
 
     @Override
-    public String toString() {
+    public String getCredentialString() {
         return "AWSCloudCredential{" +
                 "useAWSSDKDefaultBehavior=" + useAWSSDKDefaultBehavior +
                 ", useInstanceProfile=" + useInstanceProfile +
