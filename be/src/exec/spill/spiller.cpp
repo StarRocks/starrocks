@@ -82,14 +82,17 @@ Status Spiller::_run_flush_task(RuntimeState* state, const MemTablePtr& mem_tabl
     opts.name = _opts.name;
     ASSIGN_OR_RETURN(auto block, _block_manager->acquire_block(opts));
 
-    // @TODO reuse context
-    FormatterContext ctx;
-    size_t num_rows_flushed = 0;
-    RETURN_IF_ERROR(mem_table->flush([&](const auto& chunk) {
-        num_rows_flushed += chunk->num_rows();
-        RETURN_IF_ERROR(_formatter->serialize(ctx, chunk, block));
-        return Status::OK();
-    }));
+    {
+        SCOPED_TIMER(_metrics.write_io_timer);
+        // @TODO reuse context
+        FormatterContext ctx;
+        size_t num_rows_flushed = 0;
+        RETURN_IF_ERROR(mem_table->flush([&](const auto& chunk) {
+            num_rows_flushed += chunk->num_rows();
+            RETURN_IF_ERROR(_formatter->serialize(ctx, chunk, block));
+            return Status::OK();
+        }));
+    }
     RETURN_IF_ERROR(block->flush());
     _block_manager->release_block(block);
 

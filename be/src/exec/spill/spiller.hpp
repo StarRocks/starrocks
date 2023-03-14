@@ -87,6 +87,7 @@ Status Spiller::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& g
 
 template <class TaskExecutor, class MemGuard>
 StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
+    SCOPED_TIMER(_metrics.restore_timer);
     DCHECK(has_output_data());
 
     RETURN_IF_ERROR(_get_spilled_task_status());
@@ -96,6 +97,7 @@ StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor
     // @TODO(silverbullet233): reuse ctx
     FormatterContext ctx;
     ASSIGN_OR_RETURN(chunk, _input_stream->get_next(ctx));
+    COUNTER_UPDATE(_metrics.restore_rows, chunk->num_rows());
     _restore_read_rows += chunk->num_rows();
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
     return chunk;
