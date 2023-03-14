@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryQueueManager;
@@ -32,6 +33,7 @@ import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStarletCache;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.utframe.StarRocksAssert;
@@ -307,5 +309,36 @@ public class ReportHandlerTest {
 
         TMasterResult res = handler.handleReport(req);
         Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
+    }
+
+    @Test
+    public void testStarletCacheReport() {
+        Backend be = new Backend(10001, "host1", 8000);
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long backendId) {
+                if (backendId == (be.getId())) {
+                    return be;
+                }
+                return null;
+            }
+        };
+
+        TStarletCache starletCache = new TStarletCache();
+        starletCache.setCache_path("cache_path");
+        starletCache.setCache_available_capacity(1000);
+        starletCache.setCache_total_capacity(2000);
+        starletCache.setCache_used_capacity(1000);
+        starletCache.setStorage_medium(TStorageMedium.HDD);
+        Map<String, TStarletCache> caches = new HashMap<>();
+        caches.put("cache1", starletCache);
+
+        ReportHandler handler = new ReportHandler();
+        Deencapsulation.invoke(handler, "starletCacheReport", be.getId(), caches);
+
+        Assert.assertEquals(1001, be.getCacheAvailableCapacityB());
+        Assert.assertEquals(2000, be.getCacheTotalCapacityB());
+        Assert.assertEquals(1000, be.getCacheUsedCapacityB());
     }
 }

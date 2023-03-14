@@ -38,9 +38,12 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
@@ -193,8 +196,31 @@ public class BackendsProcDirTest {
         Assert.assertTrue(result instanceof BaseProcResult);
     }
 
+    @Test
+    public void testFetchResultLake() throws AnalysisException {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        BackendsProcDir dir;
+        ProcResult result;
+
+        dir = new BackendsProcDir(systemInfoService);
+        result = dir.fetchResult();
+        Assert.assertNotNull(result);
+        Assert.assertTrue(result instanceof BaseProcResult);
+
+        Assert.assertEquals(31, result.getColumnNames().size());
+        Assert.assertEquals("CacheUsedCapacity", result.getColumnNames().get(28));
+        Assert.assertEquals("CacheAvailCapacity", result.getColumnNames().get(29));
+        Assert.assertEquals("CacheTotalCapacity", result.getColumnNames().get(30));
+    }
+
     @Test    
     public void testIPTitle() {
-        Assert.assertTrue(BackendsProcDir.TITLE_NAMES.get(1).equals("IP"));
+        Assert.assertEquals("IP", BackendsProcDir.getTitleNames().get(1));
     }
 }

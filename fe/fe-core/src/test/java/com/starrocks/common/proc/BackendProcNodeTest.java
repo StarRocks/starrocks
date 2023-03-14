@@ -147,7 +147,7 @@ public class BackendProcNodeTest {
     }
 
     @Test
-    public void testResulLake() throws AnalysisException {
+    public void testResultLake() throws AnalysisException {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
@@ -163,7 +163,7 @@ public class BackendProcNodeTest {
         Assert.assertNotNull(result);
         Assert.assertTrue(result instanceof BaseProcResult);
 
-        Assert.assertTrue(result.getRows().size() == 1);
+        Assert.assertEquals(1, result.getRows().size());
         Assert.assertEquals(
                 Lists.newArrayList("CachePath", "DataUsedCapacity", "OtherUsedCapacity", "AvailCapacity",
                         "TotalCapacity", "TotalUsedPct", "State", "PathHash", "StorageMedium", "TabletNum",

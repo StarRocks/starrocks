@@ -34,7 +34,7 @@ public class ShowBackendsStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : BackendsProcDir.TITLE_NAMES) {
+        for (String title : BackendsProcDir.getTitleNames()) {
             builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
         }
         return builder.build();

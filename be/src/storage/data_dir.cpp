@@ -73,10 +73,16 @@ DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, T
           _disk_capacity_bytes(0),
           _storage_medium(storage_medium),
           _is_used(false),
+#ifdef USE_STAROS
+          _cache_available_bytes(0),
+          _cache_capacity_bytes(0),
+          _cache_used_bytes(0),
+#endif
           _tablet_manager(tablet_manager),
           _txn_manager(txn_manager),
           _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)),
-          _current_shard(0) {}
+          _current_shard(0) {
+}
 
 DataDir::~DataDir() {
     delete _id_generator;

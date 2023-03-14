@@ -62,8 +62,13 @@ import java.util.concurrent.TimeUnit;
 public class BackendsProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(BackendsProcDir.class);
 
-    public static final ImmutableList<String> TITLE_NAMES;
-    static {
+    private SystemInfoService clusterInfoService;
+
+    public BackendsProcDir(SystemInfoService clusterInfoService) {
+        this.clusterInfoService = clusterInfoService;
+    }
+
+    public static ImmutableList<String> getTitleNames() {
         ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
                 .add("BackendId").add("IP").add("HeartbeatPort")
                 .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat")
@@ -75,13 +80,7 @@ public class BackendsProcDir implements ProcDirInterface {
             builder.add("StarletPort").add("WorkerId");
             builder.add("CacheUsedCapacity").add("CacheAvailCapacity").add("CacheTotalCapacity");
         }
-        TITLE_NAMES = builder.build();
-    }
-
-    private SystemInfoService clusterInfoService;
-
-    public BackendsProcDir(SystemInfoService clusterInfoService) {
-        this.clusterInfoService = clusterInfoService;
+        return builder.build();
     }
 
     @Override
@@ -89,7 +88,7 @@ public class BackendsProcDir implements ProcDirInterface {
         Preconditions.checkNotNull(clusterInfoService);
 
         BaseProcResult result = new BaseProcResult();
-        result.setNames(TITLE_NAMES);
+        result.setNames(getTitleNames());
 
         final List<List<String>> backendInfos = getClusterBackendInfos();
         for (List<String> backendInfo : backendInfos) {
