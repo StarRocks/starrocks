@@ -321,16 +321,22 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-        @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR),
-        @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR)
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR)
     })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
         // if unixTime < 0, we should return null, throw a exception and let BE process
-        if (unixTime.getBigint() < 0) {
+        long value = 0;
+        if (unixTime.getValue() instanceof Integer) {
+            value = unixTime.getInt();
+        } else {
+            value = unixTime.getBigint();
+        }
+        if (value < 0) {
             throw new AnalysisException("unixtime should larger than zero");
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
-                LocalDateTime.ofInstant(Instant.ofEpochSecond(unixTime.getBigint()), TimeUtils.getTimeZone().toZoneId()));
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
         return ConstantOperator.createVarchar(dl.toString());
     }
 
