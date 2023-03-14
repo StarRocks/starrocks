@@ -244,6 +244,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         TNetworkAddress brpc_addr;
         brpc_addr.hostname = _node_info->host;
         brpc_addr.port = _node_info->brpc_port;
+        open_closure->cntl.http_request().set_content_type("application/proto");
         auto http_stub = BrpcStubCache::create_http_stub(brpc_addr);
         http_stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
     } else {
@@ -568,6 +569,7 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
             TNetworkAddress brpc_addr;
             brpc_addr.hostname = _node_info->host;
             brpc_addr.port = _node_info->brpc_port;
+            _add_batch_closures[_current_request_index]->cntl.http_request().set_content_type("application/proto");
             auto http_stub = BrpcStubCache::create_http_stub(brpc_addr);
             http_stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
                                                 &_add_batch_closures[_current_request_index]->result,
@@ -583,6 +585,7 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
             TNetworkAddress brpc_addr;
             brpc_addr.hostname = _node_info->host;
             brpc_addr.port = _node_info->brpc_port;
+            _add_batch_closures[_current_request_index]->cntl.http_request().set_content_type("application/proto");
             auto http_stub = BrpcStubCache::create_http_stub(brpc_addr);
             http_stub->tablet_writer_add_chunk(
                     &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
