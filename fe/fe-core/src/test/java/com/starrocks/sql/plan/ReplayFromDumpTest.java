@@ -686,4 +686,28 @@ public class ReplayFromDumpTest {
                 "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  equal join conjunct: [3807: ref_id, BIGINT, true] = [3680: deal_id, BIGINT, true]"));
     }
+
+    @Test
+    public void testGroupByDistinctColumnSkewHint() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_skew_hint"), null,
+                        TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
+                "  |  <slot 39> : 39: year\n" +
+                "  |  <slot 42> : 42: case\n" +
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)" +
+                ""));
+    }
+
+    @Test
+    public void testGroupByDistinctColumnOptimization() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_optimize"), null,
+                        TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
+                "  |  <slot 39> : 39: year\n" +
+                "  |  <slot 42> : 42: case\n" +
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)" +
+                ""));
+    }
 }
