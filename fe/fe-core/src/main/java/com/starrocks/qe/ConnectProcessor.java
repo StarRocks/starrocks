@@ -605,6 +605,17 @@ public class ConnectProcessor {
                 ctx.getSessionVariable().setMaxPushdownConditionsPerColumn(
                         queryOptions.getMax_pushdown_conditions_per_column());
             }
+            if (queryOptions.isSetParallel_exec_instance_num()) {
+                ctx.getSessionVariable().setParallelExecInstanceNum(
+                        queryOptions.getParallel_exec_instance_num());
+            }
+            if (queryOptions.isSetMax_parallel_scan_instance_num()) {
+                ctx.getSessionVariable().setMaxParallelScanInstanceNum(
+                        queryOptions.getMax_parallel_scan_instance_num());
+            }
+            if (queryOptions.isSetIs_report_success()) {
+                ctx.getSessionVariable().setReportSuccess(queryOptions.isIs_report_success());
+            }
         } else {
             // for compatibility, all following variables are moved to TQueryOptions.
             if (request.isSetExecMemLimit()) {

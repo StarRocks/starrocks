@@ -81,7 +81,7 @@ StatusOr<pipeline::MorselQueuePtr> ScanNode::convert_scan_range_to_morsel_queue(
     }
 
     int dop = _scan_dop(scan_ranges, request);
-    return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels), dop);
+    return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels), dop, io_tasks_per_scan_operator());
 }
 
 } // namespace starrocks

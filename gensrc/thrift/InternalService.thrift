@@ -171,6 +171,12 @@ struct TQueryOptions {
   60: optional i32 query_delivery_timeout;
 
   67: optional bool enable_pipeline_query_statistic = false;
+
+  // The following params only exist on 2.2 2.3, to avoid upgrade inconsistency
+  //  (if start from a low number, say 80, this id may be used by another param in the new version),
+  // start from 1000
+  1000: optional i32 parallel_exec_instance_num;
+  1001: optional i32 max_parallel_scan_instance_num;
 }
 
 

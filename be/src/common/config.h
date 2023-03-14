@@ -660,6 +660,20 @@ CONF_Int64(pipeline_sink_brpc_dop, "8");
 // exceeds it*pipeline_exec_thread_pool_thread_num.
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 
+// The arguments of multilevel feedback pipeline_driver_queue. It prioritizes small queries over larger ones,
+// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
+CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");
+CONF_Double(pipeline_driver_queue_ratio_of_adjacent_queue, "1.2");
+// 0 represents PriorityScanTaskQueue (by default), while 1 represents MultiLevelFeedScanTaskQueue.
+// - PriorityScanTaskQueue prioritizes scan tasks with lower committed times.
+// - MultiLevelFeedScanTaskQueue prioritizes scan tasks with shorter execution time.
+//   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
+CONF_Int64(pipeline_scan_queue_mode, "0");
+// The arguments of MultiLevelFeedScanTaskQueue. It prioritizes small queries over larger ones,
+// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
+CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
+CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
+
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
@@ -715,6 +729,8 @@ CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_mInt32(parquet_header_max_size, "16384");
 CONF_Bool(parquet_late_materialization_enable, "true");
+
+CONF_Int32(io_tasks_per_scan_operator, "4");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory

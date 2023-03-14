@@ -37,9 +37,9 @@ std::vector<TInternalScanRange*> FixedMorselQueue::olap_scan_ranges() const {
     return res;
 }
 
-FixedMorselQueue::FixedMorselQueue(Morsels&& morsels, int dop)
+FixedMorselQueue::FixedMorselQueue(Morsels&& morsels, int dop, int max_io_task_per_op)
         : _morsels(std::move(morsels)), _num_morsels(_morsels.size()), _pop_index(0), _scan_dop(dop) {
-    int io_parallelism = dop * ScanOperator::MAX_IO_TASKS_PER_OP;
+    int io_parallelism = dop * max_io_task_per_op;
     if (dop > 1 && _num_morsels <= io_parallelism) {
         for (int i = 0; i < dop; i++) {
             _next_idx_per_operator[i] = 0;
