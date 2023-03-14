@@ -1393,6 +1393,9 @@ CONF_Int64(vector_query_cache_capacity, "536870912");
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
 
+// In k8s we should use ip to report error log url
+CONF_Bool(force_use_ip_as_localhost, "false");
+
 // exception_stack_level controls when to print exception's stack
 // -1, enable print all exceptions' stack
 // 0, disable print exceptions' stack

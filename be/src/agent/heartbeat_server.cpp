@@ -219,8 +219,10 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
     if (master_info.__isset.backend_ip) {
         //master_info.backend_ip may be an IP or domain name, and it should be renamed 'backend_host', as it requires compatibility with historical versions, the name is still 'backend_ ip'
         if (master_info.backend_ip != BackendOptions::get_localhost()) {
-            LOG(WARNING) << master_info.backend_ip << " not equal to to backend localhost "
-                         << BackendOptions::get_localhost();
+            if (!config::force_use_ip_as_localhost) {
+                LOG(WARNING) << master_info.backend_ip << " not equal to to backend localhost "
+                             << BackendOptions::get_localhost();
+            }
             // step1: check master_info.backend_ip is IP or FQDN
             bool fe_saved_is_valid_ip = is_valid_ip(master_info.backend_ip);
             if (fe_saved_is_valid_ip && is_valid_ip(BackendOptions::get_localhost())) {
@@ -258,7 +260,9 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
 
             for (auto& host : hosts) {
                 if (host.get_host_address() == ip) {
-                    BackendOptions::set_localhost(master_info.backend_ip, ip);
+                    if (!config::force_use_ip_as_localhost) {
+                        BackendOptions::set_localhost(master_info.backend_ip, ip);
+                    }
                     set_new_localhost = true;
                     break;
                 }
