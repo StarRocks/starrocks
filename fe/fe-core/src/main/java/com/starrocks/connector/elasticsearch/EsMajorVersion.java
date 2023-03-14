@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.external.elasticsearch;
+package com.starrocks.connector.elasticsearch;
 
 /**
  * Elasticsearch major version information, useful to check client's query compatibility with the Rest API.

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/external/elasticsearch/EsShardPartitionsTest.java
+//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/external/elasticsearch/VersionPhaseTest.java
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -32,28 +32,42 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.external.elasticsearch;
+package com.starrocks.connector.elasticsearch;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.GlobalStateMgrTestUtil;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.ExceptionChecker;
+import mockit.Expectations;
+import mockit.Injectable;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import java.util.ArrayList;
+import java.util.List;
 
-public class EsShardPartitionsTest extends EsTestCase {
+import static org.junit.Assert.assertTrue;
+
+public class VersionPhaseTest extends EsTestCase {
 
     @Test
-    public void testPartition() throws Exception {
-        EsTable esTable = (EsTable) GlobalStateMgr.getCurrentState()
-                .getDb(GlobalStateMgrTestUtil.testDb1)
-                .getTable(GlobalStateMgrTestUtil.testEsTableId1);
-        EsShardPartitions esShardPartitions = EsShardPartitions.findShardPartitions("doe",
-                loadJsonFromFile("data/es/test_search_shards.json"));
-        EsTablePartitions esTablePartitions = EsTablePartitions.fromShardPartitions(esTable, esShardPartitions);
-        assertNotNull(esTablePartitions);
-        assertEquals(1, esTablePartitions.getUnPartitionedIndexStates().size());
-        assertEquals(5, esTablePartitions.getEsShardPartitions("doe").getShardRoutings().size());
+    public void testWorkFlow(@Injectable EsRestClient client) throws Exception {
+        List<Column> columns = new ArrayList<>();
+        Column k1 = new Column("k1", Type.BIGINT);
+        columns.add(k1);
+        EsTable esTableBefore7X = fakeEsTable("fake", "test", "doc", columns);
+        SearchContext context = new SearchContext(esTableBefore7X);
+
+        new Expectations(client) {
+            {
+                client.version();
+                minTimes = 0;
+                result = EsMajorVersion.V_6_X;
+            }
+        };
+        VersionPhase versionPhase = new VersionPhase(client);
+        ExceptionChecker.expectThrowsNoException(() -> versionPhase.preProcess(context));
+        ExceptionChecker.expectThrowsNoException(() -> versionPhase.execute(context));
+        assertTrue(context.version().on(EsMajorVersion.V_6_X));
     }
+
 }

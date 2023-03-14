@@ -15,15 +15,11 @@
 
 package com.starrocks.connector.elasticsearch;
 
-import com.google.common.collect.Maps;
-import com.starrocks.catalog.EsResource;
+import com.starrocks.catalog.EsTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.external.elasticsearch.EsRestClient;
-import com.starrocks.external.elasticsearch.EsUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -61,59 +57,57 @@ public class ElasticsearchConnector
      */
     public ElasticsearchConnector(ConnectorContext contex) throws DdlException {
         this.catalogName = contex.getCatalogName();
-        this.properties = processCompatibleProperties(contex.getProperties());
+        this.properties = processDefaultValue(contex.getProperties());
         this.esRestClient = new EsRestClient(this.nodes, this.username, this.password, this.enableSsl);
     }
 
-    private Map<String, String> processCompatibleProperties(Map<String, String> props) throws DdlException {
-        // Compatible with "StarRocks On ES" interfaces
-        Map<String, String> properties = Maps.newHashMap();
-        for (Map.Entry<String, String> kv : props.entrySet()) {
-            properties.put(StringUtils.removeStart(kv.getKey(), EsResource.ES_PROPERTIES_PREFIX), kv.getValue());
-        }
-        nodes = properties.get(EsResource.HOSTS).trim().split(",");
+    /**
+     * add some default value
+     */
+    private Map<String, String> processDefaultValue(Map<String, String> properties) throws DdlException {
+        nodes = properties.get(EsTable.HOSTS).trim().split(",");
         if (properties.containsKey("ssl")) {
-            properties.put(EsResource.ES_NET_SSL, properties.remove("ssl"));
+            properties.put(EsTable.ES_NET_SSL, properties.remove("ssl"));
         }
-        if (properties.containsKey(EsResource.ES_NET_SSL)) {
-            enableSsl = EsUtil.tryGetBoolean(properties, EsResource.ES_NET_SSL);
+        if (properties.containsKey(EsTable.ES_NET_SSL)) {
+            enableSsl = EsUtil.tryGetBoolean(properties, EsTable.ES_NET_SSL);
         } else {
-            properties.put(EsResource.ES_NET_SSL, String.valueOf(enableSsl));
+            properties.put(EsTable.ES_NET_SSL, String.valueOf(enableSsl));
         }
 
         if (properties.containsKey("username")) {
-            properties.put(EsResource.USER, properties.remove("username"));
+            properties.put(EsTable.USER, properties.remove("username"));
         }
-        if (StringUtils.isNotBlank(properties.get(EsResource.USER))) {
-            username = properties.get(EsResource.USER).trim();
+        if (StringUtils.isNotBlank(properties.get(EsTable.USER))) {
+            username = properties.get(EsTable.USER).trim();
         }
 
-        if (StringUtils.isNotBlank(properties.get(EsResource.PASSWORD))) {
-            password = properties.get(EsResource.PASSWORD).trim();
+        if (StringUtils.isNotBlank(properties.get(EsTable.PASSWORD))) {
+            password = properties.get(EsTable.PASSWORD).trim();
         }
 
         if (properties.containsKey("doc_value_scan")) {
-            properties.put(EsResource.DOC_VALUE_SCAN, properties.remove("doc_value_scan"));
+            properties.put(EsTable.DOC_VALUE_SCAN, properties.remove("doc_value_scan"));
         }
-        if (properties.containsKey(EsResource.DOC_VALUE_SCAN)) {
-            enableDocValueScan = EsUtil.tryGetBoolean(properties, EsResource.DOC_VALUE_SCAN);
+        if (properties.containsKey(EsTable.DOC_VALUE_SCAN)) {
+            enableDocValueScan = EsUtil.tryGetBoolean(properties, EsTable.DOC_VALUE_SCAN);
         } else {
-            properties.put(EsResource.DOC_VALUE_SCAN, String.valueOf(enableDocValueScan));
+            properties.put(EsTable.DOC_VALUE_SCAN, String.valueOf(enableDocValueScan));
         }
 
         if (properties.containsKey("keyword_sniff")) {
-            properties.put(EsResource.KEYWORD_SNIFF, properties.remove("keyword_sniff"));
+            properties.put(EsTable.KEYWORD_SNIFF, properties.remove("keyword_sniff"));
         }
-        if (properties.containsKey(EsResource.KEYWORD_SNIFF)) {
-            enableKeywordSniff = EsUtil.tryGetBoolean(properties, EsResource.KEYWORD_SNIFF);
+        if (properties.containsKey(EsTable.KEYWORD_SNIFF)) {
+            enableKeywordSniff = EsUtil.tryGetBoolean(properties, EsTable.KEYWORD_SNIFF);
         } else {
-            properties.put(EsResource.KEYWORD_SNIFF, String.valueOf(enableKeywordSniff));
+            properties.put(EsTable.KEYWORD_SNIFF, String.valueOf(enableKeywordSniff));
         }
 
-        if (properties.containsKey(EsResource.WAN_ONLY)) {
-            enableWanOnly = EsUtil.tryGetBoolean(properties, EsResource.WAN_ONLY);
+        if (properties.containsKey(EsTable.WAN_ONLY)) {
+            enableWanOnly = EsUtil.tryGetBoolean(properties, EsTable.WAN_ONLY);
         } else {
-            properties.put(EsResource.WAN_ONLY, String.valueOf(enableWanOnly));
+            properties.put(EsTable.WAN_ONLY, String.valueOf(enableWanOnly));
         }
         return properties;
     }
@@ -123,16 +117,12 @@ public class ElasticsearchConnector
         if (metadata == null) {
             try {
                 metadata = new ElasticsearchMetadata(esRestClient, catalogName, properties);
-            } catch (StarRocksConnectorException e) {
-                LOG.error("Failed to create jdbc metadata on [catalog : {}]", catalogName, e);
+            } catch (StarRocksESException e) {
+                LOG.error("Failed to create elasticsearch metadata on [catalog : {}]", catalogName, e);
                 throw e;
             }
         }
         return metadata;
     }
 
-    @Override
-    public void shutdown() {
-
-    }
 }

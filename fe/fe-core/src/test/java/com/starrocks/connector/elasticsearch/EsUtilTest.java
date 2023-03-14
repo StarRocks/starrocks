@@ -15,11 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.external.elasticsearch;
+package com.starrocks.connector.elasticsearch;
 
+import com.starrocks.connector.elasticsearch.EsUtil;
 import org.json.JSONException;
-import org.json.simple.JSONObject;
-import org.json.simple.JSONValue;
+import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -48,21 +48,21 @@ public class EsUtilTest {
 
     @Test
     public void testGetJsonObject() {
-        JSONObject json = (JSONObject) JSONValue.parse(jsonStr);
+        JSONObject json = new JSONObject(jsonStr);
         JSONObject upperBoundSetting = EsUtil.getJsonObject(json, "settings.index.bpack.partition", 0);
-        assertTrue(upperBoundSetting.containsKey("upperbound"));
+        assertTrue(upperBoundSetting.has("upperbound"));
         assertEquals("12", upperBoundSetting.get("upperbound"));
 
         JSONObject unExistKey = EsUtil.getJsonObject(json, "set", 0);
         assertNull(unExistKey);
 
         JSONObject singleKey = EsUtil.getJsonObject(json, "settings", 0);
-        assertTrue(singleKey.containsKey("index"));
+        assertTrue(singleKey.has("index"));
     }
 
     @Test(expected = JSONException.class)
     public void testGetJsonObjectWithException() {
-        JSONObject json = (JSONObject) JSONValue.parse(jsonStr);
+        JSONObject json = new JSONObject(jsonStr);
         // only support json object could not get string value directly from this api, exception will be threw
         EsUtil.getJsonObject(json, "settings.index.bpack.partition.upperbound", 0);
     }

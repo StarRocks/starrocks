@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.external.elasticsearch;
+package com.starrocks.connector.elasticsearch;
 
 public class StarRocksESException extends RuntimeException {
 

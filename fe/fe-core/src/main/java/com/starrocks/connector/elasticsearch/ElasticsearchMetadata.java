@@ -14,32 +14,33 @@
 
 package com.starrocks.connector.elasticsearch;
 
-import com.starrocks.catalog.Column;
+import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.KeysDesc;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.EsResource;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.external.elasticsearch.EsRestClient;
-import com.starrocks.external.elasticsearch.EsUtil;
-import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.server.AbstractTableFactory;
+import com.starrocks.server.TableFactoryProvider;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.common.EngineType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
 
 // TODO add meta cache
 public class ElasticsearchMetadata
         implements ConnectorMetadata {
+    private static final Logger LOG = LogManager.getLogger(EsTable.class);
+
+
     private final EsRestClient esRestClient;
     private final Map<String, String> properties;
     private final String catalogName;
@@ -75,48 +76,37 @@ public class ElasticsearchMetadata
         return toEsTable(esRestClient, properties, catalogName, tblName);
     }
 
-    @Override
-    public Statistics getTableStatistics(OptimizerContext session,
-                                         Table table,
-                                         Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate) {
-        return null;
-    }
-
-    @Override
-    public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
-        //TODO when cache
-    }
-
-    @Override
-    public void dropTable(DropTableStmt stmt) throws DdlException {
-        //TODO not implement
-    }
-
-    @Override
-    public void clear() {
-    }
-
     public static EsTable toEsTable(EsRestClient esRestClient,
                                     Map<String, String> properties,
                                     String catalogName,
                                     String tableName) {
-        List<Column> columns = EsUtil.convertColumnSchema(esRestClient, tableName);
+        List<ColumnDef> columns = EsUtil.convertColumnSchema(esRestClient, tableName);
         try {
-            properties.put(EsResource.INDEX, tableName);
-            EsTable esTable = new EsTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
-                    tableName,
+            properties.put(EsTable.INDEX, tableName);
+            Database db = new Database(DEFAULT_DB_ID, DEFAULT_DB);
+            TableName table = new TableName(catalogName, DEFAULT_DB,  tableName);
+            db.setCatalogName(catalogName);
+            CreateTableStmt tableStmt = new CreateTableStmt(false,
+                    false,
+                    table,
                     columns,
+                    EngineType.ELASTICSEARCH.name(),
+                    new KeysDesc(),
+                    new PartitionDesc(),
+                    new DistributionDesc(),
                     properties,
-                    new SinglePartitionInfo(),
-                    catalogName);
+                    new HashMap<>(),
+                    "created by internal es catalog");
+
+            AbstractTableFactory tableFactory = TableFactoryProvider.getFactory(EngineType.ELASTICSEARCH.name());
+            EsTable esTable = (EsTable) tableFactory.createTable(null, db, tableStmt);
             esTable.syncTableMetaData(esRestClient);
             return esTable;
-        } catch (DdlException e) {
-            throw new RuntimeException(e);
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            LOG.error("transform to EsTable Error", e);
+            throw new StarRocksESException("transform to EsTable Error");
         }
     }
+
+
 }

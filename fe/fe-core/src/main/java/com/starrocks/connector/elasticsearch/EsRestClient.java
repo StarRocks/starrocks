@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.external.elasticsearch;
+package com.starrocks.connector.elasticsearch;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.ImmutableList;
@@ -70,8 +70,8 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
-import static com.starrocks.external.elasticsearch.EsUtil.fromJSONArray;
-import static com.starrocks.external.elasticsearch.EsUtil.readTree;
+import static com.starrocks.connector.elasticsearch.EsUtil.getFromJSONArray;
+import static com.starrocks.connector.elasticsearch.EsUtil.readTree;
 
 public class EsRestClient {
 
@@ -321,13 +321,13 @@ public class EsRestClient {
      * indices are same as table
      * @return
      */
-    public Set<String> getIndices() {
+    private Set<String> getIndices() {
         String response = execute("_cat/indices?h=index&format=json&s=index:asc");
         if (Objects.isNull(response)) {
             throw new StarRocksESException("es indexes are null, maybe this is error");
         }
 
-        List<String> allIndices = fromJSONArray(response, String.class);
+        List<String> allIndices = getFromJSONArray(response, String.class);
         return allIndices.stream()
                 .filter(index -> !index.startsWith("."))
                 .collect(Collectors.toSet());
@@ -340,7 +340,7 @@ public class EsRestClient {
      * }
      * Get all alias.
      **/
-    public Map<String, List<String>> getAliases() {
+    private Map<String, List<String>> getAliases() {
         String response = execute("_aliases");
         // key: index, value: aliases
         Map<String, List<String>> aliases = new HashMap<>();

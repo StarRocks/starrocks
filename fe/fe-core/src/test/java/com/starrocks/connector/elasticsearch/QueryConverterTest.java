@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-package com.starrocks.external.elasticsearch;
+package com.starrocks.connector.elasticsearch;
 
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
@@ -31,6 +31,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.connector.elasticsearch.QueryConverter;
+import com.starrocks.connector.elasticsearch.StarRocksESException;
 import org.junit.Assert;
 import org.junit.Test;
 

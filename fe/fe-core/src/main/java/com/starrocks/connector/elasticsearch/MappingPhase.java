@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.external.elasticsearch;
+package com.starrocks.connector.elasticsearch;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;

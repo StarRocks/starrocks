@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-package com.starrocks.external.elasticsearch;
+package com.starrocks.connector.elasticsearch;
 
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;

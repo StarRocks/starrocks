@@ -20,7 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.external.elasticsearch.EsUtil;
+import com.starrocks.connector.elasticsearch.external.EsUtil;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Map;

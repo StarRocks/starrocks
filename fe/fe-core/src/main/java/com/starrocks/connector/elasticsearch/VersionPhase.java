@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.external.elasticsearch;
+package com.starrocks.connector.elasticsearch;
 
 /**
  * Request version from remote ES Cluster. If request fails, set the version with `LATEST`

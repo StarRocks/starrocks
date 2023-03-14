@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.external.elasticsearch;
+package com.starrocks.connector.elasticsearch;
 
 /**
  * Represents a phase of a ES fetch index metadata request e.g. get mapping, get shard location etc through network
