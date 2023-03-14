@@ -14,7 +14,7 @@ SHOW DELETE [FROM <db_name>]
 
 Return fields:
 
-- TableName: the table frow which data is deleted.
+- TableName: the table from which data is deleted.
 - PartitionName: the partition from which data is deleted. If the table is a non-partitioned table, `*` is displayed.
 - CreateTime: the time when the DELETE task was created.
 - DeleteCondition: the specified DELETE condition.
