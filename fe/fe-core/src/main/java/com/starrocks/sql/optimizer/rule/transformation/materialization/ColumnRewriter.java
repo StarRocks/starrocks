@@ -35,7 +35,12 @@ public class ColumnRewriter {
         if (predicate == null) {
             return null;
         }
-        ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, false, false, true, true);
+        ColumnRewriteVisitor visitor =
+                new ColumnWriterBuilder()
+                        .withRewriteContext(rewriteContext)
+                        .withEnableEquivalenceClassesRewrite(true)
+                        .withUseQueryEquivalenceClasses(true)
+                        .build();
         return predicate.accept(visitor, null);
     }
 
@@ -43,23 +48,43 @@ public class ColumnRewriter {
         if (predicate == null) {
             return null;
         }
-        ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, false, false, true, false);
+        ColumnRewriteVisitor visitor =
+                new ColumnWriterBuilder()
+                        .withRewriteContext(rewriteContext)
+                        .withEnableEquivalenceClassesRewrite(true)
+                        .build();
         return predicate.accept(visitor, null);
     }
 
-    public ScalarOperator rewriteViewToQuery(ScalarOperator predicate) {
-        if (predicate == null) {
+    public ColumnRefOperator rewriteViewToQuery(ColumnRefOperator colRef) {
+        if (colRef == null) {
             return null;
         }
-        ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, true, true, false, false);
-        return predicate.accept(visitor, null);
+        ColumnRewriteVisitor visitor =
+                new ColumnWriterBuilder()
+                        .withRewriteContext(rewriteContext)
+                        .withEnableRelationRewrite(true)
+                        .withViewToQuery(true)
+                        .build();
+        ScalarOperator target = colRef.accept(visitor, null);
+        if (target == null || target == colRef) {
+            return null;
+        }
+        return (ColumnRefOperator) target;
     }
 
     public ScalarOperator rewriteViewToQueryWithQueryEc(ScalarOperator predicate) {
         if (predicate == null) {
             return null;
         }
-        ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, true, true, true, true);
+        ColumnRewriteVisitor visitor =
+                new ColumnWriterBuilder()
+                        .withRewriteContext(rewriteContext)
+                        .withEnableRelationRewrite(true)
+                        .withViewToQuery(true)
+                        .withEnableEquivalenceClassesRewrite(true)
+                        .withUseQueryEquivalenceClasses(true)
+                        .build();
         return predicate.accept(visitor, null);
     }
 
@@ -67,7 +92,13 @@ public class ColumnRewriter {
         if (predicate == null) {
             return null;
         }
-        ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, true, true, true, false);
+        ColumnRewriteVisitor visitor =
+                new ColumnWriterBuilder()
+                        .withRewriteContext(rewriteContext)
+                        .withEnableRelationRewrite(true)
+                        .withViewToQuery(true)
+                        .withEnableEquivalenceClassesRewrite(true)
+                        .build();
         return predicate.accept(visitor, null);
     }
 
@@ -75,14 +106,56 @@ public class ColumnRewriter {
         if (predicate == null) {
             return null;
         }
-        ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, true, false, false, false);
+        ColumnRewriteVisitor visitor = new ColumnWriterBuilder()
+                .withRewriteContext(rewriteContext)
+                .withEnableRelationRewrite(true)
+                .build();
         return predicate.accept(visitor, null);
+    }
+
+    public class ColumnWriterBuilder {
+        private RewriteContext rewriteContext;
+        private boolean enableRelationRewrite;
+        private boolean viewToQuery;
+        private boolean enableEquivalenceClassesRewrite;
+        private boolean useQueryEquivalenceClasses;
+
+        ColumnWriterBuilder withRewriteContext(RewriteContext rewriteContext) {
+            this.rewriteContext = rewriteContext;
+            return this;
+        }
+
+        ColumnWriterBuilder withEnableRelationRewrite(boolean enableRelationRewrite) {
+            this.enableRelationRewrite = enableRelationRewrite;
+            return this;
+        }
+
+        ColumnWriterBuilder withViewToQuery(boolean viewToQuery) {
+            this.viewToQuery = viewToQuery;
+            return this;
+        }
+        ColumnWriterBuilder withEnableEquivalenceClassesRewrite(boolean enableEquivalenceClassesRewrite) {
+            this.enableEquivalenceClassesRewrite = enableEquivalenceClassesRewrite;
+            return this;
+        }
+
+        ColumnWriterBuilder withUseQueryEquivalenceClasses(boolean useQueryEquivalenceClasses) {
+            this.useQueryEquivalenceClasses = useQueryEquivalenceClasses;
+            return this;
+        }
+
+        ColumnRewriteVisitor build() {
+            return new ColumnRewriteVisitor(this.rewriteContext,
+                    this.enableRelationRewrite,
+                    this.viewToQuery,
+                    this.enableEquivalenceClassesRewrite,
+                    this.useQueryEquivalenceClasses);
+        }
     }
 
     private static class ColumnRewriteVisitor extends BaseScalarOperatorShuttle {
         private final boolean enableRelationRewrite;
         private final boolean enableEquivalenceClassesRewrite;
-
         private Map<Integer, Integer> srcToDstRelationIdMapping;
         private ColumnRefFactory srcRefFactory;
         private Map<Integer, Map<String, ColumnRefOperator>> dstRelationIdToColumns;
