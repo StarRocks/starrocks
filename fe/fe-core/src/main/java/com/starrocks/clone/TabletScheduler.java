@@ -128,7 +128,7 @@ public class TabletScheduler extends LeaderDaemon {
 
     /*
      * Tablet is added to pendingTablets as well it's id in allTabletIds.
-     * TabletScheduler will take tablet from pendingTablets but will not remove it's id from allTabletIds when
+     * TabletScheduler will take tablet from pendingTablets but will not remove its id from allTabletIds when
      * handling a tablet.
      * Tablet' id can only be removed after the clone task is done(timeout, cancelled or finished).
      * So if a tablet's id is still in allTabletIds, TabletChecker can not add tablet to TabletScheduler.
@@ -715,7 +715,7 @@ public class TabletScheduler extends LeaderDaemon {
      * we don't really need to continue to execute the previously made relocation decision, we just
      * cancel the scheduling by setting the status to HEALTHY.
      * <p>
-     * If some tablets belongs to the same bucket are already scheduled based on the new backend sequence,
+     * If some tablets belong to the same bucket has already been scheduled based on the new backend sequence,
      * we won't try to skip the current scheduling and reset the backend sequence because this will cause the tablets
      * which have finished scheduling to be scheduled again.
      */
@@ -743,9 +743,9 @@ public class TabletScheduler extends LeaderDaemon {
                 if (st != TabletStatus.COLOCATE_MISMATCH) {
                     colocateTableIndex.setBackendsSetByIdxForGroup(ctx.getColocateGroupId(),
                             ctx.getTabletOrderIdx(), lastBackendsSet);
-                    LOG.info("all current backends are available for tablet {}, bucket index: {}, reset backend set to: {}" +
-                            " for colocate group {}, before backend set: {}", ctx.getTabletId(),
-                            ctx.getTabletOrderIdx(), lastBackendsSet,
+                    LOG.info("all current backends are available for tablet {}, bucket index: {}, reset " +
+                                    "backend set to: {} for colocate group {}, before backend set: {}",
+                            ctx.getTabletId(), ctx.getTabletOrderIdx(), lastBackendsSet,
                             ctx.getColocateGroupId(), currentBackendsSet);
                 }
             }
@@ -1105,14 +1105,24 @@ public class TabletScheduler extends LeaderDaemon {
      * return true if delete one replica, otherwise, return false.
      */
     private boolean handleColocateRedundant(TabletSchedCtx tabletCtx) throws SchedException {
-        Preconditions.checkNotNull(tabletCtx.getColocateBackendsSet());
+        Set<Long> backendSet = tabletCtx.getColocateBackendsSet();
+        Preconditions.checkNotNull(backendSet);
         stat.counterReplicaColocateRedundant.incrementAndGet();
-        for (Replica replica : tabletCtx.getReplicas()) {
-            if (tabletCtx.getColocateBackendsSet().contains(replica.getBackendId())) {
-                continue;
+        List<Replica> replicas = tabletCtx.getReplicas();
+        for (Replica replica : replicas) {
+            boolean forceDropBad = false;
+            if (backendSet.contains(replica.getBackendId())) {
+                if (replica.isBad() && replicas.size() > 1) {
+                    forceDropBad = true;
+                    LOG.info("colocate tablet {}, replica {} is bad," +
+                                    "will forcefully drop it, current backend set: {}",
+                            tabletCtx.getTabletId(), replica.getBackendId(), backendSet);
+                } else {
+                    continue;
+                }
             }
 
-            deleteReplicaInternal(tabletCtx, replica, "colocate redundant", false);
+            deleteReplicaInternal(tabletCtx, replica, "colocate redundant", forceDropBad);
             throw new SchedException(Status.FINISHED, "colocate redundant replica is deleted");
         }
         throw new SchedException(Status.SCHEDULE_FAILED, "unable to delete any colocate redundant replicas");
@@ -1120,9 +1130,9 @@ public class TabletScheduler extends LeaderDaemon {
 
     private void deleteReplicaInternal(TabletSchedCtx tabletCtx, Replica replica, String reason, boolean force)
             throws SchedException {
-
         /*
-         * Before deleting a replica, we should make sure that there is no running txn on it and no more txns will be on it.
+         * Before deleting a replica, we should make sure that there is no running txn on it
+         *  and no more txns will be on it.
          * So we do followings:
          * 1. If replica is loadable, set a watermark txn id on it and set it state as DECOMMISSION, but not
          *      deleting it this time. The DECOMMISSION state will ensure that no more txns will be on this replicas.
