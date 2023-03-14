@@ -986,6 +986,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
     }
 
+    public void setActivateAllRolesOnLogin(boolean activateAll) {
+        if (activateAll) {
+            activateAllRolesOnLogin = "ON";
+        } else {
+            activateAllRolesOnLogin = "OFF";
+        }
+    }
+
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
     }
