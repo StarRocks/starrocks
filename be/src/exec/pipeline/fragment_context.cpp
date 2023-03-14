@@ -8,6 +8,15 @@
 
 namespace starrocks::pipeline {
 
+void FragmentContext::cancel(const Status& status) {
+    if (_runtime_state != nullptr && _runtime_state->query_ctx() != nullptr) {
+        _runtime_state->query_ctx()->release_workgroup_token_once();
+    }
+
+    _runtime_state->set_is_cancelled(true);
+    set_final_status(status);
+}
+
 void FragmentContext::set_final_status(const Status& status) {
     if (_final_status.load() != nullptr) {
         return;
