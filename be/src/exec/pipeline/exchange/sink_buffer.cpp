@@ -372,48 +372,42 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
 
-        if (bthread_self()) {
-            Status st;
-            TRY_CATCH_ALL(st, request.send_rpc(closure, _rpc_http_min_size));
-            RETURN_IF_ERROR(st);
-        } else {
+        if (!bthread_self()) {
             // When the driver worker thread sends request and creates the protobuf request,
             // also use process_mem_tracker to record the memory of the protobuf request.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            Status st;
-            TRY_CATCH_ALL(st, request.send_rpc(closure, _rpc_http_min_size));
-            RETURN_IF_ERROR(st);
         }
-
-        return Status::OK();
+        Status st;
+        TRY_CATCH_ALL(st, _send_rpc(closure, request));
+        return st;
     }
 
     return Status::OK();
 }
 
-Status TransmitChunkInfo::send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure,
-                                   int64_t rpc_http_min_size) {
-    if (this->attachment.size() > rpc_http_min_size) {
+Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure,
+                             const TransmitChunkInfo& request) {
+    if (UNLIKELY(request.attachment.size() > _rpc_http_min_size)) {
         butil::IOBuf iobuf;
         butil::IOBufAsZeroCopyOutputStream wrapper(&iobuf);
-        params->SerializeToZeroCopyStream(&wrapper);
+        request.params->SerializeToZeroCopyStream(&wrapper);
         // append params to iobuf
         size_t params_size = iobuf.size();
         closure->cntl.request_attachment().append(&params_size, sizeof(params_size));
         closure->cntl.request_attachment().append(iobuf);
         // append attachment
-        size_t attachment_size = this->attachment.size();
+        size_t attachment_size = request.attachment.size();
         closure->cntl.request_attachment().append(&attachment_size, sizeof(attachment_size));
-        closure->cntl.request_attachment().append(this->attachment);
-        LOG(WARNING) << "issue a http prc, attachment's size = " << attachment_size
+        closure->cntl.request_attachment().append(request.attachment);
+        LOG(WARNING) << "issue a http rpc, attachment's size = " << attachment_size
                      << " , total size = " << closure->cntl.request_attachment().size();
         closure->cntl.http_request().set_content_type("application/proto");
         // create http_stub as needed
-        auto http_stub = BrpcStubCache::create_http_stub(brpc_addr);
+        auto http_stub = BrpcStubCache::create_http_stub(request.brpc_addr);
         http_stub->transmit_chunk_via_http(&closure->cntl, NULL, &closure->result, closure);
     } else {
-        closure->cntl.request_attachment().append(this->attachment);
-        brpc_stub->transmit_chunk(&closure->cntl, this->params.get(), &closure->result, closure);
+        closure->cntl.request_attachment().append(request.attachment);
+        request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
     }
     return Status::OK();
 }

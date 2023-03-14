@@ -53,8 +53,6 @@ struct TransmitChunkInfo {
     butil::IOBuf attachment;
     int64_t attachment_physical_bytes;
     const TNetworkAddress brpc_addr;
-    // send by rpc or http
-    Status send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure, int64_t rpc_http_min_size);
 };
 
 // TimeTrace is introduced to estimate time more accurately.
@@ -113,6 +111,9 @@ private:
     // Try to send rpc if buffer is not empty and channel is not busy
     // And we need to put this function and other extra works(pre_works) together as an atomic operation
     Status _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
+
+    // send by rpc or http
+    Status _send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure, const TransmitChunkInfo& params);
 
     // Roughly estimate network time which is defined as the time between sending a and receiving a packet,
     // and the processing time of both sides are excluded
