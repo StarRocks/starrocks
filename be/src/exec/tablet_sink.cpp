@@ -240,7 +240,15 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     // This ref is for RPC's reference
     open_closure->ref();
     open_closure->cntl.set_timeout_ms(config::tablet_writer_open_rpc_timeout_sec * 1000);
-    _stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
+    if (request.ByteSizeLong() > _parent._rpc_http_min_size) {
+        TNetworkAddress brpc_addr;
+        brpc_addr.hostname = _node_info->host;
+        brpc_addr.port = _node_info->brpc_port;
+        auto http_stub = BrpcStubCache::create_http_stub(brpc_addr);
+        http_stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
+    } else {
+        _stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
+    }
     request.release_id();
     request.release_schema();
 
@@ -553,16 +561,37 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
     _add_batch_closures[_current_request_index]->ref();
     _add_batch_closures[_current_request_index]->reset();
     _add_batch_closures[_current_request_index]->cntl.set_timeout_ms(_rpc_timeout_ms);
+
     if (_enable_colocate_mv_index) {
         request.set_is_repeated_chunk(true);
-        _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
-                                        &_add_batch_closures[_current_request_index]->result,
-                                        _add_batch_closures[_current_request_index]);
+        if (UNLIKELY(request.ByteSizeLong() > _parent._rpc_http_min_size)) {
+            TNetworkAddress brpc_addr;
+            brpc_addr.hostname = _node_info->host;
+            brpc_addr.port = _node_info->brpc_port;
+            auto http_stub = BrpcStubCache::create_http_stub(brpc_addr);
+            http_stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
+                                                &_add_batch_closures[_current_request_index]->result,
+                                                _add_batch_closures[_current_request_index]);
+        } else {
+            _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
+                                            &_add_batch_closures[_current_request_index]->result,
+                                            _add_batch_closures[_current_request_index]);
+        }
     } else {
         DCHECK(request.requests_size() == 1);
-        _stub->tablet_writer_add_chunk(&_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
-                                       &_add_batch_closures[_current_request_index]->result,
-                                       _add_batch_closures[_current_request_index]);
+        if (UNLIKELY(request.ByteSizeLong() > _parent._rpc_http_min_size)) {
+            TNetworkAddress brpc_addr;
+            brpc_addr.hostname = _node_info->host;
+            brpc_addr.port = _node_info->brpc_port;
+            auto http_stub = BrpcStubCache::create_http_stub(brpc_addr);
+            http_stub->tablet_writer_add_chunk(
+                    &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
+                    &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+        } else {
+            _stub->tablet_writer_add_chunk(
+                    &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
+                    &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+        }
     }
     _next_packet_seq++;
 
@@ -852,7 +881,8 @@ bool IndexChannel::has_intolerable_failure() {
 }
 
 OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status, RuntimeState* state)
-        : _pool(pool) {
+        : _pool(pool),
+          _rpc_http_min_size(state->get_rpc_http_min_size()) {
     if (!texprs.empty()) {
         *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs, state);
     }
