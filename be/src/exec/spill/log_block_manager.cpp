@@ -196,6 +196,12 @@ private:
     std::unique_ptr<LogBlockReader> _reader;
 };
 
+LogBlockManager::LogBlockManager(TUniqueId query_id) : _query_id(query_id) {
+    _max_container_bytes = config::experimental_spill_max_log_block_container_bytes > 0
+                                   ? config::experimental_spill_max_log_block_container_bytes
+                                   : kDefaultMaxContainerBytes;
+}
+
 LogBlockManager::~LogBlockManager() {
     for (auto& container : _full_containers) {
         container.reset();
@@ -233,7 +239,7 @@ Status LogBlockManager::release_block(const BlockPtr& block) {
     auto log_block = down_cast<LogBlock*>(block.get());
     auto container = log_block->container();
     TRACE_SPILL_LOG << "release block: " << block->debug_string();
-    bool is_full = container->size() >= config::experimental_spill_max_log_block_container_bytes;
+    bool is_full = container->size() >= _max_container_bytes;
     if (is_full) {
         RETURN_IF_ERROR(container->close());
     }

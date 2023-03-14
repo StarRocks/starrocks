@@ -245,7 +245,7 @@ set(EXEC_FILES
     spill/spiller_factory.cpp
     spill/mem_table.cpp
     spill/dir_manager.cpp
-    spill/formatter.cpp
+    spill/serde.cpp
     spill/input_stream.cpp
     spill/log_block_manager.cpp
     stream/state/mem_state_table.cpp

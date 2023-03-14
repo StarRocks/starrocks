@@ -24,27 +24,27 @@ namespace starrocks {
 namespace spill {
 class SpilledOptions;
 
-enum class FormatterType {
+enum class SerdeType {
     BY_COLUMN,
 };
 
-struct FormatterContext {
+struct SerdeContext {
     std::string serialize_buffer;
     raw::RawString compress_buffer;
 };
 
-// Formatter is used to serialize and deserialize spilled data.
-class Formatter {
+// Serde is used to serialize and deserialize spilled data.
+class Serde {
 public:
-    virtual ~Formatter() = default;
+    virtual ~Serde() = default;
 
     // serialize chunk and append the serialized data into block
-    virtual Status serialize(FormatterContext& ctx, const ChunkPtr& chunk, BlockPtr block) = 0;
+    virtual Status serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) = 0;
     // deserialize data from block, return the chunk after deserialized
-    virtual StatusOr<ChunkUniquePtr> deserialize(FormatterContext& ctx, const BlockPtr block) = 0;
+    virtual StatusOr<ChunkUniquePtr> deserialize(SerdeContext& ctx, const BlockPtr block) = 0;
 };
-using FormatterPtr = std::shared_ptr<Formatter>;
+using SerdePtr = std::shared_ptr<Serde>;
 
-StatusOr<FormatterPtr> create_formatter(SpilledOptions* options);
+StatusOr<SerdePtr> create_serde(SpilledOptions* options);
 } // namespace spill
 } // namespace starrocks

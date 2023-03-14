@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/spill/formatter.h"
+#include "exec/spill/serde.h"
 
 #include "exec/spill/spiller.h"
 #include "gutil/port.h"
@@ -22,14 +22,14 @@
 namespace starrocks {
 namespace spill {
 
-class ColumnarFormatter : public Formatter {
+class ColumnarSerde : public Serde {
 public:
-    ColumnarFormatter(ChunkBuilder chunk_builder, const BlockCompressionCodec* compress_codec)
+    ColumnarSerde(ChunkBuilder chunk_builder, const BlockCompressionCodec* compress_codec)
             : _chunk_builder(std::move(chunk_builder)), _compress_codec(compress_codec) {}
-    ~ColumnarFormatter() = default;
+    ~ColumnarSerde() = default;
 
-    Status serialize(FormatterContext& ctx, const ChunkPtr& chunk, BlockPtr block) override;
-    StatusOr<ChunkUniquePtr> deserialize(FormatterContext& ctx, const BlockPtr block) override;
+    Status serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) override;
+    StatusOr<ChunkUniquePtr> deserialize(SerdeContext& ctx, const BlockPtr block) override;
 
 private:
     size_t serialize_size(const ChunkPtr& chunk) const;
@@ -38,7 +38,7 @@ private:
     const BlockCompressionCodec* _compress_codec = nullptr;
 };
 
-size_t ColumnarFormatter::serialize_size(const ChunkPtr& chunk) const {
+size_t ColumnarSerde::serialize_size(const ChunkPtr& chunk) const {
     size_t total_size = 0;
     for (const auto& column : chunk->columns()) {
         total_size += serde::ColumnArraySerde::max_serialized_size(*column);
@@ -46,7 +46,7 @@ size_t ColumnarFormatter::serialize_size(const ChunkPtr& chunk) const {
     return total_size;
 }
 
-Status ColumnarFormatter::serialize(FormatterContext& ctx, const ChunkPtr& chunk, BlockPtr block) {
+Status ColumnarSerde::serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) {
     // 1. serialize
     size_t max_size = serialize_size(chunk);
     auto& serialize_buffer = ctx.serialize_buffer;
@@ -87,7 +87,7 @@ Status ColumnarFormatter::serialize(FormatterContext& ctx, const ChunkPtr& chunk
     return Status::OK();
 }
 
-StatusOr<ChunkUniquePtr> ColumnarFormatter::deserialize(FormatterContext& ctx, const BlockPtr block) {
+StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, const BlockPtr block) {
     size_t compressed_size, uncompressed_size;
     RETURN_IF_ERROR(block->read_fully(&compressed_size, sizeof(size_t)));
     RETURN_IF_ERROR(block->read_fully(&uncompressed_size, sizeof(size_t)));
@@ -115,11 +115,11 @@ StatusOr<ChunkUniquePtr> ColumnarFormatter::deserialize(FormatterContext& ctx, c
     return chunk;
 }
 
-StatusOr<FormatterPtr> create_formatter(SpilledOptions* options) {
+StatusOr<SerdePtr> create_serde(SpilledOptions* options) {
     auto compress_type = options->compress_type;
     const BlockCompressionCodec* codec = nullptr;
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &codec));
-    return std::make_shared<ColumnarFormatter>(options->chunk_builder, codec);
+    return std::make_shared<ColumnarSerde>(options->chunk_builder, codec);
 }
 } // namespace spill
 } // namespace starrocks

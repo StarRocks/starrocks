@@ -59,8 +59,8 @@ Status Spiller::prepare(RuntimeState* state) {
         }
     }
 
-    ASSIGN_OR_RETURN(_formatter, spill::create_formatter(&_opts));
-    _block_group = std::make_shared<spill::BlockGroup>(_formatter);
+    ASSIGN_OR_RETURN(_serde, spill::create_serde(&_opts));
+    _block_group = std::make_shared<spill::BlockGroup>(_serde);
 #ifndef BE_TEST
     _block_manager = state->query_ctx()->spill_block_manager();
 #endif
@@ -85,11 +85,11 @@ Status Spiller::_run_flush_task(RuntimeState* state, const MemTablePtr& mem_tabl
     {
         SCOPED_TIMER(_metrics.write_io_timer);
         // @TODO reuse context
-        FormatterContext ctx;
+        SerdeContext ctx;
         size_t num_rows_flushed = 0;
         RETURN_IF_ERROR(mem_table->flush([&](const auto& chunk) {
             num_rows_flushed += chunk->num_rows();
-            RETURN_IF_ERROR(_formatter->serialize(ctx, chunk, block));
+            RETURN_IF_ERROR(_serde->serialize(ctx, chunk, block));
             return Status::OK();
         }));
     }

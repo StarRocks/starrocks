@@ -95,7 +95,7 @@ StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor
 
     ChunkPtr chunk;
     // @TODO(silverbullet233): reuse ctx
-    FormatterContext ctx;
+    SerdeContext ctx;
     ASSIGN_OR_RETURN(chunk, _input_stream->get_next(ctx));
     COUNTER_UPDATE(_metrics.restore_rows, chunk->num_rows());
     _restore_read_rows += chunk->num_rows();
@@ -115,7 +115,7 @@ Status Spiller::trigger_restore(RuntimeState* state, TaskExecutor&& executor, Me
             _running_restore_tasks++;
             guard.scoped_begin();
             // @TODO(silverbullet233): reuse ctx
-            FormatterContext ctx;
+            SerdeContext ctx;
             auto res = _input_stream->prefetch(ctx);
 
             _update_spilled_task_status(res.is_end_of_file() ? Status::OK() : res);

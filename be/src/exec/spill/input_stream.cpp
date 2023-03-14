@@ -31,13 +31,13 @@ public:
     bool is_buffer_full() { return _chunk_buffer.get_size() >= _capacity || eof(); }
     bool has_chunk() { return !_chunk_buffer.empty() || eof(); }
 
-    StatusOr<ChunkUniquePtr> get_next(FormatterContext& ctx) override;
+    StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
     bool is_ready() override { return has_chunk(); }
     void close() override {}
 
     bool enable_prefetch() const override { return true; }
 
-    Status prefetch(FormatterContext& ctx) override;
+    Status prefetch(SerdeContext& ctx) override;
 
     StatusOr<ChunkUniquePtr> read_from_buffer();
 
@@ -65,7 +65,7 @@ StatusOr<ChunkUniquePtr> BufferedInputStream::read_from_buffer() {
     return res;
 }
 
-StatusOr<ChunkUniquePtr> BufferedInputStream::get_next(FormatterContext& ctx) {
+StatusOr<ChunkUniquePtr> BufferedInputStream::get_next(SerdeContext& ctx) {
     if (has_chunk()) {
         return read_from_buffer();
     }
@@ -73,7 +73,7 @@ StatusOr<ChunkUniquePtr> BufferedInputStream::get_next(FormatterContext& ctx) {
     return _input_stream->get_next(ctx);
 }
 
-Status BufferedInputStream::prefetch(FormatterContext& ctx) {
+Status BufferedInputStream::prefetch(SerdeContext& ctx) {
     if (is_buffer_full()) {
         return Status::OK();
     }
@@ -97,12 +97,12 @@ Status BufferedInputStream::prefetch(FormatterContext& ctx) {
 
 class UnorderedInputStream : public InputStream {
 public:
-    UnorderedInputStream(const std::vector<BlockPtr>& input_blocks, FormatterPtr formatter)
-            : InputStream(input_blocks), _formatter(std::move(formatter)) {}
+    UnorderedInputStream(const std::vector<BlockPtr>& input_blocks, SerdePtr serde)
+            : InputStream(input_blocks), _serde(std::move(serde)) {}
 
     ~UnorderedInputStream() = default;
 
-    StatusOr<ChunkUniquePtr> get_next(FormatterContext& ctx) override;
+    StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
 
     bool is_ready() override { return false; }
 
@@ -110,16 +110,16 @@ public:
 
 private:
     size_t _current_idx = 0;
-    FormatterPtr _formatter;
+    SerdePtr _serde;
 };
 
-StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(FormatterContext& ctx) {
+StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(SerdeContext& ctx) {
     if (_current_idx >= _input_blocks.size()) {
         return Status::EndOfFile("end of stream");
     }
 
     while (true) {
-        auto res = _formatter->deserialize(ctx, _input_blocks[_current_idx]);
+        auto res = _serde->deserialize(ctx, _input_blocks[_current_idx]);
         if (res.status().is_end_of_file()) {
             _input_blocks[_current_idx].reset();
             _current_idx++;
@@ -145,15 +145,15 @@ public:
 
     ~OrderedInputStream() = default;
 
-    Status init(FormatterPtr formatter, const SortExecExprs* sort_exprs, const SortDescs* descs);
+    Status init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs);
 
-    StatusOr<ChunkUniquePtr> get_next(FormatterContext& ctx) override;
+    StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
     bool is_ready() override { return _merger.is_data_ready(); }
     void close() override {}
 
     bool enable_prefetch() const override { return true; }
 
-    Status prefetch(FormatterContext& ctx) override;
+    Status prefetch(SerdeContext& ctx) override;
 
 private:
     // multiple buffered stream
@@ -162,12 +162,12 @@ private:
     Status _status;
 };
 
-Status OrderedInputStream::init(FormatterPtr formatter, const SortExecExprs* sort_exprs, const SortDescs* descs) {
+Status OrderedInputStream::init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs) {
     std::vector<starrocks::ChunkProvider> chunk_providers;
     for (auto& block : _input_blocks) {
         std::vector<BlockPtr> blocks{block};
         auto stream = std::make_shared<BufferedInputStream>(chunk_buffer_max_size,
-                                                            std::make_shared<UnorderedInputStream>(blocks, formatter));
+                                                            std::make_shared<UnorderedInputStream>(blocks, serde));
         _input_streams.emplace_back(std::move(stream));
         auto input_stream = _input_streams.back();
         auto chunk_provider = [input_stream, this](ChunkUniquePtr* output, bool* eos) {
@@ -178,7 +178,7 @@ Status OrderedInputStream::init(FormatterPtr formatter, const SortExecExprs* sor
                 return false;
             }
             // @TODO(silverbullet233): reuse ctx
-            FormatterContext ctx;
+            SerdeContext ctx;
             auto res = input_stream->get_next(ctx);
             if (!res.status().ok()) {
                 if (!res.status().is_end_of_file()) {
@@ -197,7 +197,7 @@ Status OrderedInputStream::init(FormatterPtr formatter, const SortExecExprs* sor
     return Status::OK();
 }
 
-StatusOr<ChunkUniquePtr> OrderedInputStream::get_next(FormatterContext& ctx) {
+StatusOr<ChunkUniquePtr> OrderedInputStream::get_next(SerdeContext& ctx) {
     ChunkUniquePtr chunk;
     bool should_exit = false;
     std::atomic_bool eos = false;
@@ -212,7 +212,7 @@ StatusOr<ChunkUniquePtr> OrderedInputStream::get_next(FormatterContext& ctx) {
     return std::make_unique<Chunk>();
 }
 
-Status OrderedInputStream::prefetch(FormatterContext& ctx) {
+Status OrderedInputStream::prefetch(SerdeContext& ctx) {
     // prefetch all stream
     size_t eof_num = 0;
     for (auto& input_stream : _input_streams) {
@@ -227,14 +227,14 @@ Status OrderedInputStream::prefetch(FormatterContext& ctx) {
 }
 
 StatusOr<InputStreamPtr> BlockGroup::as_unordered_stream() {
-    auto stream = std::make_shared<UnorderedInputStream>(_blocks, _formatter);
+    auto stream = std::make_shared<UnorderedInputStream>(_blocks, _serde);
     return std::make_shared<BufferedInputStream>(chunk_buffer_max_size, std::move(stream));
 }
 
 StatusOr<InputStreamPtr> BlockGroup::as_ordered_stream(RuntimeState* state, const SortExecExprs* sort_exprs,
                                                        const SortDescs* sort_descs) {
     auto stream = std::make_shared<OrderedInputStream>(_blocks, state);
-    RETURN_IF_ERROR(stream->init(_formatter, sort_exprs, sort_descs));
+    RETURN_IF_ERROR(stream->init(_serde, sort_exprs, sort_descs));
     return stream;
 }
 

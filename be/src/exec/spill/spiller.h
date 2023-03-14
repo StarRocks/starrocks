@@ -25,9 +25,9 @@
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
-#include "exec/spill/formatter.h"
 #include "exec/spill/input_stream.h"
 #include "exec/spill/mem_table.h"
+#include "exec/spill/serde.h"
 #include "exec/spill/spiller_factory.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
@@ -232,7 +232,7 @@ private:
     size_t _spilled_append_rows{};
     size_t _restore_read_rows{};
 
-    std::shared_ptr<spill::Formatter> _formatter; // @TODO make unique
+    std::shared_ptr<spill::Serde> _serde;
     spill::BlockManager* _block_manager = nullptr;
     std::shared_ptr<spill::BlockGroup> _block_group;
     std::shared_ptr<spill::InputStream> _input_stream;

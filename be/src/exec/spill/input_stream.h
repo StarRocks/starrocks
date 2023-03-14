@@ -21,7 +21,7 @@
 #include "exec/sort_exec_exprs.h"
 #include "exec/sorting/sorting.h"
 #include "exec/spill/block_manager.h"
-#include "exec/spill/formatter.h"
+#include "exec/spill/serde.h"
 
 namespace starrocks {
 namespace spill {
@@ -34,14 +34,12 @@ public:
     InputStream(const std::vector<BlockPtr>& input_blocks) : _input_blocks(input_blocks) {}
 
     virtual ~InputStream() = default;
-    virtual StatusOr<ChunkUniquePtr> get_next(FormatterContext& ctx) = 0;
+    virtual StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) = 0;
     virtual bool is_ready() = 0;
     virtual void close() = 0;
 
     virtual bool enable_prefetch() const { return false; }
-    virtual Status prefetch(FormatterContext& ctx) {
-        return Status::NotSupported("input stream doesn't support prefetch");
-    }
+    virtual Status prefetch(SerdeContext& ctx) { return Status::NotSupported("input stream doesn't support prefetch"); }
 
     void mark_is_eof() { _eof = true; }
 
@@ -56,7 +54,7 @@ using InputStreamPtr = std::shared_ptr<InputStream>;
 
 class BlockGroup {
 public:
-    BlockGroup(FormatterPtr formatter) : _formatter(std::move(formatter)) {}
+    BlockGroup(SerdePtr serde) : _serde(std::move(serde)) {}
 
     void append(BlockPtr block) { _blocks.emplace_back(std::move(block)); }
 
@@ -66,7 +64,7 @@ public:
                                                const SortDescs* sort_descs);
 
 private:
-    FormatterPtr _formatter;
+    SerdePtr _serde;
     std::vector<BlockPtr> _blocks;
 };
 

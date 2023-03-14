@@ -46,7 +46,7 @@ using LogBlockContainerPtr = std::shared_ptr<LogBlockContainer>;
 // so theoretically, the number of containers being written at the same time will be equivalent to the number of io threads
 class LogBlockManager : public BlockManager {
 public:
-    LogBlockManager(TUniqueId query_id) : _query_id(query_id) {}
+    LogBlockManager(TUniqueId query_id);
     ~LogBlockManager();
 
     virtual Status open() override;
@@ -69,6 +69,7 @@ private:
     typedef std::shared_ptr<ContainerQueue> ContainerQueuePtr;
 
     TUniqueId _query_id;
+    int64_t _max_container_bytes;
 
     std::atomic<uint64_t> _next_container_id = 0;
     std::mutex _mutex;
@@ -83,6 +84,7 @@ private:
 #ifdef BE_TEST
     DirManager* _dir_mgr = nullptr;
 #endif
+    const static int64_t kDefaultMaxContainerBytes = 10L * 1024 * 1024 * 1024; // 10GB
 };
 } // namespace spill
 } // namespace starrocks
