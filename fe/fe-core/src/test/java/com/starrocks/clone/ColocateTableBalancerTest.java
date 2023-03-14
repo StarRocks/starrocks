@@ -34,7 +34,6 @@
 
 package com.starrocks.clone;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -845,11 +844,6 @@ public class ColocateTableBalancerTest {
         OlapTable table = (OlapTable) database.getTable("tbl3");
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
 
-        // get backend list before set bad
-        List<List<Long>> backendListBefore = ImmutableList.copyOf(
-                colocateTableIndex.getBackendsPerBucketSeq(colocateTableIndex.getGroup(table.getId())));
-        System.out.println(backendListBefore);
-
         List<Partition> partitions = Lists.newArrayList(table.getPartitions());
         LocalTablet tablet = (LocalTablet) partitions.get(0).getBaseIndex().getTablets().get(0);
         tablet.getImmutableReplicas().get(0).setBad(true);
@@ -863,13 +857,11 @@ public class ColocateTableBalancerTest {
             // call twice to trigger the real balance action
             colocateTableBalancer.runAfterCatalogReady();
             colocateTableBalancer.runAfterCatalogReady();
-
-            // get backend list after set bad
-            List<List<Long>> backendListAfter =
-                    colocateTableIndex.getBackendsPerBucketSeq(colocateTableIndex.getGroup(table.getId()));
-            System.out.println(backendListAfter);
-            // backend set changed because of bad replica
-            Assert.assertNotEquals(backendListBefore, backendListAfter);
+            TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
+            List<List<String>> result = tabletScheduler.getPendingTabletsInfo(100);
+            System.out.println(result);
+            Assert.assertEquals(result.get(0).get(0), Long.toString(tablet.getId()));
+            Assert.assertEquals(result.get(0).get(3), "COLOCATE_REDUNDANT");
         } finally {
             Config.tablet_sched_repair_delay_factor_second = oldVal;
         }
