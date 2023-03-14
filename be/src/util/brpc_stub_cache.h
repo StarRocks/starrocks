@@ -84,6 +84,7 @@ public:
         return stub;
     }
 
+    // rarely used, so create as needed
     static std::shared_ptr<doris::PBackendService_Stub> create_http_stub(const TNetworkAddress& taddr) {
         butil::EndPoint endpoint;
         std::string realhost;

@@ -30,9 +30,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
           _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
           _brpc_timeout_ms(std::min(3600, fragment_ctx->runtime_state()->query_options().query_timeout) * 1000),
           _is_dest_merge(is_dest_merge),
-          _rpc_http_min_size(fragment_ctx->runtime_state()->query_options().__isset.rpc_http_min_size
-                                     ? fragment_ctx->runtime_state()->query_options().rpc_http_min_size
-                                     : ((1L << 31) - (1L << 20))) {
+          _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
         // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
