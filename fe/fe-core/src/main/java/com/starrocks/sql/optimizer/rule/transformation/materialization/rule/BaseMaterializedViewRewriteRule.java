@@ -85,14 +85,14 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             MvRewriteContext mvRewriteContext =
                     new MvRewriteContext(mvContext, queryTables, queryExpression, queryColumnRefRewriter, queryPredicateSplit);
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
-            List<OptExpression> candidates = mvRewriter.rewrite();
-            if (!candidates.isEmpty()) {
-                candidates = postRewriteMV(context, candidates);
+            OptExpression candidate = mvRewriter.rewrite();
+            if (candidate != null) {
+                candidate = postRewriteMV(context, candidate);
                 if (queryExpression.getGroupExpression() != null) {
                     int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
                     mvContext.addMatchedGroup(currentRootGroupId);
                 }
-                results.addAll(candidates);
+                results.add(candidate);
             }
         }
 
@@ -105,21 +105,16 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
      * 2. partition prune
      * 3. bucket prune
      */
-    private List<OptExpression> postRewriteMV(OptimizerContext context, List<OptExpression> candidates) {
-        if (candidates == null || candidates.isEmpty()) {
-            return Lists.newArrayList();
+    private OptExpression postRewriteMV(OptimizerContext context, OptExpression candidate) {
+        if (candidate == null) {
+            return null;
         }
-        List<OptExpression> result = Lists.newArrayList();
-        for (OptExpression candidate : candidates) {
-            candidate = new MVColumnPruner().pruneColumns(candidate);
-            candidate = new MVPartitionPruner().prunePartition(context, candidate);
-            result.add(candidate);
-        }
-        return result;
+        candidate = new MVColumnPruner().pruneColumns(candidate);
+        candidate = new MVPartitionPruner().prunePartition(context, candidate);
+        return candidate;
     }
 
     public MaterializedViewRewriter getMaterializedViewRewrite(MvRewriteContext mvContext) {
         return new MaterializedViewRewriter(mvContext);
     }
-
 }

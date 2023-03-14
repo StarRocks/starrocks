@@ -20,14 +20,14 @@ order by
     custdist desc,
     c_count desc ;
 [result]
-TOP-N (order by [[21: count DESC NULLS LAST, 20: count DESC NULLS LAST]])
-    TOP-N (order by [[21: count DESC NULLS LAST, 20: count DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{21: count=count(21: count)}] group by [[20: count]] having [null]
-            EXCHANGE SHUFFLE[20]
-                AGGREGATE ([LOCAL] aggregate [{21: count=count()}] group by [[20: count]] having [null]
-                    AGGREGATE ([GLOBAL] aggregate [{20: count=count(20: count)}] group by [[1: C_CUSTKEY]] having [null]
-                        EXCHANGE SHUFFLE[1]
-                            AGGREGATE ([LOCAL] aggregate [{20: count=count(10: O_ORDERKEY)}] group by [[1: C_CUSTKEY]] having [null]
-                                SCAN (columns[97: c_custkey, 112: o_comment, 113: o_orderkey] predicate[NOT 112: o_comment LIKE %unusual%deposits%])
+TOP-N (order by [[19: count DESC NULLS LAST, 18: count DESC NULLS LAST]])
+    TOP-N (order by [[19: count DESC NULLS LAST, 18: count DESC NULLS LAST]])
+        AGGREGATE ([GLOBAL] aggregate [{19: count=count(19: count)}] group by [[18: count]] having [null]
+            EXCHANGE SHUFFLE[18]
+                AGGREGATE ([LOCAL] aggregate [{19: count=count()}] group by [[18: count]] having [null]
+                    AGGREGATE ([GLOBAL] aggregate [{89: count=sum(89: count)}] group by [[81: c_custkey]] having [null]
+                        EXCHANGE SHUFFLE[81]
+                            AGGREGATE ([LOCAL] aggregate [{89: count=sum(83: c_count)}] group by [[81: c_custkey]] having [null]
+                                SCAN (mv[customer_order_mv_agg_mv1] columns[81: c_custkey, 82: o_comment, 83: c_count] predicate[NOT 82: o_comment LIKE %unusual%deposits%])
 [end]
 
