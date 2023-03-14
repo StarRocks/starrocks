@@ -15,6 +15,7 @@ You can insert additional rows of data using INSERT. See [INSERT](../sql-referen
 Log in to StarRocks via your MySQL client, and execute the following statements to insert the following rows of data into the `sr_member` table you have created.
 
 ```SQL
+use sr_hub
 INSERT INTO sr_member
 WITH LABEL insertDemo
 VALUES
