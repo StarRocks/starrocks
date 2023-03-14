@@ -32,6 +32,7 @@
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/page_pointer.h"
 #include "util/coding.h"
+#include "util/once.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -64,7 +65,7 @@ class OrdinalPageIndexIterator;
 
 class OrdinalIndexReader {
 public:
-    OrdinalIndexReader() : _state(kUnloaded), _num_pages(0) {}
+    OrdinalIndexReader() : _load_once(), _num_pages(0) {}
 
     // Multiple callers may call this method concurrently, but only the first one
     // can load the data, the others will wait until the first one finished loading
@@ -101,21 +102,15 @@ public:
         return sizeof(OrdinalIndexReader) + _ordinals.size() * sizeof(ordinal_t) + _pages.size() * sizeof(PagePointer);
     }
 
-    bool loaded() const { return _state.load(std::memory_order_acquire) == kLoaded; }
+    bool loaded() const { return invoked(_load_once); }
 
 private:
     friend OrdinalPageIndexIterator;
 
-    enum State : int {
-        kUnloaded = 0, // data has not been loaded into memory
-        kLoading = 1,  // loading in process
-        kLoaded = 2,   // data was successfully loaded in memory
-    };
-
     Status do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
                    bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker);
 
-    std::atomic<State> _state;
+    OnceFlag _load_once;
     // valid after load
     int _num_pages;
     // _ordinals[i] = first ordinal of the i-th data page,
