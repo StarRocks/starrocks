@@ -68,6 +68,19 @@ public class CallOperator extends ScalarOperator {
         this.isDistinct = isDistinct;
     }
 
+    public CallOperator(CallOperator other) {
+        super(OperatorType.CALL, other.getType());
+
+        // Deep copy here
+        this.arguments = Lists.newArrayList();
+        other.arguments.forEach(p -> this.arguments.add(p.clone()));
+
+        this.fn = other.fn != null ? other.fn.copy() : null;
+        this.isDistinct = other.isDistinct;
+        this.ignoreNulls = other.ignoreNulls;
+        this.fnName = other.fnName;
+    }
+
     public void setIgnoreNulls(boolean ignoreNulls) {
         this.ignoreNulls = ignoreNulls;
     }
@@ -183,12 +196,7 @@ public class CallOperator extends ScalarOperator {
 
     @Override
     public ScalarOperator clone() {
-        CallOperator operator = (CallOperator) super.clone();
-        // Deep copy here
-        List<ScalarOperator> newArguments = Lists.newArrayList();
-        this.arguments.forEach(p -> newArguments.add(p.clone()));
-        operator.arguments = newArguments;
-        return operator;
+        return new CallOperator(this);
     }
 
     @Override
