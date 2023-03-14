@@ -451,11 +451,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             return;
         }
 
-        this.jobState = JobState.FINISHED;
-        this.finishedTimeMs = System.currentTimeMillis();
-
-        writeEditLog(this);
-
         // Replace the current index with shadow index.
         Set<String> modifiedColumns;
         List<MaterializedIndex> droppedIndexes;
@@ -498,6 +493,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 LOG.info("database or table has been dropped while trying to update colocation info for job {}.", jobId);
             }
         }
+
+        this.jobState = JobState.FINISHED;
+        this.finishedTimeMs = System.currentTimeMillis();
+
+        writeEditLog(this);
 
         if (span != null) {
             span.end();
@@ -585,8 +585,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             }
             for (Column mvColumn : mv.getColumns()) {
                 if (modifiedColumns.contains(mvColumn.getName())) {
-                    LOG.warn("Set materialized view {} inactive because the base table's scheme has changed",
-                            mv.getName());
+                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                            "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
+                            mvColumn.getName(), tbl.getName());
                     mv.setActive(false);
                     return;
                 }
