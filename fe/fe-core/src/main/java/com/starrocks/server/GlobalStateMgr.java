@@ -144,6 +144,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.ha.StateChangeExecution;
+import com.starrocks.healthchecker.SafeModeChecker;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
@@ -452,6 +453,8 @@ public class GlobalStateMgr {
 
     private final StatisticAutoCollector statisticAutoCollector;
 
+    private final SafeModeChecker safeModeChecker;
+
     private AnalyzeManager analyzeManager;
 
     private StatisticStorage statisticStorage;
@@ -459,6 +462,8 @@ public class GlobalStateMgr {
     private long imageJournalId;
 
     private long feStartTime;
+
+    private boolean isSafeMode = false;
 
     private ResourceGroupMgr resourceGroupMgr;
 
@@ -601,6 +606,7 @@ public class GlobalStateMgr {
         this.updateDbUsedDataQuotaDaemon = new UpdateDbUsedDataQuotaDaemon();
         this.statisticsMetaManager = new StatisticsMetaManager();
         this.statisticAutoCollector = new StatisticAutoCollector();
+        this.safeModeChecker = new SafeModeChecker();
         this.statisticStorage = new CachedStatisticStorage();
 
         this.replayedJournalId = new AtomicLong(0L);
@@ -715,6 +721,14 @@ public class GlobalStateMgr {
         } else {
             return SingletonHolder.INSTANCE;
         }
+    }
+
+    public boolean isSafeMode() {
+        return isSafeMode;
+    }
+
+    public void setSafeMode(boolean isSafeMode) {
+        this.isSafeMode = isSafeMode;
     }
 
     public ConcurrentHashMap<Long, Database> getIdToDb() {
@@ -1262,6 +1276,11 @@ public class GlobalStateMgr {
 
         if (RunMode.allowCreateLakeTable()) {
             shardDeleter.start();
+        }
+
+        if (Config.enable_safe_mode_check) {
+            LOG.info("Start safe mode checker!");
+            safeModeChecker.start();
         }
     }
 

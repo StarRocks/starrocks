@@ -145,6 +145,9 @@ public final class MetricRepo {
 
     public static List<GaugeMetricImpl<Long>> GAUGE_ROUTINE_LOAD_LAGS;
 
+    // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
+    public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
+
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
     private static final MetricCalculator METRIC_CALCULATOR = new MetricCalculator();
@@ -340,6 +343,11 @@ public final class MetricRepo {
         GAUGE_QUERY_LATENCY_P999.addLabel(new MetricLabel("type", "999_quantile"));
         GAUGE_QUERY_LATENCY_P999.setValue(0.0);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_LATENCY_P999);
+
+        GAUGE_SAFE_MODE = new GaugeMetricImpl<>("safe_mode", MetricUnit.NOUNIT, "safe mode flag");
+        GAUGE_SAFE_MODE.addLabel(new MetricLabel("type", "safe_mode"));
+        GAUGE_SAFE_MODE.setValue(0);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_SAFE_MODE);
 
         // 2. counter
         COUNTER_REQUEST_ALL = new LongCounterMetric("request_total", MetricUnit.REQUESTS, "total request");
