@@ -12,20 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.credential;
+package com.starrocks.credential.aliyun;
 
-import com.starrocks.thrift.TCloudConfiguration;
-import org.apache.hadoop.conf.Configuration;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
 
-public interface CloudConfiguration {
+import java.util.Map;
 
-    void toThrift(TCloudConfiguration tCloudConfiguration);
+public class AliyunCloudConfigurationFactory extends CloudConfigurationFactory {
+    private final Map<String, String> properties;
 
-    void applyToConfiguration(Configuration configuration);
+    public AliyunCloudConfigurationFactory(Map<String, String> properties) {
+        this.properties = properties;
+    }
 
-    // Hadoop FileSystem has a cache itself, it used request uri as a cache key by default,
-    // so it cannot sense the CloudCredential changed.
-    // So we need to generate an identifier for different CloudCredential, and used it as cache key.
-    // getCredentialString() Method just like toString()
-    String getCredentialString();
+    @Override
+    protected CloudConfiguration buildForStorage() {
+        // TODO
+        return null;
+    }
 }

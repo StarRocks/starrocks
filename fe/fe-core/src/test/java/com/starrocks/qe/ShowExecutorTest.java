@@ -1168,8 +1168,7 @@ public class ShowExecutorTest {
                 properties.put("type", "hive");
                 properties.put("aws.s3.access_key", "iam_user_access_key");
                 properties.put("aws.s3.secret_key", "iam_user_secret_key");
-                Catalog catalog = new Catalog(1, "test_hive", properties, "hive_test");
-                return catalog;
+                return new Catalog(1, "test_hive", properties, "hive_test");
             }
         };
         ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("test_hive");
