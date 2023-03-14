@@ -59,12 +59,12 @@ public class MysqlTable extends Table {
     private static final Logger LOG = LogManager.getLogger(OlapTable.class);
 
     private static final String ODBC_CATALOG_RESOURCE = "odbc_catalog_resource";
-    private static final String MYSQL_HOST = "host";
-    private static final String MYSQL_PORT = "port";
     private static final String MYSQL_USER = "user";
     private static final String MYSQL_PASSWORD = "password";
-    private static final String MYSQL_DATABASE = "database";
-    private static final String MYSQL_TABLE = "table";
+    public static final String MYSQL_DATABASE = "database";
+    public static final String MYSQL_TABLE = "table";
+    public static final String MYSQL_HOST = "host";
+    public static final String MYSQL_PORT = "port";
 
     // For starrocks, mysql table can be created by specifying odbc resource,
     // but we do not support odbc resource, so we just read this property for meta compatible

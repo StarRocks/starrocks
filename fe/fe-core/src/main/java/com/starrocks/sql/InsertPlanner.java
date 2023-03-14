@@ -25,10 +25,13 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.MysqlTableSink;
@@ -185,14 +188,17 @@ public class InsertPlanner {
             olapTuple.computeMemLayout();
 
             DataSink dataSink;
-            if (insertStmt.getTargetTable() instanceof OlapTable) {
-                OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
-
-                dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
+            Table targetTable = insertStmt.getTargetTable();
+            if (targetTable instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) targetTable;
+                dataSink = new OlapTableSink((OlapTable) targetTable, olapTuple,
                         insertStmt.getTargetPartitionIds(), canUsePipeline, olapTable.writeQuorum(),
                         olapTable.enableReplicatedStorage(), nullExprInAutoIncrement);
-            } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
-                dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
+            } else if (targetTable instanceof MysqlTable) {
+                dataSink = new MysqlTableSink((MysqlTable) targetTable);
+            } else if (targetTable instanceof JDBCTable
+                    && ("mysql".equalsIgnoreCase(((JDBCTable) targetTable).driverType()))) {
+                dataSink = new MysqlTableSink(((JDBCTable) targetTable).toMysqlTable());
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
@@ -221,6 +227,8 @@ public class InsertPlanner {
             execPlan.getFragments().get(0).setSink(dataSink);
             execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             return execPlan;
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
         } finally {
             session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);
             if (forceDisablePipeline) {

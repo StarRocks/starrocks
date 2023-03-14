@@ -46,6 +46,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
@@ -94,12 +95,14 @@ import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.PrivilegeCheckerV2;
+import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
@@ -1280,9 +1283,9 @@ public class StmtExecutor {
             return;
         }
 
-        MetaUtils.normalizationTableName(context, stmt.getTableName());
-        Database database = MetaUtils.getDatabase(context, stmt.getTableName());
-        Table targetTable = MetaUtils.getTable(context, stmt.getTableName());
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Table targetTable = QueryAnalyzer.resolveTable(stmt.getTableName(), context, metadataMgr);
+        Database database = metadataMgr.getDb(stmt.getTableName().getCatalog(), stmt.getTableName().getDb());
 
         String label = DebugUtil.printId(context.getExecutionId());
         if (stmt instanceof InsertStmt) {
@@ -1321,7 +1324,7 @@ public class StmtExecutor {
                                     authenticateParams);
         } else if (targetTable instanceof SchemaTable) {
             // schema table does not need txn
-        } else {
+        } else if (targetTable instanceof OlapTable) {
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                     database.getId(),
                     Lists.newArrayList(targetTable.getId()),
@@ -1389,15 +1392,17 @@ public class StmtExecutor {
                 type = TLoadJobType.INSERT_VALUES;
             }
 
-            jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
-                    label,
-                    database.getFullName(),
-                    targetTable.getId(),
-                    EtlJobType.INSERT,
-                    createTime,
-                    estimateScanRows,
-                    type,
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+            if (!(targetTable instanceof JDBCTable)) {
+                jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
+                        label,
+                        database.getFullName(),
+                        targetTable.getId(),
+                        EtlJobType.INSERT,
+                        createTime,
+                        estimateScanRows,
+                        type,
+                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+            }
             coord.setJobId(jobId);
 
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
@@ -1478,7 +1483,7 @@ public class StmtExecutor {
             }
 
             if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
-                    || stmt instanceof UpdateStmt)) {
+                    || stmt instanceof UpdateStmt) && !(targetTable instanceof JDBCTable)) {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
@@ -1511,7 +1516,7 @@ public class StmtExecutor {
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                 }
                 // TODO: wait remote txn finished
-            } else if (targetTable instanceof SchemaTable) {
+            } else if (targetTable instanceof SchemaTable || targetTable instanceof JDBCTable) {
                 // schema table does not need txn
                 txnStatus = TransactionStatus.VISIBLE;
             } else {
@@ -1548,7 +1553,7 @@ public class StmtExecutor {
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
                             t.getMessage() == null ? "Unknown reason" : t.getMessage());
-                } else {
+                } else if (targetTable instanceof OlapTable) {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(), transactionId,
                             t.getMessage() == null ? "Unknown reason" : t.getMessage(),
@@ -1605,10 +1610,12 @@ public class StmtExecutor {
             errMsg = "Publish timeout " + timeoutInfo;
         }
         try {
-            context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId,
-                    EtlJobType.INSERT,
-                    "",
-                    coord.getTrackingUrl());
+            if (!(targetTable instanceof JDBCTable)) {
+                context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId,
+                        EtlJobType.INSERT,
+                        "",
+                        coord.getTrackingUrl());
+            }
         } catch (MetaNotFoundException e) {
             LOG.warn("Record info of insert load with error {}", e.getMessage(), e);
             errMsg = "Record info of insert load with error " + e.getMessage();

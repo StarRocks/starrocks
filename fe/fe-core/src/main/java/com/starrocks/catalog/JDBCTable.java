@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.gson.JsonObject;
@@ -22,6 +21,7 @@ import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TJDBCTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -34,6 +34,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class JDBCTable extends Table {
     private static final Logger LOG = LogManager.getLogger(JDBCTable.class);
@@ -45,6 +47,9 @@ public class JDBCTable extends Table {
     private String jdbcTable;
     private Map<String, String> properties;
     private String dbName;
+    private String host;
+    private String port;
+    private String database;
 
     public JDBCTable() {
         super(TableType.JDBC);
@@ -165,5 +170,69 @@ public class JDBCTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    public static final String MYSQL_JDBC_URL_PATTERN =
+            "jdbc:(?<type>[a-z]+)://(?<host>[a-zA-Z0-9-//.]+):(?<port>[0-9]+)(/?<database>[a-zA-Z0-9_]+)?";
+
+    public final void parseJDBCUrl(String url) {
+        String type = driverType();
+        switch (type) {
+            case "mysql": {
+                Matcher urlMatcher = Pattern.compile(MYSQL_JDBC_URL_PATTERN).matcher(url);
+                while (urlMatcher.find()) {
+                    host = urlMatcher.group("host");
+                    port = urlMatcher.group("port");
+                }
+            }
+            break;
+            default:
+                throw new SemanticException("no support other jdbc type :  " + type);
+        }
+    }
+
+    public MysqlTable toMysqlTable() throws DdlException {
+        String jdbcUrl = properties.get(JDBCResource.URI);
+        if (null == jdbcUrl || !jdbcUrl.startsWith("jdbc")) {
+            return null;
+        }
+
+        parseJDBCUrl(jdbcUrl);
+        properties.putIfAbsent(MysqlTable.MYSQL_HOST, host);
+        properties.putIfAbsent(MysqlTable.MYSQL_PORT, port);
+        properties.putIfAbsent(MysqlTable.MYSQL_DATABASE, dbName);
+        properties.putIfAbsent(MysqlTable.MYSQL_TABLE, jdbcTable);
+
+        return new MysqlTable(id, name, fullSchema, properties);
+    }
+
+    /**
+     * jdbc:mysql://10.69.74.151:3306
+     */
+    public String driverType() {
+        String jdbcUrl = properties.get(JDBCResource.URI);
+        if (null == jdbcUrl || !jdbcUrl.startsWith("jdbc")) {
+            return null;
+        }
+        int colonFirst = jdbcUrl.indexOf(":");
+        int colonSecond = jdbcUrl.indexOf(":", colonFirst + 1);
+
+        return jdbcUrl.substring(colonFirst + 1, colonSecond);
+    }
+
+    public static void main(String[] args) {
+        String jdbcUrl = "jdbc:mysql://10.69.74.151:3306";
+        String pattern = "jdbc:(?<type>[a-z]+)://(?<host>[a-zA-Z0-9-//.]+):(?<port>[0-9]+)(/?<database>[a-zA-Z0-9_]+)?";
+        Matcher dateMatcher = Pattern.compile(MYSQL_JDBC_URL_PATTERN).matcher(jdbcUrl);
+        while (dateMatcher.find()) {
+            String dbType = dateMatcher.group("type");
+            String host = dateMatcher.group("host");
+            String port = dateMatcher.group("port");
+
+            System.out.println(dbType);
+            System.out.println(host);
+            System.out.println(port);
+
+        }
     }
 }
