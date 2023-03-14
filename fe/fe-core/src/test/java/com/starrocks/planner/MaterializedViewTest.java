@@ -25,8 +25,11 @@ import org.junit.Test;
 import java.util.List;
 
 public class MaterializedViewTest extends MaterializedViewTestBase {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(MaterializedViewTest.class);
     private static final String MATERIALIZED_DB_NAME = "test_mv";
+=======
+>>>>>>> f241c36fa ([Enhancement] Support TPCH Benchmark for MV (#18506))
     private static final List<String> outerJoinTypes = ImmutableList.of("left", "right");
 
     @BeforeClass

@@ -53,6 +53,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
         }
         final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
+<<<<<<< HEAD
 
         for (MaterializationContext mvContext : context.getCandidateMvs()) {
             mvContext.setQueryExpression(queryExpression);
@@ -63,6 +64,21 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             candidates = postRewriteMV(context, candidates);
             if (!candidates.isEmpty()) {
                 results.addAll(candidates);
+=======
+        List<Table> queryTables = MvUtils.getAllTables(queryExpression);
+        for (MaterializationContext mvContext : mvCandidateContexts) {
+            MvRewriteContext mvRewriteContext =
+                    new MvRewriteContext(mvContext, queryTables, queryExpression, queryColumnRefRewriter, queryPredicateSplit);
+            MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
+            OptExpression candidate = mvRewriter.rewrite();
+            if (candidate != null) {
+                candidate = postRewriteMV(context, candidate);
+                if (queryExpression.getGroupExpression() != null) {
+                    int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
+                    mvContext.addMatchedGroup(currentRootGroupId);
+                }
+                results.add(candidate);
+>>>>>>> f241c36fa ([Enhancement] Support TPCH Benchmark for MV (#18506))
             }
         }
 
@@ -75,21 +91,16 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
      * 2. partition prune
      * 3. bucket prune
      */
-    private List<OptExpression> postRewriteMV(OptimizerContext context, List<OptExpression> candidates) {
-        if (candidates == null || candidates.isEmpty()) {
-            return Lists.newArrayList();
+    private OptExpression postRewriteMV(OptimizerContext context, OptExpression candidate) {
+        if (candidate == null) {
+            return null;
         }
-        List<OptExpression> result = Lists.newArrayList();
-        for (OptExpression candidate : candidates) {
-            candidate = new MVColumnPruner().pruneColumns(candidate);
-            candidate = new MVPartitionPruner().prunePartition(context, candidate);
-            result.add(candidate);
-        }
-        return result;
+        candidate = new MVColumnPruner().pruneColumns(candidate);
+        candidate = new MVPartitionPruner().prunePartition(context, candidate);
+        return candidate;
     }
 
     public MaterializedViewRewriter getMaterializedViewRewrite(MaterializationContext mvContext) {
         return new MaterializedViewRewriter(mvContext);
     }
-
 }

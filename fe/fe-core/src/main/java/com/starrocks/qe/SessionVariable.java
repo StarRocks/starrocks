@@ -310,8 +310,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
+
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE =
+            "enable_materialized_view_view_delta_rewrite";
+
+    public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
+    public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
+    public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
+    public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
+
+    public static final String SQL_DIALECT = "sql_dialect";
+
+    public static final String ENABLE_OUTER_JOIN_REORDER = "enable_outer_join_reorder";
+
+    public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
+    public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
+
+>>>>>>> f241c36fa ([Enhancement] Support TPCH Benchmark for MV (#18506))
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
@@ -811,6 +830,43 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE)
+    private boolean enableMaterializedViewViewDeltaRewrite = true;
+
+    // if enable_big_query_log = true and cpu/io cost of a query exceeds the related threshold,
+    // the information will be written to the big query log
+    @VarAttr(name = ENABLE_BIG_QUERY_LOG)
+    private boolean enableBigQueryLog = true;
+    // the value is set for testing,
+    // if a query needs to perform 10s for computing tasks at full load on three 16-core machines,
+    // we treat it as a big query, so set this value to 480(10 * 16 * 3).
+    // Users need to set up according to their own scenario.
+    @VarAttr(name = BIG_QUERY_LOG_CPU_SECOND_THRESHOLD)
+    private long bigQueryLogCPUSecondThreshold = 480;
+    // the value is set for testing, if a query needs to scan more than 10GB of data, we treat it as a big query.
+    // Users need to set up according to their own scenario.
+    @VarAttr(name = BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD)
+    private long bigQueryLogScanBytesThreshold = 1024L * 1024 * 1024 * 10;
+    // the value is set for testing, if a query need to scan more than 1 billion rows of data,
+    // we treat it as a big query.
+    // Users need to set up according to their own scenario.
+    @VarAttr(name = BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD)
+    private long bigQueryLogScanRowsThreshold = 1000000000L;
+
+    @VarAttr(name = SQL_DIALECT)
+    private String sqlDialect = "StarRocks";
+
+    @VarAttr(name = ENABLE_OUTER_JOIN_REORDER)
+    private boolean enableOuterJoinReorder = true;
+
+    // This value is different from cboMaxReorderNodeUseExhaustive which only counts innerOrCross join node, while it
+    // counts all types of join node including outer/semi/anti join.
+    @VarAttr(name = CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE)
+    private int cboReorderThresholdUseExhaustive = 6;
+
+>>>>>>> f241c36fa ([Enhancement] Support TPCH Benchmark for MV (#18506))
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
 
@@ -1563,6 +1619,81 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnableMaterializedViewViewDeltaRewrite() {
+        return enableMaterializedViewViewDeltaRewrite;
+    }
+
+    public void setEnableMaterializedViewViewDeltaRewrite(boolean enableMaterializedViewViewDeltaRewrite) {
+        this.enableMaterializedViewViewDeltaRewrite = enableMaterializedViewViewDeltaRewrite;
+    }
+
+    public boolean isEnableBigQueryLog() {
+        return enableBigQueryLog;
+    }
+
+    public void setEnableBigQueryLog(boolean enableBigQueryLog) {
+        this.enableBigQueryLog = enableBigQueryLog;
+    }
+
+    public long getBigQueryLogCPUSecondThreshold() {
+        return this.bigQueryLogCPUSecondThreshold;
+    }
+
+    public void setBigQueryLogCpuSecondThreshold(long bigQueryLogCPUSecondThreshold) {
+        this.bigQueryLogCPUSecondThreshold = bigQueryLogCPUSecondThreshold;
+    }
+
+    public long getBigQueryLogScanBytesThreshold() {
+        return bigQueryLogScanBytesThreshold;
+    }
+
+    public void setBigQueryLogScanBytesThreshold(long bigQueryLogScanBytesThreshold) {
+        this.bigQueryLogScanBytesThreshold = bigQueryLogScanBytesThreshold;
+    }
+
+    public long getBigQueryLogScanRowsThreshold() {
+        return bigQueryLogScanRowsThreshold;
+    }
+
+    public void setBigQueryLogScanRowsThreshold(long bigQueryLogScanRowsThreshold) {
+        this.bigQueryLogScanRowsThreshold = bigQueryLogScanRowsThreshold;
+    }
+
+    public String getSqlDialect() {
+        return this.sqlDialect;
+    }
+
+    public void setSqlDialect(String dialect) {
+        this.sqlDialect = dialect;
+    }
+
+    public boolean isEnableOuterJoinReorder() {
+        return enableOuterJoinReorder;
+    }
+
+    public void setEnableOuterJoinReorder(boolean enableOuterJoinReorder) {
+        this.enableOuterJoinReorder = enableOuterJoinReorder;
+    }
+
+    public int getCboReorderThresholdUseExhaustive() {
+        return cboReorderThresholdUseExhaustive;
+    }
+
+    public void setCboReorderThresholdUseExhaustive(int cboReorderThresholdUseExhaustive) {
+        this.cboReorderThresholdUseExhaustive = cboReorderThresholdUseExhaustive;
+    }
+
+    public void setEnableRewriteSumByAssociativeRule(boolean enableRewriteSumByAssociativeRule) {
+        this.enableRewriteSumByAssociativeRule = enableRewriteSumByAssociativeRule;
+    }
+
+    public boolean isEnableRewriteSumByAssociativeRule() {
+        return this.enableRewriteSumByAssociativeRule;
+    }
+
+>>>>>>> f241c36fa ([Enhancement] Support TPCH Benchmark for MV (#18506))
     public boolean getEnablePruneComplexTypes() {
         return this.enablePruneComplexTypes;
     }

@@ -24,9 +24,13 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
+<<<<<<< HEAD
 public class MaterializedViewSSBTest extends PlanTestBase {
     private static final String MATERIALIZED_DB_NAME = "test_mv";
 
+=======
+public class MaterializedViewSSBTest extends MaterializedViewTestBase {
+>>>>>>> f241c36fa ([Enhancement] Support TPCH Benchmark for MV (#18506))
     @BeforeClass
     public static void setUp() throws Exception {
         FeConstants.runningUnitTest = true;

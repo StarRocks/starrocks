@@ -372,13 +372,54 @@ public class UtFrameUtils {
             }
 
             validatePlanConnectedness(execPlan);
-            return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
+            return new Pair<>(printPhysicalPlan(execPlan.getPhysicalPlan()), execPlan);
         } finally {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static String printPhysicalPlan(OptExpression execPlan) {
+        return LogicalPlanPrinter.print(execPlan, isPrintPlanTableNames());
+    }
+
+    public static boolean isPrintPlanTableNames() {
+        return false;
+    }
+
+    private static void testView(ConnectContext connectContext, String originStmt, StatementBase statementBase)
+            throws Exception {
+        if (statementBase instanceof QueryStatement && !connectContext.getDatabase().isEmpty() &&
+                !statementBase.isExplain()) {
+            String viewName = "view" + INDEX.getAndIncrement();
+            String createView = "create view " + viewName + " as " + originStmt;
+            CreateViewStmt createTableStmt;
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Test View")) {
+                createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
+                try {
+                    StatementBase viewStatement =
+                            SqlParser.parse(createTableStmt.getInlineViewDef(),
+                                    connectContext.getSessionVariable().getSqlMode()).get(0);
+                    com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
+                } catch (Exception e) {
+                    System.out.println(e.getMessage());
+                    throw e;
+                }
+            } catch (SemanticException | AnalysisException e) {
+                if (!e.getMessage().contains("Duplicate column name")) {
+                    throw e;
+                }
+            }
+        }
+    }
+
+    public static String printPlan(ExecPlan plan) {
+        return Explain.toString(plan.getPhysicalPlan(), plan.getOutputColumns());
+    }
+
+>>>>>>> f241c36fa ([Enhancement] Support TPCH Benchmark for MV (#18506))
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())
