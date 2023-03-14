@@ -31,6 +31,7 @@
 #include "storage/column_block.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
+#include "util/once.h"
 
 namespace starrocks {
 
@@ -47,7 +48,7 @@ class BloomFilterIndexReader {
 
 public:
     BloomFilterIndexReader()
-            : _state(kUnloaded),
+            : _load_once(),
               _typeinfo(),
               _algorithm(BLOCK_BLOOM_FILTER),
               _hash_strategy(HASH_MURMUR3_X64_64),
@@ -76,19 +77,13 @@ public:
         return size;
     }
 
-    bool loaded() const { return _state.load(std::memory_order_acquire) == kLoaded; }
+    bool loaded() const { return invoked(_load_once); }
 
 private:
-    enum State : int {
-        kUnloaded = 0, // data has not been loaded into memory
-        kLoading = 1,  // loading in process
-        kLoaded = 2,   // data was successfully loaded in memory
-    };
-
     Status do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta, bool use_page_cache,
                    bool kept_in_memory, MemTracker* mem_tracker);
 
-    std::atomic<State> _state;
+    OnceFlag _load_once;
     TypeInfoPtr _typeinfo;
     BloomFilterAlgorithmPB _algorithm;
     HashStrategyPB _hash_strategy;
