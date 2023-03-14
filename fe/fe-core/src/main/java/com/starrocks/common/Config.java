@@ -3225,6 +3225,13 @@ public class Config extends ConfigBase {
     public static long safe_mode_checker_interval_sec = 5;
 
     /**
+     * enable profile or not, this config is used by serverless EMR StarRocks
+     * Default value: false
+     */
+    @ConfField(mutable = true)
+    public static boolean profile_enable = false;
+
+    /**
      * Enable auto create tablet when creating table and add partition
      **/
     @ConfField(mutable = true)
