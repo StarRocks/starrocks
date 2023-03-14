@@ -69,14 +69,6 @@ public class CaseWhenOperator extends CallOperator {
         }
     }
 
-    public CaseWhenOperator(CaseWhenOperator other) {
-        super("CaseWhen", other.type, other.getChildren());
-        this.hasCase = other.hasCase;
-        this.hasElse = other.hasElse;
-        this.whenStart = other.whenStart;
-        this.whenEnd = other.whenEnd;
-    }
-
     public boolean hasCase() {
         return hasCase;
     }
@@ -219,10 +211,5 @@ public class CaseWhenOperator extends CallOperator {
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
         return visitor.visitCaseWhenOperator(this, context);
-    }
-
-    @Override
-    public ScalarOperator clone() {
-        return new CaseWhenOperator(this);
     }
 }

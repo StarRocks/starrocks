@@ -34,11 +34,6 @@ public class CastOperator extends CallOperator {
         this.isImplicit = isImplicit;
     }
 
-    public CastOperator(CastOperator other) {
-        super("cast", other.getType(), Lists.newArrayList(other.arguments));
-        this.isImplicit = other.isImplicit;
-    }
-
     public Type fromType() {
         return getChild(0).getType();
     }
@@ -89,10 +84,5 @@ public class CastOperator extends CallOperator {
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
         return visitor.visitCastOperator(this, context);
-    }
-
-    @Override
-    public ScalarOperator clone() {
-        return new CastOperator(this);
     }
 }

@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
  * Scalar operator support function call
  */
 public class CallOperator extends ScalarOperator {
-    private final String fnName;
+    private String fnName;
     /**
      * TODO:
      * We need a FunctionHandle to store the required information
@@ -44,9 +44,9 @@ public class CallOperator extends ScalarOperator {
 
     protected List<ScalarOperator> arguments;
 
-    private final Function fn;
+    private Function fn;
     // The flag for distinct function
-    private final boolean isDistinct;
+    private boolean isDistinct;
 
     // Ignore nulls.
     private boolean ignoreNulls = false;
@@ -66,19 +66,6 @@ public class CallOperator extends ScalarOperator {
         this.arguments = new ArrayList<>(requireNonNull(arguments, "arguments is null"));
         this.fn = fn;
         this.isDistinct = isDistinct;
-    }
-
-    public CallOperator(CallOperator other) {
-        super(OperatorType.CALL, other.getType());
-
-        // Deep copy here
-        this.arguments = Lists.newArrayList();
-        other.arguments.forEach(p -> this.arguments.add(p.clone()));
-
-        this.fn = other.fn != null ? other.fn.copy() : null;
-        this.isDistinct = other.isDistinct;
-        this.ignoreNulls = other.ignoreNulls;
-        this.fnName = other.fnName;
     }
 
     public void setIgnoreNulls(boolean ignoreNulls) {
@@ -196,7 +183,19 @@ public class CallOperator extends ScalarOperator {
 
     @Override
     public ScalarOperator clone() {
-        return new CallOperator(this);
+        CallOperator operator = (CallOperator) super.clone();
+        // Deep copy here
+        List<ScalarOperator> newArguments = Lists.newArrayList();
+        this.arguments.forEach(p -> newArguments.add(p.clone()));
+        operator.arguments = newArguments;
+        // copy fn
+        if (this.fn != null) {
+            operator.fn = this.fn.copy();
+        }
+        operator.fnName = this.fnName;
+        operator.isDistinct = this.isDistinct;
+        operator.ignoreNulls = this.ignoreNulls;
+        return operator;
     }
 
     @Override
