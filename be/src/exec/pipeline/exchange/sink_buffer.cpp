@@ -372,15 +372,19 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
 
-        if (!bthread_self()) {
+        if (bthread_self()) {
+            Status st;
+            TRY_CATCH_ALL(st, request.send_rpc(closure, _rpc_http_min_size));
+            RETURN_IF_ERROR(st);
+        } else {
             // When the driver worker thread sends request and creates the protobuf request,
             // also use process_mem_tracker to record the memory of the protobuf request.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+            // must in the same scope following the above
+            Status st;
+            TRY_CATCH_ALL(st, request.send_rpc(closure, _rpc_http_min_size));
+            RETURN_IF_ERROR(st);
         }
-        Status st;
-        TRY_CATCH_ALL(st, _send_rpc(closure, request));
-        return st;
-    }
 
     return Status::OK();
 }
