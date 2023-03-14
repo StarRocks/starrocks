@@ -298,7 +298,22 @@ Status DataDir::load() {
         }
         return true;
     };
-    Status load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
+    Status load_tablet_status =
+            TabletMetaManager::walk_until_timeout(_kv_store, load_tablet_func, config::load_tablet_timeout_seconds);
+    if (load_tablet_status.is_time_out()) {
+        Status s = _kv_store->compact();
+        if (!s.ok()) {
+            LOG(ERROR) << "data dir " << _path << " compact meta befor load failed";
+            return s;
+        }
+        for (auto tablet_id : tablet_ids) {
+            _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
+        }
+        tablet_ids.clear();
+        failed_tablet_ids.clear();
+        load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
+    }
+
     if (failed_tablet_ids.size() != 0) {
         LOG(ERROR) << "load tablets from header failed"
                    << ", loaded tablet: " << tablet_ids.size() << ", error tablet: " << failed_tablet_ids.size()

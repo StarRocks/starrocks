@@ -112,6 +112,9 @@ public:
 
     static Status walk(KVStore* meta, std::function<bool(long, long, std::string_view)> const& func);
 
+    static Status walk_until_timeout(KVStore* meta, std::function<bool(long, long, std::string_view)> const& func,
+                                     int64_t limit_time);
+
     static Status load_json_meta(DataDir* store, const std::string& meta_path);
 
     static Status get_json_meta(DataDir* store, TTabletId tablet_id, std::string* json_meta);
@@ -173,6 +176,9 @@ public:
     // TODO: rename parameter |segment_id|, it's different from `Segment::id()`
     static Status get_del_vector(KVStore* meta, TTabletId tablet_id, uint32_t segment_id, int64_t version,
                                  DelVector* delvec, int64_t* latest_version);
+
+    static Status get_del_vector_by_rowset(KVStore* meta, TTabletId tablet_id, uint32_t lower, uint32_t upper,
+                                           const std::function<bool(uint32_t, int64_t, std::string_view)>& func);
 
     // The first element of pair is segment id, the second element of pair is version.
     using DeleteVectorList = std::vector<std::pair<uint32_t, int64_t>>;

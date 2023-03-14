@@ -233,6 +233,28 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
 
     // Load delete vectors and update RowsetStats.
     // TODO: save num_dels in rowset meta.
+
+    std::map<uint32_t, std::pair<int64_t, DelVectorPtr>> del_vector_by_segment;
+    auto traverse_del_vector = [&](uint32_t segment_id, int64_t version, std::string_view value) -> bool {
+        auto iter = del_vector_by_segment.find(segment_id);
+        if (iter == del_vector_by_segment.end()) {
+            DelVectorPtr delvec = std::make_shared<DelVector>();
+            if (!delvec->load(version, value.data(), value.size()).ok()) {
+                return false;
+            }
+            del_vector_by_segment[segment_id] = std::make_pair(version, delvec);
+        } else {
+            if (version > iter->second.first) {
+                DelVectorPtr delvec = std::make_shared<DelVector>();
+                if (!delvec->load(version, value.data(), value.size()).ok()) {
+                    return false;
+                }
+                del_vector_by_segment[segment_id] = std::make_pair(version, delvec);
+            }
+        }
+        return true;
+    };
+
     for (auto& [rsid, rowset] : _rowsets) {
         auto stats = std::make_unique<RowsetStats>();
         stats->num_segments = rowset->num_segments();
@@ -241,19 +263,19 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
         stats->num_dels = 0;
         if (unapplied_rowsets.find(rsid) == unapplied_rowsets.end()) {
             // rowset applied, must have delvec
+            st = TabletMetaManager::get_del_vector_by_rowset(_tablet.data_dir()->get_meta(), _tablet.tablet_id(), rsid,
+                                                             rsid + rowset->num_segments(), traverse_del_vector);
             for (int i = 0; i < rowset->num_segments(); i++) {
-                DelVector delvec;
-                int64_t dummy;
-                auto st = TabletMetaManager::get_del_vector(_tablet.data_dir()->get_meta(), _tablet.tablet_id(),
-                                                            rsid + i, INT64_MAX, &delvec, &dummy);
-                if (!st.ok()) {
+                auto iter = del_vector_by_segment.find(rsid + i);
+                if (iter == del_vector_by_segment.end()) {
                     std::string msg = strings::Substitute("_load_from_pb get_del_vector failed: $0", st.to_string());
                     _set_error(msg);
                     LOG(ERROR) << msg;
                     return Status::OK();
                 }
-                stats->num_dels += delvec.cardinality();
+                stats->num_dels += iter->second.second->cardinality();
             }
+
             DCHECK_LE(stats->num_dels, stats->num_rows) << " tabletid:" << _tablet.tablet_id() << " rowset:" << rsid;
         }
         _calc_compaction_score(stats.get());
