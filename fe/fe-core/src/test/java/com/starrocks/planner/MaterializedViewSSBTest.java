@@ -21,7 +21,6 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class MaterializedViewSSBTest extends PlanTestBase {
@@ -49,62 +48,54 @@ public class MaterializedViewSSBTest extends PlanTestBase {
 
         // create lineorder_flat_mv
         createMaterializedViews("sql/materialized-view/ssb/", Lists.newArrayList("lineorder_flat_mv"));
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
     }
-    @Ignore
+
     @Test
     public void testQuery1_1() {
         runFileUnitTest("materialized-view/ssb/q1-1");
     }
 
-    @Ignore
     @Test
     public void testQuery1_2() {
         runFileUnitTest("materialized-view/ssb/q1-2");
     }
 
-    @Ignore
     @Test
     public void testQuery1_3() {
         runFileUnitTest("materialized-view/ssb/q1-3");
     }
 
-    @Ignore
     @Test
     public void testQuery2_1() {
         runFileUnitTest("materialized-view/ssb/q2-1");
     }
 
-    @Ignore
     @Test
     public void testQuery2_2() {
         runFileUnitTest("materialized-view/ssb/q2-2");
     }
 
-    @Ignore
     @Test
     public void testQuery2_3() {
         runFileUnitTest("materialized-view/ssb/q2-3");
     }
 
-    @Ignore
     @Test
     public void testQuery3_1() {
         runFileUnitTest("materialized-view/ssb/q3-1");
     }
 
-    @Ignore
     @Test
     public void testQuery3_2() {
         runFileUnitTest("materialized-view/ssb/q3-2");
     }
 
-    @Ignore
     @Test
     public void testQuery3_3() {
         runFileUnitTest("materialized-view/ssb/q3-3");
     }
 
-    @Ignore
     @Test
     public void testQuery3_4() {
         runFileUnitTest("materialized-view/ssb/q3-4");
