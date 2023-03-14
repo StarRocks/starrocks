@@ -887,8 +887,7 @@ bool IndexChannel::has_intolerable_failure() {
 }
 
 OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status, RuntimeState* state)
-        : _pool(pool),
-          _rpc_http_min_size(state->get_rpc_http_min_size()) {
+        : _pool(pool), _rpc_http_min_size(state->get_rpc_http_min_size()) {
     if (!texprs.empty()) {
         *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs, state);
     }
