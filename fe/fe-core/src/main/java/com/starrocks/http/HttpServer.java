@@ -80,6 +80,7 @@ import com.starrocks.http.rest.ShowDataAction;
 import com.starrocks.http.rest.ShowMetaInfoAction;
 import com.starrocks.http.rest.ShowProcAction;
 import com.starrocks.http.rest.ShowRuntimeInfoAction;
+import com.starrocks.http.rest.StopFeAction;
 import com.starrocks.http.rest.StorageTypeCheckAction;
 import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
@@ -178,6 +179,8 @@ public class HttpServer {
         ConnectionAction.registerAction(controller);
         ShowDataAction.registerAction(controller);
         QueryDumpAction.registerAction(controller);
+        // for stop fe
+        StopFeAction.registerAction(controller);
 
         // meta service action
         File imageDir = MetaHelper.getLeaderImageDir();
