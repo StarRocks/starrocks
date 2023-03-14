@@ -301,6 +301,8 @@ public:
 
     DEFINE_VECTORIZED_FN(utc_timestamp);
 
+    DEFINE_VECTORIZED_FN(utc_time);
+
     DEFINE_VECTORIZED_FN(timestamp);
 
     /**

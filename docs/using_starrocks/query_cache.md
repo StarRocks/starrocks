@@ -4,7 +4,7 @@ The query cache can save the intermediate computation results of queries. New qu
 
 You can use the FE session variable `enable_query_cache` to enable the query cache. See the "[FE session variables](../using_starrocks/query_cache.md#fe-session-variables)" section of this topic.
 
-This feature is supported from v2.5.
+This feature is supported since v2.5.
 
 ## Application scenarios
 

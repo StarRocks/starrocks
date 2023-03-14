@@ -20,10 +20,11 @@ import com.google.common.io.BaseEncoding;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.thrift.TBinaryLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TBinaryLiteral;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -33,8 +34,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
 
+import javax.validation.constraints.NotNull;
+
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.util.Locale.ENGLISH;
-import static java.util.Objects.requireNonNull;
 
 public class VarBinaryLiteral extends LiteralExpr {
     private static final CharMatcher WHITESPACE_MATCHER = CharMatcher.whitespace();
@@ -56,14 +59,19 @@ public class VarBinaryLiteral extends LiteralExpr {
         analysisDone();
     }
 
-    public VarBinaryLiteral(String value) {
-        requireNonNull(value, "value is null");
+    public VarBinaryLiteral(@NotNull String value) {
+        this(value, NodePosition.ZERO);
+    }
+
+
+    public VarBinaryLiteral(@NotNull String value, NodePosition pos) {
+        super(pos);
         String hexString = WHITESPACE_MATCHER.removeFrom(value).toUpperCase(ENGLISH);
         if (!HEX_DIGIT_MATCHER.matchesAllOf(hexString)) {
-            throw new ParsingException("Binary literal can only contain hexadecimal digits:" + value);
+            throw new ParsingException(PARSER_ERROR_MSG.invalidBinaryFormat(), pos);
         }
         if (hexString.length() % 2 != 0) {
-            throw new ParsingException("Binary literal must contain an even number of digits" + value);
+            throw new ParsingException(PARSER_ERROR_MSG.invalidBinaryFormat(), pos);
         }
         this.type = Type.VARBINARY;
         this.value = BaseEncoding.base16().decode(hexString);

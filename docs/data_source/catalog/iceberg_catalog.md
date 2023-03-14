@@ -11,9 +11,13 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 ## Usage notes
 
-- The file formats of Iceberg that StarRocks supports are Parquet, ORC, and CSV.
-- The data types of Iceberg that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP data type for CSV-formatted Iceberg tables.
-- You can only use Iceberg catalogs to query data. You cannot use Iceberg catalogs to drop, delete, or insert data into your Iceberg cluster.
+- The file formats of Iceberg that StarRocks supports are Parquet and ORC:
+
+  - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
+  - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
+
+- The data types of Delta Lake that StarRocks does not support are MAP and STRUCT.
+- Iceberg catalogs do not support Iceberg v2 tables.
 
 ## Integration preparations
 
@@ -96,7 +100,7 @@ A set of parameters about how StarRocks integrates with the metastore of your da
 If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
 
 ```SQL
-"hive.metastore.uris" = "<hive_metastore_uri>"
+"iceberg.catalog.hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
 > **NOTE**
@@ -105,9 +109,9 @@ If you choose Hive metastore as the metastore of your data source, configure `Me
 
 The following table describes the parameter you need to configure in `MetastoreParams`.
 
-| Parameter           | Required | Description                                                  |
-| ------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<IP address of Hive metastore>:<Port number of Hive metastore>`. |
+| Parameter                           | Required | Description                                                  |
+| ----------------------------------- | -------- | ------------------------------------------------------------ |
+| iceberg.catalog.hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (,), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
 ###### AWS Glue
 
@@ -151,6 +155,18 @@ The following table describes the parameters you need to configure in `Metastore
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS Glue, you must specify this parameter. Then, StarRocks will assume this user when it accesses your Iceberg data by using an Iceberg catalog. |
 
 For information about how to choose a credential method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+
+##### Custom metadata service
+
+If you use a custom metadata service for your Iceberg cluster, you need to create a custom catalog class (the class name of the custom catalog cannot be the same as the name of any class that already exists in StarRocks) and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog class needs to inherit the abstract class `BaseMetastoreCatalog`. After the custom catalog is created, package the catalog and its related files, place them under the **fe/lib** path of each FE, and then restart each FE.
+
+After you complete the preceding operations, you can create an Iceberg catalog and configure its properties.
+
+| **Property**           | **Required** | **Description**                                              |
+| ---------------------- | ------------ | ------------------------------------------------------------ |
+| type                   | Yes          | The type of the data source. Set the value to `iceberg`.      |
+| iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `CUSTOM`. |
+| iceberg.catalog-impl   | Yes          | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the custom catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg catalog. |
 
 #### `StorageCredentialParams`
 
@@ -240,7 +256,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
       "type" = "iceberg",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083"
   );
   ```
 
@@ -271,7 +287,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083"
   );
   ```
 
@@ -305,7 +321,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
       "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083"
   );
   ```
 
@@ -437,7 +453,7 @@ You can enable automatic incremental update for a single Iceberg catalog or for 
   PROPERTIES
   (
       "type" = "iceberg",
-      "hive.metastore.uris" = "thrift://102.168.xx.xx:9083",
+      "iceberg.catalog.hive.metastore.uris" = "thrift://102.168.xx.xx:9083",
        ....
       "enable_hms_events_incremental_sync" = "true"
   );

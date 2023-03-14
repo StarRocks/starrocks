@@ -277,6 +277,10 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
             const auto slot = _scanner_params.materialize_slots[j];
             DCHECK(slot != nullptr);
 
+            std::string col_name = _scanner_params.materialize_slots[j]->col_name();
+            if (!_scanner_params.case_sensitive) {
+                std::transform(col_name.begin(), col_name.end(), col_name.begin(), ::tolower);
+            }
             int index = _scanner_params.materialize_index_in_chunk[j];
             int column_field_index = _columns_index[_scanner_params.materialize_slots[j]->col_name()];
             Column* column = _column_raw_ptrs[index];
@@ -368,10 +372,13 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
 }
 
 Status HdfsTextScanner::_get_hive_column_index(const std::string& column_name) {
+    const bool case_sensitive = _scanner_params.case_sensitive;
     for (int i = 0; i < _scanner_params.hive_column_names->size(); i++) {
         const std::string& name = _scanner_params.hive_column_names->at(i);
-        if (name == column_name) {
-            _columns_index[name] = i;
+        const bool found = case_sensitive ? name == column_name : 0 == strcasecmp(name.c_str(), column_name.c_str());
+
+        if (found) {
+            _columns_index[column_name] = i;
             return Status::OK();
         }
     }

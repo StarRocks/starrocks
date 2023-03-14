@@ -138,7 +138,10 @@ if [ -e /proc/cpuinfo ] ; then
     fi
 fi
 
-if [[ -z ${WITH_BLOCK_CACHE} ]]; then
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    # force turn off block cache on arm platform
+    WITH_BLOCK_CACHE=OFF
+elif [[ -z ${WITH_BLOCK_CACHE} ]]; then
     WITH_BLOCK_CACHE=OFF
 fi
 
@@ -301,7 +304,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_STAROS=${USE_STAROS} \
                     -DWITH_BENCH=${WITH_BENCH} \
                     -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
-                    -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
                     -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
                     -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \

@@ -170,6 +170,7 @@ private:
     RuntimeProfile::Counter* _default_buffer_capacity_counter = nullptr;
     RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_scan_task_queue_size_counter = nullptr;
     // The total number of the original tablets in this fragment instance.
     RuntimeProfile::Counter* _tablets_counter = nullptr;
 };
@@ -194,8 +195,12 @@ public:
 
     SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
 
+    std::shared_ptr<workgroup::ScanTaskGroup> scan_task_group() const { return _scan_task_group; }
+
 protected:
     ScanNode* const _scan_node;
+
+    std::shared_ptr<workgroup::ScanTaskGroup> _scan_task_group;
 };
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,

@@ -1,5 +1,26 @@
 # StarRocks version 2.3
 
+## 2.3.10
+
+Release date: March 9, 2023
+
+### Improvements
+
+Optimized the inference of `storage_medium`. When BEs use both SSD and HDD as storage devices,  if the property `storage_cooldown_time` is specified, StarRocks sets `storage_medium` to `SSD`. Otherwise, StarRocks sets `storage_medium` to `HDD`. [#18649](https://github.com/StarRocks/starrocks/pull/18649)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- A query may fail if ARRAY data from Parquet files in data lakes is queried. [#17626](https://github.com/StarRocks/starrocks/pull/17626) [#17788](https://github.com/StarRocks/starrocks/pull/17788) [#18051](https://github.com/StarRocks/starrocks/pull/18051)
+- The Stream Load job initiated by a program is hung and the FE does not receive the HTTP request sent by the program. [#18559](https://github.com/StarRocks/starrocks/pull/18559)
+- An error may occur when an Elasticsearch external table is queried. [#13727](https://github.com/StarRocks/starrocks/pull/13727)
+- BEs may crash if an expression encounters an error during initialization. [#11396](https://github.com/StarRocks/starrocks/pull/11396)
+- A query may fail if the SQL statement uses an empty array literal `[]`. [#18550](https://github.com/StarRocks/starrocks/pull/18550)
+- After StarRocks is upgraded from version 2.2 and later to version 2.3.9 and later, an error `No match for <expr> with operand types xxx and xxx` may occur when a Routine Load job is created with a calculation expression specified in the `COLUMN` parameter. [#17856](https://github.com/StarRocks/starrocks/pull/17856)
+- A load job is hung after a BE restarts. [#18488](https://github.com/StarRocks/starrocks/pull/18488)
+- When a SELECT statement uses an OR operator in the WHERE clause, extra partitions are scanned. [#18610](https://github.com/StarRocks/starrocks/pull/18610)
+
 ## 2.3.9
 
 Release date: February 20, 2023
@@ -48,6 +69,10 @@ Release date: December 22, 2022
 
 - The Pipeline execution engine supports INSERT INTO statements. To enable it, set the FE configuration item `enable_pipeline_load_for_insert` to `true`.  [#14723](https://github.com/StarRocks/starrocks/pull/14723)
 - The memory used by Compaction for the primary key table is reduced. [#13861](https://github.com/StarRocks/starrocks/pull/13861)  [#13862](https://github.com/StarRocks/starrocks/pull/13862)
+
+### Behavior Change
+
+- Deprecated the FE parameter `default_storage_medium`. The storage medium of a table is automatically inferred by the system. [#14394](https://github.com/StarRocks/starrocks/pull/14394)
 
 ### Bug Fixes
 

@@ -48,7 +48,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -322,15 +321,6 @@ public class GroupByClause implements ParseNode {
 
     public boolean isEmpty() {
         return CollectionUtils.isEmpty(groupingExprs);
-    }
-
-    public void substituteGroupingExprs(Set<VirtualSlotRef> groupingSlots, ExprSubstitutionMap smap,
-                                        Analyzer analyzer) {
-        groupingExprs = Expr.substituteList(groupingExprs, smap, analyzer, true);
-        for (VirtualSlotRef vs : groupingSlots) {
-            vs.setRealSlots(Optional.ofNullable(Expr.substituteList(vs.getRealSlots(), smap, analyzer, true)).orElse(
-                    new ArrayList<>()).stream().map(e -> (SlotRef) e).collect(Collectors.toList()));
-        }
     }
 
     public enum GroupingType {

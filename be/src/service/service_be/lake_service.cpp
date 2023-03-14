@@ -318,7 +318,7 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
         auto st = fs::remove_all(location);
         if (!st.ok() && !st.is_not_found()) {
             LOG(ERROR) << "Fail to remove " << location << ": " << st;
-            cntl->SetFailed(st.get_error_msg());
+            cntl->SetFailed("Fail to remove " + location);
         }
         latch.count_down();
     };
@@ -565,7 +565,7 @@ void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* contro
         auto loader = std::make_unique<LakeSnapshotLoader>(_env);
         auto st = loader->upload(request);
         if (!st.ok()) {
-            cntl->SetFailed(st.to_string());
+            cntl->SetFailed("Fail to upload snapshot");
         }
         latch.count_down();
     };
@@ -596,7 +596,7 @@ void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* contr
         auto loader = std::make_unique<LakeSnapshotLoader>(_env);
         auto st = loader->restore(request);
         if (!st.ok()) {
-            cntl->SetFailed(st.to_string());
+            cntl->SetFailed("Fail to restore snapshot");
         }
         latch.count_down();
     };

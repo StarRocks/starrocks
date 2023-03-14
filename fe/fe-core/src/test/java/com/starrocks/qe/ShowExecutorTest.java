@@ -345,6 +345,11 @@ public class ShowExecutorTest {
                 GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "emptyDb");
                 minTimes = 0;
                 result = null;
+
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("default_catalog", "testDb",
+                        "testTbl");
+                minTimes = 0;
+                result = table;
             }
         };
 
@@ -1092,6 +1097,7 @@ public class ShowExecutorTest {
         };
 
         ShowTableStmt stmt = new ShowTableStmt("test", true, null, null, "hive_catalog");
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
@@ -1130,13 +1136,41 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         resultSet.getResultRows().forEach(System.out::println);
-        String expectString1 = "root, null, GRANT CREATE_TABLE, DROP, ALTER, CREATE_VIEW, CREATE_FUNCTION, " +
-                "CREATE_MATERIALIZED_VIEW ON ALL DATABASES TO ROLE 'root'";
+        String expectString1 = "root, null, GRANT CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, " +
+                "CREATE MATERIALIZED VIEW ON ALL DATABASES TO ROLE 'root'";
         Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
                 l.toString().contains(expectString1)));
         String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +
                 "UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
         Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
                 l.toString().contains(expectString2)));
+    }
+
+    @Test
+    public void testShowCreateExternalCatalogWithMask() throws AnalysisException, DdlException {
+        new MockUp<CatalogMgr>() {
+            @Mock
+            public Catalog getCatalogByName(String name) {
+                Map<String, String> properties = new HashMap<>();
+                properties.put("hive.metastore.uris", "thrift://hadoop:9083");
+                properties.put("type", "hive");
+                properties.put("aws.s3.access_key", "iam_user_access_key");
+                properties.put("aws.s3.secret_key", "iam_user_secret_key");
+                Catalog catalog = new Catalog(1, "test_hive", properties, "hive_test");
+                return catalog;
+            }
+        };
+        ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("test_hive");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertEquals("test_hive", resultSet.getResultRows().get(0).get(0));
+        Assert.assertEquals("CREATE EXTERNAL CATALOG `test_hive`\n" +
+                "comment \"hive_test\"\n" +
+                "PROPERTIES (\"aws.s3.access_key\"  =  \"ia******ey\",\n" +
+                "\"aws.s3.secret_key\"  =  \"ia******ey\",\n" +
+                "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
+                "\"type\"  =  \"hive\"\n" +
+                ")", resultSet.getResultRows().get(0).get(1));
     }
 }

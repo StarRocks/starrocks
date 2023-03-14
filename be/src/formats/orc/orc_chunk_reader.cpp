@@ -30,10 +30,7 @@
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
 #include "formats/orc/fill_function.h"
-#include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_mapping.h"
-#include "fs/fs.h"
-#include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
@@ -134,8 +131,8 @@ Status OrcChunkReader::_slot_to_orc_column_name(const SlotDescriptor* desc,
                                                 const std::unordered_map<int, std::string>& column_id_to_orc_name,
                                                 std::string* orc_column_name) {
     auto col_name = format_column_name(desc->col_name(), _case_sensitive);
-    auto it = _name_to_column_id.find(col_name);
-    if (it == _name_to_column_id.end()) {
+    auto it = _formatted_slot_name_to_column_id.find(col_name);
+    if (it == _formatted_slot_name_to_column_id.end()) {
         auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found, file = $1",
                                      desc->col_name(), _current_file_name);
         return Status::NotFound(s);
@@ -152,7 +149,8 @@ Status OrcChunkReader::_slot_to_orc_column_name(const SlotDescriptor* desc,
 
 Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& mapping) {
     // TODO(SmithCruise) delete _name_to_column_id, _hive_column_names when develop subfield lazy load.
-    build_column_name_to_id_mapping(&_name_to_column_id, _hive_column_names, _reader->getType(), _case_sensitive);
+    build_column_name_to_id_mapping(&_formatted_slot_name_to_column_id, _hive_column_names, _reader->getType(),
+                                    _case_sensitive);
 
     std::list<uint64_t> include_column_id;
 
@@ -261,8 +259,8 @@ Status OrcChunkReader::_init_position_in_orc() {
 
         if (slot_desc == nullptr) continue;
         std::string col_name = format_column_name(slot_desc->col_name(), _case_sensitive);
-        auto it = _name_to_column_id.find(col_name);
-        if (it == _name_to_column_id.end()) {
+        auto it = _formatted_slot_name_to_column_id.find(col_name);
+        if (it == _formatted_slot_name_to_column_id.end()) {
             auto s = strings::Substitute(
                     "OrcChunkReader::init_position_in_orc. failed to find position. col_name = $0, file = $1", col_name,
                     _current_file_name);
@@ -664,12 +662,30 @@ StatusOr<ChunkPtr> OrcChunkReader::get_lazy_chunk() {
     return _cast_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
 }
 
-void OrcChunkReader::lazy_read_next(size_t numValues) {
-    _row_reader->lazyLoadNext(*_batch, numValues);
+Status OrcChunkReader::lazy_read_next(size_t numValues) {
+    try {
+        // It may throw orc::ParseError exception
+        _row_reader->lazyLoadNext(*_batch, numValues);
+    } catch (std::exception& e) {
+        auto s = strings::Substitute("OrcChunkReader::lazy_read_next failed. reason = $0, file = $1", e.what(),
+                                     _current_file_name);
+        LOG(WARNING) << s;
+        return Status::InternalError(s);
+    }
+    return Status::OK();
 }
 
-void OrcChunkReader::lazy_seek_to(size_t rowInStripe) {
-    _row_reader->lazyLoadSeekTo(rowInStripe);
+Status OrcChunkReader::lazy_seek_to(size_t rowInStripe) {
+    try {
+        // It may throw orc::ParseError exception
+        _row_reader->lazyLoadSeekTo(rowInStripe);
+    } catch (std::exception& e) {
+        auto s = strings::Substitute("OrcChunkReader::lazy_seek_to failed. reason = $0, file = $1", e.what(),
+                                     _current_file_name);
+        LOG(WARNING) << s;
+        return Status::InternalError(s);
+    }
+    return Status::OK();
 }
 
 void OrcChunkReader::set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter) {
@@ -1202,9 +1218,10 @@ void OrcChunkReader::report_error_message(const std::string& error_msg) {
     _state->append_error_msg_to_file("", error_msg);
 }
 
-int OrcChunkReader::get_column_id_by_name(const std::string& name) const {
-    const auto& it = _name_to_column_id.find(name);
-    if (it != _name_to_column_id.end()) {
+int OrcChunkReader::get_column_id_by_slot_name(const std::string& slot_name) const {
+    const std::string& formatted_slot_name = format_column_name(slot_name, _case_sensitive);
+    const auto& it = _formatted_slot_name_to_column_id.find(formatted_slot_name);
+    if (it != _formatted_slot_name_to_column_id.end()) {
         return it->second;
     }
     return -1;

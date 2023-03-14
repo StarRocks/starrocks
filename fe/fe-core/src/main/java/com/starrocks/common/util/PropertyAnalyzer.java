@@ -63,6 +63,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.Property;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -149,13 +150,15 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
-    public static final String PROPERTIES_ALLOW_ASYNC_WRITE_BACK = "allow_async_write_back";
+    public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER  = "partition_ttl_number";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER  = "partition_live_number";
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT  = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
+
+    public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";
 
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
@@ -382,12 +385,13 @@ public class PropertyAnalyzer {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0");
         }
-        // Skip the alive nodes checking if running on Shared-data mode, because on this mode, only
-        // compute-storage-separation table will be created and in this case the replication_num will
-        // be ignored, so there is no need to check whether the number of alive nodes is greater than the
-        // replication_num.
-        if (!RunMode.getCurrentRunMode().isIgnoreReplicationNum()) {
-            List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.defaultReplicationNum() > backendIds.size()) {
+                throw new AnalysisException("Number of available BE nodes is " + backendIds.size()
+                        + ", less than " + RunMode.defaultReplicationNum());
+            }
+        } else {
             if (replicationNum > backendIds.size()) {
                 throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
                         + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
@@ -651,6 +655,14 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_TYPE)) {
             type = properties.get(PROPERTIES_TYPE);
             properties.remove(PROPERTIES_TYPE);
+        }
+        return type;
+    }
+
+    public static String analyzeType(Property property) {
+        String type = null;
+        if (PROPERTIES_TYPE.equals(property.getKey())) {
+            type = property.getValue();
         }
         return type;
     }

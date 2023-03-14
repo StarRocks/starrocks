@@ -586,7 +586,7 @@ private:
     Status _flush_l0();
 
     Status _merge_compaction_internal(ImmutableIndexWriter* writer, int l1_start_idx, int l1_end_idx,
-                                      size_t total_usage, size_t total_size);
+                                      size_t total_usage, size_t total_size, bool keep_delete);
     Status _merge_compaction_advance();
     // merge l0 and l1 into new l1, then clear l0
     Status _merge_compaction();

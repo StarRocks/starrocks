@@ -134,7 +134,7 @@ public class LakeTableTest {
         Assert.assertTrue(newTable.isLakeTable());
         LakeTable newLakeTable = (LakeTable) newTable;
 
-        Assert.assertEquals("s3://test-bucket/1/", newLakeTable.getStorageGroup());
+        Assert.assertEquals("s3://test-bucket/1/", newLakeTable.getStoragePath());
 
         Partition p1 = newLakeTable.getPartition(partitionId);
         MaterializedIndex newIndex = p1.getBaseIndex();
@@ -146,6 +146,10 @@ public class LakeTableTest {
             Assert.assertEquals(expectedTabletId, lakeTablet.getShardId());
             ++expectedTabletId;
         }
+
+        Assert.assertEquals(-1, newLakeTable.lastSchemaUpdateTime.longValue());
+        Assert.assertEquals(-1, newLakeTable.lastVersionUpdateStartTime.longValue());
+        Assert.assertEquals(0, newLakeTable.lastVersionUpdateEndTime.longValue());
 
         Assert.assertNull(table.delete(true));
         Assert.assertNotNull(table.delete(false));

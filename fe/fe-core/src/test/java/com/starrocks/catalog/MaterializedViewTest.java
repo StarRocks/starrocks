@@ -542,40 +542,6 @@ public class MaterializedViewTest {
     }
 
     @Test
-    public void testMvAfterBaseTablePartitionRename() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE test.tbl_to_rename\n" +
-                        "(\n" +
-                        "    k1 date,\n" +
-                        "    k2 int,\n" +
-                        "    v1 int sum\n" +
-                        ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
-                        "(\n" +
-                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
-                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');")
-                .withMaterializedView("create materialized view mv_to_check\n" +
-                        "distributed by hash(k2) buckets 3\n" +
-                        "refresh async\n" +
-                        "as select k2, sum(v1) as total from tbl_to_rename group by k2;");
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        String alterPartitionSql = "alter table tbl_to_rename rename partition p1 new_p1;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, alterPartitionSql);
-        stmtExecutor.execute();
-        MaterializedView mv = ((MaterializedView) testDb.getTable("mv_to_check"));
-        Assert.assertNotNull(mv);
-        Assert.assertFalse(mv.isActive());
-    }
-
-    @Test
     public void testMaterializedViewWithHint() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
@@ -638,9 +604,36 @@ public class MaterializedViewTest {
         String createMvSql = "create materialized view mv1 as select p_partkey, p_name, length(p_brand) from part_with_mv;";
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, createMvSql);
         stmtExecutor.execute();
-        Assert.assertEquals("Materialized view does not support this function:length(`test`.`part_with_mv`.`p_brand`)," +
-                " supported functions are: [min, max, hll_union, percentile_union, count, sum, bitmap_union]",
+        Assert.assertEquals("Getting analyzing error. Detail message: Materialized view does not support " +
+                        "this function:length(`test`.`part_with_mv`.`p_brand`), supported functions are: " +
+                        "[min, max, hll_union, percentile_union, count, sum, bitmap_union].",
                 connectContext.getState().getErrorMessage());
+    }
+
+    @Test(expected = DdlException.class)
+    public void testNonPartitionMvSupportedProperties() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE goods(\n" +
+                        "item_id1 INT,\n" +
+                        "item_name STRING,\n" +
+                        "price FLOAT\n" +
+                        ") DISTRIBUTED BY HASH(item_id1)\n" +
+                        "PROPERTIES(\"replication_num\" = \"1\");");
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW order_mv\n" +
+                "DISTRIBUTED BY HASH(item_id1) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "\"partition_refresh_number\" = \"10\"\n" +
+                ")\n" +
+                "REFRESH ASYNC\n" +
+                "AS SELECT\n" +
+                "item_id1,\n" +
+                "sum(price) as total\n" +
+                "FROM goods\n" +
+                "GROUP BY item_id1;");
     }
 
     @Test

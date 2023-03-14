@@ -89,6 +89,7 @@ public class FileSystemManager {
     private static final String COS_SCHEME = "cosn";
     private static final String KS3_SCHEME = "ks3";
     private static final String OBS_SCHEME = "obs";
+    private static final String TOS_SCHEME = "tos";
 
     private static final String USER_NAME_KEY = "username";
     private static final String PASSWORD_KEY = "password";
@@ -153,6 +154,16 @@ public class FileSystemManager {
     // This property is used like 'fs.hdfs.impl.disable.cache'
     private static final String FS_OBS_IMPL_DISABLE_CACHE = "fs.obs.impl.disable.cache";
     private static final String FS_OBS_IMPL = "fs.obs.impl";
+
+    // arguments for tos
+    private static final String FS_TOS_ACCESS_KEY = "fs.tos.access.key";
+    private static final String FS_TOS_SECRET_KEY = "fs.tos.secret.key";
+    private static final String FS_TOS_ENDPOINT = "fs.tos.endpoint";
+    private static final String FS_TOS_REGION = "fs.tos.region";
+    // This property is used like 'fs.hdfs.impl.disable.cache'
+    private static final String FS_TOS_IMPL_DISABLE_CACHE = "fs.tos.impl.disable.cache";
+    private static final String FS_TOS_CONNECTION_SSL_ENABLED = "fs.tos.connection.ssl.enabled";
+    private static final String FS_TOS_IMPL = "fs.tos.impl";
 
     private ScheduledExecutorService handleManagementPool = Executors.newScheduledThreadPool(2);
 
@@ -220,6 +231,8 @@ public class FileSystemManager {
             brokerFileSystem = getKS3FileSystem(path, properties);
         } else if (scheme.equals(OBS_SCHEME)) {
             brokerFileSystem = getOBSFileSystem(path, properties);
+        } else if (scheme.equals(TOS_SCHEME)) {
+            brokerFileSystem = getTOSFileSystem(path, properties);
         } else {
             // If all above match fails, then we will read the settings from hdfs-site.xml, core-site.xml of FE,
             // and try to create a universal file system. The reason why we can do this is because hadoop/s3 
@@ -789,6 +802,54 @@ public class FileSystemManager {
                 conf.set(FS_COS_IMPL_DISABLE_CACHE, disableCache);
                 FileSystem cosFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(cosFileSystem);
+            }
+            return fileSystem;
+        } catch (Exception e) {
+            logger.error("errors while connect to " + path, e);
+            throw new BrokerException(TBrokerOperationStatusCode.NOT_AUTHORIZED, e);
+        } finally {
+            fileSystem.getLock().unlock();
+        }
+    }
+
+    public BrokerFileSystem getTOSFileSystem(String path, Map<String, String> properties) {
+        WildcardURI pathUri = new WildcardURI(path);
+        String accessKey = properties.getOrDefault(FS_TOS_ACCESS_KEY, "");
+        String secretKey = properties.getOrDefault(FS_TOS_SECRET_KEY, "");
+        String endpoint = properties.getOrDefault(FS_TOS_ENDPOINT, "");
+        String disableCache = properties.getOrDefault(FS_TOS_IMPL_DISABLE_CACHE, "true");
+        String region = properties.getOrDefault(FS_TOS_REGION, "");
+        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+        // we should use these two params as the host identity, because FileSystem will cache both.
+        String host = TOS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+        String tosUgi = accessKey + "," + secretKey;
+        FileSystemIdentity fileSystemIdentity = new FileSystemIdentity(host, tosUgi);
+        BrokerFileSystem fileSystem = null;
+        cachedFileSystem.putIfAbsent(fileSystemIdentity, new BrokerFileSystem(fileSystemIdentity));
+        fileSystem = cachedFileSystem.get(fileSystemIdentity);
+        if (fileSystem == null) {
+            // it means it is removed concurrently by checker thread
+            return null;
+        }
+        fileSystem.getLock().lock();
+        try {
+            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
+                // this means the file system is closed by file system checker thread
+                // it is a corner case
+                return null;
+            }
+            if (fileSystem.getDFSFileSystem() == null) {
+                logger.info("could not find file system for path " + path + " create a new one");
+                // create a new filesystem
+                Configuration conf = new Configuration();
+                conf.set(FS_TOS_ACCESS_KEY, accessKey);
+                conf.set(FS_TOS_SECRET_KEY, secretKey);
+                conf.set(FS_TOS_ENDPOINT, endpoint);
+                conf.set(FS_TOS_REGION, region);
+                conf.set(FS_TOS_IMPL, "com.volcengine.cloudfs.fs.TosFileSystem");
+                conf.set(FS_TOS_IMPL_DISABLE_CACHE, disableCache);
+                FileSystem tosFileSystem = FileSystem.get(pathUri.getUri(), conf);
+                fileSystem.setFileSystem(tosFileSystem);
             }
             return fileSystem;
         } catch (Exception e) {

@@ -175,6 +175,7 @@ enum TObjectStoreType {
   OSS,
   COS,
   OBS,
+  TOS,
   UNIVERSAL_FS
 }
 
@@ -319,9 +320,9 @@ struct THdfsScanRange {
     9: optional list<string> hudi_logs
 
     // whether to use JNI scanner to read data of hudi MOR table for snapshot queries
-    10: optional bool use_hudi_jni_reader;
+    10: optional bool use_hudi_jni_reader
 
-    11: optional list<TIcebergDeleteFile> delete_files;
+    11: optional list<TIcebergDeleteFile> delete_files
 
     // number of lines at the start of the file to skip
     12: optional i64 skip_header
@@ -442,6 +443,7 @@ struct TOlapScanNode {
 
   26: optional list<Exprs.TExpr> bucket_exprs
   27: optional list<string> sort_key_column_names
+  28: optional i32 max_parallel_scan_instance_num
 }
 
 struct TJDBCScanNode {
@@ -467,6 +469,7 @@ struct TLakeScanNode {
   // which columns only be used to filter data in the stage of scan data
   10: optional list<string> unused_output_column_name
   11: optional list<string> sort_key_column_names
+  12: optional list<Exprs.TExpr> bucket_exprs
 }
 
 struct TEqJoinCondition {

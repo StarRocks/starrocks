@@ -41,7 +41,7 @@ void append_prev_result(ChunkPtr result_chunk, const Columns& group_by_columns, 
 
 } // namespace
 
-StreamAggregator::StreamAggregator(AggregatorParamsPtr&& params) : Aggregator(std::move(params)) {
+StreamAggregator::StreamAggregator(AggregatorParamsPtr params) : Aggregator(std::move(params)) {
     _count_agg_idx = _params->count_agg_idx;
 }
 
@@ -115,6 +115,7 @@ Status StreamAggregator::open(RuntimeState* state) {
 
 Status StreamAggregator::process_chunk(StreamChunk* chunk) {
     size_t chunk_size = chunk->num_rows();
+    _reset_exprs();
     RETURN_IF_ERROR(_evaluate_group_by_exprs(chunk));
     RETURN_IF_ERROR(evaluate_agg_fn_exprs(chunk));
 

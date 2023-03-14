@@ -11,9 +11,8 @@ To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cl
 
 ## Usage notes
 
-- The file formats of Delta Lake that StarRocks supports are Parquet, ORC, and CSV.
-- The data types of Delta Lake that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP data type for CSV-formatted Delta Lake tables.
-- You can only use Delta Lake catalogs to query data. You cannot use Delta Lake catalogs to drop, delete, or insert data into your Delta Lake cluster.
+- The file format of Delta Lake that StarRocks supports is Parquet. Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
+- The data types of Delta Lake that StarRocks does not support are MAP and STRUCT.
 
 ## Integration preparations
 
@@ -107,7 +106,7 @@ The following table describes the parameter you need to configure in `MetastoreP
 
 | Parameter           | Required | Description                                                  |
 | ------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<IP address of Hive metastore>:<Port number of Hive metastore>`. |
+| hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (,), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
 ###### AWS Glue
 
@@ -215,8 +214,8 @@ However, if the frequency of data updates in Delta Lake is high, you can tune th
 > In most cases, if your Delta Lake data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
 
 | Parameter                              | Required | Description                                                  |
-| -------------------------------------- | -------- | ------------------------------------------------------------ |
-| enable_hive_metastore_cache            | No       | Specifies whether StarRocks caches the metadata of Delta Lake tables. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
+|----------------------------------------| -------- | ------------------------------------------------------------ |
+| enable_metastore_cache                 | No       | Specifies whether StarRocks caches the metadata of Delta Lake tables. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
 | enable_remote_file_cache               | No       | Specifies whether StarRocks caches the metadata of the underlying data files of Delta Lake tables or partitions. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
 | metastore_cache_refresh_interval_sec   | No       | The time interval at which StarRocks asynchronously updates the metadata of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `7200`, which is 2 hours. |
 | remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
@@ -458,7 +457,7 @@ You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file o
 
 Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Delta Lake catalogs.
 
-By default (namely, when the `enable_hive_metastore_cache` and `enable_remote_file_cache` parameters are both set to `true`), if a query hits a partition of a Delta Lake table, StarRocks automatically caches the metadata of the partition and the metadata of the underlying data files of the partition. The cached metadata is updated by using the lazy update policy.
+By default (namely, when the `enable_metastore_cache` and `enable_remote_file_cache` parameters are both set to `true`), if a query hits a partition of a Delta Lake table, StarRocks automatically caches the metadata of the partition and the metadata of the underlying data files of the partition. The cached metadata is updated by using the lazy update policy.
 
 For example, there is a Delta Lake table named `table2`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hits `p1`, and StarRocks caches the metadata of `p1` and the metadata of the underlying data files of `p1`. Assume that the default time intervals to update and discard the cached metadata are as follows:
 

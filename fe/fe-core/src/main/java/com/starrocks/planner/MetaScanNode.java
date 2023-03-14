@@ -88,7 +88,7 @@ public class MetaScanNode extends ScanNode {
                     LOG.error("no queryable replica found in tablet {}. visible version {}",
                             tabletId, visibleVersion);
                     if (LOG.isDebugEnabled()) {
-                        if (olapTable.isLakeTable()) {
+                        if (olapTable.isCloudNativeTable()) {
                             LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId,
                                     ((LakeTablet) tablet).getShardId(),
                                     tablet.getBackendIds());
@@ -137,7 +137,7 @@ public class MetaScanNode extends ScanNode {
 
     @Override
     protected void toThrift(TPlanNode msg) {
-        if (olapTable.isLakeTable()) {
+        if (olapTable.isCloudNativeTable()) {
             msg.node_type = TPlanNodeType.LAKE_META_SCAN_NODE;
         } else {
             msg.node_type = TPlanNodeType.META_SCAN_NODE;

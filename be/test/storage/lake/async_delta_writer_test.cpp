@@ -440,4 +440,15 @@ TEST_F(AsyncDeltaWriterTest, test_close) {
     }
 }
 
+TEST_F(AsyncDeltaWriterTest, test_open_after_close) {
+    auto tablet_id = _tablet_metadata->id();
+    auto delta_writer = AsyncDeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+                                                 _mem_tracker.get());
+    ASSERT_OK(delta_writer->open());
+    delta_writer->close();
+    auto st = delta_writer->open();
+    ASSERT_FALSE(st.ok());
+    ASSERT_EQ("AsyncDeltaWriter has been closed", st.message());
+}
+
 } // namespace starrocks::lake

@@ -238,8 +238,10 @@ public:
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }
+
+        bool is_cache_hit = (*file_st)->is_cache_hit();
         auto istream = std::make_shared<StarletInputStream>(std::move(*file_st));
-        return std::make_unique<RandomAccessFile>(std::move(istream), path);
+        return std::make_unique<RandomAccessFile>(std::move(istream), path, is_cache_hit);
     }
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
@@ -299,6 +301,18 @@ public:
             return to_status(fs_st.status());
         }
         auto st = (*fs_st)->list_dir(pair.first, false, cb);
+        return to_status(st);
+    }
+
+    Status iterate_dir2(const std::string& dir,
+                        const std::function<bool(std::string_view, const FileMeta&)>& cb) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dir));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        FileMeta meta;
+        auto st = (*fs_st)->list_dir(pair.first, false, [&](std::string_view name) { return cb(name, meta); });
         return to_status(st);
     }
 

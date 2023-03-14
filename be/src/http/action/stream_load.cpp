@@ -426,11 +426,15 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         request.__set_rowDelimiter(http_req->header(HTTP_ROW_DELIMITER));
     }
     if (!http_req->header(HTTP_SKIP_HEADER).empty()) {
-        auto skip_header = std::stoll(http_req->header(HTTP_SKIP_HEADER));
-        if (skip_header < 0) {
-            return Status::InvalidArgument("skip_header must be equal or greater than 0");
+        try {
+            auto skip_header = std::stoll(http_req->header(HTTP_SKIP_HEADER));
+            if (skip_header < 0) {
+                return Status::InvalidArgument("skip_header must be equal or greater than 0");
+            }
+            request.__set_skipHeader(skip_header);
+        } catch (const std::invalid_argument& e) {
+            return Status::InvalidArgument("Invalid csv load skip_header format");
         }
-        request.__set_skipHeader(skip_header);
     }
     if (!http_req->header(HTTP_TRIM_SPACE).empty()) {
         if (boost::iequals(http_req->header(HTTP_TRIM_SPACE), "false")) {
@@ -527,10 +531,12 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             return Status::InvalidArgument("Invalid load_dop format");
         }
     }
+    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
+        rpc_timeout_ms = std::min(ctx->timeout_second * 1000, config::txn_commit_rpc_timeout_ms);
     }
-    request.__set_thrift_rpc_timeout_ms(config::thrift_rpc_timeout_ms);
+    request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
     // plan this load
     TNetworkAddress master_addr = get_master_address();
 #ifndef BE_TEST
@@ -541,7 +547,8 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     int64_t stream_load_put_start_time = MonotonicNanos();
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
-            [&request, ctx](FrontendServiceConnection& client) { client->streamLoadPut(ctx->put_result, request); }));
+            [&request, ctx](FrontendServiceConnection& client) { client->streamLoadPut(ctx->put_result, request); },
+            rpc_timeout_ms));
     ctx->stream_load_put_cost_nanos = MonotonicNanos() - stream_load_put_start_time;
 #else
     ctx->put_result = k_stream_load_put_result;

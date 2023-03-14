@@ -167,6 +167,13 @@ public:
      * @return TYPE_OBJECT
      */
     DEFINE_VECTORIZED_FN(bitmap_subset_in_range);
+
+    /**
+     * @param:
+     * @paramType columns: [TYPE_OBJECT, TYPE_BIGINT, TYPE_BIGINT]
+     * @return TYPE_OBJECT
+     */
+    DEFINE_VECTORIZED_FN(bitmap_subset_limit);
 };
 
 } // namespace starrocks

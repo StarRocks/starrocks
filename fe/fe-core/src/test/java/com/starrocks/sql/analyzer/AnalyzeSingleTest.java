@@ -357,11 +357,12 @@ public class AnalyzeSingleTest {
         statement = (QueryStatement) analyzeSuccess("select '0ABC' ");
         Assert.assertEquals("\'0ABC\'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
-        analyzeFail("select x'0AB' ", "Binary literal must contain an even number of digits");
-        analyzeFail("select x\"0AB\" ", "Binary literal must contain an even number of digits");
-        analyzeFail("select x'0,AB' ", "Binary literal can only contain hexadecimal digits");
-        analyzeFail("select x\"0,AB\" ", "Binary literal can only contain hexadecimal digits");
-        analyzeFail("select x\"0AX\" ", "Binary literal can only contain hexadecimal digits");
+        String expectMsg = "Binary literal can only contain hexadecimal digits and an even number of digits";
+        analyzeFail("select x'0AB' ", expectMsg);
+        analyzeFail("select x\"0AB\" ", expectMsg);
+        analyzeFail("select x'0,AB' ", expectMsg);
+        analyzeFail("select x\"0,AB\" ", expectMsg);
+        analyzeFail("select x\"0AX\" ", expectMsg);
     }
 
     @Test
@@ -675,8 +676,8 @@ public class AnalyzeSingleTest {
 
     @Test
     public void testColumnAlias() {
-        analyzeFail("select * from test.t0 as t(a,b,c)", "Getting syntax error at line 1, column 27. " +
-                "Detail message: Input 'a' is not valid at this position, please check the SQL Reference.");
+        analyzeFail("select * from test.t0 as t(a,b,c)", "Getting syntax error at line 1, column 26. " +
+                "Detail message: Input '(' is not valid at this position.");
         analyzeSuccess("select * from (select * from test.t0) as t(a,b,c)");
         QueryRelation query = ((QueryStatement) analyzeSuccess("select t.a from (select * from test.t0) as t(a,b,c)"))
                 .getQueryRelation();

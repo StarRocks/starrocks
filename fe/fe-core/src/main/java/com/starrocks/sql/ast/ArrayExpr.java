@@ -19,6 +19,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
@@ -30,7 +31,11 @@ public class ArrayExpr extends Expr {
     private boolean explicitType = false;
 
     public ArrayExpr(Type type, List<Expr> items) {
-        super();
+        this(type, items, NodePosition.ZERO);
+    }
+
+    public ArrayExpr(Type type, List<Expr> items, NodePosition pos) {
+        super(pos);
         this.type = type;
         this.children = Expr.cloneList(items);
         this.explicitType = this.type != null;

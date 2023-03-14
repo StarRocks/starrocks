@@ -360,6 +360,15 @@ RowsetSharedPtr Tablet::rowset_with_max_version() const {
     return iter->second;
 }
 
+Status Tablet::support_binlog() {
+    // TODO support primary key
+    if (keys_type() == DUP_KEYS) {
+        return Status::OK();
+    }
+
+    return Status::InternalError("Not support binlog, keys type: " + KeysType_Name(keys_type()));
+}
+
 bool Tablet::binlog_enable() {
     auto config = _tablet_meta->get_binlog_config();
     return config != nullptr && config->binlog_enable;
@@ -706,16 +715,6 @@ bool Tablet::check_migrate(const TabletSharedPtr& tablet) {
         }
     }
     return false;
-}
-
-bool Tablet::_check_versions_completeness() {
-    const RowsetSharedPtr lastest_delta = rowset_with_max_version();
-    if (lastest_delta == nullptr) {
-        return false;
-    }
-
-    Version test_version = Version(0, lastest_delta->end_version());
-    return capture_consistent_versions(test_version, nullptr).ok();
 }
 
 const uint32_t Tablet::calc_cumulative_compaction_score() const {
