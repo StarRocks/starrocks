@@ -2,6 +2,9 @@
 
 package com.starrocks.sql.plan;
 
+import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Preconditions;
+import com.google.common.io.CharStreams;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -13,12 +16,14 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.MaterializedViewTPCHTest;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import kotlin.text.Charsets;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.AfterClass;
@@ -34,8 +39,10 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -687,14 +694,14 @@ public class PlanTestBase {
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
         starRocksAssert.withTable("CREATE TABLE test.bitmap_table (\n" +
-                        "  `id` int(11) NULL COMMENT \"\",\n" +
-                        "  `id2` bitmap bitmap_union NULL\n" +
-                        ") ENGINE=OLAP\n" +
-                        "AGGREGATE KEY(`id`)\n" +
-                        "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
-                        "PROPERTIES (\n" +
-                        " \"replication_num\" = \"1\"\n" +
-                        ");")
+                "  `id` int(11) NULL COMMENT \"\",\n" +
+                "  `id2` bitmap bitmap_union NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                " \"replication_num\" = \"1\"\n" +
+                ");")
                 .withTable("CREATE TABLE test.bitmap_table_2 (\n" +
                         "  `id` int(11) NULL COMMENT \"\",\n" +
                         "  `id2` bitmap bitmap_union NULL\n" +
@@ -848,14 +855,14 @@ public class PlanTestBase {
 
         FeConstants.runningUnitTest = true;
         starRocksAssert.withResource("create external resource \"jdbc_test\"\n" +
-                        "PROPERTIES (\n" +
-                        "\"type\"=\"jdbc\",\n" +
-                        "\"user\"=\"test_user\",\n" +
-                        "\"password\"=\"test_passwd\",\n" +
-                        "\"driver_url\"=\"test_driver_url\",\n" +
-                        "\"driver_class\"=\"test.driver.class\",\n" +
-                        "\"jdbc_uri\"=\"test_uri\"\n" +
-                        ");")
+                "PROPERTIES (\n" +
+                "\"type\"=\"jdbc\",\n" +
+                "\"user\"=\"test_user\",\n" +
+                "\"password\"=\"test_passwd\",\n" +
+                "\"driver_url\"=\"test_driver_url\",\n" +
+                "\"driver_class\"=\"test.driver.class\",\n" +
+                "\"jdbc_uri\"=\"test_uri\"\n" +
+                ");")
                 .withTable("create external table test.jdbc_test\n" +
                         "(a int, b varchar(20), c float)\n" +
                         "ENGINE=jdbc\n" +
@@ -1013,9 +1020,9 @@ public class PlanTestBase {
                 ");");
 
         starRocksAssert.withTable("create table test.colocate1\n" +
-                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
-                        "properties(\"replication_num\" = \"1\"," +
-                        "\"colocate_with\" = \"group1\");")
+                "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
+                "properties(\"replication_num\" = \"1\"," +
+                "\"colocate_with\" = \"group1\");")
                 .withTable("create table test.colocate2\n" +
                         "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
                         "properties(\"replication_num\" = \"1\"," +
@@ -1087,8 +1094,7 @@ public class PlanTestBase {
     }
 
     public String getFragmentPlan(String sql) throws Exception {
-        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
-                getExplainString(TExplainLevel.NORMAL);
+        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getExplainString(TExplainLevel.NORMAL);
     }
 
     public String getLogicalFragmentPlan(String sql) throws Exception {
@@ -1097,13 +1103,11 @@ public class PlanTestBase {
     }
 
     public String getVerboseExplain(String sql) throws Exception {
-        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
-                getExplainString(TExplainLevel.VERBOSE);
+        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getExplainString(TExplainLevel.VERBOSE);
     }
 
     public String getCostExplain(String sql) throws Exception {
-        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
-                getExplainString(TExplainLevel.COSTS);
+        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getExplainString(TExplainLevel.COSTS);
     }
 
     public String getDumpString(String sql) throws Exception {
@@ -1224,8 +1228,7 @@ public class PlanTestBase {
                         isDump = true;
                         continue;
                     case "[end]":
-                        Pair<String, ExecPlan> pair =
-                                UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
+                        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
 
                         try {
                             String fra = null;
@@ -1318,9 +1321,9 @@ public class PlanTestBase {
     }
 
     private void debugSQL(BufferedWriter writer, boolean hasResult, boolean hasFragment, boolean hasDump,
-                          boolean hasStatistics, int nthPlan, String sql, String plan, String fragment, String dump,
-                          String statistic,
-                          String comment) {
+            boolean hasStatistics, int nthPlan, String sql, String plan, String fragment, String dump,
+            String statistic,
+            String comment) {
         try {
             if (!comment.trim().isEmpty()) {
                 writer.append(comment).append("\n");
@@ -1368,11 +1371,9 @@ public class PlanTestBase {
     }
 
     private void checkWithIgnoreTabletList(String expect, String actual) {
-        expect = Stream.of(expect.split("\n")).
-                filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+        expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
 
-        actual = Stream.of(actual.split("\n")).
-                filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+        actual = Stream.of(actual.split("\n")).filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
         Assert.assertEquals(expect, actual);
     }
 
@@ -1419,5 +1420,53 @@ public class PlanTestBase {
 
     public OlapTable getOlapTable(String t) {
         return (OlapTable) getTable(t);
+    }
+
+    public static List<Pair<String, String>> zipSqlAndPlan(List<String> sqls, List<String> plans) {
+        Preconditions.checkState(sqls.size() == plans.size(), "sqls and plans should have same size");
+        List<Pair<String, String>> zips = Lists.newArrayList();
+        for (int i = 0; i < sqls.size(); i++) {
+            zips.add(Pair.create(sqls.get(i), plans.get(i)));
+        }
+        return zips;
+    }
+
+    protected static void createTables(String dirName, List<String> fileNames) {
+        getSqlList(dirName, fileNames).forEach(createTblSql -> {
+            System.out.println("create table sql:" + createTblSql);
+            try {
+                starRocksAssert.withTable(createTblSql);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    protected static void createMaterializedViews(String dirName, List<String> fileNames) {
+        getSqlList(dirName, fileNames).forEach(sql -> {
+            System.out.println("create mv sql:" + sql);
+            try {
+                starRocksAssert.withMaterializedView(sql);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    protected static List<String> getSqlList(String dirName, List<String> fileNames) {
+        ClassLoader loader = MaterializedViewTPCHTest.class.getClassLoader();
+        List<String> createTableSqlList = fileNames.stream().map(n -> {
+            System.out.println("file name:" + n);
+            try {
+                return CharStreams.toString(
+                        new InputStreamReader(
+                                Objects.requireNonNull(loader.getResourceAsStream(dirName + n + ".sql")),
+                                Charsets.UTF_8));
+            } catch (Throwable e) {
+                return null;
+            }
+        }).collect(Collectors.toList());
+        Assert.assertFalse(createTableSqlList.contains(null));
+        return createTableSqlList;
     }
 }
