@@ -113,6 +113,7 @@ public class StatisticProcDir implements ProcDirInterface {
 
         unhealthyTabletIds.clear();
         inconsistentTabletIds.clear();
+        errorStateTabletIds.clear();
         cloningTabletIds = AgentTaskQueue.getTabletIdsByType(TTaskType.CLONE);
         List<List<Comparable>> lines = new ArrayList<List<Comparable>>();
         for (Long dbId : dbIds) {
