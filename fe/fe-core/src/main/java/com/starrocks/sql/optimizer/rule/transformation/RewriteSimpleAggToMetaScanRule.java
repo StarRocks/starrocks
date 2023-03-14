@@ -94,8 +94,10 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
             Column c = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
             // for empty table, meta scan may return NULL result, so we force set usedColumn to nullable.
-            c.setIsAllowNull(true);
-            newScanColumnRefs.put(metaColumn, c);
+            // here we should copy a new Column to avoid change metadata.
+            Column copiedColumn = new Column(c);
+            copiedColumn.setIsAllowNull(true);
+            newScanColumnRefs.put(metaColumn, copiedColumn);
 
 
             Function aggFunction = aggCall.getFunction();
