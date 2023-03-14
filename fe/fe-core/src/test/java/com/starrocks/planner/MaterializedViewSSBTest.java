@@ -25,8 +25,6 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 public class MaterializedViewSSBTest extends MaterializedViewTestBase {
-    private static final String MATERIALIZED_DB_NAME = "test_mv";
-
     @BeforeClass
     public static void setUp() throws Exception {
         FeConstants.runningUnitTest = true;
