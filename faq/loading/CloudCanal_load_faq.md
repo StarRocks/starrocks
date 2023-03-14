@@ -20,4 +20,5 @@
 cumulative_compaction_num_threads_per_disk = 4
 base_compaction_num_threads_per_disk = 2
 cumulative_compaction_check_interval_seconds = 2
+update_compaction_num_threads_per_disk = 2 （该参数属于主键模型单独的compaction参数）
 ```
