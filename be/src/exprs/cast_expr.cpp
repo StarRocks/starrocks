@@ -180,6 +180,10 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
                 } else {
                     overflow = true;
                 }
+            } else if constexpr (CastToString::extend_type<RunTimeCppType<FromType>>()) {
+                auto v = viewer.value(row);
+                std::string str = CastToString::apply<RunTimeCppType<FromType>, std::string>(v);
+                value = JsonValue::from_string(str);
             } else {
                 if constexpr (AllowThrowException) {
                     THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
@@ -1200,25 +1204,6 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
     return std::string(buf, len);
 }
 
-/**
- * Cast other type to string without float, double, string
- */
-struct CastToString {
-    template <typename Type, typename ResultType>
-    static std::string apply(const Type& v) {
-        if constexpr (IsDate<Type> || IsTimestamp<Type> || IsDecimal<Type>) {
-            // DateValue, TimestampValue, DecimalV2
-            return v.to_string();
-        } else if constexpr (IsInt128<Type>) {
-            // int128_t
-            return LargeIntValue::to_string(v);
-        } else {
-            // int8_t ~ int64_t, boolean
-            return SimpleItoa(v);
-        }
-    }
-};
-
 // The StringUnaryFunction templace is defined in unary_function.h
 // This place is a trait for this, it's for performance.
 // CastToString will copy string when returning value,
@@ -1263,6 +1248,9 @@ CUSTOMIZE_FN_CAST(TYPE_CHAR, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_MAP, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_STRUCT, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_TIME, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_DATETIME, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_DATE, TYPE_JSON, cast_to_json_fn);
 
 /**
  * Resolve cast to string

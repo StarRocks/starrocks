@@ -12,16 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/column_visitor_adapter.h"
+#include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "exprs/cast_expr.h"
-#include "types/logical_type.h"
 
 namespace starrocks {
+
+template <typename, typename = void>
+constexpr bool is_type_complete_v = false;
+
+template <typename T>
+constexpr bool is_type_complete_v<T, std::void_t<decltype(sizeof(T))>> = true;
 
 // Cast item in column
 // NOTE: cast in rowwise is not efficent but intuitive
@@ -35,37 +42,72 @@ public:
         return col->accept(&visitor);
     }
 
-    template <class T, typename = std::enable_if<ColumnTraits<T>::ColumnType, void>>
+    template <class T>
+    void _add_element(T&& value) {
+        if (_field_name.empty()) {
+            _builder->add(vpack::Value(value));
+        } else {
+            _builder->add(_field_name, vpack::Value(value));
+        }
+    }
+
+    template <class T, typename = std::enable_if<is_type_complete_v<typename ColumnTraits<T>::ColumnType>, void>>
     Status do_visit(const FixedLengthColumn<T>& col) {
-        auto value = col.get(_row).template get<T>();
-        _builder->add(_field_name, value);
+        if constexpr (CastToString::extend_type<T>()) {
+            auto value = col.get(_row).template get<T>();
+            std::string str = CastToString::apply<T, std::string>(value);
+            _add_element(std::move(str));
+        } else if constexpr (std::is_integral_v<T>) {
+            auto value = col.get(_row).template get<T>();
+            _add_element(std::move(value));
+        } else {
+            return Status::NotSupported("not supported");
+        }
         return {};
     }
 
     Status do_visit(const JsonColumn& col) {
         JsonValue* json = col.get_object(_row);
-        _builder->add(_field_name, json->to_vslice());
+        if (_field_name.empty()) {
+            _builder->add(json->to_vslice());
+        } else {
+            _builder->add(_field_name, json->to_vslice());
+        }
         return {};
     }
 
     Status do_visit(const BinaryColumn& col) {
         Slice slice = col.get_slice(_row);
-        _builder->add(_field_name, vpack::Value(std::string_view(slice.data, slice.size)));
+        _add_element(std::string_view(slice.data, slice.size));
         return {};
     }
 
     Status do_visit(const StructColumn& col) {
+        if (_field_name.empty()) {
+            _builder->openObject();
+        } else {
+            _builder->add(_field_name, vpack::Value(vpack::ValueType::Object));
+        }
         auto& names = col.field_names();
         auto& columns = col.fields();
         for (int i = 0; i < columns.size(); i++) {
-            auto& name = names[i];
+            auto name = names.size() > i ? names[i] : fmt::format("k{}", i);
             auto& field_column = columns[i];
             RETURN_IF_ERROR(cast_datum_to_json(field_column, _row, name, _builder));
         }
+        if (!_builder->isClosed()) {
+            _builder->close();
+        }
+
         return {};
     }
 
     Status do_visit(const MapColumn& col) {
+        if (_field_name.empty()) {
+            _builder->openObject();
+        } else {
+            _builder->add(_field_name, vpack::Value(vpack::ValueType::Object));
+        }
         size_t map_size = col.get_map_size(_row);
         size_t map_start = col.get_map_size(_row - 1);
         auto key_col = col.keys_column();
@@ -74,8 +116,47 @@ public:
         for (int i = 0; i < map_size; i++) {
             int index = map_start + i;
             // TODO(murphy) cast to string instead of debug
-            std::string name = key_col->debug_item(index);
+            std::string name;
+            if (key_col->is_binary()) {
+                auto binary_col = ColumnHelper::as_column<BinaryColumn>(key_col);
+                name = binary_col->get_slice(index);
+            } else {
+                name = key_col->debug_item(index);
+            }
             RETURN_IF_ERROR(cast_datum_to_json(val_col, index, name, _builder));
+        }
+
+        if (!_builder->isClosed()) {
+            _builder->close();
+        }
+        return {};
+    }
+
+    Status do_visit(const ArrayColumn& col) {
+        if (_field_name.empty()) {
+            _builder->openArray();
+        } else {
+            _builder->add(_field_name, vpack::Value(vpack::ValueType::Array));
+        }
+
+        auto [offset, size] = col.get_element_offset_size(_row);
+        auto elements = col.elements_column();
+        for (int i = offset; i < offset + size; i++) {
+            RETURN_IF_ERROR(cast_datum_to_json(elements, i, "", _builder));
+        }
+
+        if (!_builder->isClosed()) {
+            _builder->close();
+        }
+
+        return {};
+    }
+
+    Status do_visit(const NullableColumn& col) {
+        if (col.is_null(_row)) {
+            _add_element(vpack::ValueType::Null);
+        } else {
+            RETURN_IF_ERROR(cast_datum_to_json(col.data_column(), _row, _field_name, _builder));
         }
         return {};
     }
@@ -92,6 +173,7 @@ private:
 };
 
 // Cast nested type(including struct/map/* to json)
+// TODO(murphy): optimize the performance with columnwise-casting
 StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column) {
     ColumnBuilder<TYPE_JSON> column_builder(column->size());
     vpack::Builder json_builder;

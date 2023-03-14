@@ -2128,18 +2128,16 @@ TEST_F(VectorizedCastExprTest, struct_to_json) {
     cast_expr.node_type = TExprNodeType::CAST_EXPR;
     cast_expr.num_children = 2;
     cast_expr.__isset.opcode = true;
-    cast_expr.__isset.child_type = true;
-    // cast_expr.child_type = gen_struct_type_desc(names, types);
-    // cast_expr.child_type = TPrimitiveType::;
-    // cast_expr.type = to_thrift(TYPE_JSON);
+    cast_expr.__isset.child_type_desc = true;
+    cast_expr.child_type_desc = gen_struct_type_desc(names, types);
     cast_expr.type = gen_type_desc(TPrimitiveType::JSON);
 
     // Build struct column
-    Columns fields{NullableColumn::create(UInt64Column::create(), NullColumn::create()),
+    Columns fields{NullableColumn::create(Int64Column::create(), NullColumn::create()),
                    NullableColumn::create(BinaryColumn::create(), NullColumn::create())};
     auto struct_column = StructColumn::create(fields, names);
-    struct_column->append_datum(DatumStruct{uint64_t(1), Slice("murphy")});
-    struct_column->append_datum(DatumStruct{uint64_t(2), Slice("murphy")});
+    struct_column->append_datum(DatumStruct{int64_t(1), Slice("park")});
+    struct_column->append_datum(DatumStruct{int64_t(2), Slice("menlo")});
 
     // Cast to JSON
     ObjectPool pool;
@@ -2152,36 +2150,35 @@ TEST_F(VectorizedCastExprTest, struct_to_json) {
     ASSERT_EQ(2, ptr->size());
     Datum json1 = ptr->get(0);
     ASSERT_FALSE(json1.is_null());
-    ASSERT_EQ("hehe", json1.get_json()->to_string_uncheck());
+    ASSERT_EQ("{\"id\": 1, \"name\": \"park\"}", json1.get_json()->to_string_uncheck());
 
-    Datum json2 = ptr->get(0);
+    Datum json2 = ptr->get(1);
     ASSERT_FALSE(json2.is_null());
-    ASSERT_EQ("hehe", json2.get_json()->to_string_uncheck());
+    ASSERT_EQ("{\"id\": 2, \"name\": \"menlo\"}", json2.get_json()->to_string_uncheck());
 }
 
-/*
 TEST_F(VectorizedCastExprTest, map_to_json) {
     TExprNode cast_expr;
     cast_expr.opcode = TExprOpcode::CAST;
     cast_expr.node_type = TExprNodeType::CAST_EXPR;
     cast_expr.num_children = 2;
     cast_expr.__isset.opcode = true;
-    cast_expr.__isset.child_type = true;
-    cast_expr.child_type = gen_map_type_desc(TYPE_INT, TYPE_VARCHAR);
-    cast_expr.type = to_thrift(TYPE_JSON);
+    cast_expr.__isset.child_type_desc = true;
+    cast_expr.child_type_desc = gen_map_type_desc(TYPE_INT, TYPE_VARCHAR);
+    cast_expr.type = gen_type_desc(TPrimitiveType::JSON);
 
     // Build struct column
-    auto key_column = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+    auto key_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
     auto val_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     auto struct_column = MapColumn::create(key_column, val_column, UInt32Column::create());
-    
+
     DatumMap map1;
-    map1[uint64_t(1)] = Slice("murphy");
-    map1[uint64_t(2)] = Slice("murphy");
+    map1[int64_t(1)] = Slice("menlo");
+    map1[int64_t(2)] = Slice("park");
     struct_column->append_datum(map1);
     DatumMap map2;
-    map2[uint64_t(3)] = Slice("wang");
-    map2[uint64_t(4)] = Slice("wang");
+    map2[int64_t(3)] = Slice("palo");
+    map2[int64_t(4)] = Slice("alto");
     struct_column->append_datum(map2);
 
     // Cast to JSON
@@ -2195,13 +2192,12 @@ TEST_F(VectorizedCastExprTest, map_to_json) {
     ASSERT_EQ(2, ptr->size());
     Datum json1 = ptr->get(0);
     ASSERT_FALSE(json1.is_null());
-    ASSERT_EQ("hehe", json1.get_json()->to_string_uncheck());
+    ASSERT_EQ("{\"1\": \"menlo\", \"2\": \"park\"}", json1.get_json()->to_string_uncheck());
 
-    Datum json2 = ptr->get(0);
+    Datum json2 = ptr->get(1);
     ASSERT_FALSE(json2.is_null());
-    ASSERT_EQ("hehe", json2.get_json()->to_string_uncheck());
+    ASSERT_EQ("{\"3\": \"palo\", \"4\": \"alto\"}", json2.get_json()->to_string_uncheck());
 }
-*/
 
 TEST_F(VectorizedCastExprTest, unsupported_test) {
     // can't cast arry<array<int>> to array<bool> rather than crash
