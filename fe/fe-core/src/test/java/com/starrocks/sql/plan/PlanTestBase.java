@@ -16,10 +16,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.planner.MaterializedViewTPCHTest;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -1371,9 +1373,27 @@ public class PlanTestBase {
     }
 
     private void checkWithIgnoreTabletList(String expect, String actual) {
-        expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+        if (isIgnoreColRefIds()) {
+            checkWithIgnoreTabletListAndColRefIds(expect, actual);
+        } else {
+            expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+            actual = Stream.of(actual.split("\n")).filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+            Assert.assertEquals(expect, actual);
+        }
+    }
 
-        actual = Stream.of(actual.split("\n")).filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+    protected boolean isIgnoreColRefIds() {
+        return false;
+    }
+
+    private void checkWithIgnoreTabletListAndColRefIds(String expect, String actual) {
+        expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList"))
+                .map(str -> str.replaceAll("\\d+", ""))
+                .collect(Collectors.joining("\n"));
+
+        actual = Stream.of(actual.split("\n")).filter(s -> !s.contains("tabletList"))
+                .map(str -> str.replaceAll("\\d+", ""))
+                .collect(Collectors.joining("\n"));
         Assert.assertEquals(expect, actual);
     }
 
@@ -1454,7 +1474,7 @@ public class PlanTestBase {
     }
 
     protected static List<String> getSqlList(String dirName, List<String> fileNames) {
-        ClassLoader loader = MaterializedViewTPCHTest.class.getClassLoader();
+        ClassLoader loader = PlanTestBase.class.getClassLoader();
         List<String> createTableSqlList = fileNames.stream().map(n -> {
             System.out.println("file name:" + n);
             try {
@@ -1468,5 +1488,30 @@ public class PlanTestBase {
         }).collect(Collectors.toList());
         Assert.assertFalse(createTableSqlList.contains(null));
         return createTableSqlList;
+    }
+
+    public static String getFileContent(String fileName) throws Exception {
+        ClassLoader loader = PlanTestBase.class.getClassLoader();
+        System.out.println("file name:" + fileName);
+        String content = "";
+        try {
+            content = CharStreams.toString(
+                    new InputStreamReader(
+                            Objects.requireNonNull(loader.getResourceAsStream(fileName)),
+                            Charsets.UTF_8));
+        } catch (Throwable e) {
+            throw e;
+        }
+        return content;
+    }
+
+    protected static void executeSqlFile(String fileName) throws Exception {
+        String sql = getFileContent(fileName);
+        List<StatementBase> statements = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
+        for (StatementBase stmt : statements) {
+            StmtExecutor stmtExecutor = new StmtExecutor(connectContext, stmt);
+            stmtExecutor.execute();
+            Assert.assertEquals("", connectContext.getState().getErrorMessage());
+        }
     }
 }

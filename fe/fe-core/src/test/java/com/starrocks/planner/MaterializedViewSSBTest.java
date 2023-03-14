@@ -15,14 +15,14 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.FeConstants;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class MaterializedViewSSBTest extends MaterializedViewTestBase {
-    private static final String MATERIALIZED_DB_NAME = "test_mv";
-
     @BeforeClass
     public static void setUp() throws Exception {
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
         MaterializedViewTestBase.setUp();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);

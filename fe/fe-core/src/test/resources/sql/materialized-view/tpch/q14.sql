@@ -13,5 +13,9 @@ where
   and l_shipdate >= date '1997-02-01'
   and l_shipdate < date '1997-03-01';
 [result]
+AGGREGATE ([GLOBAL] aggregate [{28: sum=sum(28: sum), 29: sum=sum(29: sum)}] group by [[]] having [null]
+    EXCHANGE GATHER
+        AGGREGATE ([LOCAL] aggregate [{28: sum=sum(26: case), 29: sum=sum(27: expr)}] group by [[]] having [null]
+            SCAN (mv[lineitem_mv] columns[50: l_shipdate, 64: p_type, 68: l_saleprice] predicate[50: l_shipdate >= 1997-02-01 AND 50: l_shipdate < 1997-03-01 AND 50: l_shipdate >= 1997-01-01 AND 50: l_shipdate < 1998-01-01])
 [end]
 

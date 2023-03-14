@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -30,6 +31,8 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
@@ -37,6 +40,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static com.starrocks.utframe.UtFrameUtils.CREATE_STATISTICS_TABLE_STMT;
 
@@ -61,6 +68,27 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         FeConstants.runningUnitTest = true;
         starRocksAssert = new StarRocksAssert(connectContext);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            Set<String> getPartitionNamesToRefreshForMv() {
+                return Sets.newHashSet();
+            }
+        };
+
+        new MockUp<UtFrameUtils>() {
+            @Mock
+            boolean isPrintPlanTableNames() {
+                return true;
+            }
+        };
+
+        new MockUp<PlanTestBase>() {
+            @Mock
+            boolean isIgnoreColRefIds() {
+                return true;
+            }
+        };
 
         if (!starRocksAssert.databaseExist("_statistics_")) {
             starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.STATISTICS_DB_NAME)
@@ -191,21 +219,21 @@ public class MaterializedViewTestBase extends PlanTestBase {
         return fixture.rewrite().nonMatch();
     }
 
-    protected Table getTable(String dbName, String mvName) {
+    protected static Table getTable(String dbName, String mvName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(mvName);
         Assert.assertNotNull(table);
         return table;
     }
 
-    protected MaterializedView getMv(String dbName, String mvName) {
+    protected static MaterializedView getMv(String dbName, String mvName) {
         Table table = getTable(dbName, mvName);
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         return mv;
     }
 
-    protected void refreshMaterializedView(String dbName, String mvName) throws Exception {
+    protected static void refreshMaterializedView(String dbName, String mvName) throws Exception {
         MaterializedView mv = getMv(dbName, mvName);
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
@@ -215,5 +243,16 @@ public class MaterializedViewTestBase extends PlanTestBase {
             taskManager.createTask(task, false);
         }
         taskManager.executeTaskSync(mvTaskName);
+    }
+
+    protected static void createAndRefreshMV(String db, String sql) throws Exception {
+        Pattern createMvPattern = Pattern.compile("^create materialized view (\\w+) .*");
+        Matcher matcher = createMvPattern.matcher(sql.toLowerCase(Locale.ROOT));
+        if (!matcher.find()) {
+            throw new Exception("create materialized view syntax error.");
+        }
+        String tableName = matcher.group(1);
+        starRocksAssert.withMaterializedView(sql);
+        refreshMaterializedView(db, tableName);
     }
 }

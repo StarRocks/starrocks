@@ -43,5 +43,12 @@ order by
     s_name,
     p_partkey limit 100;
 [result]
+TOP-N (order by [[15: s_acctbal DESC NULLS LAST, 23: n_name ASC NULLS FIRST, 11: s_name ASC NULLS FIRST, 1: p_partkey ASC NULLS FIRST]])
+    TOP-N (order by [[15: s_acctbal DESC NULLS LAST, 23: n_name ASC NULLS FIRST, 11: s_name ASC NULLS FIRST, 1: p_partkey ASC NULLS FIRST]])
+        PREDICATE 20: ps_supplycost = 121: min
+            ANALYTIC ({121: min=min(20: ps_supplycost)} [1: p_partkey] [] )
+                TOP-N (order by [[1: p_partkey ASC NULLS FIRST]])
+                    EXCHANGE SHUFFLE[1]
+                        SCAN (mv[partsupp_mv] columns[101: n_name, 102: p_mfgr, 103: p_size, 104: p_type, 105: ps_partkey, 107: ps_supplycost, 108: r_name, 109: s_acctbal, 110: s_address, 111: s_comment, 112: s_name, 114: s_phone] predicate[103: p_size = 12 AND 108: r_name = AMERICA AND 104: p_type LIKE %COPPER])
 [end]
 
