@@ -208,9 +208,6 @@ Status ReplicateToken::submit(std::unique_ptr<SegmentPB> segment, bool eos) {
 }
 
 void ReplicateToken::cancel(const Status& st) {
-    for (auto& channel : _replicate_channels) {
-        channel->cancel();
-    }
     set_status(st);
 }
 
