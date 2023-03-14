@@ -386,9 +386,6 @@ public class HdfsFsManager {
             case OBS_SCHEME:
                 brokerFileSystem = getOBSFileSystem(path, loadProperties, tProperties);
                 break;
-            case TOS_SCHEME:
-                brokerFileSystem = getTOSFileSystem(path, loadProperties, tProperties);
-                break;
             case ABFS_SCHEMA:
             case ABFSS_SCHEMA:
             case ADL_SCHEMA:
