@@ -34,6 +34,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.mysql.MysqlChannel;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
@@ -224,13 +225,20 @@ public class PrivilegeCheckerV2Test {
         };
     }
 
-    private static void ctxToTestUser() {
+    private static void ctxToTestUser() throws PrivilegeException {
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setCurrentRoleIds(
+                starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager().getRoleIdsByUser(testUser)
+        );
         starRocksAssert.getCtx().setQualifiedUser(testUser.getQualifiedUser());
     }
 
-    private static void ctxToRoot() {
+    private static void ctxToRoot() throws PrivilegeException {
         starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
+        starRocksAssert.getCtx().setCurrentRoleIds(
+                starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager().getRoleIdsByUser(UserIdentity.ROOT)
+        );
+
         starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
     }
 
@@ -2549,7 +2557,7 @@ public class PrivilegeCheckerV2Test {
     }
 
     @Test
-    public void testShowAuthentication() throws com.starrocks.common.AnalysisException, DdlException {
+    public void testShowAuthentication() throws com.starrocks.common.AnalysisException, DdlException, PrivilegeException {
         ctxToTestUser();
         ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
