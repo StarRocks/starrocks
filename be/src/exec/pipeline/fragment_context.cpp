@@ -17,7 +17,6 @@ void FragmentContext::cancel(const Status& status) {
     set_final_status(status);
 }
 
-
 void FragmentContext::set_final_status(const Status& status) {
     if (_final_status.load() != nullptr) {
         return;
