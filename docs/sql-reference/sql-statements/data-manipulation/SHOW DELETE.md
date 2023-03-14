@@ -2,7 +2,7 @@
 
 ## Description
 
-This statement is used to show historical DELETE tasks that are successful performed on Duplicate Key tables in the current database. For more information about data deletion, see [DELETE](DELETE.md).
+This statement is used to show historical DELETE tasks that are successfully performed on Duplicate Key tables in the current database. For more information about data deletion, see [DELETE](DELETE.md).
 
 ## Syntax
 
