@@ -58,7 +58,10 @@ public:
     void close(RuntimeState* state) { _data_source->close(state); }
     Status get_next(RuntimeState* state, ChunkPtr* chunk) {
         SCOPED_TIMER(_scan_timer);
-        RETURN_IF_ERROR(_data_source->get_next(state, chunk));
+        auto status = _data_source->get_next(state, chunk);
+        if (!status.ok()) {
+            return status;
+        }
         return Status::OK();
     }
 

@@ -66,7 +66,7 @@ Status JsonScanner::open() {
     const TBrokerRangeDesc& range = _scan_range.ranges[0];
 
     if (range.__isset.jsonpaths) {
-        RETURN_IF_ERROR(_parse_json_paths(range.jsonpaths, &_json_paths));
+        RETURN_IF_ERROR(parse_json_paths(range.jsonpaths, &_json_paths));
     }
     if (range.__isset.json_root) {
         JsonFunctions::parse_json_paths(range.json_root, &_root_paths);
@@ -240,8 +240,7 @@ Status JsonScanner::_construct_cast_exprs() {
     return Status::OK();
 }
 
-Status JsonScanner::_parse_json_paths(const std::string& jsonpath,
-                                      std::vector<std::vector<SimpleJsonPath>>* path_vecs) {
+Status JsonScanner::parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs) {
     try {
         simdjson::dom::parser parser;
         simdjson::dom::element elem = parser.parse(jsonpath.c_str(), jsonpath.length());

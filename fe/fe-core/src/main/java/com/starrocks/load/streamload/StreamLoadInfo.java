@@ -77,6 +77,7 @@ public class StreamLoadInfo {
     private TCompressionType compressionType = TCompressionType.NO_COMPRESSION;
     private int loadParallelRequestNum = 0;
     private boolean enableReplicatedStorage = false;
+    private String confluentSchemaRegistryUrl;
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -95,6 +96,14 @@ public class StreamLoadInfo {
         this.jsonRoot = "";
         this.stripOuterArray = false;
         this.timeout = timeout;
+    }
+
+    public String getConfluentSchemaRegistryUrl() {
+        return confluentSchemaRegistryUrl;
+    }
+
+    public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
+        this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
     }
 
     public TUniqueId getId() {
@@ -427,6 +436,7 @@ public class StreamLoadInfo {
             compressionType = CompressionUtils.findTCompressionByName(
                     routineLoadJob.getSessionVariables().get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
         }
+        confluentSchemaRegistryUrl = routineLoadJob.getConfluentSchemaRegistryUrl();
         trimSpace = routineLoadJob.isTrimspace();
         enclose = routineLoadJob.getEnclose();
         escape = routineLoadJob.getEscape();
