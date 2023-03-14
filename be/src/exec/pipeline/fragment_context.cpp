@@ -8,6 +8,15 @@
 
 namespace starrocks::pipeline {
 
+void FragmentContext::cancel(const Status& status) {
+    if (_runtime_state != nullptr && _runtime_state->query_ctx() != nullptr) {
+        _runtime_state->query_ctx()->release_workgroup_token_once();
+    }
+
+    _runtime_state->set_is_cancelled(true);
+    set_final_status(status);
+}
+
 void FragmentContext::set_final_status(const Status& status) {
     if (_final_status.load() != nullptr) {
         return;
@@ -23,44 +32,6 @@ void FragmentContext::set_final_status(const Status& status) {
                                                                : _runtime_state->exec_env()->driver_executor();
             for (auto& driver : _drivers) {
                 executor->cancel(driver.get());
-<<<<<<< HEAD
-=======
-                return Status::OK();
-            });
-        }
-    }
-}
-
-void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
-    _stream_load_contexts = std::move(contexts);
-    _channel_stream_load = true;
-}
-
-void FragmentContext::cancel(const Status& status) {
-    if (_runtime_state != nullptr && _runtime_state->query_ctx() != nullptr) {
-        _runtime_state->query_ctx()->release_workgroup_token_once();
-    }
-
-    _runtime_state->set_is_cancelled(true);
-    set_final_status(status);
-
-    const TQueryOptions& query_options = _runtime_state->query_options();
-    if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
-                                                         query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
-                                                         query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id,
-                                                                                             _fragment_instance_id);
-    }
-
-    if (_stream_load_contexts.size() > 0) {
-        for (const auto& stream_load_context : _stream_load_contexts) {
-            if (stream_load_context->body_sink) {
-                Status st;
-                stream_load_context->body_sink->cancel(st);
-            }
-            if (_channel_stream_load) {
-                _runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(stream_load_context);
->>>>>>> 6f0bd88fe ([BugFix] Release workgroup token immediately when fragment is cancelled (#19310))
             }
         }
     }
