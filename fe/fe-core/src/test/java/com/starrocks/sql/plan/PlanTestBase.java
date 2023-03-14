@@ -31,8 +31,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.MaterializedViewTPCHTest;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -1557,7 +1560,7 @@ public class PlanTestBase {
         });
     }
 
-    protected  static void createMaterializedViews(String dirName, List<String> fileNames) {
+    protected static void createMaterializedViews(String dirName, List<String> fileNames) {
         getSqlList(dirName, fileNames).forEach(sql -> {
             System.out.println("create mv sql:" + sql);
             try {
@@ -1568,8 +1571,8 @@ public class PlanTestBase {
         });
     }
 
-    protected  static List<String> getSqlList(String dirName, List<String> fileNames) {
-        ClassLoader loader = MaterializedViewTPCHTest.class.getClassLoader();
+    protected static List<String> getSqlList(String dirName, List<String> fileNames) {
+        ClassLoader loader = PlanTestBase.class.getClassLoader();
         List<String> createTableSqlList = fileNames.stream().map(n -> {
             System.out.println("file name:" + n);
             try {
@@ -1583,5 +1586,30 @@ public class PlanTestBase {
         }).collect(Collectors.toList());
         Assert.assertFalse(createTableSqlList.contains(null));
         return createTableSqlList;
+    }
+
+    public static String getFileContent(String fileName) throws Exception {
+        ClassLoader loader = MaterializedViewTPCHTest.class.getClassLoader();
+        System.out.println("file name:" + fileName);
+        String content = "";
+        try {
+            content = CharStreams.toString(
+                    new InputStreamReader(
+                            Objects.requireNonNull(loader.getResourceAsStream(fileName)),
+                            Charsets.UTF_8));
+        } catch (Throwable e) {
+            throw e;
+        }
+        return content;
+    }
+
+    protected static void executeSqlFile(String fileName) throws Exception {
+        String sql = getFileContent(fileName);
+        List<StatementBase> statements = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
+        for (StatementBase stmt : statements) {
+            StmtExecutor stmtExecutor = new StmtExecutor(connectContext, stmt);
+            stmtExecutor.execute();
+            Assert.assertEquals("", connectContext.getState().getErrorMessage());
+        }
     }
 }

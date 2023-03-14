@@ -715,8 +715,8 @@ public class MvUtils {
                 return null;
             }
         }
-        return partitionPredicates.isEmpty() ?
-                ConstantOperator.createBoolean(true) : Utils.compoundAnd(partitionPredicates);
+        return partitionPredicates.isEmpty() ? ConstantOperator.createBoolean(true) :
+                Utils.compoundAnd(partitionPredicates);
     }
 
     // try to get partial partition predicates of partitioned mv.

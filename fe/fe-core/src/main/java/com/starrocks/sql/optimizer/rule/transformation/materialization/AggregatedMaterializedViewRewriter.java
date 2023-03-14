@@ -222,8 +222,6 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         for (int i = 0; i < newQueryGroupKeys.size(); i++) {
             queryColumnRefToScalarMap.put(queryGroupKeys.get(i), newQueryGroupKeys.get(i));
         }
-
-        // rewrite aggregates by using mv
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : queryAggOp.getAggregations().entrySet()) {
             ColumnRefOperator newAggColumnRef = entry.getKey();
             ColumnRefOperator rewriteAggColumnRef = rewriteContext.getQueryRefFactory().create(
@@ -238,6 +236,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         if (newAggregations == null) {
             return null;
         }
+
         return createNewAggregate(rewriteContext, queryAggOp, newAggregations, queryColumnRefToScalarMap, mvOptExpr);
     }
 
@@ -378,11 +377,20 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
         LogicalAggregationOperator.Builder aggBuilder = new LogicalAggregationOperator.Builder();
         aggBuilder.withOperator(queryAgg);
+        // rewrite grouping by keys
         aggBuilder.setGroupingKeys(distinctGroupKeys);
+
+        // rewrite aggregations
         // can not be distinct agg here, so partitionByColumns is the same as groupingKeys
         aggBuilder.setPartitionByColumns(distinctGroupKeys);
         aggBuilder.setAggregations(newAggregations);
-        aggBuilder.setPredicate(queryAgg.getPredicate());
+
+        // rewrite agg's predicate to new MV plan.
+        if (queryAgg.getPredicate() != null) {
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(queryColumnRefToScalarMap);
+            aggBuilder.setPredicate(rewriter.rewrite(queryAgg.getPredicate()));
+        }
+
         // add projection to make sure that the output columns keep the same with the origin query
         Map<ColumnRefOperator, ScalarOperator> newProjection = Maps.newHashMap();
         if (queryAgg.getProjection() == null) {
@@ -418,6 +426,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         List<ScalarOperator> newGroupByKeys = Lists.newArrayList();
         for (ScalarOperator key : groupKeys) {
             ScalarOperator newGroupByKey = replaceExprWithTarget(key, queryExprToMvExprRewriter, mapping);
+            if (key.isVariable() && key == newGroupByKey) {
+                return null;
+            }
             if (newGroupByKey == null || !isAllExprReplaced(newGroupByKey, queryColumnSet)) {
                 // it means there is some column that can not be rewritten by outputs of mv
                 return null;

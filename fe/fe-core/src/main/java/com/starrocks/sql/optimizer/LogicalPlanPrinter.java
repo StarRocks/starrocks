@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -62,7 +63,12 @@ public class LogicalPlanPrinter {
     }
 
     public static String print(OptExpression root) {
-        OperatorStr optStrings = new OperatorPrinter().visit(root);
+        return print(root, false);
+
+    }
+
+    public static String print(OptExpression root, boolean isPrintTableName) {
+        OperatorStr optStrings = new OperatorPrinter(isPrintTableName).visit(root);
         return optStrings.toString();
     }
 
@@ -90,6 +96,12 @@ public class LogicalPlanPrinter {
 
     private static class OperatorPrinter
             extends OptExpressionVisitor<OperatorStr, Integer> {
+        // To not disturb old tests, add a flag to determine whether to print table/mv names.
+        private final boolean isPrintTableName;
+
+        public OperatorPrinter(boolean printTableName) {
+            this.isPrintTableName = printTableName;
+        }
 
         public OperatorStr visit(OptExpression optExpression) {
             return visit(optExpression, 0);
@@ -231,6 +243,15 @@ public class LogicalPlanPrinter {
         public OperatorStr visitPhysicalOlapScan(OptExpression optExpression, Integer step) {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("SCAN (");
+            if (isPrintTableName) {
+                Table scanTable = scan.getTable();
+                String tableName = scan.getTable().getName();
+                if (scanTable.isMaterializedView()) {
+                    sb.append("mv[").append(tableName).append("] ");
+                } else {
+                    sb.append("table[").append(tableName).append("] ");
+                }
+            }
             sb.append("columns").append(scan.getColRefToColumnMetaMap().keySet());
             sb.append(" predicate[").append(scan.getPredicate()).append("]");
             sb.append(")");
