@@ -443,7 +443,7 @@ public class ScalarRangePredicateExtractor {
     private static boolean isOnlyAndCompound(ScalarOperator predicate) {
         if (predicate instanceof CompoundPredicateOperator) {
             CompoundPredicateOperator compoundPredicateOperator = (CompoundPredicateOperator) predicate;
-            if (compoundPredicateOperator.isOr() || compoundPredicateOperator.isNot()) {
+            if (!compoundPredicateOperator.isAnd()) {
                 return false;
             }
 
@@ -457,7 +457,7 @@ public class ScalarRangePredicateExtractor {
     private static boolean isOnlyOrCompound(ScalarOperator predicate) {
         if (predicate instanceof CompoundPredicateOperator) {
             CompoundPredicateOperator compoundPredicateOperator = (CompoundPredicateOperator) predicate;
-            if (compoundPredicateOperator.isAnd() || compoundPredicateOperator.isNot()) {
+            if (!compoundPredicateOperator.isOr()) {
                 return false;
             }
 
