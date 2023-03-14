@@ -51,6 +51,11 @@ public class EquationRewriter {
 
         BaseScalarOperatorShuttle shuttle = new BaseScalarOperatorShuttle() {
             @Override
+            public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
+                return null;
+            }
+
+            @Override
             public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
                 ScalarOperator tmp = replace(predicate);
                 return tmp != null ? tmp : super.visitBinaryPredicate(predicate, context);

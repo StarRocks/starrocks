@@ -50,7 +50,6 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggT
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.SingleTableMvRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
@@ -326,17 +325,36 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
         ruleRewriteIterative(tree, rootTaskContext, new RewriteMinMaxAggToMetaScanRule());
 
-        // if mv has multi table sources, we will process it in memo to support view delta join rewrite
-        if (!optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
-                && sessionVariable.isEnableMaterializedViewRewrite()
-                && sessionVariable.isEnableRuleBasedMaterializedViewRewrite()
-                && !rootTaskContext.getOptimizerContext().getCandidateMvs().isEmpty()
-                && rootTaskContext.getOptimizerContext().getCandidateMvs()
-                .stream().allMatch(context -> !context.hasMultiTables())) {
+        if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable)) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
         return tree.getInputs().get(0);
+    }
+
+    private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,
+                                                 SessionVariable sessionVariable) {
+        // if disable single mv rewrite, return false.
+        if (optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)) {
+            return false;
+        }
+        // if disable isEnableMaterializedViewRewrite/isEnableRuleBasedMaterializedViewRewrite, return false.
+        if (!sessionVariable.isEnableMaterializedViewRewrite()
+                || !sessionVariable.isEnableRuleBasedMaterializedViewRewrite()) {
+            return false;
+        }
+        // if mv candidates are empty, return false.
+        if (rootTaskContext.getOptimizerContext().getCandidateMvs().isEmpty()) {
+            return false;
+        }
+        // If view delta is enabled and there are multi-table mvs, return false.
+        // if mv has multi table sources, we will process it in memo to support view delta join rewrite
+        if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
+                rootTaskContext.getOptimizerContext().getCandidateMvs()
+                        .stream().anyMatch(context -> context.hasMultiTables())) {
+            return false;
+        }
+        return true;
     }
 
     private OptExpression rewriteAndValidatePlan(OptExpression tree, TaskContext rootTaskContext) {
@@ -420,17 +438,28 @@ public class Optimizer {
             context.getRuleSet().addRealtimeMVRules();
         }
 
-        if (!context.getCandidateMvs().isEmpty()
-                && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()) {
-            if (rootTaskContext.getOptimizerContext().getCandidateMvs()
-                    .stream().anyMatch(context -> context.hasMultiTables())) {
-                new SingleTableMvRewriteRule().transform(tree, context);
+        if (isEnableMultiTableRewrite(connectContext)) {
+            if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
+                    rootTaskContext.getOptimizerContext().getCandidateMvs()
+                            .stream().anyMatch(context -> context.hasMultiTables())) {
+                context.getRuleSet().addSingleTableMvRewriteRule();
             }
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(rootTaskContext, memo.getRootGroup()));
         context.getTaskScheduler().executeTasks(rootTaskContext);
+    }
+
+    private boolean isEnableMultiTableRewrite(ConnectContext connectContext) {
+        if (context.getCandidateMvs().isEmpty()) {
+            return false;
+        }
+
+        if (!connectContext.getSessionVariable().isEnableMaterializedViewRewrite()) {
+            return false;
+        }
+        return true;
     }
 
     private OptExpression physicalRuleRewrite(TaskContext rootTaskContext, OptExpression result) {
