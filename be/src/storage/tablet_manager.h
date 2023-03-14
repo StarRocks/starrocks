@@ -62,7 +62,7 @@ public:
 
 private:
     DISALLOW_COPY_AND_MOVE(RowsetsAcqRel);
-    const std::vector<RowsetSharedPtr> & _rowsets;
+    const std::vector<RowsetSharedPtr>& _rowsets;
 };
 
 using TabletAndRowsets = std::tuple<TabletSharedPtr, std::vector<RowsetSharedPtr>, RowsetsAcqRelPtr>;
