@@ -121,13 +121,13 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 **建表时批量创建日期分区**
 
-当分区键为日期类型时，建表时通过 START、END 指定批量分区的开始日期和结束日期，EVERY 子句指定分区增量值。并且 EVERY 子句中用 INTERVAL 关键字表示日期间隔，目前仅支持日期间隔的单位为 HOUR、DAY、WEEK、MONTH、YEAR。当间隔为HOUR时，类型必须是DATETIME。
+当分区键为日期类型时，建表时通过 START、END 指定批量分区的开始日期和结束日期，EVERY 子句指定分区增量值。并且 EVERY 子句中用 INTERVAL 关键字表示日期间隔，目前仅支持日期间隔的单位为 DAY、WEEK、MONTH、YEAR。
 
 如下示例中，批量分区的开始日期为 `2021-01-01` 和结束日期为 `2021-01-04`，增量值为一天：
 
 ```SQL
 CREATE TABLE site_access (
-    datekey DATETIME,
+    datekey DATE,
     site_id INT,
     city_code SMALLINT,
     user_name VARCHAR(32),
