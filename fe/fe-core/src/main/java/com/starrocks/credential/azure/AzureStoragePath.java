@@ -12,20 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.credential;
+package com.starrocks.credential.azure;
 
-import java.util.Map;
+public class AzureStoragePath {
+    private final String storageAccount;
+    private final String container;
 
-public class AliyunCloudConfigurationFactory extends CloudConfigurationFactory {
-    private final Map<String, String> properties;
-
-    public AliyunCloudConfigurationFactory(Map<String, String> properties) {
-        this.properties = properties;
+    public AzureStoragePath(String storageAccount, String container) {
+        this.storageAccount = storageAccount;
+        this.container = container;
     }
 
-    @Override
-    protected CloudConfiguration buildForStorage() {
-        // TODO
-        return null;
+    public String getStorageAccount() {
+        return storageAccount;
+    }
+
+    public String getContainer() {
+        return container;
     }
 }

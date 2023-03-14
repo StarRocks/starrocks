@@ -50,6 +50,10 @@ public class WildcardURITest {
             path = "hdfs://host/testdata/2018-01-01#123 +#*";
             wildcardURI = new WildcardURI(path);
             Assert.assertEquals("/testdata/2018-01-01#123 +#*", wildcardURI.getPath());
+
+            path = "abfs://brokerload@smith.dfs.core.windows.net/file_table.orc";
+            wildcardURI = new WildcardURI(path);
+            Assert.assertEquals("brokerload@smith.dfs.core.windows.net", wildcardURI.getAuthority());
         } catch (UserException e) {
             Assert.fail(e.getMessage());
         }

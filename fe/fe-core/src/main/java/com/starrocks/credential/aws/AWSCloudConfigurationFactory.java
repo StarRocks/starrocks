@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.credential;
+package com.starrocks.credential.aws;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationConstants;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.hive.conf.HiveConf;
 
 import java.util.Map;
