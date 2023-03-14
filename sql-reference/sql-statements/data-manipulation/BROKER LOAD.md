@@ -563,7 +563,7 @@ StarRocks 数据库 `test_db` 里的表 `table8` 包含三列，按顺序依次�
 
 数据文件 `example8.csv` 也包含三列，按顺序依次对应 `table8` 中 `col2`、`col1`、`col3`。
 
-如果要把 `example3.csv` 中所有的数据都导入到 `table3` 中，可以执行如下语句：
+如果要把 `example8.csv` 中所有的数据都导入到 `table8` 中，可以执行如下语句：
 
 ```SQL
 LOAD LABEL test_db.label8
