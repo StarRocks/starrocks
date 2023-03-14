@@ -19,6 +19,12 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 public class UnitIdentifier implements ParseNode {
+
+    public static final UnitIdentifier SECOND_UNIT = new UnitIdentifier("SECOND");
+    public static final UnitIdentifier MINUTE_UNIT = new UnitIdentifier("MINUTE");
+    public static final UnitIdentifier HOUR_UNIT = new UnitIdentifier("HOUR");
+    public static final UnitIdentifier DAY_UNIT = new UnitIdentifier("DAY");
+
     private final String description;
 
     private final NodePosition pos;
@@ -39,5 +45,10 @@ public class UnitIdentifier implements ParseNode {
     @Override
     public NodePosition getPos() {
         return pos;
+    }
+
+    @Override
+    public String toSql() {
+        return description;
     }
 }

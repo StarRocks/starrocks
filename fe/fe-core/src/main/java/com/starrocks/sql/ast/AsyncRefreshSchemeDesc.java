@@ -15,12 +15,16 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.time.LocalDateTime;
 
 public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
+
+    public static final IntervalLiteral DEFAULT_REFRESH_INTERVAL = new IntervalLiteral(
+            new IntLiteral(10), UnitIdentifier.MINUTE_UNIT);
 
     private boolean defineStartTime;
 

@@ -94,6 +94,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddBackendClause;
@@ -5616,6 +5617,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(exprSql, "INTERVAL"),
                             createPos(context.interval()));
                 }
+                MaterializedViewAnalyzer.RefreshInterval interval =
+                        MaterializedViewAnalyzer.RefreshInterval.fromLiteral(intervalLiteral);
+                if (!interval.isSupported()) {
+                    throw new IllegalArgumentException(String.format(
+                            "Refresh interval should between %s and %s",
+                            MaterializedViewAnalyzer.RefreshInterval.MIN_INTERVAL,
+                            MaterializedViewAnalyzer.RefreshInterval.MAX_INTERVAL));
+                }
+            } else {
+                intervalLiteral = AsyncRefreshSchemeDesc.DEFAULT_REFRESH_INTERVAL;
             }
             return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral, pos);
         } else if (context.MANUAL() != null) {

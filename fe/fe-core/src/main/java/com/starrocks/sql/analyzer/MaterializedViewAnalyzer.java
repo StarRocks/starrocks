@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -111,14 +112,60 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    public enum RefreshTimeUnit {
+        DAY,
+        HOUR,
+        MINUTE,
+        SECOND
+    }
 
-        public enum RefreshTimeUnit {
-            DAY,
-            HOUR,
-            MINUTE,
-            SECOND
+    public static class RefreshInterval {
+
+        public static final IntervalLiteral MIN_INTERVAL_LITERAL =
+                IntervalLiteral.fromIntValue(1, UnitIdentifier.MINUTE_UNIT);
+        public static final RefreshInterval MIN_INTERVAL = RefreshInterval.fromLiteral(MIN_INTERVAL_LITERAL);
+        public static final IntervalLiteral MAX_INTERVAL_LITERAL =
+                IntervalLiteral.fromIntValue(1, UnitIdentifier.DAY_UNIT);
+        public static final RefreshInterval MAX_INTERVAL = RefreshInterval.fromLiteral(MAX_INTERVAL_LITERAL);
+
+        private long seconds;
+
+        public RefreshInterval(long seconds) {
+            this.seconds = seconds;
         }
+
+        public static RefreshInterval fromLiteral(IntervalLiteral literal) {
+            Preconditions.checkArgument(literal.getValue() instanceof IntLiteral);
+            String unitName = literal.getUnitIdentifier().getDescription().toUpperCase();
+            RefreshTimeUnit unit = RefreshTimeUnit.valueOf(unitName);
+            long seconds = ((IntLiteral) literal.getValue()).getLongValue();
+            switch (unit) {
+                case DAY:
+                    seconds *= 12 * 60 * 60;
+                    break;
+                case HOUR:
+                    seconds *= 60 * 60;
+                    break;
+                case MINUTE:
+                    seconds *= 60;
+                    break;
+                case SECOND:
+                    break;
+            }
+            return new RefreshInterval(seconds);
+        }
+
+        public boolean isSupported() {
+            return this.compareTo(MIN_INTERVAL) >= 0 && MAX_INTERVAL.compareTo(this) >= 0;
+        }
+
+        public int compareTo(RefreshInterval other) {
+            return Long.compare(seconds, other.seconds);
+        }
+
+    }
+
+    static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
         private boolean isSupportBasedOnTable(Table table) {
             return table instanceof OlapTable || table instanceof HiveTable || table instanceof HudiTable ||
@@ -270,6 +317,7 @@ public class MaterializedViewAnalyzer {
             }
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
+            checkRefreshScheme(statement.getRefreshSchemeDesc());
 
             planMVQuery(statement, queryStatement, context);
             return null;
@@ -617,6 +665,17 @@ public class MaterializedViewAnalyzer {
             }
         }
 
+        private void checkRefreshScheme(RefreshSchemeDesc refresh) {
+            if (refresh.getType().equals(MaterializedView.RefreshType.ASYNC)) {
+                AsyncRefreshSchemeDesc asyncRefresh = (AsyncRefreshSchemeDesc) refresh;
+                RefreshInterval interval = RefreshInterval.fromLiteral(asyncRefresh.getIntervalLiteral());
+                if (!interval.isSupported()) {
+                    throw new IllegalArgumentException(String.format("Refresh interval should between %s and %s",
+                            RefreshInterval.MIN_INTERVAL_LITERAL, RefreshInterval.MAX_INTERVAL_LITERAL));
+                }
+            }
+        }
+
         private void checkDistribution(CreateMaterializedViewStatement statement,
                                        Map<TableName, Table> tableNameTableMap) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();
@@ -693,13 +752,14 @@ public class MaterializedViewAnalyzer {
                         }
                         final String unit = intervalLiteral.getUnitIdentifier().getDescription().toUpperCase();
                         try {
-                            RefreshTimeUnit.valueOf(unit);
+                            MaterializedViewAnalyzer.RefreshTimeUnit.valueOf(unit);
                         } catch (IllegalArgumentException e) {
                             String msg = String.format("Unsupported interval unit: %s, only timeunit %s are supported", unit,
                                     Arrays.asList(RefreshTimeUnit.values()));
                             throw new SemanticException(msg, intervalLiteral.getUnitIdentifier().getPos());
                         }
                     }
+                    checkRefreshScheme(async);
                 }
             } else if (statement.getModifyTablePropertiesClause() != null) {
                 TableName mvName = statement.getMvName();

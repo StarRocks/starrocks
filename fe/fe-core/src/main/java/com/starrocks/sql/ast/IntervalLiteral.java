@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -35,6 +36,10 @@ public class IntervalLiteral extends LiteralExpr {
         this.unitIdentifier = unitIdentifier;
     }
 
+    public static IntervalLiteral fromIntValue(int value, UnitIdentifier unitIdentifier) {
+        return new IntervalLiteral(new IntLiteral(value), unitIdentifier);
+    }
+
     public Expr getValue() {
         return value;
     }
@@ -45,7 +50,7 @@ public class IntervalLiteral extends LiteralExpr {
 
     @Override
     protected String toSqlImpl() {
-        return "interval " + value.toSql() + unitIdentifier;
+        return String.format("INTERVAL %s %s", value.toSql(), unitIdentifier.toSql());
     }
 
     @Override
