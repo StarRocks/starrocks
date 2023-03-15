@@ -56,8 +56,8 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                     .column("last_refresh_mv_refresh_partitions", ScalarType.createVarchar(1024))
                     .column("last_refresh_error_code", ScalarType.createVarchar(20))
                     .column("last_refresh_error_message", ScalarType.createVarchar(1024))
-                    .column("text", ScalarType.createVarchar(1024))
                     .column("rows", ScalarType.createVarchar(50))
+                    .column("text", ScalarType.createVarchar(1024))
                     .build();
 
     private static final Map<String, String> ALIAS_MAP = ImmutableMap.of(
@@ -115,6 +115,7 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
         // Columns
         SelectList selectList = new SelectList();
         ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
+<<<<<<< HEAD
         for (Column column : META_DATA.getColumns()) {
             if (ALIAS_MAP.containsKey(column.getName())) {
                 SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, ALIAS_MAP.get(column.getName())),
@@ -127,6 +128,60 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                 aliasMap.put(new SlotRef(null, column.getName()), item.getExpr().clone(null));
             }
         }
+=======
+        // id
+        SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "MATERIALIZED_VIEW_ID"), "id");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "id"), item.getExpr().clone(null));
+        // name
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_NAME"), "name");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "name"), item.getExpr().clone(null));
+        // database_name
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_SCHEMA"), "database_name");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "database_name"), item.getExpr().clone(null));
+        // REFRESH_TYPE
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "REFRESH_TYPE"), "refresh_type");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "REFRESH_TYPE"), item.getExpr().clone(null));
+        // IS_ACTIVE
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "IS_ACTIVE"), "is_active");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "IS_ACTIVE"), item.getExpr().clone(null));
+        // LAST_REFRESH_START_TIME
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "LAST_REFRESH_START_TIME"), "last_refresh_start_time");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "LAST_REFRESH_START_TIME"), item.getExpr().clone(null));
+        // LAST_REFRESH_FINISHED_TIME
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "LAST_REFRESH_FINISHED_TIME"), "last_refresh_finished_time");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "LAST_REFRESH_FINISHED_TIME"), item.getExpr().clone(null));
+        // LAST_REFRESH_DURATION
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "LAST_REFRESH_DURATION"), "last_refresh_duration");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "LAST_REFRESH_DURATION"), item.getExpr().clone(null));
+        // LAST_REFRESH_STATE
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "LAST_REFRESH_STATE"), "last_refresh_state");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "LAST_REFRESH_STATE"), item.getExpr().clone(null));
+        // INACTIVE_CODE
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "INACTIVE_CODE"), "inactive_code");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "INACTIVE_CODE"), item.getExpr().clone(null));
+        // INACTIVE_REASON
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "INACTIVE_REASON"), "inactive_reason");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "INACTIVE_REASON"), item.getExpr().clone(null));
+        // rows
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_ROWS"), "rows");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "rows"), item.getExpr().clone(null));
+        // text
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "MATERIALIZED_VIEW_DEFINITION"), "text");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "text"), item.getExpr().clone(null));
+>>>>>>> 59b37f5132 (adjust the order of show materialized view)
         where = where.substitute(aliasMap);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
                 where, null, null));
