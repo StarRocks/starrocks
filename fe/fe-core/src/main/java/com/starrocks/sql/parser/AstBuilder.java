@@ -5435,7 +5435,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitPartitionDesc(StarRocksParser.PartitionDescContext context) {
-        List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+        StarRocksParser.IdentifierListContext identifierListContext = context.identifierList();
+        if (identifierListContext == null) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(functionCallExpr.toSql(),
+                    "PARTITION DESC"), functionCallExpr.getPos());
+        }
+        List<Identifier> identifierList = visit(identifierListContext.identifier(), Identifier.class);
         List<PartitionDesc> partitionDesc = visit(context.rangePartitionDesc(), PartitionDesc.class);
         return new RangePartitionDesc(
                 identifierList.stream().map(Identifier::getValue).collect(toList()),
