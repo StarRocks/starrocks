@@ -120,7 +120,7 @@ select * from my_table partition (p1);
 
 Delete rows whose `k1` values are greater than or equal to `3` and whose `k2` values are `"abc"` from the `p1` partition.
 
-```SQL
+```plain
 DELETE FROM my_table PARTITION p1
 WHERE k1 >= 3 AND k2 = "abc";
 
@@ -136,7 +136,7 @@ select * from my_table partition (p1);
 
 Delete rows whose `k2` values are `"abc"` or `"cba"` from all partitions.
 
-```SQL
+```plain
 DELETE FROM my_table
 WHERE  k2 in ("abc", "cba");
 
@@ -180,7 +180,7 @@ DELETE FROM <table_name> WHERE <condition>;
 
 Create a Primary Key table named `score_board`:
 
-```Plain
+```sql
 CREATE TABLE `score_board` (
   `id` int(11) NOT NULL COMMENT "",
   `name` varchar(65533) NULL DEFAULT "" COMMENT "",
@@ -317,7 +317,9 @@ INSERT INTO users VALUES
 (2, "Stan", "USA"),
 (1, "Bob", "China"),
 (3, "Sam", "USA");
+```
 
+```plain
 select * from users;
 +------+------+---------+
 | uid  | name | country |
@@ -334,7 +336,7 @@ Nest a subquery to find the rows whose `country` values are `China` from the `us
 
 - Method 1
 
-```SQL
+```plain
 DELETE FROM score_board
 WHERE name IN (select name from users where country = "China");
     
@@ -349,7 +351,7 @@ select * from score_board;
 
 - Method 2
 
-```SQL
+```plain
 DELETE FROM score_board
 WHERE EXISTS (select name from users
               where score_board.name = users.name and country = "China");
