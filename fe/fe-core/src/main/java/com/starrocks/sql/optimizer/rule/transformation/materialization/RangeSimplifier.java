@@ -146,7 +146,7 @@ public class RangeSimplifier {
             List<ScalarOperator> columnScalars, Range<ConstantOperator> validRange) {
         List<ScalarOperator> results = Lists.newArrayList();;
         for (ScalarOperator candidate : columnScalars) {
-            if (!isValidScalarOperator(candidate, validRange)) {
+            if (!isRedundantScalarOperator(candidate, validRange)) {
                 continue;
             }
             results.add(candidate);
@@ -154,7 +154,7 @@ public class RangeSimplifier {
         return results;
     }
 
-    boolean isValidScalarOperator(ScalarOperator scalarOperator, Range<ConstantOperator> validRange) {
+    private boolean isRedundantScalarOperator(ScalarOperator scalarOperator, Range<ConstantOperator> validRange) {
         Preconditions.checkState(scalarOperator instanceof BinaryPredicateOperator);
         Preconditions.checkState(scalarOperator.getChild(0) instanceof ColumnRefOperator);
         Preconditions.checkState(scalarOperator.getChild(1) instanceof ConstantOperator);
