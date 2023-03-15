@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.common;
 
-
 import com.clearspring.analytics.util.Lists;
 import com.clearspring.analytics.util.Preconditions;
 import com.google.common.collect.Maps;
@@ -33,11 +32,14 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
 import org.apache.commons.lang3.StringUtils;
@@ -364,11 +366,39 @@ public class SyncPartitionUtils {
         return result;
     }
 
-    public static Set<String> getPartitionNamesByRange(MaterializedView materializedView, String start, String end)
+    public static Set<String> getPartitionNamesByRangeWithPartitionLimit(MaterializedView materializedView,
+                                                                         String start, String end,
+                                                                         Constants.TaskType type)
             throws AnalysisException {
-        if (StringUtils.isEmpty(start) && StringUtils.isEmpty(end)) {
+        int autoRefreshPartitionsLimit = materializedView.getTableProperty().getAutoRefreshPartitionsLimit();
+        boolean noPartitionRange = StringUtils.isEmpty(start) && StringUtils.isEmpty(end);
+        boolean isAutoRefresh = (type == Constants.TaskType.PERIODICAL || type == Constants.TaskType.EVENT_TRIGGERED);
+
+        if (noPartitionRange && autoRefreshPartitionsLimit == TableProperty.INVALID) {
             return materializedView.getPartitionNames();
         }
+
+        // There is no need to check autoRefreshPartitionsLimit if it is not auto refresh
+        if (noPartitionRange && !isAutoRefresh) {
+            return materializedView.getPartitionNames();
+        }
+
+        if (noPartitionRange && isAutoRefresh) {
+            Map<String, Range<PartitionKey>> rangePartitionMap = materializedView.getRangePartitionMap();
+            List<Range<PartitionKey>> sortedRange = rangePartitionMap.values().stream()
+                    .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
+            int partitionNum = sortedRange.size();
+
+            if (autoRefreshPartitionsLimit >= partitionNum) {
+                return materializedView.getPartitionNames();
+            }
+            LiteralExpr startExpr = sortedRange.get(partitionNum - autoRefreshPartitionsLimit).lowerEndpoint().
+                    getKeys().get(0);
+            LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
+            start = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
+            end = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 0);
+        }
+
         Set<String> result = Sets.newHashSet();
         Column partitionColumn =
                 ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
