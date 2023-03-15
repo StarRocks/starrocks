@@ -49,7 +49,8 @@ protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
     HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, const TupleDescriptor* tuple_desc);
-    void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc, bool diff_case_sensitive = false);
+    void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
+                                 bool diff_case_sensitive = false);
 
     THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
@@ -122,7 +123,8 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     return param;
 }
 
-void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc, bool diff_case_sensitive) {
+void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
+                                              bool diff_case_sensitive) {
     std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
     for (auto slot : tuple_desc->slots()) {
         std::string col_name = slot->col_name();
