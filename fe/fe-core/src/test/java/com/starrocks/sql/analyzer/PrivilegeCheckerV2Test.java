@@ -2781,4 +2781,55 @@ public class PrivilegeCheckerV2Test {
         starRocksAssert.dropTable("db1.tprimary");
     }
 
+    @Test
+    public void testShowTable() throws Exception {
+        ctxToRoot();
+        Config.enable_experimental_mv = true;
+        String createSql = "create materialized view db1.mv5 " +
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 1000 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, db1.tbl1.k2 from db1.tbl1;";
+        starRocksAssert.withMaterializedView(createSql);
+
+        String createViewSql = "create view db1.view5 as select * from db1.tbl1";
+        starRocksAssert.withView(createViewSql);
+
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        grantRevokeSqlAsRoot("grant select on db1.tbl1 to test");
+        ctxToTestUser();
+        ShowResultSet res = new ShowExecutor(ctx,
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx)).execute();
+        System.out.println(res.getResultRows());
+        Assert.assertEquals(1, res.getResultRows().size());
+        Assert.assertEquals("tbl1", res.getResultRows().get(0).get(0));
+
+        // can show mv if we have any privilege on it
+        grantRevokeSqlAsRoot("grant alter on materialized view db1.mv5 to test");
+        res = new ShowExecutor(ctx,
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx)).execute();
+        System.out.println(res.getResultRows());
+        Assert.assertEquals(2, res.getResultRows().size());
+        Assert.assertEquals("mv5", res.getResultRows().get(0).get(0));
+
+
+        // can show view if we have any privilege on it
+        grantRevokeSqlAsRoot("grant drop on view db1.view5 to test");
+        res = new ShowExecutor(ctx,
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx)).execute();
+        System.out.println(res.getResultRows());
+        Assert.assertEquals(3, res.getResultRows().size());
+        Assert.assertEquals("view5", res.getResultRows().get(2).get(0));
+        grantRevokeSqlAsRoot("revoke drop on view db1.view5 from test");
+        grantRevokeSqlAsRoot("revoke alter on materialized view db1.mv5 from test");
+        grantRevokeSqlAsRoot("revoke select on db1.tbl1 from test");
+
+        ctxToRoot();
+        starRocksAssert.dropMaterializedView("db1.mv5");
+        starRocksAssert.dropView("db1.view5");
+        ctxToTestUser();
+    }
 }
