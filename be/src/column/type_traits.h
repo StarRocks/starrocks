@@ -230,6 +230,18 @@ struct RunTimeTypeTraits<TYPE_VARBINARY> {
     using ColumnType = BinaryColumn;
 };
 
+template <>
+struct RunTimeTypeTraits<TYPE_STRUCT> {
+    using CppType = DatumStruct;
+    using ColumnType = StructColumn;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_MAP> {
+    using CppType = DatumMap;
+    using ColumnType = MapColumn;
+};
+
 template <LogicalType Type>
 using RunTimeCppType = typename RunTimeTypeTraits<Type>::CppType;
 
