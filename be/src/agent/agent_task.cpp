@@ -50,52 +50,36 @@ static AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash,
     return status;
 }
 
-static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signature, TTaskType::type task_type,
+static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signature,
                          TFinishTaskRequest* finish_task_request) {
-    AgentStatus status = STARROCKS_SUCCESS;
     TStatus task_status;
     std::vector<std::string> error_msgs;
-
-    std::string process_name;
-    switch (task_type) {
-    case TTaskType::ALTER:
-        process_name = "alter";
-        break;
-    default:
-        std::string task_name;
-        EnumToString(TTaskType, task_type, task_name);
-        LOG(WARNING) << "schema change type invalid. type: " << task_name << ", signature: " << signature;
-        status = STARROCKS_TASK_REQUEST_ERROR;
-        break;
-    }
 
     // Check last schema change status, if failed delete tablet file
     // Do not need to adjust delete success or not
     // Because if delete failed create rollup will failed
     TTabletId new_tablet_id;
     TSchemaHash new_schema_hash = 0;
-    if (status == STARROCKS_SUCCESS) {
-        new_tablet_id = agent_task_req.new_tablet_id;
-        new_schema_hash = agent_task_req.new_schema_hash;
-        EngineAlterTabletTask engine_task(ExecEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req,
-                                          signature, task_type, &error_msgs, process_name);
-        Status sc_status = StorageEngine::instance()->execute_task(&engine_task);
-        if (!sc_status.ok()) {
-            status = STARROCKS_ERROR;
-        } else {
-            status = STARROCKS_SUCCESS;
-        }
+    new_tablet_id = agent_task_req.new_tablet_id;
+    new_schema_hash = agent_task_req.new_schema_hash;
+    EngineAlterTabletTask engine_task(ExecEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req);
+    Status sc_status = StorageEngine::instance()->execute_task(&engine_task);
+    AgentStatus status;
+    if (!sc_status.ok()) {
+        status = STARROCKS_ERROR;
+    } else {
+        status = STARROCKS_SUCCESS;
     }
 
     if (status == STARROCKS_SUCCESS) {
         g_report_version.fetch_add(1, std::memory_order_relaxed);
-        LOG(INFO) << process_name << " finished. signature: " << signature;
+        LOG(INFO) << "alter finished. signature: " << signature;
     }
 
     // Return result to fe
     finish_task_request->__set_backend(BackendOptions::get_localBackend());
     finish_task_request->__set_report_version(g_report_version.load(std::memory_order_relaxed));
-    finish_task_request->__set_task_type(task_type);
+    finish_task_request->__set_task_type(TTaskType::ALTER);
     finish_task_request->__set_signature(signature);
 
     std::vector<TTabletInfo> finish_tablet_infos;
@@ -114,7 +98,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         }
 
         LOG_IF(WARNING, status != STARROCKS_SUCCESS)
-                << process_name << " success, but get new tablet info failed."
+                << "alter success, but get new tablet info failed."
                 << "tablet_id: " << new_tablet_id << ", schema_hash: " << new_schema_hash
                 << ", signature: " << signature;
     }
@@ -122,8 +106,8 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     if (status == STARROCKS_SUCCESS) {
         swap(finish_tablet_infos, finish_task_request->finish_tablet_infos);
         finish_task_request->__isset.finish_tablet_infos = true;
-        LOG(INFO) << process_name << " success. signature: " << signature;
-        error_msgs.push_back(process_name + " success");
+        LOG(INFO) << "alter success. signature: " << signature;
+        error_msgs.push_back("alter success");
         task_status.__set_status_code(TStatusCode::OK);
     } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
         LOG(WARNING) << "alter table request task type invalid. "
@@ -131,8 +115,8 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         error_msgs.emplace_back("alter table request new tablet id or schema count invalid.");
         task_status.__set_status_code(TStatusCode::ANALYSIS_ERROR);
     } else {
-        LOG(WARNING) << process_name << " failed. signature: " << signature;
-        error_msgs.push_back(process_name + " failed");
+        LOG(WARNING) << "alter failed. signature: " << signature;
+        error_msgs.push_back("alter failed");
         error_msgs.push_back("status: " + print_agent_status(status));
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
     }
@@ -243,7 +227,7 @@ void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& a
         TFinishTaskRequest finish_task_request;
         TTaskType::type task_type = agent_task_req->task_type;
         if (task_type == TTaskType::ALTER) {
-            alter_tablet(agent_task_req->task_req, signatrue, task_type, &finish_task_request);
+            alter_tablet(agent_task_req->task_req, signatrue, &finish_task_request);
         }
         finish_task(finish_task_request);
     }
