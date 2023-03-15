@@ -135,8 +135,16 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
                                                   const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                   google::protobuf::Closure* done) {
     auto begin_ts = MonotonicNanos();
-    VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
-             << " node=" << request->node_id() << " begin";
+    std::string transmit_info = "";
+    auto gen_transmit_info = [&transmit_info, &request]() {
+        transmit_info = "transmit data: " + std::to_string((uint64_t)(request)) +
+                        " fragment_instance_id=" + print_id(request->finst_id()) +
+                        " node=" + std::to_string(request->node_id());
+    };
+    if (VLOG_ROW_IS_ON) {
+        gen_transmit_info();
+    }
+    VLOG_ROW << transmit_info << " begin";
     // NOTE: we should give a default value to response to avoid concurrent risk
     // If we don't give response here, stream manager will call done->Run before
     // transmit_data(), which will cause a dirty memory access.
@@ -144,29 +152,42 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
     auto* req = const_cast<PTransmitChunkParams*>(request);
     const auto receive_timestamp = GetCurrentTimeNanos();
     response->set_receive_timestamp(receive_timestamp);
-    if (cntl->request_attachment().size() > 0) {
-        const butil::IOBuf& io_buf = cntl->request_attachment();
-        size_t offset = 0;
-        for (size_t i = 0; i < req->chunks().size(); ++i) {
-            auto chunk = req->mutable_chunks(i);
-            io_buf.copy_to(chunk->mutable_data(), chunk->data_size(), offset);
-            offset += chunk->data_size();
-        }
-    }
     Status st;
     st.to_protobuf(response->mutable_status());
+    DeferOp defer([&]() {
+        if (!st.ok()) {
+            gen_transmit_info();
+            LOG(WARNING) << "failed to " << transmit_info;
+        }
+        if (done != nullptr) {
+            // NOTE: only when done is not null, we can set response status
+            st.to_protobuf(response->mutable_status());
+            done->Run();
+        }
+        VLOG_ROW << transmit_info << " cost time = " << MonotonicNanos() - begin_ts;
+    });
+    if (cntl->request_attachment().size() > 0) {
+        butil::IOBuf& io_buf = cntl->request_attachment();
+        for (size_t i = 0; i < req->chunks().size(); ++i) {
+            auto chunk = req->mutable_chunks(i);
+            if (UNLIKELY(io_buf.size() < chunk->data_size())) {
+                auto msg = fmt::format("iobuf's size {} < {}", io_buf.size(), chunk->data_size());
+                LOG(WARNING) << msg;
+                st = Status::InternalError(msg);
+                return;
+            }
+            // also with copying due to the discontinuous memory in chunk
+            auto size = io_buf.cutn(chunk->mutable_data(), chunk->data_size());
+            if (UNLIKELY(size != chunk->data_size())) {
+                auto msg = fmt::format("iobuf read {} != expected {}.", size, chunk->data_size());
+                LOG(WARNING) << msg;
+                st = Status::InternalError(msg);
+                return;
+            }
+        }
+    }
+
     TRY_CATCH_ALL(st, _exec_env->stream_mgr()->transmit_chunk(*request, &done));
-    if (!st.ok()) {
-        LOG(WARNING) << "transmit_data failed, message=" << st.get_error_msg()
-                     << ", fragment_instance_id=" << print_id(request->finst_id()) << ", node=" << request->node_id();
-    }
-    if (done != nullptr) {
-        // NOTE: only when done is not null, we can set response status
-        st.to_protobuf(response->mutable_status());
-        done->Run();
-    }
-    VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
-             << " node=" << request->node_id() << " cost time = " << MonotonicNanos() - begin_ts;
 }
 
 template <typename T>
