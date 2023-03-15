@@ -253,8 +253,6 @@ public enum ErrorCode {
             "Invalid dynamic partition end %s"),
     ERROR_DYNAMIC_PARTITION_END_EMPTY(5066, new byte[] {'4', '2', '0', '0', '0'},
             "Dynamic partition end is empty"),
-    ERROR_DYNAMIC_PARTITION_BUCKETS_ZERO(5067, new byte[] {'4', '2', '0', '0', '0'},
-            "Dynamic partition buckets must greater than 0"),
     ERROR_DYNAMIC_PARTITION_BUCKETS_FORMAT(5067, new byte[] {'4', '2', '0', '0', '0'},
             "Invalid dynamic partition buckets %s"),
     ERROR_DYNAMIC_PARTITION_BUCKETS_EMPTY(5066, new byte[] {'4', '2', '0', '0', '0'},
