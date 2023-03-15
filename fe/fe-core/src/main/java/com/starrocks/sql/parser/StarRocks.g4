@@ -999,6 +999,7 @@ dataDesc
         INTO TABLE dstTableName=identifier
         partitions=partitionNames?
         (COLUMNS TERMINATED BY colSep=string)?
+        (ROWS TERMINATED BY rowSep=string)?
         format=fileFormat?
         colList=columnAliases?
         (COLUMNS FROM PATH AS colFromPath=identifierList)?
