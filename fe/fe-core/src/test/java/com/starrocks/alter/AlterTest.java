@@ -283,8 +283,8 @@ public class AlterTest {
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .refreshMaterializedView(refreshMaterializedViewStatement.getMvName().getDb(),
-                            refreshMaterializedViewStatement.getMvName().getTbl(),
-                            Constants.TaskRunPriority.LOWEST.value());
+                            refreshMaterializedViewStatement.getMvName().getTbl(), false, null,
+                            Constants.TaskRunPriority.LOWEST.value(), false, true);
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
