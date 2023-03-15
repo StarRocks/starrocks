@@ -453,6 +453,7 @@ public class MaterializedViewRewriter {
             if (!keys.containsAll(tableKeyColumns) || !tableKeyColumns.containsAll(keys)) {
                 return false;
             }
+            return true;
         } else if (tableKeyType == KeysType.DUP_KEYS) {
             List<UniqueConstraint> uniqueConstraints = table.getUniqueConstraints();
             if (uniqueConstraints == null || uniqueConstraints.isEmpty()) {
