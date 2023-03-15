@@ -179,7 +179,7 @@ public:
 
         if (_need_inline_value()) {
             using ItemType = CompactChunkItem<Slice>;
-            using Container = typename BinaryColumnBase<T>::BinaryDataProxyContainer;
+            using Container = typename BinaryColumnBase<T>::Container;
 
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
                 return lhs.inline_value.compare(rhs.inline_value);
@@ -188,7 +188,7 @@ public:
             std::vector<const Container*> containers;
             for (const auto& col : _vertical_columns) {
                 const auto real = down_cast<const ColumnType*>(col.get());
-                containers.push_back(&real->get_proxy_data());
+                containers.push_back(&real->get_data());
             }
 
             auto inlined = _create_inlined_permutation<Slice>(containers);
@@ -492,11 +492,7 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
     return Status::OK();
 }
 
-void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm) {
-    if (chunks.empty() || perm.empty()) {
-        return;
-    }
-
+void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const PermutationView& perm) {
     std::vector<const Chunk*> src;
     src.reserve(chunks.size());
     for (auto& chunk : chunks) {
@@ -509,7 +505,7 @@ void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, cons
     append_by_permutation(dst, src, perm);
 }
 
-void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const Permutation& perm) {
+void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const PermutationView& perm) {
     if (chunks.empty() || perm.empty()) {
         return;
     }
