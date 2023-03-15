@@ -95,6 +95,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
@@ -905,23 +906,6 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private int calBucketNumAccordingToBackends() {
-        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
-        // When POC, the backends is not greater than three most of the time.
-        // The bucketNum will be given a small multiplier factor for small backends.
-        int bucketNum = 0;
-        if (backendNum <= 3) {
-            bucketNum = 2 * backendNum;
-        } else if (backendNum <= 6) {
-            bucketNum = (int) (1.5 * backendNum);
-        } else if (backendNum <= 12) {
-            bucketNum = 12;
-        } else {
-            bucketNum = Math.min(backendNum, 48);
-        }
-        return bucketNum;
-    }
-
     private int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum) {
         // 1. If the partition is less than recentPartitionNum, use backendNum to speculate the bucketNum
         int bucketNum = 0;
@@ -952,7 +936,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         // A tablet will be regarded using the 1GB size
         // And also the number will not be larger than the calBucketNumAccordingToBackends()
-        bucketNum = (int) Math.min(bucketNum, maxDataSize / (1024 * 1024 * 1024L));
+        bucketNum = (int) Math.min(bucketNum, maxDataSize / FeConstants.AUTO_DISTRIBUTION_UNIT);
         if (bucketNum == 0) {
             bucketNum = 1;
         }
@@ -988,7 +972,11 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         } else {
             if (defaultDistributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH
-                    && Config.enable_auto_tablet_distribution) {
+                    && Config.enable_auto_tablet_distribution
+                    && !colocateTableIndex.isColocateTable(olapTable.getId())) {
+                // 1. If enable_auto_tablet_distribution = true, AUTO Tablet Distibution
+                //    also take effect on exist table when adding new partitions
+                // 2. ColocateTable should comply the original tablet num when creating table.
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) defaultDistributionInfo;
                 distributionInfo = new HashDistributionInfo(0, hashDistributionInfo.getDistributionColumns());
             } else {
@@ -1279,7 +1267,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, addPartitionClause);
 
-            if (distributionInfo.getBucketNum() == 0 || Config.enable_auto_tablet_distribution) {
+            if (distributionInfo.getBucketNum() == 0) {
                 int numBucket = calAvgBucketNumOfRecentPartitions(olapTable, 5);
                 distributionInfo.setBucketNum(numBucket);
             }
@@ -2619,7 +2607,7 @@ public class LocalMetastore implements ConnectorMetadata {
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
-        if (distributionInfo.getBucketNum() == 0 || Config.enable_auto_tablet_distribution) {
+        if (distributionInfo.getBucketNum() == 0) {
             int numBucket = CatalogUtils.calBucketNumAccordingToBackends();
             distributionInfo.setBucketNum(numBucket);
         }
