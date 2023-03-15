@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 466487a30 ([Enhancement] support cast struct/map/array to json (#19476))
 
 package com.starrocks.sql.plan;
 
@@ -30,6 +46,8 @@ public class JsonTypeTest extends PlanTestBase {
                 " v_FLOAT FLOAT," +
                 " v_VARCHAR VARCHAR," +
                 " v_CHAR CHAR," +
+                " v_DATE DATE," +
+                " v_DATETIME DATETIME, " +
                 " v_decimal decimal128(32,1)" +
                 ") DUPLICATE KEY (v_id) " +
                 "DISTRIBUTED BY HASH (v_id) " +
@@ -153,26 +171,16 @@ public class JsonTypeTest extends PlanTestBase {
             assertPlanContains("select cast(v_json as DECIMAL128(32,1)) from tjson_test",
                     "CAST(2: v_json AS DECIMAL128(32,1))");
             assertPlanContains("select cast(v_decimal AS JSON) from tjson_test",
-                    "CAST(13: v_decimal AS JSON)");
+                    "CAST(15: v_decimal AS JSON)");
         }
 
-        List<String> notAllowedCastTypes = Arrays.asList("date", "datetime");
-        for (String notAllowType : notAllowedCastTypes) {
-            String columnCastSql = String.format("select cast(v_json as %s) from tjson_test", notAllowType);
-            ExceptionChecker.expectThrowsWithMsg(
-                    SemanticException.class,
-                    String.format(
-                            "Invalid type cast from json to %s in sql `test.tjson_test.v_json`",
-                            notAllowType),
-                    () -> getFragmentPlan(columnCastSql)
-            );
-
-            String functionCastSql = String.format("select cast(parse_json('') as %s)", notAllowType);
-            ExceptionChecker.expectThrowsWithMsg(
-                    SemanticException.class,
-                    String.format("Invalid type cast from json to %s in sql `parse_json('')`", notAllowType),
-                    () -> getFragmentPlan(functionCastSql)
-            );
+        {
+            // Temporal types
+            List<String> temporalTypeList = Arrays.asList("date", "datetime");
+            for (String temporalType : temporalTypeList) {
+                String columnCastSql = String.format("select cast(v_%s as JSON) from tjson_test", temporalType);
+                getFragmentPlan(columnCastSql);
+            }
         }
 
     }
@@ -219,5 +227,10 @@ public class JsonTypeTest extends PlanTestBase {
         // Multi-dimension array casting is not supported
         assertExceptionMessage("select cast(json_array(1,2,3) as array<array<int>>)",
                 "Invalid type cast from json to ARRAY<ARRAY<int(11)>> in sql `json_array(1, 2, 3)`");
+    }
+
+    @Test
+    public void testCastStructToJson() throws Exception {
+        assertPlanContains("select cast(row(1, 2) as json)", "CAST(row(1, 2) AS JSON)");
     }
 }

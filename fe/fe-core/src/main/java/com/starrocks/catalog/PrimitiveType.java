@@ -96,18 +96,26 @@ public enum PrimitiveType {
     public static final ImmutableList<PrimitiveType> STRING_TYPE_LIST =
             ImmutableList.of(CHAR, VARCHAR);
 
+    private static final ImmutableList<PrimitiveType> TIME_TYPE_LIST =
+            ImmutableList.of(TIME, DATE, DATETIME);
+
     public static final ImmutableList<PrimitiveType> JSON_COMPATIBLE_TYPE =
             new ImmutableList.Builder<PrimitiveType>()
                     .add(BOOLEAN)
+                    .add(DATE)
+                    .add(DATETIME)
                     .addAll(NUMBER_TYPE_LIST)
                     .addAll(STRING_TYPE_LIST)
                     .build();
-    // TODO(mofei) support them
     public static final ImmutableList<PrimitiveType> JSON_UNCOMPATIBLE_TYPE =
+<<<<<<< HEAD
             ImmutableList.of(DATE, DATETIME, TIME, HLL, BITMAP, PERCENTILE, FUNCTION);
 
     private static final ImmutableList<PrimitiveType> TIME_TYPE_LIST =
             ImmutableList.of(TIME, DATE, DATETIME);
+=======
+            ImmutableList.of(TIME, HLL, BITMAP, PERCENTILE, FUNCTION, VARBINARY);
+>>>>>>> 466487a30 ([Enhancement] support cast struct/map/array to json (#19476))
 
     private static final ImmutableList<PrimitiveType> BASIC_TYPE_LIST =
             ImmutableList.<PrimitiveType>builder()
