@@ -821,4 +821,21 @@ vectorized_functions = [
     [170000, 'map_size', 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
     [170001, 'map_keys', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_keys'],
     [170002, 'map_values', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_values'],
+<<<<<<< HEAD:gensrc/script/vectorized/vectorized_functions.py
+=======
+    [170003, 'map_from_arrays', 'ANY_MAP', ['ANY_ARRAY', 'ANY_ARRAY'], 'MapFunctions::map_from_arrays'],
+    [170004, 'map_apply', 'ANY_MAP', ['FUNCTION', 'ANY_MAP'], 'nullptr'],
+    [170005, 'map_filter', 'ANY_MAP',  ['ANY_MAP', 'ARRAY_BOOLEAN'], 'MapFunctions::map_filter'],
+
+    # struct functions
+    [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
+
+    # unix timestamp extended version to int64
+    # [170700, 'unix_timestamp', 'BIGINT', [], 'TimeFunctions::to_unix_for_now_64'],
+    # [170701, 'unix_timestamp', 'BIGINT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime_64'],
+    # [170702, 'unix_timestamp', 'BIGINT', ['DATE'], 'TimeFunctions::to_unix_from_date_64'],
+    # [170701, 'unix_timestamp', 'BIGINT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format_64'],
+    [170704, 'from_unixtime', 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_64'],
+    # [170705, 'from_unixtime', 'VARCHAR', ['BIGINT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format_64', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
+>>>>>>> 20352e19f ([Enhancement] support `from_unixtime` to int64 (#19396)):gensrc/script/functions.py
 ]
