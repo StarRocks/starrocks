@@ -26,31 +26,49 @@ import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
 
 public class DateUtils {
+    // These are marked as deprecated because they don't support year 0000 parsing
+    @Deprecated
     public static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    @Deprecated
     public static final DateTimeFormatter DATEKEY_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
+    @Deprecated
     public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    @Deprecated
     public static final DateTimeFormatter MINUTE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
+    @Deprecated
     public static final DateTimeFormatter HOUR_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHH");
+    @Deprecated
     public static final DateTimeFormatter YEAR_FORMATTER = DateTimeFormatter.ofPattern("yyyy");
+    @Deprecated
     public static final DateTimeFormatter QUARTER_FORMATTER = DateTimeFormatter.ofPattern("yyyy'Q'q");
+    @Deprecated
     public static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyyMM");
 
     public static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     public static final DateTimeFormatter DATE_FORMATTER_UNIX =
             DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d").toFormatter();
+    public static final DateTimeFormatter DATEKEY_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y%m%d").toFormatter();
     public static final DateTimeFormatter DATE_TIME_FORMATTER_UNIX =
             DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s").toFormatter();
     public static final DateTimeFormatter DATE_TIME_MS_FORMATTER_UNIX =
             DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f").toFormatter();
-
+    public static final DateTimeFormatter MINUTE_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y%m%d%H%i").toFormatter();
+    public static final DateTimeFormatter HOUR_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y%m%d%H").toFormatter();
+    public static final DateTimeFormatter YEAR_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y").toFormatter();
+    public static final DateTimeFormatter MONTH_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y%m").toFormatter();
     public static DateTimeFormatter probeFormat(String dateTimeStr) throws AnalysisException {
         if (dateTimeStr.length() == 8) {
             return DateUtils.DATEKEY_FORMATTER;
         } else if (dateTimeStr.length() == 10) {
-            return DateUtils.DATE_FORMATTER;
+            return DateUtils.DATE_FORMATTER_UNIX;
         } else if (dateTimeStr.length() == 19) {
-            return DateUtils.DATE_TIME_FORMATTER;
+            return DateUtils.DATE_TIME_FORMATTER_UNIX;
         } else {
             throw new AnalysisException("can not probe datetime format:" + dateTimeStr);
         }
