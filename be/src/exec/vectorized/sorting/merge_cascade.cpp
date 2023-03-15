@@ -186,12 +186,12 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_intersected_cursor(SortedR
     auto perm_view = PermutationView(permutation.data(), merged_rows);
 
     // TODO: avoid copy the whole chunk, but copy orderby columns only
-    materialize_by_permutation(merged.get(), {run1.chunk, run2.chunk}, perm_view);
+    append_by_permutation(merged.get(), {run1.chunk, run2.chunk}, perm_view);
 
     auto left_rows = permutation.size() - merged_rows;
     perm_view = PermutationView(permutation.data() + merged_rows, left_rows);
     ChunkUniquePtr left_merged = run2.chunk->clone_empty(left_rows);
-    materialize_by_permutation(left_merged.get(), {run1.chunk, run2.chunk}, perm_view);
+    append_by_permutation(left_merged.get(), {run1.chunk, run2.chunk}, perm_view);
 
     if (tail_cmp <= 0) {
         run1.reset();
