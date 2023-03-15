@@ -161,18 +161,19 @@ int64_t CacheInputStream::get_align_size() const {
 #endif
 }
 
-Status CacheInputStream::zero_copy_read_at_fully(int64_t offset, void** buf, int64_t count) {
+StatusOr<std::string_view> CacheInputStream::peek(int64_t count) {
     // if app level uses zero copy read, it does bypass the cache layer.
     // so here we have to fill cache manually.
-    RETURN_IF_ERROR(_stream->zero_copy_read_at_fully(offset, buf, count));
+    ASSIGN_OR_RETURN(auto s, _stream->peek(count));
     if (_enable_populate_cache) {
-        _populate_cache_from_zero_copy_buffer(offset, count);
+        _populate_cache_from_zero_copy_buffer(s.data(), _offset, count);
     }
+    _offset += count;
     return Status::OK();
 }
 
 #ifdef WITH_BLOCK_CACHE
-void CacheInputStream::_populate_cache_from_zero_copy_buffer(int64_t offset, int64_t count) {
+void CacheInputStream::_populate_cache_from_zero_copy_buffer(constint64_t offset, int64_t count) {
     BlockCache* cache = BlockCache::instance();
     const int64_t BLOCK_SIZE = cache->block_size();
     int64_t begin = offset / BLOCK_SIZE * BLOCK_SIZE;

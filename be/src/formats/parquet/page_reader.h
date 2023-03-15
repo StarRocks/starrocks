@@ -39,8 +39,9 @@ public:
     // Must call this function ater next_header called. The total read size
     // after one next_header can not exceede the page's compressed_page_size.
     Status read_bytes(void* buffer, size_t size);
-    bool can_zero_copy_read_bytes(size_t size);
-    Status zero_copy_read_bytes(void** buf, size_t size);
+
+    bool allows_peek();
+    StatusOr<std::string_view> peek(size_t size);
 
     Status skip_bytes(size_t size);
 

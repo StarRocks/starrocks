@@ -66,8 +66,8 @@ public:
     int64_t direct_io_bytes() const { return _direct_io_bytes; }
     int64_t direct_io_timer() const { return _direct_io_timer; }
 
-    bool can_zero_copy_read_at_fully(int64_t offset, int64_t count) override;
-    Status zero_copy_read_at_fully(int64_t offset, void** buf, int64_t count) override;
+    bool allows_peek() const override;
+    StatusOr<std::string_view> peek(int64_t count) override;
 
 private:
     struct SharedBuffer {

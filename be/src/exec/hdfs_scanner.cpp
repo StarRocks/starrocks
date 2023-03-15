@@ -36,28 +36,27 @@ public:
         return nread;
     }
 
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, data, size));
-        _stats->bytes_read += nread;
-        return nread;
-    }
+    // StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) override {
+    //     SCOPED_RAW_TIMER(&_stats->io_ns);
+    //     _stats->io_count += 1;
+    //     ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, data, size));
+    //     _stats->bytes_read += nread;
+    //     return nread;
+    // }
 
     Status read_at_fully(int64_t offset, void* data, int64_t size) override {
         SCOPED_RAW_TIMER(&_stats->io_ns);
         _stats->io_count += 1;
-        RETURN_IF_ERROR(_stream->read_at_fully(offset, data, size));
         _stats->bytes_read += size;
-        return Status::OK();
+
+        RETURN_IF_ERROR(_stream->read_at_fully(offset, data, size));
     }
 
-    Status zero_copy_read_at_fully(int64_t offset, void** buf, int64_t count) override {
+    StatusOr<std::string_view> peek(int64_t count) override {
         SCOPED_RAW_TIMER(&_stats->io_ns);
         _stats->io_count += 1;
-        RETURN_IF_ERROR(_stream->zero_copy_read_at_fully(offset, buf, count));
         _stats->bytes_read += count;
-        return Status::OK();
+        RETURN_IF_ERROR(_stream->peek(count));
     }
 
 private:
