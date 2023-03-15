@@ -98,7 +98,7 @@ public:
         }
         auto null_cmp = [&](int lhs_row) -> int {
             DCHECK(null_data[lhs_row] == 1);
-            return _rhs_value.is_null() ? 0 : _null_first;
+            return _rhs_value.is_null() ? 0 : _null_first * _sort_order;
         };
         size_t null_equal_count = compare_column_helper(null_vector, null_cmp);
 
@@ -112,7 +112,7 @@ public:
         if (_rhs_value.is_null()) {
             for (size_t i = 0; i < null_data.size(); i++) {
                 if (null_data[i] == 0) {
-                    cmp_vector[i] = -_null_first;
+                    cmp_vector[i] = -_null_first * _sort_order;
                 } else {
                     cmp_vector[i] = null_vector[i];
                 }
