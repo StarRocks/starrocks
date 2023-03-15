@@ -41,12 +41,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -75,7 +73,6 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -105,7 +102,6 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
@@ -229,7 +225,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
-import static com.starrocks.catalog.TableProperty.INVALID;
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 
@@ -1500,7 +1495,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
                     if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                db.getFullName(), materializedView.getName(), Constants.TaskRunPriority.NORMAL.value());
+                                db.getFullName(), materializedView.getName(), false, null,
+                                Constants.TaskRunPriority.NORMAL.value(), true, false);
                     }
                 }
             } catch (MetaNotFoundException e) {
@@ -2999,34 +2995,21 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void refreshMaterializedView(String dbName, String mvName, int priority)
+    public void refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
+                                        int priority, boolean mergeRedundant, boolean isManual)
             throws DdlException, MetaNotFoundException {
         MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
-        int limit = materializedView.getTableProperty().getAutoRefreshPartitionsLimit();
-        PartitionInfo partitionInfo = materializedView.getPartitionInfo();
-        if (limit == INVALID || !partitionInfo.isRangePartition()) {
-            executeRefreshMvTask(dbName, materializedView, new ExecuteOption(priority));
-        } else {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            Collection<Range<PartitionKey>> ranges = rangePartitionInfo.getIdToRange(false).values();
-            List<Range<PartitionKey>> sortedRange = ranges.stream()
-                    .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
-            if (limit >= sortedRange.size()) {
-                executeRefreshMvTask(dbName, materializedView, new ExecuteOption(priority));
-                return;
-            }
 
-            int partitionNum = sortedRange.size();
-            LiteralExpr startExpr = sortedRange.get(partitionNum - limit).lowerEndpoint().getKeys().get(0);
-            LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
-            String partitionStart = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
-            String partitionEnd = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 1);
-            HashMap<String, String> taskRunProperties = new HashMap<>();
-            taskRunProperties.put(TaskRun.PARTITION_START, partitionStart);
-            taskRunProperties.put(TaskRun.PARTITION_END, partitionEnd);
-            executeRefreshMvTask(dbName, materializedView,
-                    new ExecuteOption(priority, true, taskRunProperties));
+        HashMap<String, String> taskRunProperties = new HashMap<>();
+        taskRunProperties.put(TaskRun.PARTITION_START, range == null ? null : range.getPartitionStart());
+        taskRunProperties.put(TaskRun.PARTITION_END, range == null ? null : range.getPartitionEnd());
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(force));
+
+        ExecuteOption executeOption = new ExecuteOption(priority, mergeRedundant, taskRunProperties);
+        if (isManual) {
+            executeOption.setManual();
         }
+        executeRefreshMvTask(dbName, materializedView, executeOption);
     }
 
     @Override
@@ -3037,13 +3020,8 @@ public class LocalMetastore implements ConnectorMetadata {
         boolean force = refreshMaterializedViewStatement.isForceRefresh();
         PartitionRangeDesc range =
                 refreshMaterializedViewStatement.getPartitionRangeDesc();
-        MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
-        HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(TaskRun.PARTITION_START, range == null ? null : range.getPartitionStart());
-        taskRunProperties.put(TaskRun.PARTITION_END, range == null ? null : range.getPartitionEnd());
-        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(force));
-        executeRefreshMvTask(dbName, materializedView,
-                new ExecuteOption(priority, false, taskRunProperties));
+
+        refreshMaterializedView(dbName, mvName, force, range, priority, false, true);
     }
 
     @Override
@@ -3987,8 +3965,8 @@ public class LocalMetastore implements ConnectorMetadata {
             for (MvId mvId : relatedMvs) {
                 MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
                 if (materializedView.isLoadTriggeredRefresh()) {
-                    refreshMaterializedView(db.getFullName(), db.getTable(mvId.getId()).getName(),
-                            Constants.TaskRunPriority.NORMAL.value());
+                    refreshMaterializedView(db.getFullName(), db.getTable(mvId.getId()).getName(), false, null,
+                            Constants.TaskRunPriority.NORMAL.value(), true, false);
                 }
             }
         } catch (DdlException e) {

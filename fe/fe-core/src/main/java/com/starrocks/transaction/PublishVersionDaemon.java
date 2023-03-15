@@ -471,8 +471,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     }
                     if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(),
-                                Constants.TaskRunPriority.NORMAL.value());
+                                mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
+                                Constants.TaskRunPriority.NORMAL.value(), true, false);
                     }
                 } finally {
                     mvDb.readUnlock();
