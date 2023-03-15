@@ -1708,7 +1708,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitShowFunctionsStatement(ShowFunctionsStmt statement, ConnectContext context) {
-            // Don't do any privilege check on show functions
+            // Privilege check is handled in `ShowExecutor#handleShowFunctions()`
             return null;
         }
 

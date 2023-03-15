@@ -48,7 +48,6 @@ import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
@@ -108,20 +107,20 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     protected long createTime;
     /*
      *  fullSchema and nameToColumn should contain all columns, both visible and shadow.
-     *  eg. for OlapTable, when doing schema change, there will be some shadow columns which are not visible
+     *  e.g. for OlapTable, when doing schema change, there will be some shadow columns which are not visible
      *      to query but visible to load process.
      *  If you want to get all visible columns, you should call getBaseSchema() method, which is override in
-     *  sub classes.
+     *  subclasses.
      *
      *  NOTICE: the order of this fullSchema is meaningless to OlapTable
      */
     /**
-     * The fullSchema of OlapTable includes the base columns and the SHADOW_NAME_PRFIX columns.
+     * The fullSchema of OlapTable includes the base columns and the SHADOW_NAME_PREFIX columns.
      * The properties of base columns in fullSchema are same as properties in baseIndex.
      * For example:
      * Table (c1 int, c2 int, c3 int)
      * Schema change (c3 to bigint)
-     * When OlapTable is changing schema, the fullSchema is (c1 int, c2 int, c3 int, SHADOW_NAME_PRFIX_c3 bigint)
+     * When OlapTable is changing schema, the fullSchema is (c1 int, c2 int, c3 int, SHADOW_NAME_PREFIX_c3 bigint)
      * The fullSchema of OlapTable is mainly used by Scanner of Load job.
      * <p>
      * If you want to get the mv columns, you should call getIndexToSchema in Subclass OlapTable.
@@ -130,7 +129,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     protected List<Column> fullSchema;
     // tree map for case-insensitive lookup.
     /**
-     * The nameToColumn of OlapTable includes the base columns and the SHADOW_NAME_PRFIX columns.
+     * The nameToColumn of OlapTable includes the base columns and the SHADOW_NAME_PREFIX columns.
      */
     protected Map<String, Column> nameToColumn;
 
@@ -220,6 +219,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.MATERIALIZED_VIEW;
     }
 
+    public boolean isView() {
+        return type == TableType.VIEW;
+    }
+
     public boolean isLocalTable() {
         return isOlapTable() || isOlapMaterializedView();
     }
@@ -303,7 +306,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     }
 
     public static Table read(DataInput in) throws IOException {
-        Table table = null;
+        Table table;
         TableType type = TableType.valueOf(Text.readString(in));
         if (type == TableType.OLAP) {
             table = new OlapTable();
@@ -498,10 +501,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         this.comment = Strings.nullToEmpty(comment);
     }
 
-    public CreateTableStmt toCreateTableStmt(String dbName) {
-        throw new NotImplementedException();
-    }
-
     @Override
     public int getSignature(int signatureVersion) {
         throw new NotImplementedException();
@@ -518,7 +517,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
      *   2.1 If is clone between bes or group is not stable, table can not be scheduled.
      *   2.2 If is local balance and group is stable, table can be scheduled.
      * 3. (deprecated). if table's state is ROLLUP or SCHEMA_CHANGE, but alter job's state is FINISHING, we should also
-     *      schedule the tablet to repair it(only for VERSION_IMCOMPLETE case, this will be checked in
+     *      schedule the tablet to repair it(only for VERSION_INCOMPLETE case, this will be checked in
      *      TabletScheduler).
      * 4. Even if table's state is ROLLUP or SCHEMA_CHANGE, check it. Because we can repair the tablet of base index.
      * 5. PRIMARY_KEYS table does not support local balance.
@@ -533,18 +532,15 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             boolean isGroupUnstable = colocateIndex.isGroupUnstable(colocateIndex.getGroup(getId()));
             if (!isLocalBalance || isGroupUnstable) {
                 LOG.debug(
-                        "table {} is a colocate table, skip tablet checker. is local migration: {}, is group unstable: {}",
+                        "table {} is a colocate table, skip tablet checker. " +
+                                "is local migration: {}, is group unstable: {}",
                         name, isLocalBalance, isGroupUnstable);
                 return false;
             }
         }
 
         OlapTable olapTable = (OlapTable) this;
-        if (isLocalBalance && olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-            return false;
-        }
-
-        return true;
+        return !isLocalBalance || olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
     }
 
     public boolean hasAutoIncrementColumn() {

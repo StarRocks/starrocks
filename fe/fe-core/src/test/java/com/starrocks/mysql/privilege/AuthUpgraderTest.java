@@ -28,6 +28,8 @@ import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.PrivilegeCheckerV2;
@@ -41,6 +43,7 @@ import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
 import com.starrocks.sql.ast.GrantRevokePrivilegeObjects;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
@@ -186,8 +189,8 @@ public class AuthUpgraderTest {
         for (int i = 0; i != 2; ++i) {
             for (int j = 0; j != 2; ++j) {
                 String createTblStmtStr = "create table db" + i + ".tbl" + j
-                        + "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                        + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1)"
+                        + "(k1 varchar(32), k3 varchar(32), k4 int, k2 varchar(32)) "
+                        + "PRIMARY KEY(k1,k3,k4) distributed by hash(k1)"
                         + " buckets 3 properties('replication_num' = '1');";
                 starRocksAssert.withTable(createTblStmtStr);
             }
@@ -309,12 +312,12 @@ public class AuthUpgraderTest {
         }
     }
 
+    private boolean showResultContains(List<List<String>> showResult, String target) {
+        return showResult.stream().flatMap(List::stream).anyMatch(str -> str.contains(target));
+    }
+
     @Test
     public void testSelect() throws Exception {
-        List<StatementBase> s = new ArrayList<>();
-        s.add(createUserStmt("globalSelect"));
-
-
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
                 createUserStmt("globalSelect"),
@@ -347,6 +350,21 @@ public class AuthUpgraderTest {
             if (i == 1) {
                 replayUpgrade(image);
             }
+
+            ShowResultSet res = new ShowExecutor(ctx,
+                    (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW grants for dbSelect", ctx)).execute();
+            List<List<String>> showResult = res.getResultRows();
+            System.out.println(showResult);
+            Assert.assertTrue(showResultContains(showResult, "GRANT USAGE ON ALL FUNCTIONS IN DATABASE db0"));
+            Assert.assertFalse(showResultContains(showResult,
+                    "GRANT SELECT ON ALL VIEWS IN DATABASE information_schema"));
+
+            res = new ShowExecutor(ctx,
+                    (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW grants for globalSelect", ctx)).execute();
+            showResult = res.getResultRows();
+            System.out.println(showResult);
+            Assert.assertTrue(showResultContains(showResult, "GRANT USAGE ON ALL FUNCTIONS IN ALL DATABASES"));
+
             checkPrivilegeAsUser(
                     UserIdentity.createAnalyzedUserIdentWithIp("globalSelect", "%"),
                     "select * from db1.tbl1",
@@ -1345,5 +1363,70 @@ public class AuthUpgraderTest {
             }
         }
     }
-    // TODO test table load
+
+    @Test
+    public void testLoad() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                createUserStmt("globalLoad"),
+                grantPrivilegeStmt(Lists.newArrayList("LOAD_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "globalLoad"),
+                createUserStmt("dbLoad"),
+                grantPrivilegeStmt(Lists.newArrayList("LOAD_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "*"), "dbLoad"),
+                createUserStmt("tblLoad"),
+                grantPrivilegeStmt(Lists.newArrayList("LOAD_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "tbl0"), "tblLoad"),
+                createRoleStmt("globalLoad"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("LOAD_PRIV"), "TABLE",
+                        Lists.newArrayList("*", "*"), "globalLoad"),
+                createRoleStmt("dbLoad"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("LOAD_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "*"), "dbLoad"),
+                createRoleStmt("tblLoad"),
+                grantPrivilegeToRoleStmt(Lists.newArrayList("LOAD_PRIV"), "TABLE",
+                        Lists.newArrayList("db0", "tbl0"), "tblLoad")
+        );
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+
+            checkPrivilegeAsUser(
+                    UserIdentity.createAnalyzedUserIdentWithIp("globalLoad", "%"),
+                    "delete from db1.tbl1 where k1=1",
+                    "update db0.tbl0 set k2=4 where k1=1");
+            checkPrivilegeAsUser(
+                    UserIdentity.createAnalyzedUserIdentWithIp("dbLoad", "%"),
+                    "delete from db0.tbl1 where k1=1",
+                    "update db0.tbl0 set k2=4 where k1=1",
+                    "insert into db0.tbl0 values(1,2,3,4)");
+            checkBadPrivilegeAsUser(UserIdentity.createAnalyzedUserIdentWithIp("dbLoad", "%"),
+                    "insert into db1.tbl0 values(1,2,3,4)",
+                    "INSERT command denied to user");
+            checkPrivilegeAsUser(
+                    UserIdentity.createAnalyzedUserIdentWithIp("tblLoad", "%"),
+                    "delete from db0.tbl0 where k1=1",
+                    "update db0.tbl0 set k2=4 where k1=1",
+                    "insert into db0.tbl0 values(1,2,3,4)");
+
+            UserIdentity user = createUserByRole("dbLoad");
+            checkPrivilegeAsUser(
+                    user,
+                    "delete from db0.tbl1 where k1=1",
+                    "update db0.tbl0 set k2=4 where k1=1",
+                    "insert into db0.tbl0 values(1,2,3,4)");
+            checkBadPrivilegeAsUser(user,
+                    "insert into db1.tbl0 values(1,2,3,4)",
+                    "INSERT command denied to user");
+
+            ShowResultSet res = new ShowExecutor(ctx,
+                    (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW grants for dbLoad", ctx)).execute();
+            List<List<String>> showResult = res.getResultRows();
+            System.out.println(showResult);
+            Assert.assertTrue(showResultContains(showResult,
+                    "GRANT DELETE, INSERT, EXPORT, UPDATE ON ALL TABLES IN DATABASE db0"));
+        }
+    }
 }
