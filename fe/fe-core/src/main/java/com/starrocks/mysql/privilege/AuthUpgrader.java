@@ -21,6 +21,7 @@ import com.starrocks.analysis.TablePattern;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -48,6 +49,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class AuthUpgrader {
@@ -269,6 +271,7 @@ public class AuthUpgrader {
                     upgradeTablePrivileges(STAR, STAR, privilege, collection, null);
                     upgradeViewPrivileges(STAR, STAR, privilege, collection, null);
                     upgradeMaterializedViewPrivileges(STAR, STAR, privilege, collection, null);
+                    upgradeFunctionPrivileges(STAR, STAR, privilege, collection, null);
                     break;
 
                 case LOAD_PRIV:
@@ -329,8 +332,11 @@ public class AuthUpgrader {
                 switch (privilege) {
                     case SELECT_PRIV:
                         upgradeTablePrivileges(db, STAR, privilege, collection, grantPatterns);
-                        upgradeViewPrivileges(db, STAR, privilege, collection, grantPatterns);
-                        upgradeMaterializedViewPrivileges(db, STAR, privilege, collection, grantPatterns);
+                        if (!InfoSchemaDb.isInfoSchemaDb(db)) {
+                            upgradeViewPrivileges(db, STAR, privilege, collection, grantPatterns);
+                            upgradeMaterializedViewPrivileges(db, STAR, privilege, collection, grantPatterns);
+                            upgradeFunctionPrivileges(db, STAR, privilege, collection, grantPatterns);
+                        }
                         break;
 
                     case LOAD_PRIV:
@@ -771,7 +777,7 @@ public class AuthUpgrader {
         // isGrant
         boolean isGrant = false;
         if (grantPatterns != null) {
-            isGrant = matchTableGrant(grantPatterns, db, STAR);
+            isGrant = matchGrantPrivOfObjectInDb(grantPatterns, db, STAR);
         }
 
 
@@ -859,7 +865,7 @@ public class AuthUpgrader {
         // isGrant
         boolean isGrant = false;
         if (grantPatterns != null) {
-            isGrant = matchTableGrant(grantPatterns, db, view);
+            isGrant = matchGrantPrivOfObjectInDb(grantPatterns, db, view);
         }
 
         // grant table
@@ -882,7 +888,8 @@ public class AuthUpgrader {
                 privilegeTypes = Arrays.asList(
                         PrivilegeType.INSERT,
                         PrivilegeType.DELETE,
-                        PrivilegeType.EXPORT);
+                        PrivilegeType.EXPORT,
+                        PrivilegeType.UPDATE);
                 break;
 
             case DROP_PRIV:
@@ -921,7 +928,7 @@ public class AuthUpgrader {
         // isGrant
         boolean isGrant = false;
         if (grantPatterns != null) {
-            isGrant = matchTableGrant(grantPatterns, db, table);
+            isGrant = matchGrantPrivOfObjectInDb(grantPatterns, db, table);
         }
 
         // grant table
@@ -977,17 +984,59 @@ public class AuthUpgrader {
         // isGrant
         boolean isGrant = false;
         if (grantPatterns != null) {
-            isGrant = matchTableGrant(grantPatterns, db, mv);
+            isGrant = matchGrantPrivOfObjectInDb(grantPatterns, db, mv);
         }
 
         // grant table
         collection.grant(ObjectType.MATERIALIZED_VIEW, privilegeTypes, objects, isGrant);
     }
 
+    protected void upgradeFunctionPrivileges(
+            String db, String function, Privilege privilege, PrivilegeCollection collection,
+            Set<Pair<String, String>> grantPatterns)
+            throws PrivilegeException, AuthUpgradeUnrecoverableException {
+        // action
+        List<PrivilegeType> privilegeTypes;
+        if (Objects.requireNonNull(privilege) == Privilege.SELECT_PRIV) {
+            privilegeTypes = Collections.singletonList(PrivilegeType.USAGE);
+        } else {
+            throw new AuthUpgradeUnrecoverableException("function privilege " + privilege + " hasn't implemented");
+        }
+
+        // object
+        List<PEntryObject> objects;
+        try {
+            if (db.equals(STAR)) {
+                objects = Collections.singletonList(privilegeManager.generateObject(ObjectType.FUNCTION,
+                        Lists.newArrayList("*", "*")));
+            } else if (function.equals(STAR)) {
+                // ALL FUNCTIONS in db
+                objects = Collections.singletonList(privilegeManager.generateObject(ObjectType.FUNCTION,
+                        Lists.newArrayList(db, "*")));
+            } else {
+                throw new AuthUpgradeUnrecoverableException(
+                        "old auth doesn't support grant privilege on specified function");
+            }
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Privilege '{}' on function {}.{} is ignored when upgrading from" +
+                    " old auth because of non-existed object, message: {}", privilege, db, function, e.getMessage());
+            return;
+        }
+
+        // isGrant
+        boolean isGrant = false;
+        if (grantPatterns != null) {
+            isGrant = matchGrantPrivOfObjectInDb(grantPatterns, db, function);
+        }
+
+        // grant function
+        collection.grant(ObjectType.FUNCTION, privilegeTypes, objects, isGrant);
+    }
+
     // `grantPattern` only contains dbx.tblx or dbx.*,
     // grant_priv on *.* will be upgraded to user_admin built-in role
-    private boolean matchTableGrant(Set<Pair<String, String>> grantPattern, String db, String table) {
-        return grantPattern.contains(Pair.create(db, table)) || grantPattern.contains(Pair.create(db, STAR));
+    private boolean matchGrantPrivOfObjectInDb(Set<Pair<String, String>> grantPattern, String db, String objectName) {
+        return grantPattern.contains(Pair.create(db, objectName)) || grantPattern.contains(Pair.create(db, STAR));
     }
 
     protected void upgradeImpersonatePrivileges(UserIdentity user, PrivilegeCollection collection)

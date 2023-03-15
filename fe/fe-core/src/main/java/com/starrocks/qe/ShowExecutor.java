@@ -102,7 +102,6 @@ import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
-import com.starrocks.load.Load;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
@@ -207,7 +206,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -656,7 +654,7 @@ public class ShowExecutor {
     // Handle show functions
     private void handleShowFunctions() throws AnalysisException {
         ShowFunctionsStmt showStmt = (ShowFunctionsStmt) stmt;
-        List<Function> functions = null;
+        List<Function> functions;
         if (showStmt.getIsBuiltin()) {
             functions = connectContext.getGlobalStateMgr().getBuiltinFunctions();
         } else if (showStmt.getIsGlobal()) {
@@ -688,10 +686,10 @@ public class ShowExecutor {
         }
 
         // sort function rows by first column asc
-        ListComparator<List<Comparable>> comparator = null;
+        ListComparator<List<Comparable>> comparator;
         OrderByPair orderByPair = new OrderByPair(0, false);
         comparator = new ListComparator<>(orderByPair);
-        Collections.sort(rowSet, comparator);
+        rowSet.sort(comparator);
         List<List<String>> resultRowSet = Lists.newArrayList();
 
         Set<String> functionNameSet = new HashSet<>();
@@ -726,10 +724,10 @@ public class ShowExecutor {
     }
 
     // Show databases statement
-    private void handleShowDb() throws AnalysisException, DdlException {
+    private void handleShowDb() {
         ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        List<String> dbNames = new ArrayList<>();
+        List<String> dbNames;
         String catalogName;
         if (showDbStmt.getCatalogName() == null) {
             catalogName = connectContext.getCurrentCatalog();
@@ -798,7 +796,18 @@ public class ShowExecutor {
                     }
                     // check tbl privs
                     if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        if (!PrivilegeActions.checkAnyActionOnTable(connectContext, db.getFullName(), tbl.getName())) {
+                        if (tbl.isView()) {
+                            if (!PrivilegeActions.checkAnyActionOnView(
+                                    connectContext, db.getFullName(), tbl.getName())) {
+                                continue;
+                            }
+                        } else if (tbl.isMaterializedView()) {
+                            if (!PrivilegeActions.checkAnyActionOnMaterializedView(
+                                    connectContext, db.getFullName(), tbl.getName())) {
+                                continue;
+                            }
+                        } else if (!PrivilegeActions.checkAnyActionOnTable(
+                                connectContext, db.getFullName(), tbl.getName())) {
                             continue;
                         }
                     } else {
@@ -835,7 +844,7 @@ public class ShowExecutor {
     }
 
     // Show table status statement.
-    private void handleShowTableStatus() throws AnalysisException {
+    private void handleShowTableStatus() {
         ShowTableStatusStmt showStmt = (ShowTableStatusStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
         Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDb());
@@ -883,7 +892,7 @@ public class ShowExecutor {
     }
 
     // Show variables like
-    private void handleShowVariables() throws AnalysisException {
+    private void handleShowVariables() {
         ShowVariablesStmt showStmt = (ShowVariablesStmt) stmt;
         PatternMatcher matcher = null;
         if (showStmt.getPattern() != null) {
@@ -1227,7 +1236,7 @@ public class ShowExecutor {
 
         // combine the List<LoadInfo> of load(v1) and loadManager(v2)
         Set<String> statesValue = showStmt.getStates() == null ? null : showStmt.getStates().stream()
-                .map(entity -> entity.name())
+                .map(Enum::name)
                 .collect(Collectors.toSet());
         List<List<Comparable>> loadInfos =
                 globalStateMgr.getLoadManager().getLoadJobInfosByDb(dbId, showStmt.getLabelValue(),
@@ -1239,16 +1248,16 @@ public class ShowExecutor {
         ListComparator<List<Comparable>> comparator = null;
         if (orderByPairs != null) {
             OrderByPair[] orderByPairArr = new OrderByPair[orderByPairs.size()];
-            comparator = new ListComparator<List<Comparable>>(orderByPairs.toArray(orderByPairArr));
+            comparator = new ListComparator<>(orderByPairs.toArray(orderByPairArr));
         } else {
             // sort by id asc
-            comparator = new ListComparator<List<Comparable>>(0);
+            comparator = new ListComparator<>(0);
         }
-        Collections.sort(loadInfos, comparator);
+        loadInfos.sort(comparator);
 
         List<List<String>> rows = Lists.newArrayList();
         for (List<Comparable> loadInfo : loadInfos) {
-            List<String> oneInfo = new ArrayList<String>(loadInfo.size());
+            List<String> oneInfo = new ArrayList<>(loadInfo.size());
 
             for (Comparable element : loadInfo) {
                 oneInfo.add(element.toString());
@@ -1310,7 +1319,7 @@ public class ShowExecutor {
                     .sorted(fProvider.getOrderComparator())
                     .skip(fProvider.getSkipCount())
                     .limit(fProvider.getLimitCount())
-                    .map(job -> job.getShowInfo())
+                    .map(RoutineLoadJob::getShowInfo)
                     .collect(Collectors.toList());
         }
 
@@ -1397,7 +1406,7 @@ public class ShowExecutor {
                     .sorted(fProvider.getOrderComparator())
                     .skip(fProvider.getSkipCount())
                     .limit(fProvider.getLimitCount())
-                    .map(task -> task.getShowInfo())
+                    .map(StreamLoadTask::getShowInfo)
                     .collect(Collectors.toList());
         }
 
@@ -1426,11 +1435,10 @@ public class ShowExecutor {
         long dbId = db.getId();
 
         DeleteHandler deleteHandler = globalStateMgr.getDeleteHandler();
-        Load load = globalStateMgr.getLoadInstance();
         List<List<Comparable>> deleteInfos = deleteHandler.getDeleteInfosByDb(dbId);
         List<List<String>> rows = Lists.newArrayList();
         for (List<Comparable> deleteInfo : deleteInfos) {
-            List<String> oneInfo = new ArrayList<String>(deleteInfo.size());
+            List<String> oneInfo = new ArrayList<>(deleteInfo.size());
             for (Comparable element : deleteInfo) {
                 oneInfo.add(element.toString());
             }
@@ -1597,7 +1605,7 @@ public class ShowExecutor {
 
                 // sort by index name
                 Map<String, Long> indexNames = olapTable.getIndexNameToId();
-                Map<String, Long> sortedIndexNames = new TreeMap<String, Long>(indexNames);
+                Map<String, Long> sortedIndexNames = new TreeMap<>(indexNames);
 
                 for (Long indexId : sortedIndexNames.values()) {
                     long indexSize = 0;
@@ -1688,7 +1696,7 @@ public class ShowExecutor {
                 db.readLock();
                 try {
                     Table table = db.getTable(tableId);
-                    if (table == null || !(table instanceof OlapTable)) {
+                    if (!(table instanceof OlapTable)) {
                         isSync = false;
                         break;
                     }
@@ -1766,7 +1774,7 @@ public class ShowExecutor {
                     sizeLimit = showStmt.getLimit();
                 }
                 boolean stop = false;
-                Collection<Partition> partitions = new ArrayList<Partition>();
+                Collection<Partition> partitions = new ArrayList<>();
                 if (showStmt.hasPartition()) {
                     PartitionNames partitionNames = showStmt.getPartitionNames();
                     for (String partName : partitionNames.getPartitionNames()) {
@@ -1820,7 +1828,7 @@ public class ShowExecutor {
 
                 // order by
                 List<OrderByPair> orderByPairs = showStmt.getOrderByPairs();
-                ListComparator<List<Comparable>> comparator = null;
+                ListComparator<List<Comparable>> comparator;
                 if (orderByPairs != null) {
                     OrderByPair[] orderByPairArr = new OrderByPair[orderByPairs.size()];
                     comparator = new ListComparator<>(orderByPairs.toArray(orderByPairArr));
@@ -1828,10 +1836,10 @@ public class ShowExecutor {
                     // order by tabletId, replicaId
                     comparator = new ListComparator<>(0, 1);
                 }
-                Collections.sort(tabletInfos, comparator);
+                tabletInfos.sort(comparator);
 
                 for (List<Comparable> tabletInfo : tabletInfos) {
-                    List<String> oneTablet = new ArrayList<String>(tabletInfo.size());
+                    List<String> oneTablet = new ArrayList<>(tabletInfo.size());
                     for (Comparable column : tabletInfo) {
                         oneTablet.add(column.toString());
                     }
@@ -1916,18 +1924,18 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), snapshotInfos);
     }
 
-    private void handleShowBackup() throws AnalysisException {
+    private void handleShowBackup() {
         ShowBackupStmt showStmt = (ShowBackupStmt) stmt;
-        Database fiterDb = GlobalStateMgr.getCurrentState().getDb(showStmt.getDbName());
+        Database filterDb = GlobalStateMgr.getCurrentState().getDb(showStmt.getDbName());
         List<List<String>> infos = Lists.newArrayList();
         List<Database> dbs = Lists.newArrayList();
 
-        if (fiterDb == null) {
+        if (filterDb == null) {
             for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
                 dbs.add(entry.getValue());
             }
         } else {
-            dbs.add(fiterDb);
+            dbs.add(filterDb);
         }
 
         for (Database db : dbs) {
@@ -1962,18 +1970,18 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
-    private void handleShowRestore() throws AnalysisException {
+    private void handleShowRestore() {
         ShowRestoreStmt showStmt = (ShowRestoreStmt) stmt;
-        Database fiterDb = GlobalStateMgr.getCurrentState().getDb(showStmt.getDbName());
+        Database filterDb = GlobalStateMgr.getCurrentState().getDb(showStmt.getDbName());
         List<List<String>> infos = Lists.newArrayList();
         List<Database> dbs = Lists.newArrayList();
 
-        if (fiterDb == null) {
+        if (filterDb == null) {
             for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
                 dbs.add(entry.getValue());
             }
         } else {
-            dbs.add(fiterDb);
+            dbs.add(filterDb);
         }
 
         for (Database db : dbs) {
@@ -2175,12 +2183,7 @@ public class ShowExecutor {
             }
             results = ConfigBase.getConfigInfo(matcher);
             // Sort all configs by config key.
-            Collections.sort(results, new Comparator<List<String>>() {
-                @Override
-                public int compare(List<String> o1, List<String> o2) {
-                    return o1.get(0).compareTo(o2.get(0));
-                }
-            });
+            results.sort(Comparator.comparing(o -> o.get(0)));
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
         }
@@ -2275,19 +2278,19 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), transactionMgr.getSingleTranInfo(db.getId(), txnId));
     }
 
-    private void handleShowPlugins() throws AnalysisException {
+    private void handleShowPlugins() {
         ShowPluginsStmt pluginsStmt = (ShowPluginsStmt) stmt;
         List<List<String>> rows = GlobalStateMgr.getCurrentPluginMgr().getPluginShowInfos();
         resultSet = new ShowResultSet(pluginsStmt.getMetaData(), rows);
     }
 
     // Show sql blacklist
-    private void handleShowSqlBlackListStmt() throws AnalysisException {
+    private void handleShowSqlBlackListStmt() {
         ShowSqlBlackListStmt showStmt = (ShowSqlBlackListStmt) stmt;
 
-        List<List<String>> rows = new ArrayList<List<String>>();
+        List<List<String>> rows = new ArrayList<>();
         for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
-            List<String> oneSql = new ArrayList<String>();
+            List<String> oneSql = new ArrayList<>();
             oneSql.add(String.valueOf(entry.getValue().id));
             oneSql.add(entry.getKey());
             rows.add(oneSql);
