@@ -88,8 +88,9 @@ void permutate_to_selective(const Permutation& perm, std::vector<uint32_t>* sele
 }
 
 // Materialize chunk by permutation
-void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const PermutationView& perm);
-void materialize_column_by_permutation(Column* dst, const Columns& columns, const PermutationView& perm);
+void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const PermutationView& perm);
+void append_by_permutation(Column* dst, const Columns& columns, const PermutationView& perm);
+void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const PermutationView& perm);
 
 // Tie and TieIterator
 // Tie is a compact representation of equal ranges in a vector, in which `1` means equal and `0` means not equal.
