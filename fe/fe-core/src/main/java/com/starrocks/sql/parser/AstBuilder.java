@@ -837,6 +837,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
+        PartitionDesc partitionDesc = null;
+        if (context.partitionDesc() != null) {
+            partitionDesc = (PartitionDesc) visit(context.partitionDesc());
+        }
+
+        if (partitionDesc instanceof ExpressionPartitionDesc) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo("Expression partition",
+                    "CREATE TABLE AS SELECT"), partitionDesc.getPos());
+        }
+
         CreateTableStmt createTableStmt = new CreateTableStmt(
                 context.IF() != null,
                 false,
@@ -844,7 +854,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 null,
                 EngineType.defaultEngine().name(),
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
-                context.partitionDesc() == null ? null : (PartitionDesc) visit(context.partitionDesc()),
+                partitionDesc,
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
                 properties,
                 null,
@@ -5435,7 +5445,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitPartitionDesc(StarRocksParser.PartitionDescContext context) {
-        List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+        List<PartitionDesc> partitionDescList = new ArrayList<>();
+        StarRocksParser.IdentifierListContext identifierListContext = context.identifierList();
+        if (context.functionCall() != null) {
+            for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
+                final PartitionDesc rangePartitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
+                partitionDescList.add(rangePartitionDesc);
+            }
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
+            List<String> columnList = checkAndExtractPartitionCol(functionCallExpr, null);
+            RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
+            return new ExpressionPartitionDesc(rangePartitionDesc, functionCallExpr);
+        }
+        List<Identifier> identifierList = visit(identifierListContext.identifier(), Identifier.class);
         List<PartitionDesc> partitionDesc = visit(context.rangePartitionDesc(), PartitionDesc.class);
         return new RangePartitionDesc(
                 identifierList.stream().map(Identifier::getValue).collect(toList()),
