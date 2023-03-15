@@ -22,6 +22,8 @@ public class ExecuteOption {
     private int priority = Constants.TaskRunPriority.LOWEST.value();
     private boolean mergeRedundant = false;
     private Map<String, String> taskRunProperties;
+    // indicates whether the current execution is manual
+    private boolean isManual = false;
 
     public ExecuteOption() {
     }
@@ -54,5 +56,13 @@ public class ExecuteOption {
 
     public Map<String, String> getTaskRunProperties() {
         return this.taskRunProperties;
+    }
+
+    public boolean isManual() {
+        return isManual;
+    }
+
+    public void setManual() {
+        this.isManual = true;
     }
 }
