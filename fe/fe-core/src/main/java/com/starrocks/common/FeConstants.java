@@ -53,6 +53,7 @@ public class FeConstants {
     // default scheduler interval is 10 seconds
     public static int default_scheduler_interval_millisecond = 10000;
 
+<<<<<<< HEAD
     // general model
     // Current meta data version. Use this version to write journals and image
     // for community meta version
@@ -69,4 +70,13 @@ public class FeConstants {
     public static final int DEFAULT_TABLET_NUMBER = 128;
 
     public static final int AGG_FUNC_VERSION = 3;
+=======
+    // Every 3GB, corresponds a new tablet. Assume compression ratio equals to 3,
+    // the raw data of one tablet equals to 10GB approximately
+    public static final long AUTO_DISTRIBUTION_UNIT = 3221225472L;
+
+    public static String getNodeNotFoundError(boolean chooseComputeNode) {
+        return chooseComputeNode ? COMPUTE_NODE_NOT_FOUND_ERROR : BACKEND_NODE_NOT_FOUND_ERROR;
+    }
+>>>>>>> da327fe22 ([Enhancement] Rectify some behaviors when auto creating tablet (#19062))
 }

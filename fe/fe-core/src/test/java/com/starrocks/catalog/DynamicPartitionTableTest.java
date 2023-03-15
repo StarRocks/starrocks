@@ -240,7 +240,7 @@ public class DynamicPartitionTableTest {
                 ");");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("dynamic_partition_buckets");
-        Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getBuckets(), 32);
+        Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getBuckets(), 0);
     }
 
     @Test
