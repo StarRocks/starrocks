@@ -26,6 +26,7 @@ import java.util.List;
 
 public class MaterializedViewTest extends MaterializedViewTestBase {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewTest.class);
+
     private static final String MATERIALIZED_DB_NAME = "test_mv";
     private static final List<String> outerJoinTypes = ImmutableList.of("left", "right");
 
