@@ -30,8 +30,8 @@ class Dir {
 public:
     Dir(const std::string& dir, std::shared_ptr<FileSystem> fs) : _dir(dir), _fs(fs) {}
 
-    FileSystem* fs() { return _fs.get(); }
-    std::string dir() { return _dir; }
+    FileSystem* fs() const { return _fs.get(); }
+    std::string dir() const { return _dir; }
 
 private:
     std::string _dir;

@@ -160,7 +160,7 @@ public:
         return _decrease_running_flush_tasks();
     }
 
-    bool has_output_data() { return _input_stream && _input_stream->is_ready(); }
+    bool has_output_data() const { return _input_stream && _input_stream->is_ready(); }
     size_t spilled_append_rows() { return _spilled_append_rows; }
 
     size_t restore_read_rows() { return _restore_read_rows; }
