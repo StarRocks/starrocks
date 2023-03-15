@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <utility>
 
-#include "column/array_column.h"
+#include "column/column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -17,19 +17,21 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/vectorized/binary_function.h"
+#include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/decimal_cast_expr.h"
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/casts.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/large_int_value.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "types/bitmap_value_detail.h"
 #include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
+#include "util/mysql_global.h"
 #include "velocypack/Iterator.h"
 
 namespace starrocks::vectorized {
@@ -124,38 +126,13 @@ DEFINE_UNARY_FN_WITH_IMPL(TimeToNumber, value) {
 
 template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
 static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
-    if constexpr (lt_is_map<FromType> || lt_is_struct<FromType>) {
+    if constexpr (pt_is_map<FromType> || pt_is_struct<FromType>) {
         auto maybe_ret = cast_nested_to_json(column);
         if (maybe_ret.ok()) {
             return maybe_ret.value();
         }
-<<<<<<< HEAD:be/src/exprs/vectorized/cast_expr.cpp
-
-        JsonValue value;
-        bool overflow = false;
-        if constexpr (pt_is_integer<FromType>) {
-            constexpr int64_t min = RunTimeTypeLimits<TYPE_BIGINT>::min_value();
-            constexpr int64_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
-            overflow = viewer.value(row) < min || viewer.value(row) > max;
-            value = JsonValue::from_int(viewer.value(row));
-        } else if constexpr (pt_is_float<FromType>) {
-            constexpr double min = RunTimeTypeLimits<TYPE_DOUBLE>::min_value();
-            constexpr double max = RunTimeTypeLimits<TYPE_DOUBLE>::max_value();
-            overflow = viewer.value(row) < min || viewer.value(row) > max;
-            value = JsonValue::from_double(viewer.value(row));
-        } else if constexpr (pt_is_boolean<FromType>) {
-            value = JsonValue::from_bool(viewer.value(row));
-        } else if constexpr (pt_is_string<FromType>) {
-            auto maybe = JsonValue::parse_json_or_string(viewer.value(row));
-            if (maybe.ok()) {
-                value = maybe.value();
-            } else {
-                overflow = true;
-            }
-=======
         if constexpr (AllowThrowException) {
             throw std::runtime_error("cast failed: " + maybe_ret.status().get_error_msg());
->>>>>>> 466487a30 ([Enhancement] support cast struct/map/array to json (#19476)):be/src/exprs/cast_expr.cpp
         } else {
             ColumnBuilder<TYPE_JSON> builder(column->size());
             builder.append_nulls(column->size());
@@ -173,19 +150,19 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
 
             JsonValue value;
             bool overflow = false;
-            if constexpr (lt_is_integer<FromType>) {
+            if constexpr (pt_is_integer<FromType>) {
                 constexpr int64_t min = RunTimeTypeLimits<TYPE_BIGINT>::min_value();
                 constexpr int64_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
                 overflow = viewer.value(row) < min || viewer.value(row) > max;
                 value = JsonValue::from_int(viewer.value(row));
-            } else if constexpr (lt_is_float<FromType>) {
+            } else if constexpr (pt_is_float<FromType>) {
                 constexpr double min = RunTimeTypeLimits<TYPE_DOUBLE>::min_value();
                 constexpr double max = RunTimeTypeLimits<TYPE_DOUBLE>::max_value();
                 overflow = viewer.value(row) < min || viewer.value(row) > max;
                 value = JsonValue::from_double(viewer.value(row));
-            } else if constexpr (lt_is_boolean<FromType>) {
+            } else if constexpr (pt_is_boolean<FromType>) {
                 value = JsonValue::from_bool(viewer.value(row));
-            } else if constexpr (lt_is_string<FromType>) {
+            } else if constexpr (pt_is_string<FromType>) {
                 auto maybe = JsonValue::parse_json_or_string(viewer.value(row));
                 if (maybe.ok()) {
                     value = maybe.value();
@@ -1096,7 +1073,7 @@ template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException
 class VectorizedCastExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
         ColumnPtr column = _children[0]->evaluate(context, ptr);
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
@@ -1132,6 +1109,7 @@ public:
         }
         return result_column;
     };
+
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
@@ -1172,7 +1150,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
             return Status::OK();                                                                                \
         }                                                                                                       \
                                                                                                                 \
-        ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {                             \
+        ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {                                         \
             ColumnPtr column = _children[0]->evaluate(context, ptr);                                            \
             if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {                   \
                 return ColumnHelper::create_const_null_column(column->size());                                  \
@@ -1272,7 +1250,7 @@ template <PrimitiveType Type, bool AllowThrowException>
 class VectorizedCastToStringExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastToStringExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) {
         ColumnPtr column = _children[0]->evaluate(context, ptr);
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
@@ -1460,66 +1438,32 @@ using CastVarcharToHll = VectorizedCastExpr<TYPE_VARCHAR, TYPE_HLL, throw_except
 template <bool throw_exception>
 using CastVarcharToBitmap = VectorizedCastExpr<TYPE_VARCHAR, TYPE_OBJECT, throw_exception>;
 
-Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& node, bool allow_throw_exception) {
-    PrimitiveType to_type = TypeDescriptor::from_thrift(node.type).type;
-    PrimitiveType from_type = thrift_to_type(node.child_type);
+// Create a SlotRef as the child of children cast for the complex type
+// For example: to cast STRUCT<int, int> as STRUCT<double, double>
+// Inorder to reuse the primary casting expression, we will generate a new CAST(INT as DOUBLE) for
+// each field.
+// And for the new generated CAST expressions, we will generate a ColumnRef as its child expression
+static std::unique_ptr<Expr> create_slot_ref(const TypeDescriptor& type) {
+    TExprNode ref_node;
+    ref_node.type = type.to_thrift();
+    ref_node.__isset.slot_ref = true;
+    ref_node.slot_ref.slot_id = 0;
+    ref_node.slot_ref.tuple_id = 0;
+    return std::make_unique<ColumnRef>(ref_node);
+}
 
-    if (node.__isset.child_type_desc) {
-        TypeDescriptor array_field_type_cast_to = TypeDescriptor::from_thrift(node.type);
-        TypeDescriptor array_field_type_cast_from = TypeDescriptor::from_thrift(node.child_type_desc);
-
-        if (array_field_type_cast_to.type == TYPE_ARRAY && array_field_type_cast_from.type == TYPE_ARRAY) {
-            while (array_field_type_cast_from.type == TYPE_ARRAY && array_field_type_cast_to.type == TYPE_ARRAY) {
-                array_field_type_cast_from = array_field_type_cast_from.children[0];
-                array_field_type_cast_to = array_field_type_cast_to.children[0];
-            }
-
-            if (array_field_type_cast_from.type == TYPE_ARRAY || array_field_type_cast_to.type == TYPE_ARRAY) {
-                LOG(WARNING) << "the level between from_type: " << array_field_type_cast_from.debug_string()
-                             << ", and to_type: " << array_field_type_cast_to.debug_string() << " not match";
-                return nullptr;
-            }
-
-            TExprNode cast;
-            cast.type = array_field_type_cast_to.to_thrift();
-            cast.child_type = to_thrift(array_field_type_cast_from.type);
-
-            //A new slot_id is created here, which has no practical meaning and is used for placeholders
-            cast.slot_ref.slot_id = 0;
-            cast.slot_ref.tuple_id = 0;
-
-            Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(pool, cast, allow_throw_exception);
-            if (cast_element_expr == nullptr) {
-                LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", array_field_type_cast_from.debug_string(),
-                                                    array_field_type_cast_to.debug_string());
-                return nullptr;
-            }
-            auto* child = new ColumnRef(cast);
-            cast_element_expr->add_child(child);
-            if (pool) {
-                pool->add(cast_element_expr);
-                pool->add(child);
-            }
-
-            return new VectorizedCastArrayExpr(cast_element_expr, node);
-        } else {
-            return nullptr;
-        }
-    }
-
-    if (to_type == TYPE_VARCHAR || to_type == TYPE_CHAR) {
+Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const TExprNode& node, PrimitiveType from_type,
+                                                       PrimitiveType to_type, bool allow_throw_exception) {
+    if (to_type == TYPE_CHAR) {
         to_type = TYPE_VARCHAR;
     }
-
-    if (from_type == TYPE_VARCHAR || from_type == TYPE_CHAR) {
+    if (from_type == TYPE_CHAR) {
         from_type = TYPE_VARCHAR;
     }
-
     if (from_type == TYPE_NULL) {
         // NULL TO OTHER TYPE, direct return
         from_type = to_type;
     }
-
     if (from_type == TYPE_VARCHAR && to_type == TYPE_HLL) {
         return dispatch_throw_exception<CastVarcharToHll>(allow_throw_exception, node);
     }
@@ -1623,6 +1567,10 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
                 return nullptr;
             }
         }
+    } else if (is_binary_type(from_type) || is_binary_type(to_type)) {
+        LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
+                     << ", to type: " << type_to_string(to_type);
+        return nullptr;
     } else {
         switch (to_type) {
             CASE_TO_TYPE(TYPE_BOOLEAN, allow_throw_exception);
@@ -1649,56 +1597,67 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
     return nullptr;
 }
 
+// NOTE: should return error status to avoid null in ASSIGN_OR_RETURN, otherwise causing crash
+StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, const TExprNode& node,
+                                                                            const TypeDescriptor& from_type,
+                                                                            const TypeDescriptor& to_type,
+                                                                            bool allow_throw_exception) {
+    if (from_type.is_array_type() && to_type.is_array_type()) {
+        ASSIGN_OR_RETURN(auto child_cast,
+                         create_cast_expr(pool, from_type.children[0], to_type.children[0], allow_throw_exception));
+        auto child_input = create_slot_ref(from_type.children[0]);
+        child_cast->add_child(child_input.get());
+        auto child_cast_ptr = child_cast.get();
+        pool->add(child_input.release());
+        pool->add(child_cast.release());
+        return std::make_unique<VectorizedCastArrayExpr>(child_cast_ptr, node);
+    }
+    auto res = create_primitive_cast(pool, node, from_type.type, to_type.type, allow_throw_exception);
+    if (res == nullptr) {
+        return Status::NotSupported(fmt::format("vectorized engine not support cast {} to {}.",
+                                                from_type.debug_string(), to_type.debug_string()));
+    }
+    std::unique_ptr<Expr> result(res);
+    return std::move(result);
+}
+
+Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& node, bool allow_throw_exception) {
+    TypeDescriptor to_type = TypeDescriptor::from_thrift(node.type);
+    TypeDescriptor from_type(thrift_to_type(node.child_type));
+    if (node.__isset.child_type_desc) {
+        from_type = TypeDescriptor::from_thrift(node.child_type_desc);
+    }
+    auto ret = create_cast_expr(pool, from_type, to_type, allow_throw_exception);
+    if (!ret.ok()) {
+        LOG(WARNING) << "Don't support to cast type: " << from_type << " to type: " << to_type;
+        return nullptr;
+    }
+    return std::move(ret).value().release();
+}
+
+StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool,
+                                                                            const TypeDescriptor& from_type,
+                                                                            const TypeDescriptor& to_type,
+                                                                            bool allow_throw_exception) {
+    TExprNode cast_node;
+    cast_node.node_type = TExprNodeType::CAST_EXPR;
+    cast_node.type = to_type.to_thrift();
+    cast_node.__set_child_type(to_thrift(from_type.type));
+    cast_node.__set_child_type_desc(from_type.to_thrift());
+    return create_cast_expr(pool, cast_node, from_type, to_type, allow_throw_exception);
+}
+
 Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const TypeDescriptor& to, Expr* child,
                                            ObjectPool* pool, bool allow_throw_exception) {
-    Expr* expr = nullptr;
-    if (!from.is_complex_type() && !to.is_complex_type()) {
-        TExprNode node;
-        node.type = to.to_thrift();
-        node.child_type = to_thrift(from.type);
-
-        expr = from_thrift(pool, node, allow_throw_exception);
-    } else {
-        const TypeDescriptor* from_type = &from;
-        const TypeDescriptor* to_type = &to;
-        while (from_type->type == TYPE_ARRAY && to_type->type == TYPE_ARRAY) {
-            from_type = &(from_type->children[0]);
-            to_type = &(to_type->children[0]);
-        }
-        if (from_type->type == TYPE_ARRAY || to_type->type == TYPE_ARRAY) {
-            LOG(WARNING) << "the level between from_type: " << from.debug_string()
-                         << ", and to_type: " << to.debug_string() << " not match";
-            return nullptr;
-        }
-
-        TExprNode node;
-        node.type = to_type->to_thrift();
-        node.child_type = to_thrift(from_type->type);
-        node.slot_ref.slot_id = 0;
-        node.slot_ref.tuple_id = 0;
-
-        Expr* cast_element_expr = from_thrift(pool, node, allow_throw_exception);
-        if (cast_element_expr == nullptr) {
-            LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", from.debug_string(), to.debug_string());
-            return nullptr;
-        }
-        auto* child = new ColumnRef(node);
-        cast_element_expr->add_child(child);
-
-        pool->add(child);
-        pool->add(cast_element_expr);
-
-        TExprNode cast_array_expr;
-        cast_array_expr.type = to.to_thrift();
-        cast_array_expr.slot_ref.slot_id = 0;
-        cast_array_expr.slot_ref.tuple_id = 0;
-        expr = new VectorizedCastArrayExpr(cast_element_expr, cast_array_expr);
+    auto ret = create_cast_expr(pool, from, to, allow_throw_exception);
+    if (!ret.ok()) {
+        LOG(WARNING) << "Don't support to cast type: " << from << " to type: " << to;
+        return nullptr;
     }
-    if (expr != nullptr) {
-        expr->add_child(child);
-        pool->add(expr);
-    }
-    return expr;
+    auto cast_expr = std::move(ret).value().release();
+    pool->add(cast_expr);
+    cast_expr->add_child(child);
+    return cast_expr;
 }
 
 } // namespace starrocks::vectorized

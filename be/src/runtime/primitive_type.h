@@ -81,6 +81,10 @@ inline bool is_enumeration_type(PrimitiveType type) {
     }
 }
 
+constexpr bool is_binary_type(PrimitiveType type) {
+    return type == TYPE_VARCHAR;
+}
+
 constexpr bool is_object_type(PrimitiveType type) {
     return type == PrimitiveType::TYPE_HLL || type == PrimitiveType::TYPE_OBJECT || type == PrimitiveType::TYPE_JSON ||
            type == PrimitiveType::TYPE_PERCENTILE;
@@ -153,6 +157,8 @@ VALUE_GUARD(PrimitiveType, ObjectPTGuard, pt_is_object, TYPE_OBJECT)
 VALUE_GUARD(PrimitiveType, StringPTGuard, pt_is_string, TYPE_CHAR, TYPE_VARCHAR)
 VALUE_GUARD(PrimitiveType, JsonGuard, pt_is_json, TYPE_JSON)
 VALUE_GUARD(PrimitiveType, FunctionGuard, pt_is_function, TYPE_FUNCTION)
+VALUE_GUARD(PrimitiveType, MapGuard, pt_is_map, TYPE_MAP)
+VALUE_GUARD(PrimitiveType, StructGuard, pt_is_struct, TYPE_STRUCT)
 
 VALUE_GUARD(PrimitiveType, DatePTGuard, pt_is_date, TYPE_DATE)
 VALUE_GUARD(PrimitiveType, DateTimePTGuard, pt_is_datetime, TYPE_DATETIME)

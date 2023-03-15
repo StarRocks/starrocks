@@ -8,6 +8,7 @@
 #include "column/column.h"
 #include "column/datum.h"
 #include "common/statusor.h"
+#include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"

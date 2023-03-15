@@ -17,6 +17,17 @@
 
 namespace starrocks::vectorized {
 
+BinaryColumn::Ptr build_binary_column(const std::vector<std::string>& slices) {
+    BinaryColumn::Ptr res = BinaryColumn::create();
+    std::vector<Slice> copy;
+    copy.reserve(slices.size());
+    for (auto& str : slices) {
+        copy.emplace_back(str);
+    }
+    res->append_strings(copy);
+    return res;
+}
+
 template <typename T>
 void BinaryColumnBase<T>::check_or_die() const {
     CHECK_EQ(_bytes.size(), _offsets.back());

@@ -335,6 +335,8 @@ private:
     BinaryDataProxyContainer _immuable_container = BinaryDataProxyContainer(*this);
 };
 
+BinaryColumn::Ptr build_binary_column(const std::vector<std::string>& slices);
+
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;
 using LargeOffsets = BinaryColumnBase<uint64_t>::Offsets;
 

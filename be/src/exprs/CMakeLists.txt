@@ -41,7 +41,6 @@ set(EXPR_FILES
   expr.cpp
   table_function/table_function_factory.cpp
   table_function/json_each.cpp
-<<<<<<< HEAD
   vectorized/arithmetic_expr.cpp
   vectorized/array_element_expr.cpp
   vectorized/array_expr.cpp
@@ -51,6 +50,7 @@ set(EXPR_FILES
   vectorized/case_expr.cpp
   vectorized/cast_expr.cpp
   vectorized/cast_expr_array.cpp
+  vectorized/cast_expr_json.cpp
   vectorized/column_ref.cpp
   vectorized/placeholder_ref.cpp
   vectorized/dictmapping_expr.cpp
@@ -84,53 +84,6 @@ set(EXPR_FILES
   vectorized/string_functions.cpp
   vectorized/time_functions.cpp
   vectorized/utility_functions.cpp
-=======
-  arithmetic_expr.cpp
-  array_element_expr.cpp
-  array_expr.cpp
-  array_functions.cpp
-  binary_predicate.cpp
-  bitmap_functions.cpp
-  case_expr.cpp
-  cast_expr.cpp
-  cast_expr_array.cpp
-  cast_expr_json.cpp
-  cast_nested.cpp
-  column_ref.cpp
-  placeholder_ref.cpp
-  dictmapping_expr.cpp
-  compound_predicate.cpp
-  condition_expr.cpp
-  encryption_functions.cpp
-  es_functions.cpp
-  find_in_set.cpp
-  function_call_expr.cpp
-  function_helper.cpp
-  geo_functions.cpp
-  grouping_sets_functions.cpp
-  hyperloglog_functions.cpp
-  in_const_predicate.cpp
-  info_func.cpp
-  in_predicate.cpp
-  is_null_predicate.cpp
-  json_functions.cpp
-  jsonpath.cpp
-  like_predicate.cpp
-  literal.cpp
-  locate.cpp
-  map_element_expr.cpp
-  map_functions.cpp
-  struct_functions.cpp
-  math_functions.cpp
-  percentile_functions.cpp
-  runtime_filter_bank.cpp
-  runtime_filter.cpp
-  split.cpp
-  split_part.cpp
-  string_functions.cpp
-  time_functions.cpp
-  utility_functions.cpp
->>>>>>> 466487a30 ([Enhancement] support cast struct/map/array to json (#19476))
   agg/java_udaf_function.cpp
   agg/java_window_function.cpp
   table_function/java_udtf_function.cpp

@@ -237,15 +237,6 @@ struct RunTimeTypeTraits<TYPE_JSON> {
     using ColumnType = JsonColumn;
 };
 
-<<<<<<< HEAD
-template <PrimitiveType Type>
-=======
-template <>
-struct RunTimeTypeTraits<TYPE_VARBINARY> {
-    using CppType = Slice;
-    using ColumnType = BinaryColumn;
-};
-
 template <>
 struct RunTimeTypeTraits<TYPE_STRUCT> {
     using CppType = DatumStruct;
@@ -258,8 +249,7 @@ struct RunTimeTypeTraits<TYPE_MAP> {
     using ColumnType = MapColumn;
 };
 
-template <LogicalType Type>
->>>>>>> 466487a30 ([Enhancement] support cast struct/map/array to json (#19476))
+template <PrimitiveType Type>
 using RunTimeCppType = typename RunTimeTypeTraits<Type>::CppType;
 
 template <PrimitiveType Type>

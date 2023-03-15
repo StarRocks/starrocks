@@ -20,10 +20,10 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
-#include "exprs/cast_expr.h"
-#include "exprs/decimal_cast_expr.h"
+#include "exprs/vectorized/cast_expr.h"
+#include "exprs/vectorized/decimal_cast_expr.h"
 
-namespace starrocks {
+namespace starrocks::vectorized {
 
 template <typename, typename = void>
 constexpr bool is_type_complete_v = false;
@@ -103,7 +103,7 @@ public:
         auto& names = col.field_names();
         auto& columns = col.fields();
         for (int i = 0; i < columns.size(); i++) {
-            auto name = names.size() > i ? names[i] : fmt::format("k{}", i);
+            auto name = names.size() > i ? std::string(names.get_slice(i)) : fmt::format("k{}", i);
             auto& field_column = columns[i];
             RETURN_IF_ERROR(cast_datum_to_json(field_column, _row, name, _builder));
         }
@@ -208,4 +208,4 @@ StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column) {
     return column_builder.build(false);
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

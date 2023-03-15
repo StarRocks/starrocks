@@ -13,23 +13,11 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
-<<<<<<< HEAD:be/test/exprs/vectorized/cast_expr_test.cpp
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/primitive_type.h"
 #include "runtime/time_types.h"
-=======
-#include "column/vectorized_fwd.h"
-#include "exprs/mock_vectorized_expr.h"
-#include "gen_cpp/Exprs_types.h"
-#include "gen_cpp/Types_types.h"
-#include "runtime/datetime_value.h"
-#include "runtime/time_types.h"
-#include "types/date_value.h"
-#include "types/logical_type.h"
-#include "types/timestamp_value.h"
->>>>>>> 466487a30 ([Enhancement] support cast struct/map/array to json (#19476)):be/test/exprs/cast_expr_test.cpp
 #include "util/json.h"
 #include "util/slice.h"
 
@@ -2035,10 +2023,7 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     EXPECT_EQ(R"([])", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/cast_expr_test.cpp
-} // namespace starrocks::vectorized
-=======
-TTypeDesc gen_struct_type_desc(const std::vector<std::string>& names, const std::vector<LogicalType>& field_types) {
+TTypeDesc gen_struct_type_desc(const std::vector<std::string>& names, const std::vector<PrimitiveType>& field_types) {
     std::vector<TTypeNode> types_list;
     TTypeDesc type_desc;
     TTypeNode type_array;
@@ -2068,7 +2053,7 @@ TTypeDesc gen_struct_type_desc(const std::vector<std::string>& names, const std:
     return type_desc;
 }
 
-TTypeDesc gen_map_type_desc(LogicalType key_type, LogicalType value_type) {
+TTypeDesc gen_map_type_desc(PrimitiveType key_type, PrimitiveType value_type) {
     TTypeDesc type_desc;
     TTypeNode type_array;
     type_array.type = TTypeNodeType::MAP;
@@ -2108,7 +2093,7 @@ TTypeDesc gen_map_type_desc(LogicalType key_type, LogicalType value_type) {
 TEST_F(VectorizedCastExprTest, struct_to_json) {
     // Struct{id: xxx, name: yyy}
     std::vector<std::string> names{"id", "name"};
-    std::vector<LogicalType> types{TYPE_INT, TYPE_VARCHAR};
+    std::vector<PrimitiveType> types{TYPE_INT, TYPE_VARCHAR};
 
     TExprNode cast_expr;
     cast_expr.opcode = TExprOpcode::CAST;
@@ -2122,7 +2107,7 @@ TEST_F(VectorizedCastExprTest, struct_to_json) {
     // Build struct column
     Columns fields{NullableColumn::create(Int64Column::create(), NullColumn::create()),
                    NullableColumn::create(BinaryColumn::create(), NullColumn::create())};
-    auto struct_column = StructColumn::create(fields, names);
+    StructColumn::Ptr struct_column = StructColumn::create(fields, build_binary_column(names));
     struct_column->append_datum(DatumStruct{int64_t(1), Slice("park")});
     struct_column->append_datum(DatumStruct{int64_t(2), Slice("menlo")});
 
@@ -2188,7 +2173,7 @@ TEST_F(VectorizedCastExprTest, map_to_json) {
 
 TEST_F(VectorizedCastExprTest, unsupported_test) {
     // can't cast arry<array<int>> to array<bool> rather than crash
-    expr_node.child_type = to_thrift(LogicalType::TYPE_ARRAY);
+    expr_node.child_type = to_thrift(PrimitiveType::TYPE_ARRAY);
     expr_node.child_type_desc = gen_multi_array_type_desc(to_thrift(TYPE_INT), 2);
     expr_node.type = gen_multi_array_type_desc(to_thrift(TYPE_BOOLEAN), 1);
 
@@ -2198,4 +2183,3 @@ TEST_F(VectorizedCastExprTest, unsupported_test) {
 }
 
 } // namespace starrocks
->>>>>>> 466487a30 ([Enhancement] support cast struct/map/array to json (#19476)):be/test/exprs/cast_expr_test.cpp
