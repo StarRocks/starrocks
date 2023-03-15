@@ -91,7 +91,7 @@ private:
     };
 
     bool _make_heap(std::vector<ChunkPtr>& chunk_arr);
-    bool _pop_heap();
+    void _pop_heap();
 
     TabletSharedPtr _tablet;
     std::priority_queue<MergeElement> _heap;
@@ -196,11 +196,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
 
         tmp_chunk->append(*_heap.top().chunk, _heap.top().row_index, 1);
         nread += 1;
-        if (!_pop_heap()) {
-            LOG(WARNING) << "get next chunk from heap failed";
-            process_err();
-            return false;
-        }
+        _pop_heap();
         bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
     }
 
@@ -239,16 +235,15 @@ bool ChunkMerger::_make_heap(std::vector<ChunkPtr>& chunk_arr) {
     return true;
 }
 
-bool ChunkMerger::_pop_heap() {
+void ChunkMerger::_pop_heap() {
     MergeElement element = _heap.top();
     _heap.pop();
 
     if (++element.row_index >= element.chunk->num_rows()) {
-        return true;
+        return;
     }
 
     _heap.push(element);
-    return true;
 }
 
 Status LinkedSchemaChange::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
@@ -284,25 +279,26 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     do {
+        Status st;
         bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
         if (bg_worker_stopped) {
             return Status::InternalError("bg_worker_stopped");
         }
 #ifndef BE_TEST
-        Status st = CurrentThread::mem_tracker()->check_mem_limit("DirectSchemaChange");
+        st = CurrentThread::mem_tracker()->check_mem_limit("DirectSchemaChange");
         if (!st.ok()) {
             LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
             return st;
         }
 #endif
-        Status status = reader->do_get_next(base_chunk.get());
+        st = reader->do_get_next(base_chunk.get());
 
-        if (!status.ok()) {
-            if (status.is_end_of_file()) {
+        if (!st.ok()) {
+            if (st.is_end_of_file()) {
                 break;
             } else {
-                LOG(WARNING) << "tablet reader failed to get next chunk, status: " << status.get_error_msg();
-                return status;
+                LOG(WARNING) << "tablet reader failed to get next chunk, status: " << st.get_error_msg();
+                return st;
             }
         }
         if (!_chunk_changer->change_chunk_v2(base_chunk, new_chunk, base_schema, new_schema, mem_pool.get())) {
@@ -314,7 +310,7 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
 
         ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
 
-        if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
+        if (st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
             std::string err_msg = strings::Substitute(
                     "failed to execute schema change. base tablet:$0, new_tablet:$1. err msg: failed to add chunk to "
                     "rowset writer: $2",
