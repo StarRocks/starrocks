@@ -57,6 +57,8 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private TaskRunStatus status;
 
+    private Constants.TaskType type;
+
     TaskRun() {
         future = new CompletableFuture<>();
     }
@@ -97,6 +99,14 @@ public class TaskRun implements Comparable<TaskRun> {
         this.processor = processor;
     }
 
+    public void setType(Constants.TaskType type) {
+        this.type = type;
+    }
+
+    public Constants.TaskType getType() {
+        return this.type;
+    }
+
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
         taskRunContext.setDefinition(status.getDefinition());
@@ -124,6 +134,7 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);
         taskRunContext.setPriority(status.getPriority());
+        taskRunContext.setTaskType(type);
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
         if (runCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
