@@ -19,9 +19,7 @@
 
 #include "common/global_types.h"
 #include "common/object_pool.h"
-#include "exprs/column_ref.h"
 #include "exprs/expr.h"
-#include "glog/logging.h"
 
 namespace starrocks {
 
@@ -37,5 +35,7 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MapApplyExpr(*this)); }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+private:
+    bool _maybe_duplicated_keys;
 };
 } // namespace starrocks

@@ -26,13 +26,20 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
+#include "exprs/map_expr.h"
+#include "glog/logging.h"
 #include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks {
-MapApplyExpr::MapApplyExpr(const TExprNode& node) : Expr(node, false) {}
 
-MapApplyExpr::MapApplyExpr(TypeDescriptor type) : Expr(std::move(type), false) {}
+namespace starrocks {
+
+MapApplyExpr::MapApplyExpr(const TExprNode& node) : Expr(node, false) {
+    _maybe_duplicated_keys = down_cast<MapExpr*>(_children[0])->maybe_duplicated_keys();
+}
+
+// for tests
+MapApplyExpr::MapApplyExpr(TypeDescriptor type) : Expr(std::move(type), false), _maybe_duplicated_keys(true) {}
 
 StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> input_columns;
@@ -130,9 +137,13 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                                                  input_map->offsets_column()->get_data().back(),
                                                  map_col->keys_column()->size()));
     }
+
     auto res_map =
             std::make_shared<MapColumn>(map_col->keys_column(), map_col->values_column(), input_map->offsets_column());
 
+    if (_maybe_duplicated_keys && res_map->size() > 0) {
+        res_map->remove_duplicated_keys();
+    }
     // attach null info
     if (input_null_map != nullptr) {
         return NullableColumn::create(std::move(res_map), input_null_map);
