@@ -182,6 +182,32 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return isNull;
     }
 
+    public boolean isZero() {
+        boolean isZero = false;
+        if (type.isInt()) {
+            Integer val = (Integer) value;
+            isZero = (val.compareTo(0) == 0);
+        } else if (type.isBigint()) {
+            Long val = (Long) value;
+            isZero = (val.compareTo(0L) == 0);
+        } else if (type.isLargeint()) {
+            BigInteger val = (BigInteger) value;
+            isZero = (val.compareTo(BigInteger.ZERO) == 0);
+        } else if (type.isFloat()) {
+            Float val = (Float) value;
+            isZero = (val.compareTo(0.0f) == 0);
+        } else if (type.isDouble()) {
+            Double val = (Double) value;
+            isZero = (val.compareTo(0.0) == 0);
+        } else if (type.isDecimalV3()) {
+            BigDecimal val = (BigDecimal) value;
+            isZero = (val.compareTo(BigDecimal.ZERO) == 0);
+        } else {
+            isZero = false;
+        }
+        return isZero;
+    }
+
     @Override
     public boolean isConstant() {
         return true;
