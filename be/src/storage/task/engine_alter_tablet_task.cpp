@@ -43,9 +43,7 @@ namespace starrocks {
 
 using std::to_string;
 
-EngineAlterTabletTask::EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& request,
-                                             int64_t signature, const TTaskType::type task_type,
-                                             std::vector<string>* error_msgs, const string& process_name)
+EngineAlterTabletTask::EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& request)
         : _alter_tablet_req(request) {
     size_t mem_limit = static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
     _mem_tracker =

@@ -48,7 +48,6 @@ class Schema;
 class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
-class ChunkAllocator;
 
 struct CompactionInfo {
     EditVersion start_version;
@@ -401,7 +400,7 @@ private:
     int64_t _last_compaction_time_ms = 0;
     std::atomic<int64_t> _last_compaction_success_millis{0};
     std::atomic<int64_t> _last_compaction_failure_millis{0};
-    int64_t _compaction_cost_seek = 32 * 1024 * 1024; // 32MB
+    static const int64_t _compaction_cost_seek = 32 * 1024 * 1024; // 32MB
 
     mutable std::mutex _rowset_stats_lock;
     // maintain current version(applied version) rowsets' stats
