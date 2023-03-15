@@ -356,7 +356,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 - `strict_mode`
 
-  是否开启严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。关于该模式的介绍，参阅[严格模式](../../../loading/load_concept/strict_mode.md)。
+  是否开启严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。<br>关于该模式的介绍，参见[严格模式](../../../loading/load_concept/strict_mode.md)。
 
 - `timezone`
 
