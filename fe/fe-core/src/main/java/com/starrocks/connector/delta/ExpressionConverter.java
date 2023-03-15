@@ -78,7 +78,7 @@ public class ExpressionConverter extends AstVisitor<Expression, Void> {
         if (expr == null) {
             return null;
         }
-        return visit(expr);
+        return visit(expr, null);
     }
 
     @Override

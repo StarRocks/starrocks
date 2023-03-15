@@ -22,7 +22,7 @@ import com.starrocks.sql.ast.StatementBase;
 //Used to build sql digests
 public class SqlDigestBuilder {
     public static String build(StatementBase statement) {
-        return new SqlDigestBuilderVisitor().visit(statement);
+        return new SqlDigestBuilderVisitor().visit(statement, null);
     }
 
     private static class SqlDigestBuilderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {

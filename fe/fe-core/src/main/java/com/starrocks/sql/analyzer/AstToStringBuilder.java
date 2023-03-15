@@ -116,7 +116,7 @@ import static java.util.stream.Collectors.toList;
  */
 public class AstToStringBuilder {
     public static String toString(ParseNode expr) {
-        return new AST2StringBuilderVisitor().visit(expr);
+        return new AST2StringBuilderVisitor().visit(expr, null);
     }
 
     public static class AST2StringBuilderVisitor extends AstVisitor<String, Void> {
@@ -272,7 +272,7 @@ public class AstToStringBuilder {
                     setVarSql += systemVariable.getType().toString() + " ";
                     setVarSql += "`" + systemVariable.getVariable() + "`";
                     setVarSql += " = ";
-                    setVarSql += visit(systemVariable.getResolvedExpression());
+                    setVarSql += visit(systemVariable.getResolvedExpression(), context);
 
                     setVarList.add(setVarSql);
                 } else if (setVar instanceof UserVariable) {
@@ -282,7 +282,7 @@ public class AstToStringBuilder {
                     setVarSql += "`" + userVariable.getVariable() + "`";
                     setVarSql += " = ";
 
-                    setVarSql += "cast (" + visit(userVariable.getEvaluatedExpression())
+                    setVarSql += "cast (" + visit(userVariable.getEvaluatedExpression(), context)
                             + " as " + userVariable.getEvaluatedExpression().getType().toSql() + ")";
                     setVarList.add(setVarSql);
                 } else if (setVar instanceof SetPassVar) {
@@ -444,11 +444,11 @@ public class AstToStringBuilder {
             if (queryRelation.hasWithClause()) {
                 sqlBuilder.append("WITH ");
                 List<String> cteStrings =
-                        queryRelation.getCteRelations().stream().map(this::visit).collect(Collectors.toList());
+                        queryRelation.getCteRelations().stream().map(r -> visit(r, context)).collect(Collectors.toList());
                 sqlBuilder.append(Joiner.on(", ").join(cteStrings));
             }
 
-            sqlBuilder.append(visit(queryRelation));
+            sqlBuilder.append(visit(queryRelation, context));
 
             if (queryRelation.hasOrderByClause()) {
                 List<OrderByElement> sortClause = queryRelation.getOrderBy();
@@ -457,7 +457,7 @@ public class AstToStringBuilder {
 
             // Limit clause.
             if (queryRelation.getLimit() != null) {
-                sqlBuilder.append(visit(queryRelation.getLimit()));
+                sqlBuilder.append(visit(queryRelation.getLimit(), context));
             }
             return sqlBuilder.toString();
         }
@@ -478,7 +478,7 @@ public class AstToStringBuilder {
                 sqlBuilder.append("(")
                         .append(Joiner.on(", ").join(relation.getColumnOutputNames())).append(")");
             }
-            sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
+            sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement(), context)).append(") ");
             return sqlBuilder.toString();
         }
 
@@ -503,7 +503,7 @@ public class AstToStringBuilder {
                     if (item.getAlias() != null) {
                         aliasSql = "AS " + item.getAlias();
                     }
-                    selectItemLabel = visit(item.getExpr()) + ((aliasSql == null) ? "" : " " + aliasSql);
+                    selectItemLabel = visit(item.getExpr(), context) + ((aliasSql == null) ? "" : " " + aliasSql);
                 } else if (item.getTblName() != null) {
                     selectItemLabel = item.getTblName().toString() + ".*";
                 } else {
@@ -513,7 +513,7 @@ public class AstToStringBuilder {
                 sqlBuilder.append(selectItemLabel);
             }
 
-            String fromClause = visit(stmt.getRelation());
+            String fromClause = visit(stmt.getRelation(), context);
             if (fromClause != null) {
                 sqlBuilder.append(" FROM ");
                 sqlBuilder.append(fromClause);
@@ -521,17 +521,17 @@ public class AstToStringBuilder {
 
             if (stmt.hasWhereClause()) {
                 sqlBuilder.append(" WHERE ");
-                sqlBuilder.append(visit(stmt.getWhereClause()));
+                sqlBuilder.append(visit(stmt.getWhereClause(), context));
             }
 
             if (stmt.hasGroupByClause()) {
                 sqlBuilder.append(" GROUP BY ");
-                sqlBuilder.append(visit(stmt.getGroupByClause()));
+                sqlBuilder.append(visit(stmt.getGroupByClause(), context));
             }
 
             if (stmt.hasHavingClause()) {
                 sqlBuilder.append(" HAVING ");
-                sqlBuilder.append(visit(stmt.getHavingClause()));
+                sqlBuilder.append(visit(stmt.getHavingClause(), context));
             }
 
             return sqlBuilder.toString();
@@ -539,7 +539,7 @@ public class AstToStringBuilder {
 
         @Override
         public String visitSubquery(SubqueryRelation node, Void context) {
-            StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
+            StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement(), context) + ")");
 
             if (node.getAlias() != null) {
                 sqlBuilder.append(" ").append(node.getAlias().getTbl());
@@ -568,7 +568,7 @@ public class AstToStringBuilder {
         @Override
         public String visitJoin(JoinRelation relation, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
-            sqlBuilder.append(visit(relation.getLeft())).append(" ");
+            sqlBuilder.append(visit(relation.getLeft(), context)).append(" ");
             if (relation.isImplicit()) {
                 sqlBuilder.append(",");
             } else {
@@ -581,10 +581,10 @@ public class AstToStringBuilder {
             if (relation.isLateral()) {
                 sqlBuilder.append("LATERAL ");
             }
-            sqlBuilder.append(visit(relation.getRight())).append(" ");
+            sqlBuilder.append(visit(relation.getRight(), context)).append(" ");
 
             if (relation.getOnPredicate() != null) {
-                sqlBuilder.append("ON ").append(visit(relation.getOnPredicate()));
+                sqlBuilder.append("ON ").append(visit(relation.getOnPredicate(), context));
             }
             return sqlBuilder.toString();
         }
@@ -607,7 +607,7 @@ public class AstToStringBuilder {
         private String processSetOp(SetOperationRelation relation) {
             StringBuilder sqlBuilder = new StringBuilder();
 
-            sqlBuilder.append(visit(relation.getRelations().get(0)));
+            sqlBuilder.append(visit(relation.getRelations().get(0), null));
 
             for (int i = 1; i < relation.getRelations().size(); ++i) {
                 if (relation instanceof UnionRelation) {
@@ -624,7 +624,7 @@ public class AstToStringBuilder {
                 if (setChildRelation instanceof SetOperationRelation) {
                     sqlBuilder.append("(");
                 }
-                sqlBuilder.append(visit(setChildRelation));
+                sqlBuilder.append(visit(setChildRelation, null));
                 if (setChildRelation instanceof SetOperationRelation) {
                     sqlBuilder.append(")");
                 }
@@ -657,7 +657,7 @@ public class AstToStringBuilder {
                 StringBuilder rowBuilder = new StringBuilder();
                 rowBuilder.append("(");
                 List<String> rowStrings =
-                        node.getRows().get(i).stream().map(this::visit).collect(Collectors.toList());
+                        node.getRows().get(i).stream().map(r -> visit(r, scope)).collect(Collectors.toList());
                 rowBuilder.append(Joiner.on(", ").join(rowStrings));
                 rowBuilder.append(")");
                 values.add(rowBuilder.toString());
@@ -684,7 +684,7 @@ public class AstToStringBuilder {
             sqlBuilder.append(node.getFunctionName());
             sqlBuilder.append("(");
 
-            List<String> childSql = node.getChildExpressions().stream().map(this::visit).collect(toList());
+            List<String> childSql = node.getChildExpressions().stream().map(e -> visit(e, scope)).collect(toList());
             sqlBuilder.append(Joiner.on(",").join(childSql));
 
             sqlBuilder.append(")");
@@ -731,7 +731,7 @@ public class AstToStringBuilder {
             AnalyticWindow window = node.getWindow();
 
             StringBuilder sb = new StringBuilder();
-            sb.append(visit(fnCall)).append(" OVER (");
+            sb.append(visit(fnCall, context)).append(" OVER (");
             if (!partitionExprs.isEmpty()) {
                 sb.append("PARTITION BY ").append(visitAstList(partitionExprs)).append(" ");
             }
@@ -768,7 +768,7 @@ public class AstToStringBuilder {
 
         @Override
         public String visitCollectionElementExpr(CollectionElementExpr node, Void context) {
-            return visit(node.getChild(0)) + "[" + visit(node.getChild(1)) + "]";
+            return visit(node.getChild(0), context) + "[" + visit(node.getChild(1), context) + "]";
         }
 
         @Override
@@ -814,7 +814,7 @@ public class AstToStringBuilder {
         public String visitCastExpr(CastExpr node, Void context) {
             boolean isImplicit = node.isImplicit();
             if (isImplicit) {
-                return visit(node.getChild(0));
+                return visit(node.getChild(0), context);
             }
             return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
         }
@@ -844,7 +844,7 @@ public class AstToStringBuilder {
 
             }
             strBuilder.append("EXISTS ");
-            strBuilder.append(visit(node.getChild(0)));
+            strBuilder.append(visit(node.getChild(0), context));
             return strBuilder.toString();
         }
 
@@ -871,16 +871,16 @@ public class AstToStringBuilder {
             }
 
             if (functionName.equalsIgnoreCase(FunctionSet.TIME_SLICE) || functionName.equalsIgnoreCase(FunctionSet.DATE_SLICE)) {
-                sb.append(visit(node.getChild(0))).append(", ");
+                sb.append(visit(node.getChild(0), context)).append(", ");
                 sb.append("INTERVAL ");
-                sb.append(visit(node.getChild(1)));
+                sb.append(visit(node.getChild(1), context));
                 StringLiteral ident = (StringLiteral) node.getChild(2);
                 sb.append(" ").append(ident.getValue());
                 StringLiteral boundary = (StringLiteral) node.getChild(3);
                 sb.append(", ").append(boundary.getValue());
                 sb.append(")");
             } else {
-                List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
+                List<String> p = node.getChildren().stream().map(c -> visit(c, context)).collect(Collectors.toList());
                 sb.append(Joiner.on(", ").join(p)).append(")");
             }
             return sb.toString();
@@ -890,21 +890,21 @@ public class AstToStringBuilder {
         @Override
         public String visitLambdaFunctionExpr(LambdaFunctionExpr node, Void context) {
             List<Expr> children = node.getChildren();
-            String names = visit(children.get(1));
+            String names = visit(children.get(1), context);
 
             if (children.size() > 2) {
-                names = "(" + visit(children.get(1));
+                names = "(" + visit(children.get(1), context);
                 for (int i = 2; i < children.size(); ++i) {
-                    names = names + ", " + visit(children.get(i));
+                    names = names + ", " + visit(children.get(i), context);
                 }
                 names = names + ")";
             }
-            return String.format("%s -> %s", names, visit(children.get(0)));
+            return String.format("%s -> %s", names, visit(children.get(0), context));
         }
 
         @Override
         public String visitSubfieldExpr(SubfieldExpr node, Void context) {
-            return String.format("%s.%s", visit(node.getChild(0)), Joiner.on('.').join(node.getFieldNames()));
+            return String.format("%s.%s", visit(node.getChild(0), context), Joiner.on('.').join(node.getFieldNames()));
         }
 
         public String visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {
@@ -961,7 +961,7 @@ public class AstToStringBuilder {
 
         @Override
         public String visitSubquery(Subquery node, Void context) {
-            return "(" + visit(node.getQueryStatement()) + ")";
+            return "(" + visit(node.getQueryStatement(), context) + ")";
         }
 
         public String visitVariableExpr(VariableExpr node, Void context) {
@@ -992,15 +992,15 @@ public class AstToStringBuilder {
                 if (funcName.equalsIgnoreCase("TIMESTAMPDIFF") || funcName.equalsIgnoreCase("TIMESTAMPADD")) {
                     strBuilder.append(funcName).append("(");
                     strBuilder.append(timeUnitIdent).append(", ");
-                    strBuilder.append(visit(node.getChild(1))).append(", ");
-                    strBuilder.append(visit(node.getChild(0))).append(")");
+                    strBuilder.append(visit(node.getChild(1), context)).append(", ");
+                    strBuilder.append(visit(node.getChild(0), context)).append(")");
                     return strBuilder.toString();
                 }
                 // Function-call like version.
                 strBuilder.append(funcName).append("(");
-                strBuilder.append(visit(node.getChild(0))).append(", ");
+                strBuilder.append(visit(node.getChild(0), context)).append(", ");
                 strBuilder.append("INTERVAL ");
-                strBuilder.append(visit(node.getChild(1)));
+                strBuilder.append(visit(node.getChild(1), context));
                 strBuilder.append(" ").append(timeUnitIdent);
                 strBuilder.append(")");
                 return strBuilder.toString();
@@ -1008,16 +1008,16 @@ public class AstToStringBuilder {
             if (intervalFirst) {
                 // Non-function-call like version with interval as first operand.
                 strBuilder.append("INTERVAL ");
-                strBuilder.append(visit(node.getChild(1))).append(" ");
+                strBuilder.append(visit(node.getChild(1), context)).append(" ");
                 strBuilder.append(timeUnitIdent);
                 strBuilder.append(" ").append(op.toString()).append(" ");
-                strBuilder.append(visit(node.getChild(0)));
+                strBuilder.append(visit(node.getChild(0), context));
             } else {
                 // Non-function-call like version with interval as second operand.
-                strBuilder.append(visit(node.getChild(0)));
+                strBuilder.append(visit(node.getChild(0), context));
                 strBuilder.append(" ").append(op.toString()).append(" ");
                 strBuilder.append("INTERVAL ");
-                strBuilder.append(visit(node.getChild(1))).append(" ");
+                strBuilder.append(visit(node.getChild(1), context)).append(" ");
                 strBuilder.append(timeUnitIdent);
             }
             return strBuilder.toString();
@@ -1040,7 +1040,7 @@ public class AstToStringBuilder {
         @Override
         public String visitOrderByElement(OrderByElement node, Void context) {
             StringBuilder strBuilder = new StringBuilder();
-            strBuilder.append(visit(node.getExpr()));
+            strBuilder.append(visit(node.getExpr(), context));
             strBuilder.append(node.getIsAsc() ? " ASC" : " DESC");
 
             // When ASC and NULLS FIRST or DESC and NULLS LAST, we do not print NULLS FIRST/LAST
@@ -1068,7 +1068,7 @@ public class AstToStringBuilder {
                 case GROUP_BY:
                     if (oriGroupingExprs != null) {
                         for (int i = 0; i < oriGroupingExprs.size(); ++i) {
-                            strBuilder.append(visit(oriGroupingExprs.get(i)));
+                            strBuilder.append(visit(oriGroupingExprs.get(i), context));
                             strBuilder.append((i + 1 != oriGroupingExprs.size()) ? ", " : "");
                         }
                     }
@@ -1085,7 +1085,7 @@ public class AstToStringBuilder {
                                 strBuilder.append(", (");
                             }
                             for (int i = 0; i < groupingExprs.size(); ++i) {
-                                strBuilder.append(visit(groupingExprs.get(i)));
+                                strBuilder.append(visit(groupingExprs.get(i), context));
                                 strBuilder.append((i + 1 != groupingExprs.size()) ? ", " : "");
                             }
                             strBuilder.append(")");
@@ -1097,7 +1097,7 @@ public class AstToStringBuilder {
                     if (oriGroupingExprs != null) {
                         strBuilder.append("CUBE (");
                         for (int i = 0; i < oriGroupingExprs.size(); ++i) {
-                            strBuilder.append(visit(oriGroupingExprs.get(i)));
+                            strBuilder.append(visit(oriGroupingExprs.get(i), context));
                             strBuilder.append((i + 1 != oriGroupingExprs.size()) ? ", " : "");
                         }
                         strBuilder.append(")");
@@ -1107,7 +1107,7 @@ public class AstToStringBuilder {
                     if (oriGroupingExprs != null) {
                         strBuilder.append("ROLLUP (");
                         for (int i = 0; i < oriGroupingExprs.size(); ++i) {
-                            strBuilder.append(visit(oriGroupingExprs.get(i)));
+                            strBuilder.append(visit(oriGroupingExprs.get(i), context));
                             strBuilder.append((i + 1 != oriGroupingExprs.size()) ? ", " : "");
                         }
                         strBuilder.append(")");
@@ -1120,14 +1120,14 @@ public class AstToStringBuilder {
         }
 
         private String visitAstList(List<? extends ParseNode> contexts) {
-            return Joiner.on(", ").join(contexts.stream().map(this::visit).collect(toList()));
+            return Joiner.on(", ").join(contexts.stream().map(c -> visit(c, null)).collect(toList()));
         }
 
         private String printWithParentheses(ParseNode node) {
             if (node instanceof SlotRef || node instanceof LiteralExpr) {
-                return visit(node);
+                return visit(node, null);
             } else {
-                return "(" + visit(node) + ")";
+                return "(" + visit(node, null) + ")";
             }
         }
     }

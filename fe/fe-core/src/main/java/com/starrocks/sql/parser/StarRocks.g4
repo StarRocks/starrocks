@@ -38,6 +38,7 @@ statement
     | showClustersStatement
     | suspendWarehouseStatement
     | resumeWarehouseStatement
+    | setWarehouseStatement
 
     // Database Statement
     | useDatabaseStatement
@@ -181,7 +182,6 @@ statement
     | showEventsStatement
     | showEnginesStatement
     | showFrontendsStatement
-    | showPluginsStatement
     | showRepositoriesStatement
     | showOpenTableStatement
     | showProcedureStatement
@@ -239,6 +239,7 @@ statement
     // Plugin Statement
     | installPluginStatement
     | uninstallPluginStatement
+    | showPluginsStatement
 
     // File Statement
     | createFileStatement
@@ -248,10 +249,46 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
-    | setWarehouseStatement
 
     //Unsupported Statement
     | unsupportedStatement
+    ;
+
+// ---------------------------------------- Warehouse Statement ---------------------------------------------------------
+
+createWarehouseStatement
+    : CREATE (WAREHOUSE) (IF NOT EXISTS)? warehouseName=identifierOrString
+    properties?
+    ;
+
+showWarehousesStatement
+    : SHOW WAREHOUSES ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+dropWarehouseStatement
+    : DROP WAREHOUSE (IF EXISTS)? warehouseName=identifierOrString
+    ;
+
+alterWarehouseStatement
+    : ALTER WAREHOUSE identifier ADD CLUSTER
+    | ALTER WAREHOUSE identifier REMOVE CLUSTER
+    | ALTER WAREHOUSE identifier SET propertyList
+    ;
+
+showClustersStatement
+    : SHOW CLUSTERS FROM WAREHOUSE identifier
+    ;
+
+suspendWarehouseStatement
+    : SUSPEND WAREHOUSE (IF EXISTS)? identifier
+    ;
+
+resumeWarehouseStatement
+    : RESUME WAREHOUSE (IF EXISTS)? identifier
+    ;
+
+setWarehouseStatement
+    : SET WAREHOUSE identifierOrString
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -611,40 +648,6 @@ dropExternalCatalogStatement
 
 showCatalogsStatement
     : SHOW CATALOGS
-    ;
-
-
-// ---------------------------------------- Warehouse Statement ---------------------------------------------------------
-
-createWarehouseStatement
-    : CREATE (WAREHOUSE) (IF NOT EXISTS)? warehouseName=identifierOrString
-    properties?
-    ;
-
-showWarehousesStatement
-    : SHOW WAREHOUSES ((LIKE pattern=string) | (WHERE expression))?
-    ;
-
-dropWarehouseStatement
-    : DROP WAREHOUSE (IF EXISTS)? warehouseName=identifierOrString
-    ;
-
-alterWarehouseStatement
-    : ALTER WAREHOUSE identifier ADD CLUSTER
-    | ALTER WAREHOUSE identifier REMOVE CLUSTER
-    | ALTER WAREHOUSE identifier SET propertyList
-    ;
-
-showClustersStatement
-    : SHOW CLUSTERS FROM WAREHOUSE identifier
-    ;
-
-suspendWarehouseStatement
-    : SUSPEND WAREHOUSE (IF EXISTS)? identifier
-    ;
-
-resumeWarehouseStatement
-    : RESUME WAREHOUSE (IF EXISTS)? identifier
     ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
@@ -1148,10 +1151,6 @@ showFrontendsStatement
     : SHOW FRONTENDS
     ;
 
-showPluginsStatement
-    : SHOW PLUGINS
-    ;
-
 showRepositoriesStatement
     : SHOW REPOSITORIES
     ;
@@ -1429,6 +1428,10 @@ uninstallPluginStatement
     : UNINSTALL PLUGIN identifierOrString
     ;
 
+showPluginsStatement
+    : SHOW PLUGINS
+    ;
+
 // ------------------------------------------- File Statement ----------------------------------------------------------
 
 createFileStatement
@@ -1497,10 +1500,6 @@ setUserPropertyStatement
 
 roleList
     : identifierOrString (',' identifierOrString)*
-    ;
-
-setWarehouseStatement
-    : SET WAREHOUSE identifierOrString
     ;
 
 unsupportedStatement

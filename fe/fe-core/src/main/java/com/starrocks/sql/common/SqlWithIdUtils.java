@@ -59,7 +59,7 @@ public class SqlWithIdUtils {
     public static String encode(StatementBase statement, ConnectContext context) {
         Map<TableName, Table> tableMap = AnalyzerUtils.collectAllTable(statement);
         Map<String, Database> databaseMap = AnalyzerUtils.collectAllDatabase(context, statement);
-        return new SqlEncoderVisitor(databaseMap, tableMap).visit(statement);
+        return new SqlEncoderVisitor(databaseMap, tableMap).visit(statement, null);
     }
 
     /**
@@ -145,13 +145,13 @@ public class SqlWithIdUtils {
                             (tableName == null ? "" : getTableId(tableName) + ".")
                                     + "`" + field.getName() + "`" + " AS `" + columnName + "`");
                 } else {
-                    selectListString.add(visit(expr) + " AS `" + columnName + "`");
+                    selectListString.add(visit(expr, context) + " AS `" + columnName + "`");
                 }
             }
 
             sqlBuilder.append(Joiner.on(", ").join(selectListString));
 
-            String fromClause = visit(stmt.getRelation());
+            String fromClause = visit(stmt.getRelation(), context);
             if (fromClause != null) {
                 sqlBuilder.append(" FROM ");
                 sqlBuilder.append(fromClause);
@@ -159,17 +159,17 @@ public class SqlWithIdUtils {
 
             if (stmt.hasWhereClause()) {
                 sqlBuilder.append(" WHERE ");
-                sqlBuilder.append(visit(stmt.getWhereClause()));
+                sqlBuilder.append(visit(stmt.getWhereClause(), context));
             }
 
             if (stmt.hasGroupByClause()) {
                 sqlBuilder.append(" GROUP BY ");
-                sqlBuilder.append(visit(stmt.getGroupByClause()));
+                sqlBuilder.append(visit(stmt.getGroupByClause(), context));
             }
 
             if (stmt.hasHavingClause()) {
                 sqlBuilder.append(" HAVING ");
-                sqlBuilder.append(visit(stmt.getHavingClause()));
+                sqlBuilder.append(visit(stmt.getHavingClause(), context));
             }
 
             return sqlBuilder.toString();
@@ -193,7 +193,7 @@ public class SqlWithIdUtils {
                                 relation.getColumnOutputNames().stream().map(c -> "`" + c + "`").collect(toList())))
                         .append(")");
             }
-            sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
+            sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement(), context)).append(") ");
             return sqlBuilder.toString();
         }
 

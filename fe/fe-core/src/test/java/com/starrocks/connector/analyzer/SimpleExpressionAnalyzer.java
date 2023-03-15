@@ -158,10 +158,10 @@ public class SimpleExpressionAnalyzer {
             }
         }
         // visit LambdaFunction
-        visitor.visit(expression.getChild(0));
+        visitor.visit(expression.getChild(0), null);
         Expr res = rewriteHighOrderFunction(expression);
         if (res != null) {
-            visitor.visit(res);
+            visitor.visit(res, null);
         }
     }
 
@@ -173,7 +173,7 @@ public class SimpleExpressionAnalyzer {
                 bottomUpAnalyze(visitor, expr);
             }
         }
-        visitor.visit(expression);
+        visitor.visit(expression, null);
     }
 
     static class Visitor extends ExpressionAnalyzer.Visitor {

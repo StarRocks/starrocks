@@ -566,14 +566,9 @@ public class SelectAnalyzer {
         }
 
         @Override
-        public Expr visit(ParseNode expr) {
-            return visit(expr, null);
-        }
-
-        @Override
         public Expr visitExpression(Expr expr, Void context) {
             for (int i = 0; i < expr.getChildren().size(); ++i) {
-                expr.setChild(i, visit(expr.getChild(i)));
+                expr.setChild(i, visit(expr.getChild(i), context));
             }
             return expr;
         }
@@ -600,7 +595,6 @@ public class SelectAnalyzer {
             this.columnsNotInGroupBy = columnsNotInGroupBy;
         }
 
-        @Override
         public Expr visit(ParseNode expr) {
             return visit(expr, null);
         }
