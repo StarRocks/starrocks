@@ -48,15 +48,14 @@ public:
         SCOPED_RAW_TIMER(&_stats->io_ns);
         _stats->io_count += 1;
         _stats->bytes_read += size;
-
-        RETURN_IF_ERROR(_stream->read_at_fully(offset, data, size));
+        return _stream->read_at_fully(offset, data, size);
     }
 
     StatusOr<std::string_view> peek(int64_t count) override {
         SCOPED_RAW_TIMER(&_stats->io_ns);
         _stats->io_count += 1;
         _stats->bytes_read += count;
-        RETURN_IF_ERROR(_stream->peek(count));
+        return _stream->peek(count);
     }
 
 private:

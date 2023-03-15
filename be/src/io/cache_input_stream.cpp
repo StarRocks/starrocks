@@ -169,18 +169,16 @@ StatusOr<std::string_view> CacheInputStream::peek(int64_t count) {
         _populate_cache_from_zero_copy_buffer(s.data(), _offset, count);
     }
     _offset += count;
-    return Status::OK();
+    return s;
 }
 
 #ifdef WITH_BLOCK_CACHE
-void CacheInputStream::_populate_cache_from_zero_copy_buffer(constint64_t offset, int64_t count) {
+void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count) {
     BlockCache* cache = BlockCache::instance();
     const int64_t BLOCK_SIZE = cache->block_size();
     int64_t begin = offset / BLOCK_SIZE * BLOCK_SIZE;
     int64_t end = std::min((offset + count + BLOCK_SIZE - 1) / BLOCK_SIZE * BLOCK_SIZE, _size);
-    const char* p = nullptr;
-    _stream->zero_copy_read_at_fully(begin, (void**)&p, end - begin);
-
+    p -= (offset - begin);
     auto f = [&](const char* buf, size_t offset, size_t size) {
         StatusOr<size_t> res;
         // to support nullptr read.
@@ -211,7 +209,7 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(constint64_t offset
     return;
 }
 #else
-void CacheInputStream::_populate_cache_from_zero_copy_buffer(int64_t offset, int64_t size) {
+void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t size) {
     return;
 }
 #endif

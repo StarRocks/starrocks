@@ -172,18 +172,18 @@ StatusOr<int64_t> SharedBufferedInputStream::read(void* data, int64_t count) {
 }
 
 bool SharedBufferedInputStream::allows_peek() const {
-    StatusOr<SharedBuffer*> ret = _find_shared_buffer(_offset, 0);
-    if (!ret.ok()) return false;
-    SharedBuffer* sb = ret.value();
-    if (sb->buffer.capacity() == 0) return false;
+    auto iter = _map.upper_bound(_offset);
+    if (iter == _map.end()) return false;
+    const SharedBuffer& sb = iter->second;
+    if (sb.buffer.capacity() == 0) return false;
     return true;
 }
 
 StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
-    const char* buf = nullptr;
+    const uint8_t* buf = nullptr;
     size_t nbytes = count;
-    RETURN_IF_ERROR(get_bytes(buffer, _offset, &nbytes));
-    return std::string_view(buf, count);
+    RETURN_IF_ERROR(get_bytes(&buf, _offset, &nbytes));
+    return std::string_view((const char*)buf, count);
 }
 
 } // namespace starrocks::io

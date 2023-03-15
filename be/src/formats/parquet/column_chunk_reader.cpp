@@ -137,9 +137,10 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
     _opts.stats->request_bytes_read_uncompressed += uncompressed_size;
 
     // check if we can zero copy read.
-    Slice read_data((const char*)nullptr, read_size);
-    if (_page_reader->can_zero_copy_read_bytes(read_size)) {
-        RETURN_IF_ERROR(_page_reader->zero_copy_read_bytes((void**)(&(read_data.data)), read_data.size));
+    Slice read_data;
+    if (_page_reader->allows_peek()) {
+        ASSIGN_OR_RETURN(auto ret, _page_reader->peek(read_size));
+        read_data = Slice(ret.data(), read_size);
     } else {
         read_buffer.reserve(read_size);
         read_data = Slice(read_buffer.data(), read_size);

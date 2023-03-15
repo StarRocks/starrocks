@@ -91,7 +91,7 @@ StatusOr<std::string_view> PageReader::peek(size_t size) {
         return Status::InternalError("Size to read exceed page size");
     }
     _offset += size;
-    RETURN_IF_ERROR(_stream->peek(size));
+    return _stream->peek(size);
 }
 
 } // namespace starrocks::parquet

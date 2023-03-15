@@ -55,9 +55,9 @@ public:
     int64_t get_align_size() const;
 
     StatusOr<std::string_view> peek(int64_t count) override;
-    
+
 private:
-    void _populate_cache_from_zero_copy_buffer(int64_t offset, int64_t count);
+    void _populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count);
 
     std::string _cache_key;
     std::string _filename;
