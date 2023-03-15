@@ -603,4 +603,46 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_subset_limit(FunctionContext* contex
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_subset_in_range(FunctionContext* context,
+                                                            const starrocks::Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TYPE_OBJECT> bitmap_viewer(columns[0]);
+    ColumnViewer<TYPE_BIGINT> range_start_viewer(columns[1]);
+    ColumnViewer<TYPE_BIGINT> range_end_viewer(columns[2]);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+
+    for (int row = 0; row < size; row++) {
+        if (bitmap_viewer.is_null(row) || range_start_viewer.is_null(row) || range_end_viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        auto bitmap = bitmap_viewer.value(row);
+        auto range_start = range_start_viewer.value(row);
+        auto range_end = range_end_viewer.value(row);
+
+        if (range_start < 0) {
+            range_start = 0;
+        }
+
+        if (bitmap->cardinality() == 0 || range_start >= range_end) {
+            builder.append_null();
+            continue;
+        }
+
+        BitmapValue ret_bitmap;
+        if (bitmap->bitmap_subset_in_range_internal(range_start, range_end, &ret_bitmap) == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        builder.append(std::move(ret_bitmap));
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
 } // namespace starrocks
