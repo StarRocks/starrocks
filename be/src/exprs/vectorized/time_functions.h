@@ -4,16 +4,10 @@
 
 #include "column/column_builder.h"
 #include "column/vectorized_fwd.h"
-<<<<<<< HEAD:be/src/exprs/vectorized/time_functions.h
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
+#include "runtime/primitive_type.h"
 #include "udf/udf.h"
-=======
-#include "exprs/builtin_functions.h"
-#include "exprs/function_context.h"
-#include "exprs/function_helper.h"
-#include "types/logical_type.h"
->>>>>>> 20352e19f ([Enhancement] support `from_unixtime` to int64 (#19396)):be/src/exprs/time_functions.h
 #include "util/timezone_hsscan.h"
 namespace starrocks {
 namespace vectorized {
@@ -624,7 +618,7 @@ private:
     static ColumnPtr convert_tz_const(FunctionContext* context, const Columns& columns, const cctz::time_zone& from,
                                       const cctz::time_zone& to);
 
-    template <LogicalType Type>
+    template <PrimitiveType Type>
     DEFINE_VECTORIZED_FN(_t_from_unix_to_datetime);
 
 public:
