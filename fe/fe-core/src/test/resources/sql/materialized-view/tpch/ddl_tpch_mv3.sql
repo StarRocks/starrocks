@@ -3,7 +3,7 @@ create materialized view lineitem_mv_agg_mv1
  distributed by hash(p_name,
                o_orderyear,
                n_name1) buckets 96
- refresh manual
+ refresh deferred manual
  properties (
      "replication_num" = "1"
  )
@@ -26,7 +26,7 @@ create materialized view lineitem_mv_agg_mv2
         n_name1,
         n_name2,
         l_shipyear) buckets 96
- refresh manual
+ refresh deferred manual
  properties (
      "replication_num" = "1"
  )
@@ -49,7 +49,7 @@ create materialized view lineitem_mv_agg_mv2
 create materialized view query4_mv
  distributed by hash(o_orderdate,
     o_orderpriority) buckets 24
- refresh manual
+ refresh deferred manual
  properties (
      "replication_num" = "1"
  )
@@ -78,7 +78,7 @@ create materialized view query21_mv
 distributed by hash(s_name,
               o_orderstatus,
               n_name) buckets 24
-refresh manual
+refresh deferred manual
 properties (
     "replication_num" = "1"
 )

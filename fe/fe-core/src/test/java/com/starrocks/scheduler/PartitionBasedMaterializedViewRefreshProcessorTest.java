@@ -183,7 +183,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                        "REFRESH MANUAL\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
@@ -193,7 +193,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                        "REFRESH MANUAL\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
@@ -204,22 +204,22 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`par_date`)\n" +
                         "DISTRIBUTED BY HASH(`par_col`) BUCKETS 10\n" +
-                        "REFRESH MANUAL\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
                         "AS SELECT c1, c2, par_date, par_col FROM `hive0`.`partitioned_db`.`t1_par`;")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_join_mv`\n" +
-                    "COMMENT \"MATERIALIZED_VIEW\"\n" +
-                    "PARTITION BY (`par_date`)\n" +
-                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
-                    "REFRESH MANUAL\n" +
-                    "PROPERTIES (\n" +
-                    "\"replication_num\" = \"1\",\n" +
-                    "\"storage_medium\" = \"HDD\"\n" +
-                    ")\n" +
-                    "AS SELECT t1.c1, t1.c2, t1_par.par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t1` join " +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`par_date`)\n" +
+                        "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT t1.c1, t1.c2, t1_par.par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t1` join " +
                         "`hive0`.`partitioned_db`.`t1_par` using (par_col)");
     }
 

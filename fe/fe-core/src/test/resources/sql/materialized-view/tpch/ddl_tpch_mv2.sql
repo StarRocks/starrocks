@@ -6,7 +6,7 @@ distributed by hash(l_orderkey,
                l_returnflag,
                l_linestatus) buckets 96
 partition by l_shipdate
-refresh manual
+refresh deferred manual
 properties (
     "replication_num" = "1",
     "partition_refresh_number" = "1"
@@ -38,7 +38,7 @@ as select  /*+ SET_VAR(query_timeout = 7200) */
 create materialized view lineitem_agg_mv2
 distributed by hash(l_suppkey, l_shipdate, l_partkey) buckets 96
 partition by l_shipdate
-refresh manual
+refresh deferred manual
 properties (
     "replication_num" = "1",
     "partition_refresh_number" = "1"
@@ -62,7 +62,7 @@ as select  /*+ SET_VAR(query_timeout = 7200) */
 create materialized view lineitem_agg_mv3
 distributed by hash(l_shipdate, l_discount, l_quantity) buckets 24
 partition by l_shipdate
-refresh manual
+refresh deferred manual
 properties (
     "replication_num" = "1",
     "partition_refresh_number" = "1"
@@ -81,7 +81,7 @@ as select  /*+ SET_VAR(query_timeout = 7200) */
 -- query22 needs avg & rollup -> sum/count
 create materialized view customer_agg_mv1
 distributed by hash(c_custkey) buckets 24
-refresh manual
+refresh deferred manual
 properties (
     "replication_num" = "1"
 )
@@ -100,7 +100,7 @@ as select
 create materialized view customer_order_mv_agg_mv1
 distributed by hash( c_custkey,
        o_comment) buckets 24
-refresh manual
+refresh deferred manual
 properties (
     "replication_num" = "1"
 )
