@@ -1060,12 +1060,8 @@ ColumnPtr TimeFunctions::to_unix_for_now(FunctionContext* context, const Columns
 /*
  * definition for from_unix operators
  */
-<<<<<<< HEAD:be/src/exprs/vectorized/time_functions.cpp
-ColumnPtr TimeFunctions::from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
-=======
-template <LogicalType Type>
-StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
->>>>>>> 20352e19f ([Enhancement] support `from_unixtime` to int64 (#19396)):be/src/exprs/time_functions.cpp
+template <PrimitiveType Type>
+ColumnPtr TimeFunctions::_t_from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -1100,11 +1096,11 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
-    return _t_from_unix_to_datetime<TYPE_INT>(context, columns);
+ColumnPtr TimeFunctions::from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
+    return _t_from_unix_to_datetime<PrimitiveType::TYPE_INT>(context, columns);
 }
-StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_64(FunctionContext* context, const Columns& columns) {
-    return _t_from_unix_to_datetime<TYPE_BIGINT>(context, columns);
+ColumnPtr TimeFunctions::from_unix_to_datetime_64(FunctionContext* context, const Columns& columns) {
+    return _t_from_unix_to_datetime<PrimitiveType::TYPE_BIGINT>(context, columns);
 }
 
 std::string TimeFunctions::convert_format(const Slice& format) {
