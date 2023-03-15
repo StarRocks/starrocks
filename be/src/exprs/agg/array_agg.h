@@ -50,6 +50,16 @@ struct ArrayAggAggregateState {
         DCHECK((*data_columns)[index]->is_nullable());
         (*data_columns)[index]->append_nulls(count);
     }
+
+    // release the trailing N-1 order-by columns
+    void release_order_by_columns() const {
+        DCHECK(data_columns != nullptr);
+        for (auto i = 1; i < data_columns->size(); ++i) {
+            data_columns->at(i).reset();
+        }
+        data_columns->resize(1);
+    }
+
     ~ArrayAggAggregateState() {
         if (data_columns != nullptr) {
             for (auto& col : *data_columns) {
@@ -163,10 +173,13 @@ public:
         auto tmp = (*state_impl.data_columns)[0]->clone_empty();
         if (state_impl.data_columns->size() > 1) {
             Permutation perm;
-            Columns sort_by_columns;
+            Columns order_by_columns;
             SortDescs sort_desc(ctx->get_is_asc_order(), ctx->get_nulls_first());
-            sort_by_columns.assign(state_impl.data_columns->begin() + 1, state_impl.data_columns->end());
-            Status st = sort_and_tie_columns(false, sort_by_columns, sort_desc, &perm);
+            order_by_columns.assign(state_impl.data_columns->begin() + 1, state_impl.data_columns->end());
+            Status st = sort_and_tie_columns(false, order_by_columns, sort_desc, &perm);
+            // release order-by columns early
+            order_by_columns.clear();
+            state_impl.release_order_by_columns();
             CHECK(st.ok());
             materialize_column_by_permutation(tmp.get(), {(*state_impl.data_columns)[0]}, perm);
             res = ColumnPtr(std::move(tmp));

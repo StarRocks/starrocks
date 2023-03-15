@@ -107,7 +107,6 @@ public:
     virtual bool is_pod_state() const { return false; }
     virtual void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
     virtual void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
-    virtual void init(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
 
     virtual void batch_create_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
                                              size_t state_offset, const std::vector<uint8_t>& selection) const {
@@ -288,7 +287,7 @@ public:
         init(ctx, ptr);
     }
 
-    void init(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {}
+    virtual void init(FunctionContext* ctx, AggDataPtr __restrict ptr) const {}
 
     void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const final { data(ptr).~State(); }
 
