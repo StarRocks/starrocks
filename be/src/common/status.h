@@ -403,7 +403,7 @@ struct StatusInstance {
         if (UNLIKELY(!st__.ok())) {                           \
             LOG(WARNING) << (warning_prefix) << ": " << st__; \
         }                                                     \
-    } while (0);
+    } while (0)
 
 #define RETURN_IF_ERROR_WITH_WARN(stmt, warning_prefix)              \
     do {                                                             \
@@ -412,7 +412,7 @@ struct StatusInstance {
             LOG(WARNING) << (warning_prefix) << ", error: " << st__; \
             return std::move(st__);                                  \
         }                                                            \
-    } while (0);
+    } while (0)
 
 #define DCHECK_IF_ERROR(stmt)      \
     do {                           \
