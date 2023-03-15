@@ -23,7 +23,7 @@ BITMAP_FROM_STRING(input)
 ## 示例
 
 ```Plain Text
--- 返回空值。
+-- 返回空字符串。
 MySQL > select bitmap_to_string(bitmap_from_string(""));
 +--------------------------------------------+
 |  bitmap_to_string(bitmap_from_string(''))  |
