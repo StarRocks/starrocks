@@ -282,7 +282,7 @@ protected:
 public:
     static constexpr bool pod_state() { return std::is_trivially_destructible_v<State>; }
 
-    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
+    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const final {
         new (ptr) State;
         init(ctx, ptr);
     }
