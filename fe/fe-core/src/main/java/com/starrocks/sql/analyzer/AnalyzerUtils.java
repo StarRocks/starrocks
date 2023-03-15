@@ -658,6 +658,9 @@ public class AnalyzerUtils {
             LocalDateTime endTime;
             String partitionName;
             try {
+                if ("NULL".equalsIgnoreCase(partitionValue)) {
+                    partitionValue = "0000-01-01";
+                }
                 beginDateTimeFormat = DateUtils.probeFormat(partitionValue);
                 beginTime = DateUtils.parseStringWithDefaultHSM(partitionValue, beginDateTimeFormat);
                 // The start date here is passed by BE through function calculation,
