@@ -68,10 +68,10 @@ struct ArrayAggAggregateState {
 class ArrayAggAggregateFunction
         : public AggregateFunctionBatchHelper<ArrayAggAggregateState, ArrayAggAggregateFunction> {
 public:
-    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
+    void init(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
         auto num = ctx->get_num_args();
-        auto* state = new (ptr) ArrayAggAggregateState;
-        state->data_columns = new Columns;
+        auto& state_impl = this->data(ptr);
+        state_impl.data_columns = new Columns;
         for (auto i = 0; i < num; ++i) {
             auto arg_type = ctx->get_arg_type(i);
             // TODO: support nested type
@@ -80,13 +80,13 @@ public:
                 ctx->set_error("array_agg can't support nested type.", false);
                 return;
             }
-            state->data_columns->emplace_back(
+            state_impl.data_columns->emplace_back(
                     ColumnHelper::create_column(TypeDescriptor::from_logical_type(arg_type->type, arg_type->len,
                                                                                   arg_type->precision, arg_type->scale),
                                                 true));
         }
         CHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
-        CHECK(state->data_columns->size() == ctx->get_is_asc_order().size() + 1);
+        CHECK(state_impl.data_columns->size() == ctx->get_is_asc_order().size() + 1);
     }
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
