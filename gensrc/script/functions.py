@@ -538,7 +538,8 @@ vectorized_functions = [
     [90801, 'bitmap_to_base64', 'VARCHAR', ['BITMAP'], 'BitmapFunctions::bitmap_to_base64', False],
     [90900, 'array_to_bitmap', 'BITMAP', ['ARRAY_BIGINT'], 'BitmapFunctions::array_to_bitmap', False],
     [91000, 'sub_bitmap', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::sub_bitmap', False],
-    [91002, 'bitmap_subset_limit', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::bitmap_subset_limit', False],
+    [91001, 'bitmap_subset_limit', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::bitmap_subset_limit', False],
+    [91002, 'bitmap_subset_in_range', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::bitmap_subset_in_range', False],
 
     # hash function
     [100010, 'murmur_hash3_32', 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
