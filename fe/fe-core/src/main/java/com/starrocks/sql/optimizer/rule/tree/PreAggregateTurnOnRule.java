@@ -38,7 +38,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -224,13 +223,16 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                     CaseWhenOperator cwo = (CaseWhenOperator) child;
 
                     for (int i = 0; i < cwo.getWhenClauseSize(); i++) {
-                        if (!cwo.getThenClause(i).isColumnRef()) {
+                        if (cwo.getThenClause(i).isColumnRef()) {
+                            conditions.addAll(Utils.extractColumnRef(cwo.getWhenClause(i)));
+                            returns.add((ColumnRefOperator) cwo.getThenClause(i));
+                        } else if (cwo.getThenClause(i).isConstantNull()
+                                || cwo.getThenClause(i).isConstantZero()) {
+                            // If then expr is NULL or Zero, open the preaggregation
+                        } else {
                             scan.setTurnOffReason("The result of THEN isn't value column");
                             return true;
                         }
-
-                        conditions.addAll(Utils.extractColumnRef(cwo.getWhenClause(i)));
-                        returns.add((ColumnRefOperator) cwo.getThenClause(i));
                     }
 
                     if (cwo.hasCase()) {
@@ -238,11 +240,11 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                     }
 
                     if (cwo.hasElse()) {
-                        if (OperatorType.VARIABLE.equals(cwo.getElseClause().getOpType())) {
+                        if (cwo.getElseClause().isColumnRef()) {
                             returns.add((ColumnRefOperator) cwo.getElseClause());
-                        } else if (OperatorType.CONSTANT.equals(cwo.getElseClause().getOpType())
-                                && ((ConstantOperator) cwo.getElseClause()).isNull()) {
-                            // NULL don't effect result, can open PreAggregate
+                        } else if (cwo.getElseClause().isConstantNull()
+                                || cwo.getElseClause().isConstantZero()) {
+                            // If else expr is NULL or Zero, open the preaggregation
                         } else {
                             scan.setTurnOffReason("The result of ELSE isn't value column");
                             return true;
