@@ -19,8 +19,8 @@
 #include "exprs/builtin_functions.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+#include "types/logical_type.h"
 #include "util/timezone_hsscan.h"
-
 namespace starrocks {
 
 // TODO:
@@ -562,6 +562,7 @@ public:
      * @return BinaryColumn
      */
     DEFINE_VECTORIZED_FN(from_unix_to_datetime);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_64);
 
     // from_unix_datetime with format's auxiliary method
     static Status from_unix_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -622,6 +623,9 @@ private:
 
     static StatusOr<ColumnPtr> convert_tz_const(FunctionContext* context, const Columns& columns,
                                                 const cctz::time_zone& from, const cctz::time_zone& to);
+
+    template <LogicalType Type>
+    DEFINE_VECTORIZED_FN(_t_from_unix_to_datetime);
 
 public:
     static TimestampValue start_of_time_slice;
