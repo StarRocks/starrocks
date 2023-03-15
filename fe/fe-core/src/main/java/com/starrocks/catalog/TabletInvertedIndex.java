@@ -363,14 +363,6 @@ public class TabletInvertedIndex {
             return true;
         }
 
-        // error state need sync or not
-        /*
-        if (backendTabletInfo.isSetIs_error_state() && 
-            backendTabletInfo.isSetIs_error_state() != replicaInFe.isErrorState()) {
-            return true;
-        }
-        */
-
         return false;
     }
 
