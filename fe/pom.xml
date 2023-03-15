@@ -47,10 +47,10 @@ under the License.
         <spark.version>2.4.6</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.10.1</parquet.version>
-        <hadoop.version>2.7.2-TBDS-5.1.3.0</hadoop.version>
+        <hadoop.version>2.7.2-TBDS-5.2.0.1</hadoop.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>0.10.1</hudi.version>
-        <hive-apache.version>2.2.0-TBDS-5.1.3.0</hive-apache.version>
+        <hive-apache.version>2.2.0-TBDS-5.2.0.1</hive-apache.version>
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
@@ -101,6 +101,19 @@ under the License.
                     <id>central</id>
                     <name>central maven repo https</name>
                     <url>https://repo.maven.apache.org/maven2</url>
+                </repository>
+
+                <repository>
+                    <id>tbds</id>
+                    <url>https://tbdsrepo.cloud.tencent.com/repository/tbds/</url>
+                    <snapshots>
+                        <enabled>true</enabled>
+                        <updatePolicy>always</updatePolicy>
+                    </snapshots>
+                    <releases>
+                        <enabled>true</enabled>
+                        <updatePolicy>always</updatePolicy>
+                    </releases>
                 </repository>
 
                 <!-- for java-cup -->
