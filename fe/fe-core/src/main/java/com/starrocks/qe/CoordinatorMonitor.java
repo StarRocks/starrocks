@@ -14,7 +14,7 @@
 
 package com.starrocks.qe;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Queues;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
