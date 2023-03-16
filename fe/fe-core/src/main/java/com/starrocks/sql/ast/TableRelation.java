@@ -39,6 +39,8 @@ public class TableRelation extends Relation {
     private Map<Field, Column> columns;
     // Support temporary partition
     private PartitionNames partitionNames;
+
+    private boolean hasHintsPartitionNames = false;
     private final List<Long> tabletIds;
     private final Set<TableHint> tableHints = new HashSet<>();
     // optional temporal clause for external MySQL tables that support this syntax
@@ -61,6 +63,7 @@ public class TableRelation extends Relation {
         super(pos);
         this.name = name;
         this.partitionNames = partitionNames;
+        this.hasHintsPartitionNames = (partitionNames != null);
         this.tabletIds = tabletIds;
     }
 
@@ -82,6 +85,10 @@ public class TableRelation extends Relation {
 
     public void setPartitionNames(PartitionNames partitionNames) {
         this.partitionNames = partitionNames;
+    }
+
+    public boolean getHasHintsPartitionNames() {
+        return hasHintsPartitionNames;
     }
 
     public List<Long> getTabletIds() {
