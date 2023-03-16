@@ -66,7 +66,6 @@ public:
     int64_t direct_io_bytes() const { return _direct_io_bytes; }
     int64_t direct_io_timer() const { return _direct_io_timer; }
 
-    bool allows_peek() const override;
     StatusOr<std::string_view> peek(int64_t count) override;
 
 private:

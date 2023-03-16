@@ -138,9 +138,9 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
 
     // check if we can zero copy read.
     Slice read_data;
-    if (_page_reader->allows_peek()) {
-        ASSIGN_OR_RETURN(auto ret, _page_reader->peek(read_size));
-        read_data = Slice(ret.data(), read_size);
+    auto ret = _page_reader->peek(read_size);
+    if (ret.ok()) {
+        read_data = Slice(ret.value().data(), read_size);
     } else {
         read_buffer.reserve(read_size);
         read_data = Slice(read_buffer.data(), read_size);

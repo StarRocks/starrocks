@@ -171,18 +171,13 @@ StatusOr<int64_t> SharedBufferedInputStream::read(void* data, int64_t count) {
     return n;
 }
 
-bool SharedBufferedInputStream::allows_peek() const {
-    auto iter = _map.upper_bound(_offset);
-    if (iter == _map.end()) return false;
-    const SharedBuffer& sb = iter->second;
-    if (sb.buffer.capacity() == 0) return false;
-    return true;
-}
-
 StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
+    ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(_offset, count));
+    if (ret->buffer.capacity() == 0) return Status::NotSupported("peek shared buffer empty");
     const uint8_t* buf = nullptr;
     size_t nbytes = count;
     RETURN_IF_ERROR(get_bytes(&buf, _offset, &nbytes));
+    _offset += count;
     return std::string_view((const char*)buf, count);
 }
 

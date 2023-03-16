@@ -81,17 +81,15 @@ Status PageReader::skip_bytes(size_t size) {
     return Status::OK();
 }
 
-bool PageReader::allows_peek() {
-    _stream->seek(_offset);
-    return _stream->allows_peek();
-}
-
 StatusOr<std::string_view> PageReader::peek(size_t size) {
     if (_offset + size > _next_header_pos) {
         return Status::InternalError("Size to read exceed page size");
     }
+    _stream->seek(_offset);
+    ASSIGN_OR_RETURN(auto ret, _stream->peek(size));
+    // advance `offset` only when succeed.
     _offset += size;
-    return _stream->peek(size);
+    return ret;
 }
 
 } // namespace starrocks::parquet
