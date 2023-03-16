@@ -44,7 +44,6 @@ set(EXPR_FILES
   case_expr.cpp
   cast_expr.cpp
   cast_expr_array.cpp
-  cast_expr_json.cpp
   cast_nested.cpp
   column_ref.cpp
   placeholder_ref.cpp
