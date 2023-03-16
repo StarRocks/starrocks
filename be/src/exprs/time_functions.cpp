@@ -983,6 +983,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_datetime(FunctionContext* con
             result.append_null();
         } else {
             timestamp = timestamp < 0 ? 0 : timestamp;
+            timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
             result.append(timestamp);
         }
     }
@@ -1027,6 +1028,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_date(FunctionContext* context
             result.append_null();
         } else {
             timestamp = timestamp < 0 ? 0 : timestamp;
+            timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
             result.append(timestamp);
         }
     }
@@ -1078,6 +1080,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_datetime_with_format(Function
         }
 
         timestamp = timestamp < 0 ? 0 : timestamp;
+        timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
         result.append(timestamp);
     }
 
@@ -1132,7 +1135,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
         }
 
         auto date = data_column.value(row);
-        if (date < 0) {
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
             result.append_null();
             continue;
         }
@@ -1237,7 +1240,7 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_general(FunctionContext
 
         auto date = data_column.value(row);
         auto format = format_column.value(row);
-        if (date < 0 || format.empty()) {
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP || format.empty()) {
             result.append_null();
             continue;
         }
@@ -1284,7 +1287,7 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_const(std::string& form
         }
 
         auto date = data_column.value(row);
-        if (date < 0) {
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
             result.append_null();
             continue;
         }

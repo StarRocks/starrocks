@@ -25,7 +25,7 @@ VARCHAR from_unixtime(BIGINT unix_timestamp[, VARCHAR string_format])
 
 ## Parameters
 
-- `unix_timestamp`: the UNIX timestamp you want to convert. It must be of the BIGINT type. If the specified timestamp is less than 0 or larger than(???), NULL will be returned. That is, the range for timestamp is `1970-01-01 00:00:00` to `9999-12-31 11:59:59`.
+- `unix_timestamp`: the UNIX timestamp you want to convert. It must be of the BIGINT type. If the specified timestamp is less than 0 or larger than 253402243199, NULL will be returned. That is, the range for timestamp is `1970-01-01 00:00:00` to `9999-12-30 11:59:59`(varies because of timezone).
 
 - `string_format`: the required time format.
 

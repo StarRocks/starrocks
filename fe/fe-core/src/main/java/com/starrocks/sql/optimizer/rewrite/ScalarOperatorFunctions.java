@@ -315,7 +315,7 @@ public class ScalarOperatorFunctions {
         LocalDateTime dt = arg.getDatetime();
         ZonedDateTime zdt = ZonedDateTime.of(dt, TimeUtils.getTimeZone().toZoneId());
         long value = zdt.toEpochSecond();
-        if (value < 0) {
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
             value = 0;
         }
         return ConstantOperator.createBigint(value);
@@ -323,10 +323,9 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR)
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
-        // if unixTime < 0, we should return null, throw a exception and let BE process
         long value = unixTime.getBigint();
-        if (value < 0) {
-            throw new AnalysisException("unixtime should larger than zero");
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            throw new AnalysisException("unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
                 LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
@@ -336,10 +335,9 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR)
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime, ConstantOperator fmtLiteral)
             throws AnalysisException {
-        // if unixTime < 0, we should return null, throw a exception and let BE process
-        long vaue = unixTime.getBigint();
-        if (value < 0) {
-            throw new AnalysisException("unixtime should larger than zero");
+        long value = unixTime.getBigint();
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            throw new AnalysisException("unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
                 LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
