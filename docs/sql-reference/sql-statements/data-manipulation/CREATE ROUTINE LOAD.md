@@ -6,7 +6,7 @@ Routine Load is an asynchronous loading method based on the MySQL protocol. It c
 
 > **NOTE**
 >
-> For information about the application scenarios, principles, and basic operations of Routine Load, see [Continuously load data from Apache Kafka®](../../loading/RoutineLoad.md).
+> For information about the application scenarios, principles, and basic operations of Routine Load, see [Continuously load data from Apache Kafka®](../../../loading/RoutineLoad.md).
 
 ## Syntax
 
@@ -44,7 +44,6 @@ Optional. The properties of the data. Syntax:
 [COLUMNS (<column1_name>[,<column2_name>,<column_assignment>,... ])],
 [WHERE <expr>],
 [PARTITION (<partition1_name>[,<partition2_name>...])]
-COLUMNS TERMINATED BY
 ```
 
 The column separator for CSV-formatted data. The default column separator is `\t` (Tab). For example,  you can use `COLUMNS TERMINATED BY ","` to specify the column separator as a comma.
@@ -61,7 +60,7 @@ The row separator for CSV-formatted data. The default row separator is `\n`.
 
 `COLUMNS`
 
-The mapping between the columns in the source data and the columns in the StarRocks table. For more information, see [Column mapping](./) in this topic.
+The mapping between the columns in the source data and the columns in the StarRocks table. For more information, see [Column mapping](#column-mapping) in this topic.
 
 - `column_name`: If a column of the source data can be mapped to a column of the StarRocks table without any computation, you only need to specify the column name. These columns can be referred to as mapped columns.
 - `column_assignment`: If a column of the source data cannot be directly mapped to a column of the StarRocks table, and the column's values must be computed by using functions before data loading, you must specify the computation function in `expr`. These columns can be referred to as derived columns.
@@ -91,17 +90,17 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 | **Property**              | **Required** | **Description**                                              |
 | ------------------------- | ------------ | ------------------------------------------------------------ |
-| desired_concurrent_number | No           | The expected task parallelism of a single Routine Load job. Default value: `3`. The actual task parallelism is determined by the minimum value of the following parameters:`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)``alive_be_number`: the number of alive BE nodes.`partition_number`: the number of partitions to be consumed.`desired_concurrent_number`: the expected task parallelism of a single Routine Load  job. Default value: `3`.`max_routine_load_task_concurrent_num`: the default maximum task parallelism of a Routine Load job, which is `5`. See [FE dynamic parameter](../).The maximum actual task parallelism is determined by either the number of alive BE nodes or the number of partitions to be consumed. |
+| desired_concurrent_number | No           | The expected task parallelism of a single Routine Load job. Default value: `3`. The actual task parallelism is determined by the minimum value of the following parameters:`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`. <ul><li>`alive_be_number`: the number of alive BE nodes.</li><li>`partition_number`: the number of partitions to be consumed.</li><li>`desired_concurrent_number`: the expected task parallelism of a single Routine Load  job. Default value: `3`.</li><li>`max_routine_load_task_concurrent_num`: the default maximum task parallelism of a Routine Load job, which is `5`. See [FE dynamic parameter](../../../administration/Configuration#configure-fe-dynamic-parameters).</li></ul>The maximum actual task parallelism is determined by either the number of alive BE nodes or the number of partitions to be consumed.|
 | max_batch_interval        | No           | The scheduling interval for a task, that is, how often a task is executed. Unit: seconds. Value range: `5` ~ `60`. Default value: `10`. It is recommended to set a value larger than `10`. If the scheduling is shorter than 10 seconds, too many tablet versions are generated due to an excessively high loading frequency. |
 | max_batch_rows            | No           | This property is only used to define the window of error detection. The window is the number of rows of data consumed by a single Routine Load task. The value is `10 * max_batch_rows`. The default value is `10 * 200000 = 200000`. The Routine Load task detects error data in the error detection window. Error data refers to data that StarRocks cannot parse, such as invalid JSON-formatted data. |
-| max_error_number          | No           | The maximum number of error data rows allowed within an error detection window. If the number of error data rows exceeds this value, the load job will pause. You can execute [SHOW ROUTINE LOAD](./)  and view the error logs by using `ErrorLogUrls`.  After that, you can correct the error in Kafka according to the error logs. The default value is `0`, which means error rows are not allowed.**NOTE** Error data rows do not include data rows that are filtered out by the WHERE clause. |
+| max_error_number          | No           | The maximum number of error data rows allowed within an error detection window. If the number of error data rows exceeds this value, the load job will pause. You can execute [SHOW ROUTINE LOAD](./SHOW%20ROUTINE%20LOAD.md)  and view the error logs by using `ErrorLogUrls`.  After that, you can correct the error in Kafka according to the error logs. The default value is `0`, which means error rows are not allowed.**NOTE** Error data rows do not include data rows that are filtered out by the WHERE clause. |
 | strict_mode               | No           | Specifies whether to enable the strict mode. Valid values: `true` and `false`. Default value: `false`. When the strict mode is enabled, if the value for a column in the loaded data is `NULL` but the target table does not allow a `NULL` value for this column, the data row will be filtered out. |
-| timezone                  | No           | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime(), alignment_timestamp(), and from_unixtime(). The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../administration/timezone.md). |
-| merge_condition           | No           | Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column. For more information, see [Change data through loading](../../loading/Load_to_Primary_Key_tables).**NOTE**Only tables that use the Primary Key model support conditional updates.The column that you specify cannot be a primary key column. |
+| timezone                  | No           | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime(), alignment_timestamp(), and from_unixtime(). The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../administration/timezone.md). |
+| merge_condition           | No           | Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column. For more information, see [Change data through loading](../../loading/Load_to_Primary_Key_tables).<br>**NOTE**<br>Only tables that use the Primary Key model support conditional updates.The column that you specify cannot be a primary key column. |
 | format                    | No           | The format of the data to be loaded. Valid values: `CSV` and `JSON`. Default value: `CSV`. |
-| strip_outer_array         | No           | Specifies whether to strip the outermost array structure of the JSON-formatted data. Valid values: `true` and `false`. Default value: `false`. In real-world business scenarios, JSON-formatted data may have an outermost array structure as indicated by a pair of square brackets `[]`. In this situation, we recommend that you set this parameter to `true`, so StarRocks removes the outermost square brackets `[]` and loads each inner array as a separate data record. If you set this parameter to `false`, StarRocks parses the entire JSON-formatted data into one array and loads the array as a single data record. Use the JSON-formatted data `[`` ``{"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]` as an example. If you set this parameter to `true`, `{"category" : 1, "author" : 2}` and `{"category" : 3, "author" : 4}` are parsed as two separate data records and are loaded into two StarRocks data rows. |
-| jsonpaths                 | No           | The names of the fields that you want to load from JSON-formatted data. The value of this parameter is a valid JsonPath expression. For more information, see [Configure column mapping for loading JSON-formatted data](#Configure column mapping for loading  JSON-formatted data) in this topic. |
-| json_root                 | No           | The root element of the JSON-formatted data to load. StarRocks extracts the elements of the root node through `json_root` for parsing.By default, the value of this parameter is empty, indicating that all JSON-formatted data will be loaded. For more information, see [Specify the root element of the JSON-formatted data to be loaded](#Specify the root element of the JSON data to be loaded) in this topic. |
+| strip_outer_array         | No           | Specifies whether to strip the outermost array structure of the JSON-formatted data. Valid values: `true` and `false`. Default value: `false`. In real-world business scenarios, JSON-formatted data may have an outermost array structure as indicated by a pair of square brackets `[]`. In this situation, we recommend that you set this parameter to `true`, so StarRocks removes the outermost square brackets `[]` and loads each inner array as a separate data record. If you set this parameter to `false`, StarRocks parses the entire JSON-formatted data into one array and loads the array as a single data record. Use the JSON-formatted data `[{"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]` as an example. If you set this parameter to `true`, `{"category" : 1, "author" : 2}` and `{"category" : 3, "author" : 4}` are parsed as two separate data records and are loaded into two StarRocks data rows. |
+| jsonpaths                 | No           | The names of the fields that you want to load from JSON-formatted data. The value of this parameter is a valid JsonPath expression. For more information, see [Configure column mapping for loading JSON-formatted data](#configure-column-mapping-for-loading-json-formatted-data) in this topic. |
+| json_root                 | No           | The root element of the JSON-formatted data to load. StarRocks extracts the elements of the root node through `json_root` for parsing.By default, the value of this parameter is empty, indicating that all JSON-formatted data will be loaded. For more information, see [Specify the root element of the JSON-formatted data to be loaded](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded) in this topic. |
 
 ### `data_source`, `data_source_properties`
 
@@ -125,14 +124,14 @@ The properties of the data source.
 | kafka_broker_list | Yes      | Kafka's broker connection information. The format is `<kafka_broker_ip>:<broker_ port>`. Multiple brokers are separated by commas (,). The default port used by Kafka brokers is `9092`. Example:`"kafka_broker_list" = ""xxx.xx.xxx.xx:9092,xxx.xx.xxx.xx:9092"`. |
 | kafka_topic       | Yes      | The  Kafka topic to be consumed. A Routine Load job can only consume messages from one topic. |
 | kafka_partitions  | No       | The Kafka partitions to be consumed. If this property is not specified, all partitions are consumed by default. |
-| kafka_offsets     | No       | The starting point from which to consume data in a Kafka partition as specified in `kafka_partitions`. If this property is not specified, the Routine Load job consumes data starting from the latest offsets for partitions in `kafka_partitions`. Valid values:A specific offset: consumes data starting from a specific offset.`OFFSET_BEGINNING`: consumes data starting from the earliest offset possible.`OFFSET_END`:  consumes data starting from the latest offset. |
+| kafka_offsets     | No       | The starting point from which to consume data in a Kafka partition as specified in `kafka_partitions`. If this property is not specified, the Routine Load job consumes data starting from the latest offsets for partitions in `kafka_partitions`. Valid values:<ul><li>A specific offset: consumes data starting from a specific offset.</li><li>`OFFSET_BEGINNING`: consumes data starting from the earliest offset possible.</li><li>`OFFSET_END`:  consumes data starting from the latest offset.</li></ul> |
 
 **More data source-related** **properties**
 
 - You can specify additional data source (Kafka) related properties, which are equivalent to using the Kafka command line `--property`. For more supported properties, see the properties for a Kafka consumer client in [librdkafka configuration properties](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md).
 
 > **NOTE**
-> If the value of a property is a file name, add the keyword `FILE:` preceding the file name. For information about how to create a file, see [CREATE FILE.](https://docs.starrocks.io/zh-cn/latest/sql-reference/sql-statements/Administration/CREATE FILE).
+> If the value of a property is a file name, add the keyword `FILE:` preceding the file name. For information about how to create a file, see [CREATE FILE](../Administration/CREATE%20FILE.md).
 
 - **Specify the default initial offset for all the partitions to be consumed**
 
@@ -180,7 +179,7 @@ If `property.group.id` is not specified, StarRocks generates a random value base
 
 ### FE and BE configuration items
 
-For FE and BE configuration items related to Routine Load, see [Parameter configuration](../../administration/Configuration.md).
+For FE and BE configuration items related to Routine Load, see [configuration items](../../../administration/Configuration.md).
 
 ## Column mapping
 
@@ -203,7 +202,7 @@ If the columns of the CSV-formatted data cannot be mapped one on one in sequence
   - The StarRocks table consists of three columns, which are `col1`, `col2`, and `col3` in sequence. The data file consists of four columns, among which the first three columns can be mapped in sequence to the StarRocks table columns `col1`, `col2`, and `col3` and the fourth column cannot be mapped to any of the StarRocks table columns. In this case, you need to temporarily specify a name for the fourth column of the data file, and the temporary name must be different from any of the StarRocks table column names. For example, you can specify `"columns: col1, col2, col3, temp"`, in which the fourth column of the data file is temporarily named `temp`.
   - The StarRocks table consists of three columns, which are `year`, `month`, and `day` in sequence. The data file consists of only one column that accommodates date and time values in `yyyy-mm-dd hh:mm:ss` format. In this case, you can specify `"columns: col, year = year(col), month=month(col), day=day(col)"`, in which `col` is the temporary name of the data file column and the functions `year = year(col)`, `month=month(col)`, and `day=day(col)` are used to extract data from the data file column `col` and loads the data into the mapping StarRocks table columns. For example, `year = year(col)` is used to extract the `yyyy` data from the data file column `col` and loads the data into the StarRocks table column `year`.
 
-For more examples, see [Configure column mapping](#Configure column mapping).
+For more examples, see [Configure column mapping](#configure-column-mapping).
 
 ### Configure column mapping for loading  JSON-formatted data
 
@@ -216,7 +215,7 @@ If the keys of the JSON-formatted data have different names than the columns of 
   - The column names specified in the `COLUMNS` parameter are mapped one on one in sequence to the JSON-formatted data.
   - The column names specified in the `COLUMNS` parameter are mapped one on one by name to the StarRocks table columns.
 
-For examples, see [matched mode](#Columns of the target table are derived columns).
+For examples, see [matched mode](#starrocks-table-column-names-different-from-json-key-names).
 
 ## Examples
 
@@ -276,7 +275,7 @@ To improve loading performance and avoid accumulative consumption, you can incre
 
 > **Note**
 >
-> For more ways to improve loading performance, see [Routine Load FAQ](../faq/loading/Routine_load_faq.md)
+> For more ways to improve loading performance, see [Routine Load FAQ](../../../faq/loading/Routine_load_faq.md).
 
 Note that the actual task parallelism is determined by the minimum value among the following multiple parameters:
 
