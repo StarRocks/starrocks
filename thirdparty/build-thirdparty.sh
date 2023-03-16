@@ -1086,6 +1086,7 @@ build_ragel
 build_hyperscan
 build_mariadb
 build_aliyun_jindosdk
+build_gcs_connector
 build_broker_thirdparty_jars
 build_aws_cpp_sdk
 build_vpack
