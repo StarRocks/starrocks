@@ -18,6 +18,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
 public class SimplifiedCaseWhenRule extends BottomUpScalarOperatorRewriteRule {
+    private SimplifiedCaseWhenRule() {
+    }
+
+    public static final SimplifiedCaseWhenRule INSTANCE = new SimplifiedCaseWhenRule();
+
     @Override
     public ScalarOperator apply(ScalarOperator root, ScalarOperatorRewriteContext context) {
         return InvertedCaseWhen.simplify(root);

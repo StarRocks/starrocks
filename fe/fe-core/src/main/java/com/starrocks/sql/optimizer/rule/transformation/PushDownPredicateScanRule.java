@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
+import com.starrocks.sql.optimizer.rewrite.scalar.PruneTediousPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedCaseWhenRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
@@ -80,8 +81,10 @@ public class PushDownPredicateScanRule extends TransformationRule {
         Preconditions.checkState(predicates != null);
 
         // simplify case-when
-        predicates = scalarOperatorRewriter.rewrite(predicates, Lists.newArrayList(new SimplifiedCaseWhenRule()));
-        predicates = Utils.pruneTediousPredicate(predicates);
+        predicates = scalarOperatorRewriter.rewrite(predicates, Lists.newArrayList(
+                SimplifiedCaseWhenRule.INSTANCE,
+                PruneTediousPredicateRule.INSTANCE
+        ));
         predicates = scalarOperatorRewriter.rewrite(predicates,
                 ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
         predicates = Utils.transTrue2Null(predicates);
