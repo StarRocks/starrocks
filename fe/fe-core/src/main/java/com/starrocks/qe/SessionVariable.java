@@ -755,7 +755,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "NO_COMPRESSION";
 
-    @VariableMgr.VarAttr(name = RPC_HTTP_MIN_SIZE)
+    // if a packet's size is larger than RPC_HTTP_MIN_SIZE, it will use RPC via http.
+    @VariableMgr.VarAttr(name = RPC_HTTP_MIN_SIZE, flag = VariableMgr.INVISIBLE)
     private long rpcHttpMinSize = ((1L << 31) - (1L << 20));
 
     @VariableMgr.VarAttr(name = TRANSMISSION_ENCODE_LEVEL)
