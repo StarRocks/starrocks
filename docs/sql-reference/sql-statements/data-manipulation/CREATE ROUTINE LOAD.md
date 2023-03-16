@@ -43,8 +43,10 @@ Optional. The properties of the data. Syntax:
 [ROWS TERMINATED BY '<row_separator>'],
 [COLUMNS (<column1_name>[,<column2_name>,<column_assignment>,... ])],
 [WHERE <expr>],
-[PARTITION (<partition1_name>[,<partition2_name>...])]
+[PARTITION (<partition1_name>[,<partition2_name>,...])]
 ```
+
+`COLUMNS TERMINATED BY`
 
 The column separator for CSV-formatted data. The default column separator is `\t` (Tab). For example,  you can use `COLUMNS TERMINATED BY ","` to specify the column separator as a comma.
 
@@ -68,7 +70,7 @@ The mapping between the columns in the source data and the columns in the StarRo
 
 `WHERE`
 
-The filter condition. Only data that meets the filter condition can be loaded into StarRocks. For example, if you only want to ingest rows whose `col1` value is greater than `100` and `col2` value is equal to `1000`, you can use `WHERE col1 > 100 and col2 = 1000;`.
+The filter condition. Only data that meets the filter condition can be loaded into StarRocks. For example, if you only want to ingest rows whose `col1` value is greater than `100` and `col2` value is equal to `1000`, you can use `WHERE col1 > 100 and col2 = 1000`.
 
 > **NOTE** The columns specified in the filter condition can be source columns or derived columns.
 
@@ -77,7 +79,7 @@ The filter condition. Only data that meets the filter condition can be loaded in
 If a StarRocks table is distributed on partitions p0, p1, p2 and p3, and you want to load the data only to p1, p2, and p3 in StarRocks and filter out the data that will be stored in p0, then you can specify `PARTITION(p1, p2, p3)` as a filter condition. By default, if you do not specify this parameter, the data will be loaded into all the partitions. Example:
 
 ```SQL
-PARTITION(p1, p2, p3)
+PARTITION (p1, p2, p3)
 ```
 
 ### `job_properties`
@@ -90,7 +92,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 | **Property**              | **Required** | **Description**                                              |
 | ------------------------- | ------------ | ------------------------------------------------------------ |
-| desired_concurrent_number | No           | The expected task parallelism of a single Routine Load job. Default value: `3`. The actual task parallelism is determined by the minimum value of the following parameters:`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`. <ul><li>`alive_be_number`: the number of alive BE nodes.</li><li>`partition_number`: the number of partitions to be consumed.</li><li>`desired_concurrent_number`: the expected task parallelism of a single Routine Load  job. Default value: `3`.</li><li>`max_routine_load_task_concurrent_num`: the default maximum task parallelism of a Routine Load job, which is `5`. See [FE dynamic parameter](../../../administration/Configuration.md#configure-fe-dynamic-parameters).</li></ul>The maximum actual task parallelism is determined by either the number of alive BE nodes or the number of partitions to be consumed.|
+| desired_concurrent_number | No           | The expected task parallelism of a single Routine Load job. Default value: `3`. The actual task parallelism is determined by the minimum value of the multiple parameters: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`. <ul><li>`alive_be_number`: the number of alive BE nodes.</li><li>`partition_number`: the number of partitions to be consumed.</li><li>`desired_concurrent_number`: the expected task parallelism of a single Routine Load  job. Default value: `3`.</li><li>`max_routine_load_task_concurrent_num`: the default maximum task parallelism of a Routine Load job, which is `5`. See [FE dynamic parameter](../../../administration/Configuration.md#configure-fe-dynamic-parameters).</li></ul>The maximum actual task parallelism is determined by either the number of alive BE nodes or the number of partitions to be consumed.|
 | max_batch_interval        | No           | The scheduling interval for a task, that is, how often a task is executed. Unit: seconds. Value range: `5` ~ `60`. Default value: `10`. It is recommended to set a value larger than `10`. If the scheduling is shorter than 10 seconds, too many tablet versions are generated due to an excessively high loading frequency. |
 | max_batch_rows            | No           | This property is only used to define the window of error detection. The window is the number of rows of data consumed by a single Routine Load task. The value is `10 * max_batch_rows`. The default value is `10 * 200000 = 200000`. The Routine Load task detects error data in the error detection window. Error data refers to data that StarRocks cannot parse, such as invalid JSON-formatted data. |
 | max_error_number          | No           | The maximum number of error data rows allowed within an error detection window. If the number of error data rows exceeds this value, the load job will pause. You can execute [SHOW ROUTINE LOAD](./SHOW%20ROUTINE%20LOAD.md)  and view the error logs by using `ErrorLogUrls`.  After that, you can correct the error in Kafka according to the error logs. The default value is `0`, which means error rows are not allowed.**NOTE** Error data rows do not include data rows that are filtered out by the WHERE clause. |
@@ -128,7 +130,7 @@ The properties of the data source.
 
 **More data source-related properties**
 
-- You can specify additional data source (Kafka) related properties, which are equivalent to using the Kafka command line `--property`. For more supported properties, see the properties for a Kafka consumer client in [librdkafka configuration properties](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md).
+You can specify additional data source (Kafka) related properties, which are equivalent to using the Kafka command line `--property`. For more supported properties, see the properties for a Kafka consumer client in [librdkafka configuration properties](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md).
 
 > **NOTE**
 >
