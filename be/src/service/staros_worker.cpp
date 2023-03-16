@@ -23,10 +23,14 @@
 #include "common/logging.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
+#include "gflags/gflags.h"
 #include "gutil/strings/fastmem.h"
 #include "util/debug_util.h"
 #include "util/lru_cache.h"
 #include "util/sha.h"
+
+// cachemgr thread pool size
+DECLARE_int32(cachemgr_threadpool_size);
 
 namespace starrocks {
 
@@ -289,6 +293,8 @@ void init_staros_worker() {
     if (g_starlet.get() != nullptr) {
         return;
     }
+    FLAGS_cachemgr_threadpool_size = config::starlet_cache_thread_num;
+
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;
     g_worker = std::make_shared<StarOSWorker>();
