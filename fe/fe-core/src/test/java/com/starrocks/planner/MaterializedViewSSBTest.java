@@ -17,7 +17,6 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
@@ -41,6 +40,9 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+
+        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         // create SSB tables
         // put lineorder last because it depends on other tables for foreign key constraints
