@@ -31,7 +31,7 @@ namespace starrocks {
 class ORCFileStream : public ORCHdfsFileStream {
 public:
     ORCFileStream(std::shared_ptr<RandomAccessFile> file, uint64_t length, starrocks::ScannerCounter* counter)
-            : ORCHdfsFileStream(file.get(), length), _file(std::move(file)), _counter(counter) {}
+            : ORCHdfsFileStream(file.get(), length, nullptr), _file(std::move(file)), _counter(counter) {}
 
     ~ORCFileStream() override { _file.reset(); }
 

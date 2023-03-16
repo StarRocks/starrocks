@@ -23,6 +23,7 @@
 #include "exprs/expr_context.h"
 #include "fs/fs_hdfs.h"
 #include "io/cache_input_stream.h"
+#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
@@ -96,6 +97,13 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* block_cache_write_timer = nullptr;
     RuntimeProfile::Counter* block_cache_write_fail_counter = nullptr;
     RuntimeProfile::Counter* block_cache_write_fail_bytes = nullptr;
+
+    RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
+    RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
+    RuntimeProfile::Counter* shared_buffered_shared_io_timer = nullptr;
+    RuntimeProfile::Counter* shared_buffered_direct_io_count = nullptr;
+    RuntimeProfile::Counter* shared_buffered_direct_io_bytes = nullptr;
+    RuntimeProfile::Counter* shared_buffered_direct_io_timer = nullptr;
 };
 
 struct HdfsScannerParams {
@@ -309,6 +317,7 @@ protected:
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
+    std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
 };
 
 } // namespace starrocks
