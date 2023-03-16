@@ -145,10 +145,10 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
                     multilane_op != nullptr) {
                     multilane_op->set_lane_arbiter(lane_arbiter);
                     multilane_operators.push_back(multilane_op);
-                } else if (auto* olap_scan_op = dynamic_cast<OlapScanOperator*>(op.get()); olap_scan_op != nullptr) {
-                    olap_scan_op->set_lane_arbiter(lane_arbiter);
-                    olap_scan_op->set_cache_operator(cache_op);
-                    cache_op->set_scan_operator(olap_scan_op);
+                } else if (auto* scan_op = dynamic_cast<ScanOperator*>(op.get()); scan_op != nullptr) {
+                    scan_op->set_lane_arbiter(lane_arbiter);
+                    scan_op->set_cache_operator(cache_op);
+                    cache_op->set_scan_operator(scan_op);
                 }
             }
             cache_op->set_multilane_operators(std::move(multilane_operators));
