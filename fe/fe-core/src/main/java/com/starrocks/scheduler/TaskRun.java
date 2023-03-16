@@ -16,6 +16,9 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.load.loadv2.InsertLoadJob;
@@ -107,6 +110,34 @@ public class TaskRun implements Comparable<TaskRun> {
         return this.type;
     }
 
+    public Map<String, String>  refreshTaskProperties(ConnectContext ctx) {
+        Map<String, String> newProperties = Maps.newHashMap();
+        if (task.getSource() != Constants.TaskSource.MV) {
+            return newProperties;
+        }
+
+        try {
+            // NOTE: mvId is set in Task's properties when creating
+            long mvId = Long.parseLong(properties.get(PartitionBasedMaterializedViewRefreshProcessor.MV_ID));
+            Database database = GlobalStateMgr.getCurrentState().getDb(ctx.getDatabase());
+            if (database == null) {
+                LOG.warn("database {} do not exist when refreshing materialized view:{}", ctx.getDatabase(), mvId);
+                return newProperties;
+            }
+
+            Table table = database.getTable(mvId);
+            if (table == null) {
+                LOG.warn("materialized view:{} in database:{} do not exist when refreshing", mvId,
+                        ctx.getDatabase());
+            }
+            MaterializedView materializedView = (MaterializedView) table;
+            newProperties = materializedView.getTableProperty().getProperties();
+        } catch (Exception e) {
+            LOG.warn("refresh task properties failed:", e);
+        }
+        return newProperties;
+    }
+
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
         taskRunContext.setDefinition(status.getDefinition());
@@ -118,6 +149,9 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.setCurrentRoleIds(runCtx.getCurrentUserIdentity());
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
+
+        Map<String, String> newProperties = refreshTaskProperties(runCtx);
+        properties.putAll(newProperties);
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
         runCtx.resetSessionVariable();
         if (properties != null) {

@@ -59,6 +59,9 @@ public class TaskBuilder {
         Map<String, String> taskProperties = Maps.newHashMap();
         taskProperties.put(PartitionBasedMaterializedViewRefreshProcessor.MV_ID, String.valueOf(materializedView.getId()));
         taskProperties.put(SessionVariable.ENABLE_INSERT_STRICT, "false");
+        // TODO: filter session properties into task.
+        taskProperties.putAll(materializedView.getTableProperty().getProperties());
+
         task.setProperties(taskProperties);
         task.setDefinition(
                 "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
