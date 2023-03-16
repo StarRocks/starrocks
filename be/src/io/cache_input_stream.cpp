@@ -26,9 +26,13 @@
 
 namespace starrocks::io {
 
-CacheInputStream::CacheInputStream(const std::string& filename, std::shared_ptr<SeekableInputStream> stream)
-        : _filename(filename), _stream(std::move(stream)), _offset(0) {
-    _size = _stream->get_size().value();
+CacheInputStream::CacheInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename,
+                                   size_t size)
+        : SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
+          _filename(filename),
+          _stream(stream),
+          _offset(0),
+          _size(size) {
 #ifdef WITH_BLOCK_CACHE
     // _cache_key = _filename;
     // use hash(filename) as cache key.
@@ -43,9 +47,9 @@ CacheInputStream::CacheInputStream(const std::string& filename, std::shared_ptr<
 }
 
 #ifdef WITH_BLOCK_CACHE
-StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
+Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
     BlockCache* cache = BlockCache::instance();
-    count = std::min(_size - _offset, count);
+    count = std::min(_size - offset, count);
     const int64_t BLOCK_SIZE = cache->block_size();
     char* p = static_cast<char*>(out);
     char* pe = p + count;
@@ -56,12 +60,11 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
         DCHECK(size <= BLOCK_SIZE);
         {
             SCOPED_RAW_TIMER(&_stats.read_cache_ns);
-            res = cache->read_cache(_cache_key, _offset, size, p);
+            res = cache->read_cache(_cache_key, offset, size, p);
             if (res.ok()) {
                 _stats.read_cache_count += 1;
                 _stats.read_cache_bytes += size;
                 p += size;
-                _offset += size;
                 return Status::OK();
             }
         }
@@ -104,37 +107,41 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
             strings::memcpy_inlined(p, src + shift, size);
         }
         p += size;
-        _offset += size;
         return Status::OK();
     };
 
-    int64_t end_offset = _offset + count;
-    int64_t start_block_id = _offset / BLOCK_SIZE;
+    int64_t end_offset = offset + count;
+    int64_t start_block_id = offset / BLOCK_SIZE;
     int64_t end_block_id = (end_offset - 1) / BLOCK_SIZE;
-    // VLOG_FILE << "[XXX] CacheInputStream read _offset = " << _offset << ", count = " << count;
     for (int64_t i = start_block_id; i <= end_block_id; i++) {
-        size_t off = std::max(_offset, i * BLOCK_SIZE);
+        size_t off = std::max(offset, i * BLOCK_SIZE);
         size_t end = std::min((i + 1) * BLOCK_SIZE, end_offset);
         size_t size = end - off;
-        // VLOG_FILE << "[XXX] Cache inputStream read_one_block. off = " << off << ", size = " << size;
         Status st = read_one_block(off, size);
         if (!st.ok()) return st;
+        offset += size;
     }
     DCHECK(p == pe);
-    return count;
+    return Status::OK();
 }
 #else
-StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
-    int64_t load_size = std::min(count, _size - _offset);
-    RETURN_IF_ERROR(_stream->read_at_fully(_offset, out, load_size));
-    _offset += load_size;
-    return load_size;
+Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
+    int64_t load_size = std::min(count, _size - offset);
+    RETURN_IF_ERROR(_stream->read_at_fully(offset, out, load_size));
+    return Status::OK();
 }
 #endif
 
+StatusOr<int64_t> CacheInputStream::read(void* data, int64_t count) {
+    RETURN_IF_ERROR(read_at_fully(_offset, data, count));
+    _offset += count;
+    return count;
+}
+
 Status CacheInputStream::seek(int64_t offset) {
-    if (offset < 0) return Status::InvalidArgument(fmt::format("Invalid offset {}", offset));
+    if (offset < 0 || offset >= _size) return Status::InvalidArgument(fmt::format("Invalid offset {}", offset));
     _offset = offset;
+    _stream->seek(offset);
     return Status::OK();
 }
 
@@ -143,6 +150,69 @@ StatusOr<int64_t> CacheInputStream::position() {
 }
 
 StatusOr<int64_t> CacheInputStream::get_size() {
-    return _stream->get_size();
+    return _size;
 }
+
+int64_t CacheInputStream::get_align_size() const {
+#ifdef WITH_BLOCK_CACHE
+    BlockCache* cache = BlockCache::instance();
+    return cache->block_size();
+#else
+    return 0;
+#endif
+}
+
+StatusOr<std::string_view> CacheInputStream::peek(int64_t count) {
+    // if app level uses zero copy read, it does bypass the cache layer.
+    // so here we have to fill cache manually.
+    ASSIGN_OR_RETURN(auto s, _stream->peek(count));
+    if (_enable_populate_cache) {
+        _populate_cache_from_zero_copy_buffer(s.data(), _offset, count);
+    }
+    _offset += count;
+    return s;
+}
+
+#ifdef WITH_BLOCK_CACHE
+void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count) {
+    BlockCache* cache = BlockCache::instance();
+    const int64_t BLOCK_SIZE = cache->block_size();
+    int64_t begin = offset / BLOCK_SIZE * BLOCK_SIZE;
+    int64_t end = std::min((offset + count + BLOCK_SIZE - 1) / BLOCK_SIZE * BLOCK_SIZE, _size);
+    p -= (offset - begin);
+    auto f = [&](const char* buf, size_t offset, size_t size) {
+        StatusOr<size_t> res;
+        // to support nullptr read.
+        res = cache->read_cache(_cache_key, offset, size, nullptr);
+        if (res.ok()) {
+            return;
+        }
+        {
+            SCOPED_RAW_TIMER(&_stats.write_cache_ns);
+            Status r = cache->write_cache(_cache_key, offset, size, buf);
+            if (r.ok()) {
+                _stats.write_cache_count += 1;
+                _stats.write_cache_bytes += size;
+            } else {
+                _stats.write_cache_fail_count += 1;
+                _stats.write_cache_fail_bytes += size;
+                LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
+            }
+        }
+    };
+
+    while (begin < end) {
+        size_t size = std::min(BLOCK_SIZE, end - begin);
+        f(p, begin, size);
+        begin += size;
+        p += size;
+    }
+    return;
+}
+#else
+void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t size) {
+    return;
+}
+#endif
+
 } // namespace starrocks::io

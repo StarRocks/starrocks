@@ -26,7 +26,6 @@
 #include "formats/orc/orc_mapping.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
-#include "util/buffered_stream.h"
 
 namespace starrocks {
 

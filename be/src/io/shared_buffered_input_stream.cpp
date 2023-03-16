@@ -12,18 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/buffered_stream.h"
+#include "io/shared_buffered_input_stream.h"
 
-#include "common/config.h"
-#include "fs/fs.h"
 #include "gutil/strings/fastmem.h"
-#include "util/bit_util.h"
+#include "util/runtime_profile.h"
+namespace starrocks::io {
 
-namespace starrocks {
-
-// ===================================================================================
-
-SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream) : _stream(stream) {}
+SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream,
+                                                     const std::string& filename, size_t size)
+        : _stream(stream), _size(size) {}
 
 Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges) {
     if (ranges.size() == 0) {
@@ -39,9 +36,29 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
         }
         return a.size < b.size;
     });
+    if (_align_size != 0) {
+        const int64_t sz = _align_size;
+        // do alignment and compaction
+        for (int i = 0; i < check.size(); i++) {
+            int64_t start = check[i].offset / sz * sz;
+            int64_t end = std::min((check[i].offset + check[i].size + sz - 1) / sz * sz, _size);
+            check[i].offset = start;
+            check[i].size = end - start;
+        }
+        int j = 0;
+        for (int i = 1; i < check.size(); i++) {
+            if (check[i].offset <= (check[j].offset + check[j].size)) {
+                check[j].size = (check[i].offset + check[i].size - check[j].offset);
+            } else {
+                j++;
+                check[j] = check[i];
+            }
+        }
+        check.resize(j + 1);
+    }
 
     // check io range is not overlapped.
-    for (size_t i = 1; i < ranges.size(); i++) {
+    for (size_t i = 1; i < check.size(); i++) {
         if (check[i].offset < (check[i - 1].offset + check[i - 1].size)) {
             return Status::RuntimeError("io ranges are overalpped");
         }
@@ -87,17 +104,26 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
     return Status::OK();
 }
 
-Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) {
+StatusOr<SharedBufferedInputStream::SharedBuffer*> SharedBufferedInputStream::_find_shared_buffer(size_t offset,
+                                                                                                  size_t count) {
     auto iter = _map.upper_bound(offset);
     if (iter == _map.end()) {
         return Status::RuntimeError("failed to find shared buffer based on offset");
     }
     SharedBuffer& sb = iter->second;
-    if ((sb.offset > offset) || (sb.offset + sb.size) < (offset + *nbytes)) {
+    if ((sb.offset > offset) || (sb.offset + sb.size) < (offset + count)) {
         return Status::RuntimeError("bad construction of shared buffer");
     }
+    return &sb;
+}
 
+Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) {
+    ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(offset, *nbytes));
+    SharedBuffer& sb = *ret;
     if (sb.buffer.capacity() == 0) {
+        SCOPED_RAW_TIMER(&_shared_io_timer);
+        _shared_io_count += 1;
+        _shared_io_bytes += sb.size;
         sb.buffer.reserve(sb.size);
         RETURN_IF_ERROR(_stream->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
     }
@@ -111,11 +137,22 @@ void SharedBufferedInputStream::release() {
 }
 
 void SharedBufferedInputStream::release_to_offset(int64_t offset) {
+    if (_align_size != 0) {
+        offset = (offset + _align_size - 1) / _align_size * _align_size;
+    }
     auto it = _map.upper_bound(offset);
     _map.erase(_map.begin(), it);
 }
 
 Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
+    if (_map.size() == 0) {
+        SCOPED_RAW_TIMER(&_direct_io_timer);
+        _direct_io_count += 1;
+        _direct_io_bytes += count;
+        RETURN_IF_ERROR(_stream->read_at_fully(offset, out, count));
+        return Status::OK();
+    }
+
     const uint8_t* buffer = nullptr;
     size_t nbytes = count;
     RETURN_IF_ERROR(get_bytes(&buffer, offset, &nbytes));
@@ -124,7 +161,24 @@ Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64
 }
 
 StatusOr<int64_t> SharedBufferedInputStream::get_size() {
-    return _stream->get_size();
+    return _size;
 }
 
-} // namespace starrocks
+StatusOr<int64_t> SharedBufferedInputStream::read(void* data, int64_t count) {
+    auto n = _stream->read_at(_offset, data, count);
+    RETURN_IF_ERROR(n);
+    _offset += n.value();
+    return n;
+}
+
+StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
+    ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(_offset, count));
+    if (ret->buffer.capacity() == 0) return Status::NotSupported("peek shared buffer empty");
+    const uint8_t* buf = nullptr;
+    size_t nbytes = count;
+    RETURN_IF_ERROR(get_bytes(&buf, _offset, &nbytes));
+    _offset += count;
+    return std::string_view((const char*)buf, count);
+}
+
+} // namespace starrocks::io

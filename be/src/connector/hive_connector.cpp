@@ -269,6 +269,21 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 
+    {
+        static const char* prefix = "SharedBuffered";
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        _profile.shared_buffered_shared_io_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, prefix);
+        _profile.shared_buffered_shared_io_count =
+                ADD_CHILD_COUNTER(_runtime_profile, "SharedIOCount", TUnit::UNIT, prefix);
+        _profile.shared_buffered_shared_io_timer = ADD_CHILD_TIMER(_runtime_profile, "SharedIOTime", prefix);
+        _profile.shared_buffered_direct_io_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DirectIOBytes", TUnit::BYTES, prefix);
+        _profile.shared_buffered_direct_io_count =
+                ADD_CHILD_COUNTER(_runtime_profile, "DirectIOCount", TUnit::UNIT, prefix);
+        _profile.shared_buffered_direct_io_timer = ADD_CHILD_TIMER(_runtime_profile, "DirectIOTime", prefix);
+    }
+
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
         ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
