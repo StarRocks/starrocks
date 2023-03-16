@@ -39,4 +39,16 @@ public class PrivilegeBuiltinConstants {
 
     public static final Set<Long> IMMUTABLE_BUILT_IN_ROLE_IDS = new HashSet<>(Arrays.asList(
             ROOT_ROLE_ID, DB_ADMIN_ROLE_ID, CLUSTER_ADMIN_ROLE_ID, USER_ADMIN_ROLE_ID));
+
+    public static final long ALL_CATALOGS_ID = -1;
+
+    public static final String ALL_DATABASES_UUID = "ALL_DATABASES_UUID"; // represent all databases
+    public static final long ALL_DATABASE_ID = -2; // -2 represent all databases
+
+    public static final String ALL_TABLES_UUID = "ALL_TABLES_UUID"; // represent all tables
+
+    public static final long ALL_FUNCTIONS_ID = -3; // -3 represent all functions
+    public static final long GLOBAL_FUNCTION_DEFAULT_DATABASE_ID = -4;
+
+    public static final long ALL_RESOURCE_GROUP_ID = -1; // -1 represent all
 }

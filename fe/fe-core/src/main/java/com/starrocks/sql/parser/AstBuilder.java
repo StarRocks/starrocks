@@ -701,7 +701,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         // For materialized views currently columnDefs == null
         if (columnDefs != null && "hour".equalsIgnoreCase(fmt)) {
             ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionColumnName);
-            if (partitionDef == null)  {
+            if (partitionDef == null) {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
             }
             if (partitionDef.getType() != Type.DATETIME) {
@@ -4486,18 +4486,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String objectTypeUnResolved = ((Identifier) visit(context.privObjectTypePlural())).getValue().toUpperCase();
 
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        ArrayList<String> tokenList;
         if (context.isAll != null) {
-            objects.setAllPrivilegeObject(true, null);
+            tokenList = Lists.newArrayList("*", "*");
         } else if (context.IN() != null) {
             String dbName = ((Identifier) visit(context.identifierOrString())).getValue();
-            objects.setAllPrivilegeObject(false, dbName);
+            tokenList = Lists.newArrayList(dbName, "*");
         } else {
-            objects.setAllPrivilegeObject(false, null);
+            tokenList = Lists.newArrayList("*");
         }
+        objects.setPrivilegeObjectNameTokensList(Collections.singletonList(tokenList));
 
-        return new GrantPrivilegeStmt(privilegeList, objectTypeUnResolved,
+        GrantPrivilegeStmt grantPrivilegeStmt = new GrantPrivilegeStmt(privilegeList, objectTypeUnResolved,
                 (GrantRevokeClause) visit(context.grantRevokeClause()),
                 objects, context.WITH() != null, createPos(context));
+        grantPrivilegeStmt.setGrantOnAll();
+        return grantPrivilegeStmt;
     }
 
     @Override
@@ -4507,17 +4511,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String objectTypeUnResolved = ((Identifier) visit(context.privObjectTypePlural())).getValue().toUpperCase();
 
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        ArrayList<String> tokenList;
         if (context.isAll != null) {
-            objects.setAllPrivilegeObject(true, null);
+            tokenList = Lists.newArrayList("*", "*");
         } else if (context.IN() != null) {
             String dbName = ((Identifier) visit(context.identifierOrString())).getValue();
-            objects.setAllPrivilegeObject(false, dbName);
+            tokenList = Lists.newArrayList(dbName, "*");
         } else {
-            objects.setAllPrivilegeObject(false, null);
+            tokenList = Lists.newArrayList("*");
         }
+        objects.setPrivilegeObjectNameTokensList(Collections.singletonList(tokenList));
 
-        return new RevokePrivilegeStmt(privilegeList, objectTypeUnResolved,
+        RevokePrivilegeStmt revokePrivilegeStmt = new RevokePrivilegeStmt(privilegeList, objectTypeUnResolved,
                 (GrantRevokeClause) visit(context.grantRevokeClause()), objects, createPos(context));
+        revokePrivilegeStmt.setGrantOnAll();
+        return revokePrivilegeStmt;
     }
 
     @Override
