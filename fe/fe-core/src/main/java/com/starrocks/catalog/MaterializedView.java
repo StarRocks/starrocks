@@ -710,7 +710,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Preconditions.checkNotNull(sb);
 
         // replicationNum
-        Short replicationNum = this.getDefaultReplicationNum();
+        short replicationNum = this.getDefaultReplicationNum();
         sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
         sb.append(replicationNum).append("\"");
 
@@ -835,7 +835,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         Map<String, String> propsMap = new HashMap<>();
         // replicationNum
-        Short replicationNum = this.getDefaultReplicationNum();
+        short replicationNum = this.getDefaultReplicationNum();
         propsMap.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(replicationNum));
 
         // storageMedium

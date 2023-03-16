@@ -2292,7 +2292,7 @@ public class GlobalStateMgr {
             sb.append("\nPROPERTIES (\n");
 
             // replicationNum
-            Short replicationNum = olapTable.getDefaultReplicationNum();
+            short replicationNum = olapTable.getDefaultReplicationNum();
             sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
             sb.append(replicationNum).append("\"");
 

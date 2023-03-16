@@ -654,7 +654,7 @@ public class MaterializedViewAnalyzer {
             for (Table table : tableNameTableMap.values()) {
                 if (table instanceof OlapTable) {
                     OlapTable olapTable = (OlapTable) table;
-                    Short replicationNum = olapTable.getDefaultReplicationNum();
+                    short replicationNum = olapTable.getDefaultReplicationNum();
                     if (replicationNum > defaultReplicationNum) {
                         defaultReplicationNum = replicationNum;
                     }

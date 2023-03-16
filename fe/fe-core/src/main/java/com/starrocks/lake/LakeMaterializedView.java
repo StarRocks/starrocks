@@ -145,7 +145,7 @@ public class LakeMaterializedView extends MaterializedView {
     }
 
     @Override
-    public Short getDefaultReplicationNum() {
+    public short getDefaultReplicationNum() {
         return 1;
     }
 

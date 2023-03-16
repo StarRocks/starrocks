@@ -76,7 +76,6 @@ import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -346,6 +345,9 @@ public class OlapTable extends Table {
     }
 
     public TableProperty getTableProperty() {
+        if (this.tableProperty == null) {
+            this.tableProperty = new TableProperty(Maps.newHashMap());
+        }
         return this.tableProperty;
     }
 
@@ -1797,41 +1799,25 @@ public class OlapTable extends Table {
     }
 
     public void setReplicationNum(Short replicationNum) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, replicationNum.toString());
-        tableProperty.buildReplicationNum();
+        getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, replicationNum.toString());
+        getTableProperty().buildReplicationNum();
     }
 
-    public Short getDefaultReplicationNum() {
-        if (tableProperty != null) {
-            return tableProperty.getReplicationNum();
-        }
-        return RunMode.defaultReplicationNum();
+    public short getDefaultReplicationNum() {
+        return getTableProperty().getReplicationNum();
     }
 
-    public Boolean isInMemory() {
-        if (tableProperty != null) {
-            return tableProperty.isInMemory();
-        }
-        return false;
+    public boolean isInMemory() {
+        return getTableProperty().isInMemory();
     }
 
     public void setIsInMemory(boolean isInMemory) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty
-                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_INMEMORY, Boolean.valueOf(isInMemory).toString());
-        tableProperty.buildInMemory();
+        getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_INMEMORY, Boolean.valueOf(isInMemory).toString());
+        getTableProperty().buildInMemory();
     }
 
-    public Boolean enablePersistentIndex() {
-        if (tableProperty != null) {
-            return tableProperty.enablePersistentIndex();
-        }
-        return false;
+    public boolean enablePersistentIndex() {
+        return getTableProperty().enablePersistentIndex();
     }
 
     // Determine which situation supports importing and automatically creating partitions
@@ -1839,82 +1825,57 @@ public class OlapTable extends Table {
         return partitionInfo.getType() == PartitionType.EXPR_RANGE;
     }
 
-    public Boolean isBinlogEnabled() {
-        if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
+    public boolean isBinlogEnabled() {
+        if (getTableProperty().getBinlogConfig() == null) {
             return false;
         }
-        return tableProperty.getBinlogConfig().getBinlogEnable();
+        return getTableProperty().getBinlogConfig().getBinlogEnable();
     }
 
     public long getBinlogVersion() {
-        if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
+        if (getTableProperty().getBinlogConfig() == null) {
             return BinlogConfig.INVALID;
         }
-        return tableProperty.getBinlogConfig().getVersion();
+        return getTableProperty().getBinlogConfig().getVersion();
     }
 
     public void setEnablePersistentIndex(boolean enablePersistentIndex) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty
-                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
-                        Boolean.valueOf(enablePersistentIndex).toString());
-        tableProperty.buildEnablePersistentIndex();
+        getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
+                Boolean.valueOf(enablePersistentIndex).toString());
+        getTableProperty().buildEnablePersistentIndex();
     }
 
-    public Boolean enableReplicatedStorage() {
-        if (tableProperty != null) {
-            return tableProperty.enableReplicatedStorage();
-        }
-        return false;
+    public boolean enableReplicatedStorage() {
+        return getTableProperty().enableReplicatedStorage();
     }
 
     public void setEnableReplicatedStorage(boolean enableReplicatedStorage) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty
-                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
-                        Boolean.valueOf(enableReplicatedStorage).toString());
-        tableProperty.buildReplicatedStorage();
+        getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                Boolean.valueOf(enableReplicatedStorage).toString());
+        getTableProperty().buildReplicatedStorage();
     }
 
     public TWriteQuorumType writeQuorum() {
-        if (tableProperty != null) {
-            return tableProperty.writeQuorum();
-        }
-        return TWriteQuorumType.MAJORITY;
+        return getTableProperty().writeQuorum();
     }
 
     public void setWriteQuorum(String writeQuorum) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty
-                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM,
+        getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM,
                         writeQuorum);
-        tableProperty.buildWriteQuorum();
+        getTableProperty().buildWriteQuorum();
     }
 
     public void setStorageMedium(TStorageMedium storageMedium) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty
-                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium.name());
+        getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium.name());
     }
 
     public String getStorageMedium() {
-        return tableProperty.getProperties().
+        return getTableProperty().getProperties().
                 getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, TStorageMedium.HDD.name());
     }
 
     public boolean hasDelete() {
-        if (tableProperty == null) {
-            return false;
-        }
-        return tableProperty.hasDelete();
+        return getTableProperty().hasDelete();
     }
 
     public void setHasDelete() {
@@ -1925,10 +1886,7 @@ public class OlapTable extends Table {
     }
 
     public boolean hasForbitGlobalDict() {
-        if (tableProperty == null) {
-            return false;
-        }
-        return tableProperty.hasForbitGlobalDict();
+        return getTableProperty().hasForbitGlobalDict();
     }
 
     public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
@@ -2097,56 +2055,31 @@ public class OlapTable extends Table {
     }
 
     public void setStorageFormat(TStorageFormat storageFormat) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT, storageFormat.name());
-        tableProperty.buildStorageFormat();
+        getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT, storageFormat.name());
+        getTableProperty().buildStorageFormat();
     }
 
     public TStorageFormat getStorageFormat() {
-        if (tableProperty == null) {
-            return TStorageFormat.DEFAULT;
-        }
-        return tableProperty.getStorageFormat();
+        return getTableProperty().getStorageFormat();
     }
 
     public void setStorageVolume(String storageVolume) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, storageVolume);
-        tableProperty.buildStorageVolume();
-    }
-
-    public String getStorageVolume() {
-        if (tableProperty == null) {
-            return RunMode.allowCreateLakeTable() ? "default" : "local";
-        }
-        return tableProperty.getStorageVolume();
+        getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, storageVolume);
+        getTableProperty().buildStorageVolume();
     }
 
     public void setCompressionType(TCompressionType compressionType) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_COMPRESSION, compressionType.name());
-        tableProperty.buildCompressionType();
+        getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_COMPRESSION, compressionType.name());
+        getTableProperty().buildCompressionType();
     }
 
     public TCompressionType getCompressionType() {
-        if (tableProperty == null) {
-            return TCompressionType.LZ4_FRAME;
-        }
-        return tableProperty.getCompressionType();
+        return getTableProperty().getCompressionType();
     }
 
     public void setPartitionLiveNumber(int number) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, String.valueOf(number));
-        tableProperty.buildPartitionLiveNumber();
+        getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, String.valueOf(number));
+        getTableProperty().buildPartitionLiveNumber();
     }
 
     public Map<String, String> buildBinlogAvailableVersion() {
@@ -2160,25 +2093,16 @@ public class OlapTable extends Table {
     }
 
     public void setBinlogAvailableVersion(Map<String, String> properties) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty.modifyTableProperties(properties);
-        tableProperty.buildBinlogAvailableVersion();
+        getTableProperty().modifyTableProperties(properties);
+        getTableProperty().buildBinlogAvailableVersion();
     }
 
     public Map<Long, Long> getBinlogAvailableVersion() {
-        if (tableProperty == null) {
-            return new HashMap<>();
-        }
-        return tableProperty.getBinlogAvailaberVersions();
+        return getTableProperty().getBinlogAvailaberVersions();
     }
 
     public void clearBinlogAvailableVersion() {
-        if (tableProperty == null) {
-            return;
-        }
-        tableProperty.clearBinlogAvailableVersion();
+        getTableProperty().clearBinlogAvailableVersion();
     }
 
     public boolean hasUniqueConstraints() {
@@ -2187,40 +2111,28 @@ public class OlapTable extends Table {
     }
 
     public List<UniqueConstraint> getUniqueConstraints() {
-        if (tableProperty == null) {
-            return null;
-        }
-        return tableProperty.getUniqueConstraints();
+        return getTableProperty().getUniqueConstraints();
     }
 
     public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         Map<String, String> properties = Maps.newHashMap();
         String newProperty = uniqueConstraints.stream().map(UniqueConstraint::toString).collect(Collectors.joining(";"));
         properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, newProperty);
-        tableProperty.modifyTableProperties(properties);
-        tableProperty.setUniqueConstraints(uniqueConstraints);
+        getTableProperty().modifyTableProperties(properties);
+        getTableProperty().setUniqueConstraints(uniqueConstraints);
     }
 
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
-        if (tableProperty == null) {
-            return null;
-        }
-        return tableProperty.getForeignKeyConstraints();
+        return getTableProperty().getForeignKeyConstraints();
     }
 
     public void setForeignKeyConstraint(List<ForeignKeyConstraint> foreignKeyConstraints) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         Map<String, String> properties = Maps.newHashMap();
         String newProperty = foreignKeyConstraints
                 .stream().map(ForeignKeyConstraint::toString).collect(Collectors.joining(";"));
         properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, newProperty);
-        tableProperty.modifyTableProperties(properties);
-        tableProperty.setForeignKeyConstraints(foreignKeyConstraints);
+        getTableProperty().modifyTableProperties(properties);
+        getTableProperty().setForeignKeyConstraints(foreignKeyConstraints);
     }
 
     @Override
@@ -2350,8 +2262,8 @@ public class OlapTable extends Table {
     public Map<String, String> getProperties() {
         Map<String, String> properties = Maps.newHashMap();
 
-        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());
-        properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, isInMemory().toString());
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(getDefaultReplicationNum()));
+        properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, String.valueOf(isInMemory()));
 
         Map<String, String> tableProperty = getTableProperty().getProperties();
         if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {

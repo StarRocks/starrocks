@@ -610,10 +610,10 @@ public class AlterTest {
         alterTableWithNewParser(stmt, false);
 
         // set table's default replication num
-        Assert.assertEquals(Short.valueOf("1"), tbl.getDefaultReplicationNum());
+        Assert.assertEquals(1, tbl.getDefaultReplicationNum());
         stmt = "alter table test.tbl1 set ('default.replication_num' = '3');";
         alterTableWithNewParser(stmt, false);
-        Assert.assertEquals(Short.valueOf("3"), tbl.getDefaultReplicationNum());
+        Assert.assertEquals(3, tbl.getDefaultReplicationNum());
 
         // set range table's real replication num
         Partition p1 = tbl.getPartition("p1");
@@ -632,17 +632,17 @@ public class AlterTest {
         alterTableWithNewParser(stmt, false);
         Assert.assertEquals(Short.valueOf("3"),
                 Short.valueOf(tbl2.getPartitionInfo().getReplicationNum(partition.getId())));
-        Assert.assertEquals(Short.valueOf("3"), tbl2.getDefaultReplicationNum());
+        Assert.assertEquals(3, tbl2.getDefaultReplicationNum());
         stmt = "alter table test.tbl2 set ('default.replication_num' = '2');";
         alterTableWithNewParser(stmt, false);
         Assert.assertEquals(Short.valueOf("2"),
                 Short.valueOf(tbl2.getPartitionInfo().getReplicationNum(partition.getId())));
-        Assert.assertEquals(Short.valueOf("2"), tbl2.getDefaultReplicationNum());
+        Assert.assertEquals(2, tbl2.getDefaultReplicationNum());
         stmt = "alter table test.tbl2 modify partition tbl2 set ('replication_num' = '1');";
         alterTableWithNewParser(stmt, false);
         Assert.assertEquals(Short.valueOf("1"),
                 Short.valueOf(tbl2.getPartitionInfo().getReplicationNum(partition.getId())));
-        Assert.assertEquals(Short.valueOf("1"), tbl2.getDefaultReplicationNum());
+        Assert.assertEquals(1, tbl2.getDefaultReplicationNum());
 
         Thread.sleep(5000); // sleep to wait dynamic partition scheduler run
         // add partition without set replication num

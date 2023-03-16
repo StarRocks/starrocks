@@ -91,7 +91,7 @@ public class MaterializedViewTest {
         Assert.assertEquals(null, mv2.getDefaultDistributionInfo());
         Assert.assertEquals(null, mv2.getPartitionInfo());
         mv2.setReplicationNum((short) 3);
-        Assert.assertEquals(3, mv2.getDefaultReplicationNum().shortValue());
+        Assert.assertEquals(3, mv2.getDefaultReplicationNum());
         mv2.setStorageMedium(TStorageMedium.SSD);
         Assert.assertEquals("SSD", mv2.getStorageMedium());
         Assert.assertEquals(true, mv2.isActive());
