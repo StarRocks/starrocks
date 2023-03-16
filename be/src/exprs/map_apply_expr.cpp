@@ -31,15 +31,24 @@
 #include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 
-
 namespace starrocks {
 
-MapApplyExpr::MapApplyExpr(const TExprNode& node) : Expr(node, false) {
-    _maybe_duplicated_keys = down_cast<MapExpr*>(_children[0])->maybe_duplicated_keys();
-}
+MapApplyExpr::MapApplyExpr(const TExprNode& node) : Expr(node, false) {}
 
 // for tests
 MapApplyExpr::MapApplyExpr(TypeDescriptor type) : Expr(std::move(type), false), _maybe_duplicated_keys(true) {}
+
+Status MapApplyExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
+    RETURN_IF_ERROR(Expr::prepare(state, context));
+    if (_children.size() < 2) {
+        return Status::InternalError("map expression's children size should not less than 2.");
+    }
+    auto lambda_func = down_cast<LambdaFunction*>(_children[0]);
+    auto map_expr = down_cast<MapExpr*>(lambda_func->get_lambda_expr());
+    _maybe_duplicated_keys = map_expr->maybe_duplicated_keys();
+    lambda_func->get_lambda_arguments_ids(&_arguments_ids);
+    return Status::OK();
+}
 
 StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> input_columns;
@@ -92,12 +101,10 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
     } else {
         auto cur_chunk = std::make_shared<Chunk>();
         // put all arguments into the new chunk
-        std::vector<SlotId> arguments_ids;
-        auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
-        int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
+        int argument_num = _arguments_ids.size();
         DCHECK(argument_num == input_columns.size());
         for (int i = 0; i < argument_num; ++i) {
-            cur_chunk->append_column(input_columns[i], arguments_ids[i]); // column ref
+            cur_chunk->append_column(input_columns[i], _arguments_ids[i]); // column ref
         }
         // put captured columns into the new chunk aligning with the first map's offsets
         std::vector<SlotId> slot_ids;
