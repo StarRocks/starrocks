@@ -15,9 +15,9 @@
 
 package com.starrocks.connector.hive.events;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.connector.hive.HivePartitionName;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;

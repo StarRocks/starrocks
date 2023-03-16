@@ -16,8 +16,8 @@
 package com.starrocks.lake.backup;
 
 import autovalue.shaded.com.google.common.common.collect.Maps;
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.backup.BackupJobInfo;

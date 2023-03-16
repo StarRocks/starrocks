@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
