@@ -602,7 +602,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY (`l_shipdate`)\n" +
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                "REFRESH MANUAL\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
@@ -645,7 +645,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY (`par_date`)\n" +
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
-                "REFRESH MANUAL\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
@@ -693,7 +693,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY (`l_shipdate`)\n" +
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                "REFRESH MANUAL\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
@@ -741,7 +741,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_tbl_mv1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "DISTRIBUTED BY HASH(`n_nationkey`) BUCKETS 10\n" +
-                "REFRESH MANUAL\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
@@ -785,7 +785,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY (`l_shipdate`)\n" +
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                "REFRESH MANUAL\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
@@ -832,7 +832,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_tbl_mv2`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                "REFRESH MANUAL\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
@@ -875,7 +875,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY (`l_shipdate`)\n" +
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                "REFRESH MANUAL\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
@@ -924,7 +924,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY (`l_shipdate`)\n" +
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                "REFRESH MANUAL\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
@@ -969,16 +969,17 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
     }
 
     public void testPartitionRefreshWithLowerCase() throws Exception {
-        starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv1`\n" +
-                "COMMENT \"MATERIALIZED_VIEW\"\n" +
-                "PARTITION BY (`par_col`)\n" +
-                "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
-                "REFRESH MANUAL\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"storage_medium\" = \"HDD\"\n" +
-                ")\n" +
-                "AS SELECT c1, c2, par_col FROM `hive0`.`partitioned_db2`.`t2`;");
+        starRocksAssert.useDatabase("test").withMaterializedView(
+                "CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv1`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`par_col`)\n" +
+                        "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT c1, c2, par_col FROM `hive0`.`partitioned_db2`.`t2`;");
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_parttbl_mv1"));
 
