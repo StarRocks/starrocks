@@ -536,11 +536,6 @@ size_t MapColumn::get_map_size(size_t idx) const {
     return _offsets->get_data()[idx + 1] - _offsets->get_data()[idx];
 }
 
-std::pair<size_t, size_t> MapColumn::get_map_offset_size(size_t idx) const {
-    DCHECK_LT(idx + 1, _offsets->size());
-    return {_offsets->get_data()[idx], _offsets->get_data()[idx + 1] - _offsets->get_data()[idx]};
-}
-
 bool MapColumn::set_null(size_t idx) {
     return false;
 }
