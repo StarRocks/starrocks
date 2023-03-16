@@ -14,7 +14,7 @@
 
 package com.starrocks.analysis;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.PrimitiveType;

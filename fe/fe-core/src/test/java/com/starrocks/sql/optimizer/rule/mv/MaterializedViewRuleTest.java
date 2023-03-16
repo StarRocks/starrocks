@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.mv;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;

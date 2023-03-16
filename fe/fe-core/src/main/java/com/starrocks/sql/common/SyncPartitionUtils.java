@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.common;
 
-import com.clearspring.analytics.util.Lists;
-import com.clearspring.analytics.util.Preconditions;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
