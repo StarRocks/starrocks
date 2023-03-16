@@ -65,10 +65,10 @@ public:
     ~TabletColumn();
 
     TabletColumn(const TabletColumn& rhs);
-    TabletColumn(TabletColumn&& rhs);
+    TabletColumn(TabletColumn&& rhs) noexcept;
 
     TabletColumn& operator=(const TabletColumn& rhs);
-    TabletColumn& operator=(TabletColumn&& rhs);
+    TabletColumn& operator=(TabletColumn&& rhs) noexcept;
 
     void swap(TabletColumn* rhs);
 
@@ -78,7 +78,7 @@ public:
     ColumnUID unique_id() const { return _unique_id; }
     void set_unique_id(ColumnUID unique_id) { _unique_id = unique_id; }
 
-    std::string_view name() const { return std::string_view(_col_name.data(), _col_name.size()); }
+    std::string_view name() const { return {_col_name.data(), _col_name.size()}; }
     void set_name(std::string_view name) { _col_name.assign(name.data(), name.size()); }
 
     FieldType type() const { return _type; }
@@ -218,16 +218,14 @@ public:
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
     constexpr static SchemaId invalid_id() { return 0; }
 
-    TabletSchema() = default;
-    explicit TabletSchema(const TabletSchemaPB& schema_pb) { init_from_pb(schema_pb); }
+    explicit TabletSchema(const TabletSchemaPB& schema_pb) { _init_from_pb(schema_pb); }
     // Does NOT take ownership of |schema_map| and |schema_map| must outlive TabletSchema.
     TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
-        init_from_pb(schema_pb);
+        _init_from_pb(schema_pb);
     }
 
     ~TabletSchema();
 
-    void init_from_pb(const TabletSchemaPB& schema);
     void to_schema_pb(TabletSchemaPB* tablet_meta_pb) const;
 
     // Caller should always check the returned value with `invalid_id()`.
@@ -249,7 +247,7 @@ public:
 
     // The in-memory property is no longer supported, but leave this API for compatibility.
     // Newly-added code should not rely on this method, it may be removed at any time.
-    bool is_in_memory() const { return false; }
+    static bool is_in_memory() { return false; }
 
     bool contains_format_v1_column() const;
     bool contains_format_v2_column() const;
@@ -275,6 +273,8 @@ private:
 
     friend bool operator==(const TabletSchema& a, const TabletSchema& b);
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);
+
+    void _init_from_pb(const TabletSchemaPB& schema);
 
     SchemaId _id = invalid_id();
     TabletSchemaMap* _schema_map = nullptr;

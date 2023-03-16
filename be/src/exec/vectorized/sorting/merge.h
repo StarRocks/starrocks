@@ -4,6 +4,7 @@
 
 #include "column/chunk.h"
 #include "column/datum.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 
@@ -116,6 +117,9 @@ public:
 private:
     ChunkProvider& as_provider() { return _chunk_provider; }
     StatusOr<ChunkUniquePtr> merge_sorted_cursor_two_way();
+    // merge two runs
+    StatusOr<ChunkUniquePtr> merge_sorted_intersected_cursor(SortedRun& run1, SortedRun& run2);
+
     bool move_cursor();
 
     SortDescs _sort_desc;
@@ -124,6 +128,11 @@ private:
     std::unique_ptr<SimpleChunkSortCursor> _left_cursor;
     std::unique_ptr<SimpleChunkSortCursor> _right_cursor;
     ChunkProvider _chunk_provider;
+
+#ifndef NDEBUG
+    bool _left_is_empty = false;
+    bool _right_is_empty = false;
+#endif
 };
 
 // Merge multiple cursors in cascade way

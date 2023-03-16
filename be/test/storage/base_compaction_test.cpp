@@ -75,8 +75,7 @@ public:
         column_3->set_is_bf_column(false);
         column_3->set_aggregation("SUM");
 
-        _tablet_schema.reset(new TabletSchema);
-        _tablet_schema->init_from_pb(tablet_schema_pb);
+        _tablet_schema = std::make_unique<TabletSchema>(tablet_schema_pb);
     }
 
     void create_tablet_meta(TabletMeta* tablet_meta) {
