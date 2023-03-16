@@ -18,8 +18,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 
-namespace starrocks {
-namespace spill {
+namespace starrocks::spill {
 
 // Block represents a continuous storage space and is the smallest storage unit of flush and restore in spill task.
 // Block only supports append writing and sequential reading, and neither writing nor reading of Block is guaranteed to be thread-safe.
@@ -62,5 +61,4 @@ public:
     // return Block to BlockManager
     virtual Status release_block(const BlockPtr& block) = 0;
 };
-} // namespace spill
-} // namespace starrocks
+} // namespace starrocks::spill

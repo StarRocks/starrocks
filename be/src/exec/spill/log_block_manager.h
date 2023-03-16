@@ -49,11 +49,11 @@ public:
     LogBlockManager(TUniqueId query_id);
     ~LogBlockManager();
 
-    virtual Status open() override;
-    virtual void close() override;
+    Status open() override;
+    void close() override;
 
-    virtual StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) override;
-    virtual Status release_block(const BlockPtr& block) override;
+    StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) override;
+    Status release_block(const BlockPtr& block) override;
 
 #ifdef BE_TEST
     void set_dir_manager(DirManager* dir_mgr) { _dir_mgr = dir_mgr; }

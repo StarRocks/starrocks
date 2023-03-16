@@ -21,14 +21,13 @@
 #include "common/statusor.h"
 #include "fs/fs.h"
 
-namespace starrocks {
-namespace spill {
+namespace starrocks::spill {
 
 // Dir describes a specific directory, including the directory name and the corresponding FileSystem
 // @TODO(silverbullet233): maintain some stats, such as the capacity
 class Dir {
 public:
-    Dir(const std::string& dir, std::shared_ptr<FileSystem> fs) : _dir(dir), _fs(fs) {}
+    Dir(std::string dir, std::shared_ptr<FileSystem> fs) : _dir(std::move(dir)), _fs(fs) {}
 
     FileSystem* fs() const { return _fs.get(); }
     std::string dir() const { return _dir; }
@@ -60,5 +59,4 @@ private:
     std::vector<DirPtr> _dirs;
 };
 
-} // namespace spill
-} // namespace starrocks
+} // namespace starrocks::spill

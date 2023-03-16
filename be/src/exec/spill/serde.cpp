@@ -19,14 +19,13 @@
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
 
-namespace starrocks {
-namespace spill {
+namespace starrocks::spill {
 
 class ColumnarSerde : public Serde {
 public:
     ColumnarSerde(ChunkBuilder chunk_builder, const BlockCompressionCodec* compress_codec)
             : _chunk_builder(std::move(chunk_builder)), _compress_codec(compress_codec) {}
-    ~ColumnarSerde() = default;
+    ~ColumnarSerde() override = default;
 
     Status serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) override;
     StatusOr<ChunkUniquePtr> deserialize(SerdeContext& ctx, const BlockPtr block) override;
@@ -121,5 +120,4 @@ StatusOr<SerdePtr> create_serde(SpilledOptions* options) {
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &codec));
     return std::make_shared<ColumnarSerde>(options->chunk_builder, codec);
 }
-} // namespace spill
-} // namespace starrocks
+} // namespace starrocks::spill

@@ -18,8 +18,7 @@
 #include "util/blocking_queue.hpp"
 #include "util/defer_op.h"
 
-namespace starrocks {
-namespace spill {
+namespace starrocks::spill {
 
 static const int chunk_buffer_max_size = 2;
 
@@ -46,7 +45,12 @@ private:
         bool expected = false;
         return _is_prefetching.compare_exchange_strong(expected, true);
     }
-    void _release() { _is_prefetching = false; }
+    void _release() {
+        bool expected = true;
+        bool result = _is_prefetching.compare_exchange_strong(expected, false);
+        // _release is only invoked when _acquire successes, here add a DCHECK to check it.
+        DCHECK(result);
+    }
 
 private:
     int _capacity;
@@ -238,5 +242,4 @@ StatusOr<InputStreamPtr> BlockGroup::as_ordered_stream(RuntimeState* state, cons
     return stream;
 }
 
-} // namespace spill
-} // namespace starrocks
+} // namespace starrocks::spill

@@ -20,8 +20,7 @@
 #include "exec/spill/block_manager.h"
 #include "util/raw_container.h"
 
-namespace starrocks {
-namespace spill {
+namespace starrocks::spill {
 class SpilledOptions;
 
 enum class SerdeType {
@@ -46,5 +45,4 @@ public:
 using SerdePtr = std::shared_ptr<Serde>;
 
 StatusOr<SerdePtr> create_serde(SpilledOptions* options);
-} // namespace spill
-} // namespace starrocks
+} // namespace starrocks::spill

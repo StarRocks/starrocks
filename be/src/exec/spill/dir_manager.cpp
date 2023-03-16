@@ -17,8 +17,7 @@
 #include "common/config.h"
 #include "storage/options.h"
 
-namespace starrocks {
-namespace spill {
+namespace starrocks::spill {
 
 Status DirManager::init() {
     std::vector<starrocks::StorePath> storage_paths;
@@ -47,5 +46,4 @@ StatusOr<Dir*> DirManager::acquire_writable_dir(const AcquireDirOptions& opts) {
     return _dirs[idx].get();
 }
 
-} // namespace spill
-} // namespace starrocks
+} // namespace starrocks::spill
