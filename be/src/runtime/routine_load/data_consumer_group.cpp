@@ -240,12 +240,12 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 Status st = Status::OK();
                 if (ctx->format == TFileFormatType::FORMAT_AVRO) {
                     // We must ensure the msg len > 0.
-                    if (msg->len() > 0) {                    
+                    if (msg->len() > 0) {
                         avro_value_t avro;
                         DeferOp op([&] { avro_value_decref(&avro); });
                         serdes_schema_t* schema;
                         serdes_err_t err = serdes_deserialize_avro(serdes, &avro, &schema, msg->payload(), msg->len(),
-                                                                errstr, sizeof(errstr));
+                                                                   errstr, sizeof(errstr));
                         if (err) {
                             LOG(ERROR) << "serdes deserialize avro failed: " << errstr;
                             return Status::InternalError("serdes deserialize avro failed");
