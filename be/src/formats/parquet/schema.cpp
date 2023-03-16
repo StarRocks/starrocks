@@ -125,9 +125,6 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
     //     }
     //   }
     auto& level1_schema = t_schemas[pos];
-    if (level1_schema.repetition_type == tparquet::FieldRepetitionType::REPEATED) {
-        return Status::InvalidArgument("LIST-annotated group must be not repeated");
-    }
     if (level1_schema.num_children != 1) {
         return Status::InvalidArgument("LIST-annotated group must have only one child");
     }
@@ -170,8 +167,11 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
             //         }
             //     }
             // }
+            // The above case is also applied to "LIST".
             if (is_map(level2_schema)) {
                 RETURN_IF_ERROR(map_to_field(t_schemas, pos + 1, cur_level_info, element, next_pos));
+            } else if (is_list(level2_schema)) {
+                RETURN_IF_ERROR(list_to_field(t_schemas, pos + 1, cur_level_info, element, next_pos));
             } else {
                 RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos + 1, cur_level_info, element, next_pos));
             }
