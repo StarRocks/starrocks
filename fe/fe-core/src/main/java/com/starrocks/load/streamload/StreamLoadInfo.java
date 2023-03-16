@@ -321,7 +321,7 @@ public class StreamLoadInfo {
             escape = request.getEscape();
         }
         if (request.isSetTrimSpace()) {
-            trimSpace = request.isSetTrimSpace();
+            trimSpace = request.isTrimSpace();
         }
         if (request.isSetPartitions()) {
             String[] partNames = PART_NAME_SPLIT.split(request.getPartitions().trim());
