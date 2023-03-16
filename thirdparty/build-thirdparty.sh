@@ -861,6 +861,12 @@ build_aliyun_jindosdk() {
     cp -r $TP_SOURCE_DIR/$JINDOSDK_SOURCE/lib/*.jar $TP_INSTALL_DIR/jindosdk
 }
 
+build_gcs_connector() {
+    check_if_source_exist $GCS_CONNECTOR_SOURCE
+    mkdir -p $TP_INSTALL_DIR/gcs_connector
+    cp -r $TP_SOURCE_DIR/$GCS_CONNECTOR_SOURCE/*.jar $TP_INSTALL_DIR/gcs_connector
+}
+
 build_broker_thirdparty_jars() {
     check_if_source_exist $BROKER_THIRDPARTY_JARS_SOURCE
     mkdir -p $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
@@ -1080,6 +1086,7 @@ build_ragel
 build_hyperscan
 build_mariadb
 build_aliyun_jindosdk
+build_gcs_connector
 build_broker_thirdparty_jars
 build_aws_cpp_sdk
 build_vpack
