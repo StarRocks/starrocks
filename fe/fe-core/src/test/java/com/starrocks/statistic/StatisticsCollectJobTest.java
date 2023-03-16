@@ -246,7 +246,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("tunique_stats", fullStatisticsCollectJob.getTable().getName());
-        Assert.assertEquals("[pk, v1, v2]", fullStatisticsCollectJob.getColumns().toString());
+        Assert.assertEquals("[pk]", fullStatisticsCollectJob.getColumns().toString());
     }
 
     @Test
