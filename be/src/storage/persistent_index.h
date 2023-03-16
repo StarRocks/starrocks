@@ -594,7 +594,7 @@ private:
     // merge l0 and l1 into new l1, then clear l0
     Status _merge_compaction();
 
-    Status _load(const PersistentIndexMetaPB& index_meta);
+    Status _load(const PersistentIndexMetaPB& index_meta, bool reload = false);
     Status _reload(const PersistentIndexMetaPB& index_meta);
 
     // commit index meta

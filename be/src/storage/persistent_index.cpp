@@ -346,6 +346,14 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
 StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(size_t key_size, size_t npage,
                                                                                size_t nbucket,
                                                                                const std::vector<KVRef>& kv_refs) {
+    if (!kv_refs.empty()) {
+        // This scenario should not happen in theory, since the usage and size stats by key size is not exactly
+        // accurate, so we add this code as a defense
+        if (npage == 0) {
+            LOG(ERROR) << "find a empty shard with kvs, key size: " << key_size << ", kv_num: " << kv_refs.size();
+            npage = 1;
+        }
+    }
     const size_t total_bucket = npage * nbucket;
     std::vector<uint8_t> bucket_sizes(total_bucket);
     std::vector<std::pair<uint32_t, std::vector<uint16_t>>> bucket_data_size(total_bucket);
@@ -354,14 +362,6 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
     for (auto& [kv_ptrs, tags] : bucket_kv_ptrs_tags) {
         kv_ptrs.reserve(estimated_entry_per_bucket);
         tags.reserve(estimated_entry_per_bucket);
-    }
-    if (!kv_refs.empty()) {
-        // This scenario should not happen in theory, since the usage and size stats by key size is not exactly
-        // accurate, so we add this code as a defense
-        if (npage == 0) {
-            LOG(ERROR) << "find a empty shard with kvs, key size: " << key_size << ", kv_num: " << kv_refs.size();
-            npage = 1;
-        }
     }
     for (const auto& kv_ref : kv_refs) {
         auto h = IndexHash(kv_ref.hash);
@@ -2340,7 +2340,7 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     return Status::OK();
 }
 
-Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
+Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool reload) {
     size_t key_size = index_meta.key_size();
     _size = index_meta.size();
     if (_size != 0 && index_meta.usage() == 0) {
@@ -2382,6 +2382,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     RETURN_IF_ERROR(_l0->load(l0_meta));
     _l1_vec.clear();
     _l1_merged_num.clear();
+    _has_l1 = false;
     std::unique_ptr<RandomAccessFile> l1_rfile;
     if (index_meta.has_l1_version()) {
         _l1_version = index_meta.l1_version();
@@ -2395,38 +2396,42 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
         _l1_merged_num.emplace_back(-1);
         _has_l1 = true;
     }
-    for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
-        size_t total_size = 0;
-        size_t total_usage = 0;
-        auto [l0_shard_offset, l0_shard_size] = shard_info;
-        const auto l0_kv_pairs_size = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
-                                                      std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
-                                                      0UL, [](size_t s, const auto& e) { return s + e->size(); });
-        const auto l0_kv_pairs_usage = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
-                                                       std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
-                                                       0UL, [](size_t s, const auto& e) { return s + e->usage(); });
-        total_size += l0_kv_pairs_size;
-        total_usage += l0_kv_pairs_usage;
-        if (_has_l1) {
-            auto iter = _l1_vec[0]->_shard_info_by_length.find(key_size);
-            if (iter != _l1_vec[0]->_shard_info_by_length.end()) {
-                auto [l1_shard_offset, l1_shard_size] = iter->second;
-                const auto l1_kv_pairs_size =
-                        std::accumulate(std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset),
-                                        std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset + l1_shard_size), 0UL,
-                                        [](size_t s, const auto& e) { return s + e.size; });
-                const auto l1_kv_pairs_usage =
-                        std::accumulate(std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset),
-                                        std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset + l1_shard_size), 0UL,
-                                        [](size_t s, const auto& e) { return s + e.data_size; });
-                total_size += l1_kv_pairs_size;
-                total_usage += l1_kv_pairs_usage;
+    // if reload, don't update _usage_and_size_by_key_size 
+    if (!reload) {
+        _usage_and_size_by_key_size.clear();
+        for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
+            size_t total_size = 0;
+            size_t total_usage = 0;
+            auto [l0_shard_offset, l0_shard_size] = shard_info;
+            const auto l0_kv_pairs_size = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
+                                                          std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
+                                                          0UL, [](size_t s, const auto& e) { return s + e->size(); });
+            const auto l0_kv_pairs_usage = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
+                                                           std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
+                                                           0UL, [](size_t s, const auto& e) { return s + e->usage(); });
+            total_size += l0_kv_pairs_size;
+            total_usage += l0_kv_pairs_usage;
+            if (_has_l1) {
+                auto iter = _l1_vec[0]->_shard_info_by_length.find(key_size);
+                if (iter != _l1_vec[0]->_shard_info_by_length.end()) {
+                    auto [l1_shard_offset, l1_shard_size] = iter->second;
+                    const auto l1_kv_pairs_size =
+                            std::accumulate(std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset),
+                                            std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset + l1_shard_size), 0UL,
+                                            [](size_t s, const auto& e) { return s + e.size; });
+                    const auto l1_kv_pairs_usage =
+                            std::accumulate(std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset),
+                                            std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset + l1_shard_size), 0UL,
+                                            [](size_t s, const auto& e) { return s + e.data_size; });
+                    total_size += l1_kv_pairs_size;
+                    total_usage += l1_kv_pairs_usage;
+                }
             }
-        }
-        if (auto [it, inserted] = _usage_and_size_by_key_size.insert({key_size, {total_usage, total_size}});
-            !inserted) {
-            LOG(WARNING) << "insert usage and size by key size failed, key_size: " << key_size;
-            return Status::InternalError("insert usage and size by key size falied");
+            if (auto [it, inserted] = _usage_and_size_by_key_size.insert({key_size, {total_usage, total_size}});
+                !inserted) {
+                LOG(WARNING) << "insert usage and size by key size failed, key_size: " << key_size;
+                return Status::InternalError("insert usage and size by key size falied");
+            }
         }
     }
 
@@ -2853,7 +2858,7 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
         auto iter = _usage_and_size_by_key_size.find(_key_size);
         DCHECK(iter != _usage_and_size_by_key_size.end());
         if (iter == _usage_and_size_by_key_size.end()) {
-            std::string msg = strings::Substitute("no key_size: $0 usage info", _key_size);
+            std::string msg = strings::Substitute("no key_size: $0 in usage info", _key_size);
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         } else {
@@ -2865,7 +2870,7 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
             if (add_usage_and_size[key_size].second > 0) {
                 auto iter = _usage_and_size_by_key_size.find(key_size);
                 if (iter == _usage_and_size_by_key_size.end()) {
-                    std::string msg = strings::Substitute("no key_size: $0 usage info", key_size);
+                    std::string msg = strings::Substitute("no key_size: $0 in usage info", key_size);
                     LOG(WARNING) << msg;
                     return Status::InternalError(msg);
                 } else {
@@ -2884,7 +2889,7 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
         DCHECK(_key_size == 0);
         auto iter = _usage_and_size_by_key_size.find(_key_size);
         if (iter == _usage_and_size_by_key_size.end()) {
-            std::string msg = strings::Substitute("no key_size: $0 usage info", _key_size);
+            std::string msg = strings::Substitute("no key_size: $0 in usage info", _key_size);
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
@@ -3039,7 +3044,7 @@ Status PersistentIndex::_reload(const PersistentIndexMetaPB& index_meta) {
         return l0_st.status();
     }
     _l0 = std::move(l0_st).value();
-    Status st = _load(index_meta);
+    Status st = _load(index_meta, true);
     if (!st.ok()) {
         LOG(WARNING) << "reload persistent index failed, status: " << st.to_string();
     }
@@ -3529,14 +3534,6 @@ Status PersistentIndex::_merge_compaction_advance() {
     int merge_l1_end_idx = _l1_vec.size();
     LOG(INFO) << "merge compaction advance, start_idx: " << merge_l1_start_idx << " end_idx: " << merge_l1_end_idx;
     bool keep_delete = (merge_l1_start_idx != 0);
-    /*
-    size_t total_usage = _l0->memory_usage();
-    size_t total_size = _l0->size();
-    for (int i = merge_l1_start_idx; i < merge_l1_end_idx; i++) {
-        total_usage += _l1_vec[i]->total_usage();
-        total_size += _l1_vec[i]->total_size();
-    }
-    */
 
     std::map<uint32_t, std::pair<int64_t, int64_t>> usage_and_size_stat;
     for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
