@@ -144,8 +144,8 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 }
 
 void GroupReader::close() {
-    if (_param.shared_buffered_stream) {
-        _param.shared_buffered_stream->release_to_offset(_end_offset);
+    if (_param.sb_stream) {
+        _param.sb_stream->release_to_offset(_end_offset);
     }
     _column_readers.clear();
 }
@@ -157,7 +157,6 @@ Status GroupReader::_init_column_readers() {
     opts.case_sensitive = _param.case_sensitive;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
-    opts.sb_stream = _param.shared_buffered_stream;
     opts.file = _param.file;
     opts.row_group_meta = _row_group_metadata.get();
     opts.context = _obj_pool.add(new ColumnReaderContext);
@@ -237,7 +236,7 @@ ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices)
     return chunk;
 }
 
-void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
+void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
     int64_t end = 0;
     for (const auto& column : _param.read_cols) {
         auto schema_node = _param.file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
@@ -247,7 +246,7 @@ void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORan
 }
 
 void GroupReader::_collect_field_io_range(const ParquetField& field,
-                                          std::vector<SharedBufferedInputStream::IORange>* ranges,
+                                          std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                           int64_t* end_offset) {
     // 1. We collect column io ranges for each row group to make up the shared buffer, so we get column
     // metadata (such as page offset and compressed_size) from _row_group_meta directly rather than file_metadata.
@@ -274,7 +273,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field,
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = SharedBufferedInputStream::IORange{.offset = offset, .size = size};
+        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size};
         ranges->emplace_back(r);
         *end_offset = std::max(*end_offset, offset + size);
     }

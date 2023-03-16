@@ -21,7 +21,7 @@
 
 namespace starrocks::io {
 
-class CacheInputStream final : public SeekableInputStream {
+class CacheInputStream final : public SeekableInputStreamWrapper {
 public:
     struct Stats {
         int64_t read_cache_ns = 0;
@@ -34,12 +34,13 @@ public:
         int64_t write_cache_fail_bytes = 0;
     };
 
-    static constexpr int64_t BLOCK_SIZE = 1 * 1024 * 1024;
-    explicit CacheInputStream(const std::string& filename, std::shared_ptr<SeekableInputStream> stream);
+    explicit CacheInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename, size_t size);
 
     ~CacheInputStream() override = default;
 
     StatusOr<int64_t> read(void* data, int64_t count) override;
+
+    Status read_at_fully(int64_t offset, void* data, int64_t count) override;
 
     Status seek(int64_t offset) override;
 
@@ -51,7 +52,13 @@ public:
 
     void set_enable_populate_cache(bool v) { _enable_populate_cache = v; }
 
+    int64_t get_align_size() const;
+
+    StatusOr<std::string_view> peek(int64_t count) override;
+
 private:
+    void _populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count);
+
     std::string _cache_key;
     std::string _filename;
     std::shared_ptr<SeekableInputStream> _stream;
