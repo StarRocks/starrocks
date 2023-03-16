@@ -298,7 +298,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
-    auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _scanner_params.scan_ranges[0]->file_length);
+    auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
+                                                            _shared_buffered_input_stream.get());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
     try {
@@ -352,7 +353,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     _orc_reader->set_row_reader_filter(_orc_row_reader_filter);
     _orc_reader->set_read_chunk_size(runtime_state->chunk_size());
     _orc_reader->set_runtime_state(runtime_state);
-    _orc_reader->set_current_file_name(_scanner_params.scan_ranges[0]->relative_path);
+    _orc_reader->set_current_file_name(_file->filename());
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx.timezone));
     if (_use_orc_sargs) {
         std::vector<Expr*> conjuncts;
