@@ -267,8 +267,8 @@ FROM KAFKA
 (
     "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
     "kafka_topic" = "ordertest1",
-    "kafka_partitions" ="0,1,2,3,4", --partitions to be consumed
-    "kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000" --corresponding initial offsets
+    "kafka_partitions" ="0,1,2,3,4", -- partitions to be consumed
+    "kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000" -- corresponding initial offsets
 );
 ```
 
@@ -418,7 +418,7 @@ PROPERTIES
 -- The location of the Kafka client's private key.
 "property.ssl.key.location" = "FILE:client.key",
 -- The password to the Kafka client's private key.
-"property.ssl.key.password" = "abcdefg",
+"property.ssl.key.password" = "abcdefg"
 )
 FROM KAFKA
 (
