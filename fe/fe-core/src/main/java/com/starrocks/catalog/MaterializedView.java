@@ -914,6 +914,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Expr partitionExpr = getPartitionRefTableExprs().get(0);
         Pair<Table, Column> partitionInfo = getPartitionTableAndColumn();
         // if non-partition-by table has changed, should refresh all mv partitions
+        if (partitionInfo == null) {
+            // mark it inactive
+            setActive(false);
+            LOG.warn("mark mv:{} inactive for get partition info failed", name);
+            throw new RuntimeException(String.format("getting partition info failed for mv: %s", name));
+        }
         Table partitionTable = partitionInfo.first;
         boolean forceExternalTableQueryRewrite = isForceExternalTableQueryRewrite();
         for (BaseTableInfo tableInfo : baseTableInfos) {
@@ -1009,7 +1015,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 return Pair.create(table, table.getColumn(partitionSlotRef.getColumnName()));
             }
         }
-        return null;
+        String baseTableNames = baseTableInfos.stream()
+                .map(tableInfo -> tableInfo.getTable().getName()).collect(Collectors.joining(","));
+        throw new RuntimeException(
+                String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
     }
 
     public ExecPlan getMaintenancePlan() {
