@@ -354,11 +354,15 @@ PROPERTIES (
 
 #### 创建表时为列添加 bloom filter 索引
 
-如果 Engine 类型为 olap, 可以指定某列使用 bloom filter 索引。bloom filter 索引仅适用于查询条件为 `in` 和 `equal` 的情况，该列的值越分散效果越好。
+如果 Engine 类型为 olap, 可以指定某列使用 bloom filter 索引。bloom filter 索引使用时有如下限制：
 
-目前只支持符合以下条件的列: 除了 `TINYINT，FLOAT，DOUBLE` 类型以外的 **key 列** 及聚合方法为 `REPLACE` 的 **value 列**。
+* 主键模型和明细模型中所有列都可以创建 Bloom filter 索引；聚合模型和更新模型中，只有维度列（即 Key 列）支持创建 Bloom filter 索引。
+* 不支持为 TINYINT、FLOAT、DOUBLE 和 DECIMAL 类型的列创建 Bloom filter 索引。
+* Bloom filter 索引只能提高查询条件为 `in` 和 `=` 的查询效率，值越分散效果越好。
 
-``` sql
+更多信息，参见 [Bloom filter 索引](../../../using_starrocks/Bloomfilter_index.md)。
+
+```sql
 PROPERTIES (
     "bloom_filter_columns" = "k1, k2, k3"
 )
