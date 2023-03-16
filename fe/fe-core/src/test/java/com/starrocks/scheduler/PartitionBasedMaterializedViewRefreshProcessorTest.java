@@ -138,24 +138,24 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 .withMaterializedView("create materialized view test.mv1\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
-                        "refresh manual\n" +
+                        "refresh deferred manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;")
                 .withMaterializedView("create materialized view test.mv2\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
-                        "refresh manual\n" +
+                        "refresh deferred manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select tbl4.k1, tbl4.k2 from tbl4;")
                 .withMaterializedView("create materialized view test.mv_inactive\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
-                        "refresh manual\n" +
+                        "refresh deferred manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;")
                 .withMaterializedView("create materialized view test.mv_without_partition\n" +
                         "distributed by hash(k2) buckets 10\n" +
-                        "refresh manual\n" +
+                        "refresh deferred manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select k2, sum(v1) as total_sum from tbl3 group by k2;")
                 .withTable("CREATE TABLE test.base\n" +
@@ -177,7 +177,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 .withMaterializedView("create materialized view test.mv_with_test_refresh\n" +
                         "partition by k1\n" +
                         "distributed by hash(k2) buckets 10\n" +
-                        "refresh manual\n" +
+                        "refresh deferred manual\n" +
                         "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
@@ -1604,7 +1604,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         starRocksAssert.useDatabase("test").withMaterializedView("create materialized view test.mv_with_ssd\n" +
                 "partition by date_trunc('month',k1) \n" +
                 "distributed by hash(k2) buckets 10\n" +
-                "refresh manual\n" +
+                "refresh deferred manual\n" +
                 "properties('replication_num' = '1',\n" +
                 "'storage_medium' = 'SSD')\n" +
                 "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;");
@@ -1651,14 +1651,15 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 }
             }
         };
-        starRocksAssert.useDatabase("test").withMaterializedView("create materialized view test.mv_use_ssd_and_cooldown\n" +
-                "partition by date_trunc('month',k1) \n" +
-                "distributed by hash(k2) buckets 10\n" +
-                "refresh manual\n" +
-                "properties('replication_num' = '1',\n" +
-                "'storage_medium' = 'SSD',\n" +
-                "'storage_cooldown_time' = '2222-04-21 20:45:11')\n" +
-                "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;");
+        starRocksAssert.useDatabase("test").withMaterializedView(
+                "create materialized view test.mv_use_ssd_and_cooldown\n" +
+                        "partition by date_trunc('month',k1) \n" +
+                        "distributed by hash(k2) buckets 10\n" +
+                        "refresh deferred manual\n" +
+                        "properties('replication_num' = '1',\n" +
+                        "'storage_medium' = 'SSD',\n" +
+                        "'storage_cooldown_time' = '2222-04-21 20:45:11')\n" +
+                        "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;");
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_use_ssd_and_cooldown"));
         // build task

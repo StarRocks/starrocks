@@ -174,11 +174,8 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setProperties(taskRunContextProperties);
         taskRunContext.setPriority(status.getPriority());
         taskRunContext.setTaskType(type);
-<<<<<<< HEAD
         taskRunContext.setStatus(status);
-=======
 
->>>>>>> 96fd519b11 (analyze table after refresh MV)
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
         if (runCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
