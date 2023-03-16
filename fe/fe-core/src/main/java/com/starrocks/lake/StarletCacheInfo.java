@@ -14,8 +14,7 @@
 
 package com.starrocks.lake;
 
-import autovalue.shaded.com.google.common.common.collect.Lists;
-import com.starrocks.catalog.DiskInfo;
+import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.thrift.TStorageMedium;
@@ -106,21 +105,12 @@ public class StarletCacheInfo {
         }
         info.add(String.format("%.2f", used) + " %");
 
-        // state
-        info.add(DiskInfo.DiskState.ONLINE.name());
-
-        // path hash
-        info.add("");
-
         // medium
         if (storageMedium == null) {
             info.add("N/A");
         } else {
             info.add(storageMedium.name());
         }
-
-        // tablet num
-        info.add("0");
 
         // data total
         long dataTotalB = getDataTotalCapacityB();

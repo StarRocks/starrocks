@@ -51,7 +51,7 @@ import java.util.List;
 import java.util.Map;
 
 public class BackendProcNode implements ProcNodeInterface {
-    public ImmutableList<String> titleNames;
+    private ImmutableList<String> titleNames;
 
     private Backend backend;
 
@@ -61,12 +61,20 @@ public class BackendProcNode implements ProcNodeInterface {
     }
 
     private void createTitleNames() {
-        ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
-                .add(RunMode.allowCreateLakeTable() ? "CachePath" : "RootPath")
-                .add("DataUsedCapacity").add("OtherUsedCapacity").add("AvailCapacity")
-                .add("TotalCapacity").add("TotalUsedPct").add("State").add("PathHash").add("StorageMedium")
-                .add("TabletNum").add("DataTotalCapacity").add("DataUsedPct");
-        this.titleNames = builder.build();
+        if (RunMode.allowCreateLakeTable()) {
+            ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
+                    .add("CachePath").add("DataUsedCapacity").add("OtherUsedCapacity").add("AvailCapacity")
+                    .add("TotalCapacity").add("TotalUsedPct").add("StorageMedium")
+                    .add("DataTotalCapacity").add("DataUsedPct");
+            this.titleNames = builder.build();
+
+        } else {
+            ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
+                    .add("RootPath").add("DataUsedCapacity").add("OtherUsedCapacity").add("AvailCapacity")
+                    .add("TotalCapacity").add("TotalUsedPct").add("State").add("PathHash").add("StorageMedium")
+                    .add("TabletNum").add("DataTotalCapacity").add("DataUsedPct");
+            this.titleNames = builder.build();
+        }
     }
 
     @Override

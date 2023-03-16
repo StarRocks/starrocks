@@ -73,16 +73,10 @@ DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, T
           _disk_capacity_bytes(0),
           _storage_medium(storage_medium),
           _is_used(false),
-#ifdef USE_STAROS
-          _cache_available_bytes(0),
-          _cache_capacity_bytes(0),
-          _cache_used_bytes(0),
-#endif
           _tablet_manager(tablet_manager),
           _txn_manager(txn_manager),
           _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)),
-          _current_shard(0) {
-}
+          _current_shard(0) {}
 
 DataDir::~DataDir() {
     delete _id_generator;
@@ -540,15 +534,6 @@ Status DataDir::update_capacity() {
     _disk_capacity_bytes = space_info.capacity;
     return Status::OK();
 }
-
-#ifdef USE_STAROS
-Status DataDir::update_cache_capacity() {
-    ASSIGN_OR_RETURN(auto space_info, FileSystem::Default()->space(_path));
-    _cache_available_bytes = space_info.available;
-    _cache_capacity_bytes = space_info.capacity;
-    return Status::OK();
-}
-#endif
 
 bool DataDir::capacity_limit_reached(int64_t incoming_data_size) {
     double used_pct = (_disk_capacity_bytes - _available_bytes + incoming_data_size) / (double)_disk_capacity_bytes;

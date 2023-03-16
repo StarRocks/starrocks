@@ -263,7 +263,7 @@ Status StorageEngine::_init_store_map() {
 #ifdef USE_STAROS
 Status StorageEngine::_init_starlet_cache_map() {
     for (auto& path : _options.starlet_cache_paths) {
-        auto* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
+        auto* store = new lake::StarletCacheDir(path.path, path.storage_medium);
         _starlet_cache_map.emplace(store->path(), store);
     }
     return Status::OK();
@@ -371,11 +371,12 @@ Status StorageEngine::get_starlet_cache_path_used_capacity(const std::string& pa
         }
         if (*is_directory) {
             get_starlet_cache_path_used_capacity(abs_path, cache_used_capacity);
+            return true;
         }
 
-        auto file_size_or = FileSystem::Default()->get_file_size(abs_path);
-        if (file_size_or.ok()) {
-            *cache_used_capacity += *file_size_or;
+        auto file_size = FileSystem::Default()->get_file_size(abs_path);
+        if (file_size.ok()) {
+            *cache_used_capacity += *file_size;
         }
         return true;
     };
@@ -383,20 +384,22 @@ Status StorageEngine::get_starlet_cache_path_used_capacity(const std::string& pa
     return FileSystem::Default()->iterate_dir(path, cb);
 }
 
-Status StorageEngine::get_all_starlet_cache_dir_info(vector<DataDirInfo>* cache_dir_infos) {
+Status StorageEngine::get_all_starlet_cache_dir_info(vector<lake::StarletCacheDirInfo>* cache_dir_infos) {
     cache_dir_infos->clear();
-    std::map<std::string, DataDirInfo> path_map;
+    std::map<std::string, lake::StarletCacheDirInfo> path_map;
     for (auto& it : _starlet_cache_map) {
-        it.second->update_cache_capacity();
+        it.second->update_capacity();
         path_map.emplace(it.first, it.second->get_dir_info());
     }
 
     for (auto& entry : path_map) {
         uint64_t cache_used_capacity = 0;
         auto st = get_starlet_cache_path_used_capacity(entry.first, &cache_used_capacity);
-        if (st.ok()) {
-            entry.second.cache_used_capacity += cache_used_capacity;
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to get used capacity of path " << entry.first << ", status: " << st.to_string();
+            continue;
         }
+        entry.second.used_capacity += cache_used_capacity;
     }
 
     // add path info to cache_dir_infos

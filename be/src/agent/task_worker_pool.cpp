@@ -59,6 +59,7 @@
 #include "runtime/snapshot_loader.h"
 #include "service/backend_options.h"
 #include "storage/data_dir.h"
+#include "storage/lake/starlet_cache_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
 #include "storage/snapshot_manager.h"
@@ -623,16 +624,16 @@ void* ReportDiskStateTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         request.__set_backend(BackendOptions::get_localBackend());
 
 #ifdef USE_STAROS
-        std::vector<DataDirInfo> starlet_cache_dir_infos;
+        std::vector<lake::StarletCacheDirInfo> starlet_cache_dir_infos;
         StorageEngine::instance()->get_all_starlet_cache_dir_info(&starlet_cache_dir_infos);
         std::map<std::string, TStarletCache> starlet_caches;
         for (auto& cache_path_info : starlet_cache_dir_infos) {
             TStarletCache cache;
             cache.__set_cache_path(cache_path_info.path);
             cache.__set_storage_medium(cache_path_info.storage_medium);
-            cache.__set_cache_total_capacity(cache_path_info.cache_capacity);
-            cache.__set_cache_used_capacity(cache_path_info.cache_used_capacity);
-            cache.__set_cache_available_capacity(cache_path_info.cache_available);
+            cache.__set_cache_total_capacity(cache_path_info.capacity);
+            cache.__set_cache_used_capacity(cache_path_info.used_capacity);
+            cache.__set_cache_available_capacity(cache_path_info.available);
             starlet_caches[cache_path_info.path] = cache;
         }
         request.__set_starlet_caches(starlet_caches);

@@ -166,8 +166,7 @@ public class BackendProcNodeTest {
         Assert.assertEquals(1, result.getRows().size());
         Assert.assertEquals(
                 Lists.newArrayList("CachePath", "DataUsedCapacity", "OtherUsedCapacity", "AvailCapacity",
-                        "TotalCapacity", "TotalUsedPct", "State", "PathHash", "StorageMedium", "TabletNum",
-                        "DataTotalCapacity", "DataUsedPct"),
+                        "TotalCapacity", "TotalUsedPct", "StorageMedium", "DataTotalCapacity", "DataUsedPct"),
                 result.getColumnNames());
     }
 }

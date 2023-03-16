@@ -57,6 +57,7 @@
 #include "runtime/heartbeat_flags.h"
 #include "storage/cluster_id_mgr.h"
 #include "storage/kv_store.h"
+#include "storage/lake/starlet_cache_dir.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
@@ -117,7 +118,7 @@ public:
     Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
 #ifdef USE_STAROS
-    Status get_all_starlet_cache_dir_info(std::vector<DataDirInfo>* cache_dir_infos);
+    Status get_all_starlet_cache_dir_info(std::vector<lake::StarletCacheDirInfo>* cache_dir_infos);
     Status get_starlet_cache_path_used_capacity(const std::string& path, uint64_t* cache_used_capacity);
 #endif
 
@@ -337,7 +338,7 @@ private:
     std::mutex _store_lock;
     std::map<std::string, DataDir*> _store_map;
 #ifdef USE_STAROS
-    std::map<std::string, DataDir*> _starlet_cache_map;
+    std::map<std::string, lake::StarletCacheDir*> _starlet_cache_map;
 #endif
     uint32_t _available_storage_medium_type_count;
 
