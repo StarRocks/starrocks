@@ -28,12 +28,20 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"REFRESH_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"IS_ACTIVE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"partition_type", TYPE_VARCHAR, sizeof(StringValue), false},
         {"LAST_REFRESH_START_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"LAST_REFRESH_FINISHED_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"LAST_REFRESH_DURATION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"LAST_REFRESH_STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"INACTIVE_CODE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"INACTIVE_REASON", TYPE_VARCHAR, sizeof(StringValue), false},
+
+        {"FORCE_REFRESH", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"START_PARTITION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"END_PARTITION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"BASE_REFRESH_PARTITIONS", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"MV_REFRESH_PARTITIONS", TYPE_VARCHAR, sizeof(StringValue), false},
+
+        {"LAST_REFRESH_ERROR_CODE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"LAST_REFRESH_ERROR_REASON", TYPE_VARCHAR, sizeof(StringValue), false},
         {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TABLE_ROWS", TYPE_VARCHAR, sizeof(StringValue), false},
 };
@@ -126,79 +134,139 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 6: {
-            // last_refresh_start_time
+            // partition_type
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
-                const std::string* str = &tbl_status.last_refresh_start_time;
+                const std::string* str = &tbl_status.partition_type;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 7: {
-            // last_refresh_finished_time
+            // last_refresh_start_time
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
-                const std::string* str = &tbl_status.last_refresh_finished_time;
+                const std::string* str = &tbl_status.last_refresh_start_time;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 8: {
-            // last_refresh_duration
+            // last_refresh_finished_time
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
-                const std::string* str = &tbl_status.last_refresh_duration;
+                const std::string* str = &tbl_status.last_refresh_finished_time;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 9: {
-            // last_refresh_state
+            // last_refresh_duration
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
-                const std::string* str = &tbl_status.last_refresh_state;
+                const std::string* str = &tbl_status.last_refresh_duration;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 10: {
-            // VIEW_DEFINITION
+            // last_refresh_state
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
-                const std::string* str = &tbl_status.inactive_code;
+                const std::string* str = &tbl_status.last_refresh_state;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 11: {
-            // inactive_reason
+            // force_refresh
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
-                const std::string* str = &tbl_status.inactive_reason;
+                const std::string* str = &tbl_status.force_refresh;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 12: {
-            // VIEW_DEFINITION
+            // start_partition
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
-                const std::string* str = &tbl_status.text;
+                const std::string* str = &tbl_status.start_partition;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 13: {
-            // TABLE_ROWS
+            // end_partition
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
+                const std::string* str = &tbl_status.end_partition;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 14: {
+            // base_refresh_partitions
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(14);
+                const std::string* str = &tbl_status.base_refresh_partitions;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 15: {
+            // mv_refresh_partitions
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(15);
+                const std::string* str = &tbl_status.mv_refresh_partitions;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 16: {
+            // last_refresh_error_code
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
+                const std::string* str = &tbl_status.last_refresh_error_code;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 17: {
+            // last_refresh_error_reason
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(17);
+                const std::string* str = &tbl_status.last_refresh_error_reason;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 18: {
+            // view_definition
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(18);
+                const std::string* str = &tbl_status.text;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 19: {
+            // table_rows
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(19);
                 const std::string* str = &tbl_status.rows;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);

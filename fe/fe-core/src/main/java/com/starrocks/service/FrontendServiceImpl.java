@@ -468,14 +468,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setDatabase_name(rowSet.get(2));
             status.setRefresh_type(rowSet.get(3));
             status.setIs_active(rowSet.get(4));
-            status.setLast_refresh_start_time(rowSet.get(5));
-            status.setLast_refresh_finished_time(rowSet.get(6));
-            status.setLast_refresh_duration(rowSet.get(7));
-            status.setLast_refresh_state(rowSet.get(8));
-            status.setInactive_code(rowSet.get(9));
-            status.setInactive_reason(rowSet.get(10));
-            status.setText(rowSet.get(11));
-            status.setRows(rowSet.get(12));
+            status.setPartition_type(rowSet.get(5));
+            status.setLast_refresh_start_time(rowSet.get(6));
+            status.setLast_refresh_finished_time(rowSet.get(7));
+            status.setLast_refresh_duration(rowSet.get(8));
+            status.setLast_refresh_state(rowSet.get(9));
+
+            status.setForce_refresh(rowSet.get(10));
+            status.setStart_partition(rowSet.get(11));
+            status.setEnd_partition(rowSet.get(12));
+            status.setBase_refresh_partitions(rowSet.get(13));
+            status.setMv_refresh_partitions(rowSet.get(14));
+
+            status.setLast_refresh_error_code(rowSet.get(15));
+            status.setLast_refresh_error_reason(rowSet.get(16));
+            status.setText(rowSet.get(17));
+            status.setRows(rowSet.get(18));
             tablesResult.add(status);
         }
         return result;
@@ -613,6 +621,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setError_message(status.getErrorMessage());
             info.setExpire_time(status.getExpireTime() / 1000);
             info.setProgress(status.getProgress() + "%");
+            info.setForce_refresh(status.isForceRefresh() ? "true" : "false");
+            info.setStart_partition(status.getPartitionStart());
+            info.setEnd_partition(status.getPartitionEnd());
+            info.setBase_refresh_partitions(status.getBasePartitionsToRefreshMapString());
+            info.setMv_refresh_partitions(status.getMvPartitionsToRefreshString());
             tasksResult.add(info);
         }
         return result;

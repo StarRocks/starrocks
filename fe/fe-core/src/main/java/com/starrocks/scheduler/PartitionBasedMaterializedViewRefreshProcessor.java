@@ -178,6 +178,10 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 Map<String, Set<String>> sourceTablePartitions = getSourceTablePartitions(partitionsToRefresh);
                 LOG.debug("materialized view:{} source partitions :{}",
                         materializedView.getName(), sourceTablePartitions);
+                if (this.mvContext.status != null) {
+                    this.mvContext.status.setMvPartitionsToRefresh(partitionsToRefresh);
+                    this.mvContext.status.setBasePartitionsToRefreshMap(sourceTablePartitions);
+                }
 
                 // create ExecPlan
                 insertStmt = generateInsertStmt(partitionsToRefresh, sourceTablePartitions);
@@ -531,11 +535,18 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         String start = properties.get(TaskRun.PARTITION_START);
         String end = properties.get(TaskRun.PARTITION_END);
         boolean force = Boolean.parseBoolean(properties.get(TaskRun.FORCE));
+        Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
+        PartitionInfo partitionInfo = materializedView.getPartitionInfo();
+        if (this.mvContext.status != null) {
+            this.mvContext.status.setForceRefresh(force);
+            this.mvContext.status.setPartitionStart(start);
+            this.mvContext.status.setPartitionEnd(end);
+        }
+
         if (force && start == null && end == null) {
             return Sets.newHashSet(materializedView.getPartitionNames());
         }
-        Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
-        PartitionInfo partitionInfo = materializedView.getPartitionInfo();
+
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
             if (force || unPartitionedMVNeedToRefresh()) {

@@ -366,10 +366,17 @@ struct TMaterializedViewStatus {
     7: optional string last_refresh_finished_time
     8: optional string last_refresh_duration
     9: optional string last_refresh_state
-    10: optional string inactive_code
-    11: optional string inactive_reason 
+    10: optional string last_refresh_error_code
+    11: optional string last_refresh_error_reason 
     12: optional string text
     13: optional string rows
+
+    14: optional string partition_type 
+    15: optional string force_refresh
+    16: optional string start_partition
+    17: optional string end_partition
+    18: optional string base_refresh_partitions
+    19: optional string mv_refresh_partitions
 
     20: optional i64 last_check_time
     21: optional i64 create_time
@@ -411,6 +418,12 @@ struct TTaskRunInfo {
     9: optional i32 error_code
     10: optional string error_message
     11: optional string progress
+
+    12: optional string force_refresh
+    13: optional string start_partition
+    14: optional string end_partition
+    15: optional string base_refresh_partitions
+    16: optional string mv_refresh_partitions
 }
 
 struct TGetTaskRunInfoResult {

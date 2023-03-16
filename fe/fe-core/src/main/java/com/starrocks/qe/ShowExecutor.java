@@ -522,6 +522,12 @@ public class ShowExecutor {
             }
             // is_active
             resultRow.add(String.valueOf(mvTable.isActive()));
+            // partition info
+            if (mvTable.getPartitionInfo() != null && mvTable.getPartitionInfo().getType() != null) {
+                resultRow.add(mvTable.getPartitionInfo().getType().toString());
+            } else {
+                resultRow.add("");
+            }
             // task run status
             setTaskRunStatus(resultRow, taskStatus);
             resultRow.add(mvTable.getMaterializedViewDdlStmt(true));
@@ -542,6 +548,13 @@ public class ShowExecutor {
             resultRow.add("ROLLUP");
             // is_active
             resultRow.add(String.valueOf(true));
+            // partition type
+            if (olapTable.getPartitionInfo() != null && olapTable.getPartitionInfo().getType() != null) {
+                resultRow.add(olapTable.getPartitionInfo().getType().toString());
+            } else {
+                resultRow.add("");
+            }
+            // task run status
             setTaskRunStatus(resultRow, null);
             if (mvMeta.getOriginStmt() == null) {
                 StringBuilder originStmtBuilder = new StringBuilder(
@@ -582,26 +595,30 @@ public class ShowExecutor {
             // last_refresh_finished_time
             resultRow.add(String.valueOf(TimeUtils.longToTimeString(taskStatus.getFinishTime())));
             // last_refresh_duration(s)
-            resultRow.add(String.valueOf((taskStatus.getFinishTime() - taskStatus.getCreateTime()) / 1000));
+            resultRow.add(DebugUtil.DECIMAL_FORMAT_SCALE_3
+                    .format((taskStatus.getFinishTime() - taskStatus.getCreateTime()) / 1000D));
             // last_refresh_state
             resultRow.add(String.valueOf(taskStatus.getState()));
-            // inactive_code
+
+            // force refresh
+            resultRow.add(taskStatus.isForceRefresh() ? "true" : "false");
+            // last_refresh partition start
+            resultRow.add(taskStatus.getPartitionStart());
+            // last_refresh partition end
+            resultRow.add(taskStatus.getPartitionEnd());
+            // last_refresh base table refresh map
+            resultRow.add(taskStatus.getBasePartitionsToRefreshMapString());
+            // last_refresh mv partitions
+            resultRow.add(taskStatus.getMvPartitionsToRefreshString());
+
+            // last_refresh_code
             resultRow.add(String.valueOf(taskStatus.getErrorCode()));
-            // inactive_reason
+            // last_refresh_reason
             resultRow.add(taskStatus.getErrorMessage());
         } else {
-            // last_refresh_start_time
-            resultRow.add("");
-            // last_refresh_finished_time
-            resultRow.add("");
-            // last_refresh_duration
-            resultRow.add("");
-            // last_refresh_state
-            resultRow.add("");
-            // inactive_code
-            resultRow.add("");
-            // inactive_reason
-            resultRow.add("");
+            for (int i = 0; i < 11; i++) {
+                resultRow.add("");
+            }
         }
     }
 

@@ -143,6 +143,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
         taskRunContext.setDefinition(status.getDefinition());
+
         runCtx = new ConnectContext(null);
         runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         runCtx.setDatabase(task.getDbName());
@@ -154,6 +155,7 @@ public class TaskRun implements Comparable<TaskRun> {
 
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
+
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
         runCtx.resetSessionVariable();
         if (properties != null) {
@@ -171,6 +173,7 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setProperties(taskRunContextProperties);
         taskRunContext.setPriority(status.getPriority());
         taskRunContext.setTaskType(type);
+        taskRunContext.setStatus(status);
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
         if (runCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
