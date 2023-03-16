@@ -117,8 +117,8 @@ void BinlogManager::_apply_build_result(BinlogBuildResult* result) {
         int128_t lsn = BinlogUtil::get_lsn(meta->start_version(), meta->start_seq_id());
         auto it = _alive_binlog_files.find(lsn);
         bool override_meta = it != _alive_binlog_files.end();
-        BinlogFilePtr binlog_file = it->second;
         if (override_meta) {
+            BinlogFilePtr binlog_file = it->second;
             BinlogFileMetaPBPtr& old_file_meta = binlog_file->file_meta();
             std::unordered_set<int64_t> old_rowsets;
             for (auto rowset_id : old_file_meta->rowsets()) {
