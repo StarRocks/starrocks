@@ -95,14 +95,14 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | desired_concurrent_number | No           | The expected task parallelism of a single Routine Load job. Default value: `3`. The actual task parallelism is determined by the minimum value of the multiple parameters: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`. <ul><li>`alive_be_number`: the number of alive BE nodes.</li><li>`partition_number`: the number of partitions to be consumed.</li><li>`desired_concurrent_number`: the expected task parallelism of a single Routine Load  job. Default value: `3`.</li><li>`max_routine_load_task_concurrent_num`: the default maximum task parallelism of a Routine Load job, which is `5`. See [FE dynamic parameter](../../../administration/Configuration.md#configure-fe-dynamic-parameters).</li></ul>The maximum actual task parallelism is determined by either the number of alive BE nodes or the number of partitions to be consumed.|
 | max_batch_interval        | No           | The scheduling interval for a task, that is, how often a task is executed. Unit: seconds. Value range: `5` ~ `60`. Default value: `10`. It is recommended to set a value larger than `10`. If the scheduling is shorter than 10 seconds, too many tablet versions are generated due to an excessively high loading frequency. |
 | max_batch_rows            | No           | This property is only used to define the window of error detection. The window is the number of rows of data consumed by a single Routine Load task. The value is `10 * max_batch_rows`. The default value is `10 * 200000 = 200000`. The Routine Load task detects error data in the error detection window. Error data refers to data that StarRocks cannot parse, such as invalid JSON-formatted data. |
-| max_error_number          | No           | The maximum number of error data rows allowed within an error detection window. If the number of error data rows exceeds this value, the load job will pause. You can execute [SHOW ROUTINE LOAD](./SHOW%20ROUTINE%20LOAD.md)  and view the error logs by using `ErrorLogUrls`.  After that, you can correct the error in Kafka according to the error logs. The default value is `0`, which means error rows are not allowed.**NOTE** Error data rows do not include data rows that are filtered out by the WHERE clause. |
+| max_error_number          | No           | The maximum number of error data rows allowed within an error detection window. If the number of error data rows exceeds this value, the load job will pause. You can execute [SHOW ROUTINE LOAD](./SHOW%20ROUTINE%20LOAD.md)  and view the error logs by using `ErrorLogUrls`.  After that, you can correct the error in Kafka according to the error logs. The default value is `0`, which means error rows are not allowed.<br>**NOTE** <br>Error data rows do not include data rows that are filtered out by the WHERE clause. |
 | strict_mode               | No           | Specifies whether to enable the strict mode. Valid values: `true` and `false`. Default value: `false`. When the strict mode is enabled, if the value for a column in the loaded data is `NULL` but the target table does not allow a `NULL` value for this column, the data row will be filtered out. |
 | timezone                  | No           | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime(), alignment_timestamp(), and from_unixtime(). The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../administration/timezone.md). |
-| merge_condition           | No           | Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md).<br>**NOTE**<br>Only tables that use the Primary Key model support conditional updates.The column that you specify cannot be a primary key column. |
+| merge_condition           | No           | Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md).<br>**NOTE**<br>Only tables that use the Primary Key model support conditional updates. The column that you specify cannot be a primary key column. |
 | format                    | No           | The format of the data to be loaded. Valid values: `CSV` and `JSON`. Default value: `CSV`. |
 | strip_outer_array         | No           | Specifies whether to strip the outermost array structure of the JSON-formatted data. Valid values: `true` and `false`. Default value: `false`. In real-world business scenarios, JSON-formatted data may have an outermost array structure as indicated by a pair of square brackets `[]`. In this situation, we recommend that you set this parameter to `true`, so StarRocks removes the outermost square brackets `[]` and loads each inner array as a separate data record. If you set this parameter to `false`, StarRocks parses the entire JSON-formatted data into one array and loads the array as a single data record. Use the JSON-formatted data `[{"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]` as an example. If you set this parameter to `true`, `{"category" : 1, "author" : 2}` and `{"category" : 3, "author" : 4}` are parsed as two separate data records and are loaded into two StarRocks data rows. |
 | jsonpaths                 | No           | The names of the fields that you want to load from JSON-formatted data. The value of this parameter is a valid JsonPath expression. For more information, see [Configure column mapping for loading JSON-formatted data](#configure-column-mapping-for-loading-json-formatted-data) in this topic. |
-| json_root                 | No           | The root element of the JSON-formatted data to load. StarRocks extracts the elements of the root node through `json_root` for parsing.By default, the value of this parameter is empty, indicating that all JSON-formatted data will be loaded. For more information, see [Specify the root element of the JSON-formatted data to be loaded](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded) in this topic. |
+| json_root                 | No           | The root element of the JSON-formatted data to load. StarRocks extracts the elements of the root node through `json_root` for parsing. By default, the value of this parameter is empty, indicating that all JSON-formatted data will be loaded. For more information, see [Specify the root element of the JSON-formatted data to be loaded](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded) in this topic. |
 
 ### `data_source`, `data_source_properties`
 
@@ -151,7 +151,7 @@ You can specify additional data source (Kafka) related properties, which are equ
 If `property.group.id` is not specified, StarRocks generates a random value based on the name of the Routine Load job, in the format of `{job_name}_{random uuid}`, such as `simple_job_0a64fe25-3983-44b2-a4d8-f52d3af4c3e8`.
 
 - **Specify the authentication mechanism used by** **BEs** **when accessing Kafka.**
-  - Access Kafka with SSL encryption and authentification:
+  - Access Kafka with SSL encryption and authentication:
 
   ```SQL
   -- Enable SSL.
@@ -255,7 +255,7 @@ PRIMARY KEY (order_id,pay_dt)
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
 ```
 
-#### **Consumes data starting from** **specified offsets for** **specified** **partitions**
+#### **Consume data starting from** **specified offsets for** **specified** **partitions**
 
 If the Routine Load job needs to consume data starting from specified partitions and offsets, you need to configure the parameters `kafka_partitions` and `kafka_offsets`.
 
@@ -431,7 +431,7 @@ FROM KAFKA
 
 #### StarRocks table column names consistent with JSON key names
 
-**Prepare a datase****t**
+**Prepare a dataset**
 
 For example, the following JSON-formatted data exists in the Kafka topic `ordertest2`.
 
@@ -443,7 +443,9 @@ For example, the following JSON-formatted data exists in the Kafka topic `ordert
 
 > **Note** Each JSON object must be in one Kafka message. Otherwise, an error that indicates a failure in parsing JSON-formatted data occurs.
 
-**Target database and table** Create table `example_tbl3` in the target database `example_db` in the StarRocks cluster. The column names are consistent with the keys names in the JSON-formatted data.
+**Target database and table**
+
+Create table `example_tbl3` in the target database `example_db` in the StarRocks cluster. The column names are consistent with the keys names in the JSON-formatted data.
 
 ```SQL
 CREATE TABLE example_db.example_tbl3 ( 
@@ -501,7 +503,7 @@ CREATE TABLE example_db.example_tbl4 (
     `country` varchar(26) NULL,
     `pay_time` bigint(20) NULL,  
     `pay_dt` date NULL, 
-    `price`double SUM NULL) 
+    `price` double SUM NULL) 
 AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`,`pay_dt`) 
 DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
 ```
@@ -512,7 +514,7 @@ You can use the matched mode for the Routine Load job. That is, you need to spec
 
 You need to specify the keys of the JSON-formatted data and arrange them in sequence in the `jsonpaths` parameter.
 
-And since the values in the key `pay_time` of the JSON-formatted data need to be converted to the DATE type before the vaules are stored in the `pay_dt` column of the `example_tbl4` table, you need to specify the computation by using `pay_dt=from_unixtime(pay_time,'%Y%m%d')` in `COLUMNS`. The values of other keys in the JSON-formatted data can be directly mapped to the `example_tbl4` table.
+And since the values in the key `pay_time` of the JSON-formatted data need to be converted to the DATE type before the values are stored in the `pay_dt` column of the `example_tbl4` table, you need to specify the computation by using `pay_dt=from_unixtime(pay_time,'%Y%m%d')` in `COLUMNS`. The values of other keys in the JSON-formatted data can be directly mapped to the `example_tbl4` table.
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl4_ordertest2 ON example_tbl4
