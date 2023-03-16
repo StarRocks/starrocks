@@ -72,7 +72,9 @@ The mapping between the columns in the source data and the columns in the StarRo
 
 The filter condition. Only data that meets the filter condition can be loaded into StarRocks. For example, if you only want to ingest rows whose `col1` value is greater than `100` and `col2` value is equal to `1000`, you can use `WHERE col1 > 100 and col2 = 1000`.
 
-> **NOTE** The columns specified in the filter condition can be source columns or derived columns.
+> **NOTE**
+>
+> The columns specified in the filter condition can be source columns or derived columns.
 
 `PARTITION`
 
