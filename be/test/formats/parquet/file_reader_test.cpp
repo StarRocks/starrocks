@@ -203,6 +203,8 @@ protected:
 
     std::string _file_array_map_path = "./be/test/exec/test_data/parquet_scanner/hudi_array_map.parquet";
 
+    std::string _file_binary_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test_binary.parquet";
+
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
     ObjectPool _pool;
@@ -1578,6 +1580,45 @@ TEST_F(FileReaderTest, TestReadStructNull) {
               chunk->debug_row(2));
     EXPECT_EQ("[4, {c1_0:4,c1_1:[4,5,6]}, [{c2_0:4,c2_1:NULL},{c2_0:5,c2_1:NULL},{c2_0:6,c2_1:4}]]",
               chunk->debug_row(3));
+}
+
+TEST_F(FileReaderTest, TestReadBinary) {
+    auto file = _create_file(_file_binary_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file_binary_path));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+    ctx->case_sensitive = false;
+
+    TypeDescriptor k1 = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    TypeDescriptor k2 = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARBINARY);
+
+    SlotDesc slot_descs[] = {{"k1", k1}, {"k2", k2}, {""}};
+
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file_binary_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    if (!status.ok()) {
+        std::cout << status.get_error_msg() << std::endl;
+    }
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(k1, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(k2, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(1, chunk->num_rows());
+
+    std::string s = chunk->debug_row(0);
+    EXPECT_EQ("[6, '\017']", chunk->debug_row(0));
 }
 
 TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
