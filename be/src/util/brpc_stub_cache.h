@@ -85,7 +85,7 @@ public:
     }
 
     // rarely used, so create as needed
-    static std::shared_ptr<doris::PBackendService_Stub> create_http_stub(const TNetworkAddress& taddr) {
+    static std::unique_ptr<doris::PBackendService_Stub> create_http_stub(const TNetworkAddress& taddr) {
         butil::EndPoint endpoint;
         std::string realhost;
         realhost = taddr.hostname;
@@ -111,7 +111,7 @@ public:
         if (channel->Init(endpoint, &options)) {
             return nullptr;
         }
-        return std::make_shared<doris::PBackendService_Stub>(channel.release(),
+        return std::make_unique<doris::PBackendService_Stub>(channel.release(),
                                                              google::protobuf::Service::STUB_OWNS_CHANNEL);
     }
 
