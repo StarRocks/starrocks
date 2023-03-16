@@ -5,13 +5,13 @@ services:
     hostname: starrocks-fe
     container_name: starrocks-fe
     command:
-      /opt/starrocks/fe/bin/start_fe.sh
+      /opt/starrocks/fe/bin/start_fe.sh --host_type FQDN
     ports:
       - 8030:8030
       - 9020:9020
       - 9030:9030
-    # volumes:
-    #   - ../../conf/fe.conf:/opt/starrocks/fe/conf/fe.conf
+    volumes:
+       - fe_data:/opt/starrocks/fe/meta
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9030"]
       interval: 5s
@@ -32,5 +32,8 @@ services:
     container_name: starrocks-be
     depends_on:
       - starrocks-fe
-    # volumes:
-    #   - ../../conf/be.conf:/opt/starrocks/be/conf/be.conf
+    volumes:
+      - be1_data:/opt/starrocks/be/storage
+volumes:
+  fe_data:
+  be1_data:
