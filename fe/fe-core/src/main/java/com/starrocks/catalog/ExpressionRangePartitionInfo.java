@@ -3,13 +3,21 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.ast.AstVisitor;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 import java.util.List;
 
 import static java.util.stream.Collectors.toList;
@@ -22,9 +30,13 @@ import static java.util.stream.Collectors.toList;
 public class ExpressionRangePartitionInfo extends RangePartitionInfo {
 
     @SerializedName(value = "partitionExprs")
-    private final List<Expr> partitionExprs;
+    private List<Expr> partitionExprs;
 
-    public ExpressionRangePartitionInfo(List<Expr> partitionExprs, List<Column> columns) {
+    public ExpressionRangePartitionInfo() {
+        this.type = PartitionType.EXPR_RANGE;
+    }
+
+    public ExpressionRangePartitionInfo(List<Expr> partitionExprs, List<Column> columns, PartitionType type) {
         super(columns);
         Preconditions.checkState(partitionExprs != null);
         Preconditions.checkState(partitionExprs.size() > 0);
@@ -32,6 +44,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
         Preconditions.checkState(partitionExprs.size() == columns.size());
         this.partitionExprs = partitionExprs;
         this.isMultiColumnPartition = partitionExprs.size() > 0;
+        this.type = type;
     }
 
     public List<Expr> getPartitionExprs() {
@@ -93,6 +106,37 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
         for (Expr expr : partitionExprs) {
             expr.accept(renameVisitor, null);
         }
+    }
+
+    public static PartitionInfo read(DataInput in) throws IOException {
+        ExpressionRangePartitionInfo info = new ExpressionRangePartitionInfo();
+        info.readFields(in);
+        String json = Text.readString(in);
+        List<Expr> exprs = GsonUtils.GSON.fromJson(json, new TypeToken<List<Expr>>(){}.getType());
+        List<Column> partitionColumns = info.getPartitionColumns();
+        for (Expr expr : exprs) {
+            if (expr instanceof FunctionCallExpr) {
+                SlotRef slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
+                for (Column partitionColumn : partitionColumns) {
+                    if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
+                        PartitionExprAnalyzer.analyzePartitionExpr(expr, partitionColumn.getType());
+                        slotRef.setType(partitionColumn.getType());
+                    }
+                }
+            }
+        }
+        info.setPartitionExprs(exprs);
+        return info;
+    }
+
+    public void setPartitionExprs(List<Expr> partitionExprs) {
+        this.partitionExprs = partitionExprs;
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        super.write(out);
+        Text.writeString(out, GsonUtils.GSON.toJson(partitionExprs));
     }
 }
 
