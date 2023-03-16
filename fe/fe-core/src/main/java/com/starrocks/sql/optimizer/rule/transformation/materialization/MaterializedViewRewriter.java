@@ -1247,16 +1247,15 @@ public class MaterializedViewRewriter {
                 // for query
                 swappedSrcPr = columnRewriter.rewriteByQueryEc(srcPr.clone());
                 // for view, swap column by relation mapping and query ec
-                swappedTargetPr = targetPr == null ? null : columnRewriter.rewriteViewToQueryWithQueryEc(targetPr.clone());
+                swappedTargetPr = columnRewriter.rewriteViewToQueryWithQueryEc(targetPr.clone());
             } else {
                 // for view
                 swappedSrcPr = columnRewriter.rewriteViewToQueryWithViewEc(srcPr.clone());
                 // for query
-                swappedTargetPr = targetPr == null ? null : columnRewriter.rewriteByViewEc(targetPr.clone());
+                swappedTargetPr = columnRewriter.rewriteByViewEc(targetPr.clone());
             }
             ScalarOperator canonizedSrcPr = MvUtils.canonizePredicateForRewrite(swappedSrcPr);
-            ScalarOperator canonizedTargetPr =
-                    targetPr == null ? null : MvUtils.canonizePredicateForRewrite(swappedTargetPr);
+            ScalarOperator canonizedTargetPr = MvUtils.canonizePredicateForRewrite(swappedTargetPr);
             compensationPr = getCompensationRangePredicate(canonizedSrcPr, canonizedTargetPr);
         }
         return MvUtils.canonizePredicate(compensationPr);
