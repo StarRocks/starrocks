@@ -71,9 +71,9 @@ StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::st
     if (fs::is_s3_uri(uri)) {
         return new_fs_s3(options);
     }
-    if (fs::is_azure_uri(uri)) {
+    if (fs::is_azure_uri(uri) || fs::is_gcs_uri(uri)) {
         // TODO(SmithCruise):
-        // Now we use LibHdfs to access azure storage, we can use Azure CPP SDK to improve performance in the future.
+        // Now Azure storage and Google Cloud Storage both are using LibHdfs, we can use cpp sdk instead in the future.
         return new_fs_hdfs(options);
     }
 #ifdef USE_STAROS

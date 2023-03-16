@@ -629,6 +629,14 @@ under the License.
                 <version>${hadoop.version}</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/com.google.cloud.bigdataoss/gcs-connector -->
+            <dependency>
+                <groupId>com.google.cloud.bigdataoss</groupId>
+                <artifactId>gcs-connector</artifactId>
+                <version>hadoop3-2.2.11</version>
+                <classifier>shaded</classifier>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/com.fasterxml.uuid/java-uuid-generator -->
             <dependency>
                 <groupId>com.fasterxml.uuid</groupId>
