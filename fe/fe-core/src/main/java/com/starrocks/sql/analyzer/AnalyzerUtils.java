@@ -16,6 +16,7 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
@@ -54,6 +55,7 @@ import com.starrocks.sql.parser.ParsingException;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -68,6 +70,18 @@ public class AnalyzerUtils {
         }
 
         return dbName;
+    }
+
+    public static SlotRef getSlotRefFromFunctionCall(Expr expr) {
+        if (expr instanceof FunctionCallExpr) {
+            ArrayList<Expr> children = expr.getChildren();
+            for (Expr child : children) {
+                if (child instanceof SlotRef) {
+                    return (SlotRef) child;
+                }
+            }
+        }
+        return null;
     }
 
     public static void verifyNoAggregateFunctions(Expr expression, String clause) {

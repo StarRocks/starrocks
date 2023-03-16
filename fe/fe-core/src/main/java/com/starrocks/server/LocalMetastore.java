@@ -165,6 +165,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
@@ -1985,10 +1986,17 @@ public class LocalMetastore implements ConnectorMetadata {
                 ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
                 listPartitionDesc.findAllPartitionNames()
                         .forEach(partitionName -> partitionNameToId.put(partitionName, getNextId()));
+            } else if (partitionDesc instanceof ExpressionPartitionDesc) {
+                ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+                for (SingleRangePartitionDesc desc : expressionPartitionDesc.getRangePartitionDesc()
+                        .getSingleRangePartitionDescs()) {
+                    long partitionId = getNextId();
+                    partitionNameToId.put(desc.getPartitionName(), partitionId);
+                }
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
             }
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false, true);
         } else {
             if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(stmt.getProperties())) {
                 throw new DdlException("Only support dynamic partition properties on range partition table");
@@ -2471,7 +2479,7 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionInfo partitionInfo = null;
         Map<String, Long> partitionNameToId = Maps.newHashMap();
         if (partitionDesc != null) {
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false, false);
         } else {
             long partitionId = getNextId();
             // use table name as single partition name
@@ -3249,7 +3257,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitionDesc != null) {
             partitionInfo = partitionDesc.toPartitionInfo(
                     Collections.singletonList(stmt.getPartitionColumn()),
-                    Maps.newHashMap(), false);
+                    Maps.newHashMap(), false, false);
         } else {
             partitionInfo = new SinglePartitionInfo();
         }
