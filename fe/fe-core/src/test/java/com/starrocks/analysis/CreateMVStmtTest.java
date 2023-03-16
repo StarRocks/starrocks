@@ -14,7 +14,7 @@
 
 package com.starrocks.analysis;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
