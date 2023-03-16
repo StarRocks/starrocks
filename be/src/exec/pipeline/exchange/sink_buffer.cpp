@@ -389,7 +389,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
 Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure,
                              const TransmitChunkInfo& request) {
-    if (UNLIKELY(request.attachment.size() > _rpc_http_min_size)) {
+    if (UNLIKELY(request.attachment.size() + request.params->ByteSizeLong() + sizeof(size_t) * 2 >
+                 _rpc_http_min_size)) {
         butil::IOBuf iobuf;
         butil::IOBufAsZeroCopyOutputStream wrapper(&iobuf);
         request.params->SerializeToZeroCopyStream(&wrapper);
