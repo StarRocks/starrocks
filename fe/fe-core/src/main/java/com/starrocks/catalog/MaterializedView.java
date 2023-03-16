@@ -424,7 +424,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public static SlotRef getPartitionSlotRef(MaterializedView materializedView) {
-        List<SlotRef> slotRefs = com.clearspring.analytics.util.Lists.newArrayList();
+        List<SlotRef> slotRefs = Lists.newArrayList();
         Expr partitionExpr = getPartitionExpr(materializedView);
         partitionExpr.collect(SlotRef.class, slotRefs);
         // if partitionExpr is FunctionCallExpr, get first SlotRef

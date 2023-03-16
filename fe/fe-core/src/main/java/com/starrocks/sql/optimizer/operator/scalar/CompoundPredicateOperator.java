@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import org.apache.commons.collections.CollectionUtils;

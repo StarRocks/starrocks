@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.parser;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;

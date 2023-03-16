@@ -14,7 +14,7 @@
 
 package com.starrocks.pseudocluster;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.ibm.icu.impl.Assert;
 import com.staros.proto.FileCacheInfo;
