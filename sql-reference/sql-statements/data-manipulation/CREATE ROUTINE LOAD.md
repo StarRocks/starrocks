@@ -47,7 +47,7 @@ FROM data_source
 [ROWS TERMINATED BY '<row_separator>'],
 [COLUMNS (<column1_name>[,<column2_name>,<column_assignment>,... ])],
 [WHERE <expr>],
-[PARTITION (<partition1_name>[,<partition2_name>...])]
+[PARTITION (<partition1_name>[,<partition2_name>,...])]
 ```
 
 `COLUMNS TERMINATED BY`
@@ -80,7 +80,7 @@ FROM data_source
 
 `WHERE`
 
-设置过滤条件，只有满足过滤条件的数据才会导入到 StarRocks 中。例如只希望导入 `col1` 大于 `100` 并且 `col2` 等于 `1000` 的数据行，则可以输入 `WHERE col1 > 100 and col2 = 1000;`。
+设置过滤条件，只有满足过滤条件的数据才会导入到 StarRocks 中。例如只希望导入 `col1` 大于 `100` 并且 `col2` 等于 `1000` 的数据行，则可以输入 `WHERE col1 > 100 and col2 = 1000`。
 
 > **说明**
 >
@@ -137,7 +137,7 @@ FROM <data_source>
 
 | **参数**          | **说明**                                                     |
 | ----------------- | ------------------------------------------------------------ |
-| kafka_broker_list | Kafka 的 Broker 连接信息。格式为 `<kafka_broker_ip>:<kafka port>`，多个 Broker 之间以英文逗号 (,) 分隔。 Kafka Broker 默认端口号为 `9092`。示例：`"kafka_broker_list" = "broker1:9092,broker2:9092"` |
+| kafka_broker_list | Kafka 的 Broker 连接信息。格式为 `<kafka_broker_ip>:<kafka port>`，多个 Broker 之间以英文逗号 (,) 分隔。 Kafka Broker 默认端口号为 `9092`。示例：`"kafka_broker_list" = "xxx.xx.xxx.xx:9092,xxx.xx.xxx.xx:9092"` |
 | kafka_topic       | Kafka Topic 名称。一个导入作业仅支持消费一个 Topic 的消息。  |
 | kafka_partitions  | 待消费的分区。如果不配置该参数，则默认消费所有分区。`"kafka_partitions" = "0, 1, 2, 3"` |
 | kafka_offsets     | 待消费分区的起始消费位点，必须完全对应 `kafka_partitions` 中指定分区。如果不配置该参数，则默认为从分区的末尾开始消费。取值为具体消费位点，或者：`OFFSET_BEGINNING`：从分区中有数据的位置开始消费。`OFFSET_END`：从分区的末尾开始消费。`"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"` |
@@ -173,22 +173,22 @@ FROM <data_source>
 
 - **使用SSL 加密和 CA 证书认证访问 Kafka**
 
-```Plaintext
-"property.security.protocol" = "ssl", --使用 SSL 加密
-"property.ssl.ca.location" = "FILE:ca-cert",--CA 证书的位置
+```sql
+"property.security.protocol" = "ssl", -- 使用 SSL 加密
+"property.ssl.ca.location" = "FILE:ca-cert", -- CA 证书的位置
 --如果 Kafka server 端开启了 client 认证，则还需设置如下三个参数：
-"property.ssl.certificate.location" = "FILE:client.pem", -- client 的 public key 的位置
-"property.ssl.key.location" = "FILE:client.key", -- client 的 private key 的位置
-"property.ssl.key.password" = "abcdefg",-- client 的 private key 的密码
+"property.ssl.certificate.location" = "FILE:client.pem", -- Client 的 public key 的位置
+"property.ssl.key.location" = "FILE:client.key", -- Client 的 private key 的位置
+"property.ssl.key.password" = "abcdefg" -- Client 的 private key 的密码
 ```
 
 - **使用 SASL 认证机制访问 Kafka**
 
-```Plaintext
-"property.security.protocol"="SASL_PLAINTEXT",--使用 SASL 认证机制
-"property.sasl.mechanism"="PLAIN",-- SASL 的 认证方式为 PLAIN
-"property.sasl.username"="admin",--SASL 的用户名
-"property.sasl.password"="admin"--SASL 的密码
+```sql
+"property.security.protocol"="SASL_PLAINTEXT", -- 使用 SASL 认证机制
+"property.sasl.mechanism"="PLAIN", -- SASL 的认证方式为 PLAIN
+"property.sasl.username"="admin", -- SASL 的用户名
+"property.sasl.password"="admin" -- SASL 的密码
 ```
 
 ### FE 和 BE 配置项
@@ -260,7 +260,7 @@ CREATE TABLE example_db.example_tbl1 (
     `customer_name` varchar(26) NULL COMMENT "顾客姓名", 
     `nationality` varchar(26) NULL COMMENT "国籍", 
     `gender` varchar(26) NULL COMMENT "性别", 
-    `price`double NULL COMMENT "支付金额") 
+    `price` double NULL COMMENT "支付金额") 
 PRIMARY KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
 ```
@@ -277,8 +277,8 @@ FROM KAFKA
 (
     "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
     "kafka_topic" = "ordertest1",
-    "kafka_partitions" ="0,1,2,3",--指定分区
-    "kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"--指定起始位点
+    "kafka_partitions" ="0,1,2,3", -- 指定分区
+    "kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000" -- 指定起始位点
 );
 ```
 
@@ -304,7 +304,7 @@ COLUMNS TERMINATED BY ",",
 COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
 PROPERTIES
 (
-"desired_concurrent_number" = "5" --设置单个 Routine Load 导入作业的期望任务并发度
+"desired_concurrent_number" = "5" -- 设置单个 Routine Load 导入作业的期望任务并发度
 )
 FROM KAFKA
 (
@@ -374,7 +374,7 @@ COLUMNS TERMINATED BY ",",
 COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
 PROPERTIES
 (
-"strict_mode" = "true" --设置导入作业为严格模式
+"strict_mode" = "true" -- 设置导入作业为严格模式
 )
 FROM KAFKA
 (
@@ -393,8 +393,8 @@ COLUMNS TERMINATED BY ",",
 COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
 PROPERTIES
 (
-"max_batch_rows" = "100000",--错误检测窗口范围为单个 Routine Load 导入任务所消费的 10 * max-batch-rows 行数。
-"max_error_number" = "100" --错误检测窗口范围内允许的错误数据行数的上限
+"max_batch_rows" = "100000", -- 错误检测窗口范围为单个 Routine Load 导入任务所消费的 10 * max-batch-rows 行数。
+"max_error_number" = "100" -- 错误检测窗口范围内允许的错误数据行数的上限
 )
 FROM KAFKA
 (
@@ -413,12 +413,12 @@ COLUMNS TERMINATED BY ",",
 COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
 PROPERTIES
 (
-"property.security.protocol" = "ssl", --使用 SSL 加密
-"property.ssl.ca.location" = "FILE:ca-cert",--CA 证书的位置
---如果 Kafka Server 端开启了 Client 身份认证，则还需设置如下三个参数：
+"property.security.protocol" = "ssl", -- 使用 SSL 加密
+"property.ssl.ca.location" = "FILE:ca-cert", -- CA 证书的位置
+-- 如果 Kafka Server 端开启了 Client 身份认证，则还需设置如下三个参数：
 "property.ssl.certificate.location" = "FILE:client.pem", -- Client 的 Public Key 的位置
 "property.ssl.key.location" = "FILE:client.key", -- Client 的 Private Key 的位置
-"property.ssl.key.password" = "abcdefg",-- Client 的 Private Key 的密码
+"property.ssl.key.password" = "abcdefg" -- Client 的 Private Key 的密码
 )
 FROM KAFKA
 (
@@ -516,7 +516,7 @@ DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5;
 
 **导入作业**
 
-提交导入作业时使用匹配模式。使用 `jsonpaths` 指定待导入 JSON 数据的 Key。并且由于 JSON 数据中 key `pay_time` 需要转换为 DATE 类型，才能导入到目标表的列 `pay_dt`，因此 `COLUMNS` 中需要使用函数`from_unixtime`进行转换。JSON 数据的其他 key 都能直接映射至表 `example_tbl3` 中。
+提交导入作业时使用匹配模式。使用 `jsonpaths` 指定待导入 JSON 数据的 Key。并且由于 JSON 数据中 key `pay_time` 需要转换为 DATE 类型，才能导入到目标表的列 `pay_dt`，因此 `COLUMNS` 中需要使用函数`from_unixtime`进行转换。JSON 数据的其他 key 都能直接映射至表 `example_tbl4` 中。
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl4_ordertest2 ON example_tbl4
@@ -567,7 +567,7 @@ DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5;
 
 **导入作业**
 
-提交导入作业，设置`"json_root" = "$.RECORDS"`指定实际待导入的json 数据的根节点。并且由于实际待导入的 JSON 数据是数组结构，因此还需要设置`"strip_outer_array" = "true"`，裁剪外层的数组结构。
+提交导入作业，设置`"json_root" = "$.RECORDS"`指定实际待导入的 JSON 数据的根节点。并且由于实际待导入的 JSON 数据是数组结构，因此还需要设置`"strip_outer_array" = "true"`，裁剪外层的数组结构。
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl3_ordertest3 ON example_tbl3
