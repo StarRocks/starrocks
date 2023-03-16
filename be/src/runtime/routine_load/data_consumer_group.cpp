@@ -247,13 +247,15 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                         serdes_err_t err = serdes_deserialize_avro(serdes, &avro, &schema, msg->payload(), msg->len(),
                                                                    errstr, sizeof(errstr));
                         if (err) {
-                            LOG(ERROR) << "serdes deserialize avro failed: " << errstr;
-                            return Status::InternalError("serdes deserialize avro failed");
+                            auto err_msg = strings::Substitute("serdes deserialize avro failed: $0", errstr);
+                            LOG(ERROR) << err_msg;
+                            return Status::InternalError(err_msg);
                         }
                         char* as_json;
                         if (avro_value_to_json(&avro, 1, &as_json)) {
-                            LOG(ERROR) << "avro to json failed: %s" << avro_strerror();
-                            return Status::InternalError("avro to json failed");
+                            auto err_msg = strings::Substitute("avro to json failed: $0", avro_strerror());
+                            LOG(ERROR) << err_msg;
+                            return Status::InternalError(err_msg);
                         }
                         st = (kafka_pipe.get()->*append_data)(as_json, strlen(as_json), row_delimiter);
                         free(as_json);
