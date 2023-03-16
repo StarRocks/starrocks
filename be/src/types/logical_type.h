@@ -104,15 +104,6 @@ inline LogicalType delegate_type(LogicalType type) {
     }
 }
 
-inline bool is_integer_type(LogicalType type) {
-    return type == TYPE_TINYINT || type == TYPE_SMALLINT || type == TYPE_INT || type == TYPE_BIGINT ||
-           type == TYPE_LARGEINT;
-}
-
-inline bool is_float_type(LogicalType type) {
-    return type == TYPE_FLOAT || type == TYPE_DOUBLE;
-}
-
 inline bool is_string_type(LogicalType type) {
     return type == LogicalType::TYPE_CHAR || type == LogicalType::TYPE_VARCHAR;
 }
@@ -248,8 +239,6 @@ VALUE_GUARD(LogicalType, BinaryLTGuard, lt_is_binary, TYPE_BINARY, TYPE_VARBINAR
 VALUE_GUARD(LogicalType, JsonGuard, lt_is_json, TYPE_JSON)
 VALUE_GUARD(LogicalType, FunctionGuard, lt_is_function, TYPE_FUNCTION)
 VALUE_GUARD(LogicalType, ObjectFamilyLTGuard, lt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
-VALUE_GUARD(LogicalType, MapGuard, lt_is_map, TYPE_MAP)
-VALUE_GUARD(LogicalType, StructGurad, lt_is_struct, TYPE_STRUCT)
 
 VALUE_GUARD(LogicalType, DateLTGuard, lt_is_date, TYPE_DATE)
 VALUE_GUARD(LogicalType, DateTimeLTGuard, lt_is_datetime, TYPE_DATETIME)

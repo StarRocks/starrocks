@@ -161,7 +161,6 @@ public:
 
     const Column& elements() const { return *_elements; }
     ColumnPtr& elements_column() { return _elements; }
-    ColumnPtr elements_column() const { return _elements; }
 
     const UInt32Column& offsets() const { return *_offsets; }
     UInt32Column::Ptr& offsets_column() { return _offsets; }
