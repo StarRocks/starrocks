@@ -818,9 +818,7 @@ public class PropertyAnalyzer {
                 } else {
                     // for PRIMARY_KEYS and UNIQUE_KEYS type table
                     // parent columns should be keys
-                    Set<String> keyColumnNames = parentOlapTable.getKeyColumns().stream().map(Column::getName)
-                                    .map(String::toLowerCase).collect(Collectors.toSet());
-                    if (!keyColumnNames.equals(Sets.newHashSet(parentColumns))) {
+                    if (!parentOlapTable.isKeySet(Sets.newHashSet(parentColumns))) {
                         throw new AnalysisException(String.format("columns:%s are not key columns of table:%s",
                                 parentColumns, parentTable.getName()));
                     }
