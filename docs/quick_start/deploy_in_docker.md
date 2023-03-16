@@ -15,12 +15,14 @@ You need to download the docker compose yaml file of starrocks.
 wget https://raw.githubusercontent.com/StarRocks/starrocks/main/docker/docker-compose/docker-compose.yml
 ```
 
+There are also other cluster configurations available at https://github.com/StarRocks/starrocks/tree/main/docker/docker-compose
+
 ## Step 2: Run StarRocks cluster
 
 You should run the following command
 
 ```sh
-docker-compose up -d
+docker compose -f docker-compose.yml -p starrocks up -d
 ```
 
 Then you can check the containers status.
@@ -33,7 +35,7 @@ Connect to StarRocks cluster
 mysql -h 127.0.0.1 -P9030 -u root
 ```
 
-## Step4: Create table, Ingest data, Query
+## Step 4: Create table, Ingest data, Query
 
 ```SQL
 CREATE DATABASE test;
@@ -42,3 +44,7 @@ CREATE TABLE tbl(c1 int, c2 int) distributed by hash(c1) properties ("replicatio
 INSERT INTO tbl VALUES (1, 1), (2, 2), (3, 3);
 SELECT * FROM tbl;
 ```
+
+## Step 5: Browse the local web console
+
+Connect to the StarRocks web console at http://localhost:8030 with username "root" and no password.
