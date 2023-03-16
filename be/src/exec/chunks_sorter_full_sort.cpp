@@ -249,7 +249,7 @@ starrocks::ChunkPtr ChunksSorterFullSort::_late_materialize_tmpl(const starrocks
     }
     return final_chunk;
 }
-Status ChunksSorterFullSort::done(RuntimeState* state) {
+Status ChunksSorterFullSort::do_done(RuntimeState* state) {
     RETURN_IF_ERROR(_partial_sort(state, true));
     {
         _sort_permutation = {};
