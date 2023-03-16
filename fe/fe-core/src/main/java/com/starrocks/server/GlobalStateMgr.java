@@ -2632,7 +2632,7 @@ public class GlobalStateMgr {
         // 2. add partition
         if (separatePartition && (table instanceof OlapTable)
                 && ((OlapTable) table).getPartitionInfo().isRangePartition()
-                && ((OlapTable) table).getPartitions().size() > 1) {
+                && table.getPartitions().size() > 1) {
             OlapTable olapTable = (OlapTable) table;
             RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             boolean first = true;

@@ -136,6 +136,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
             String partitionName = partition.getName();
             // show create table does not show hidden partitions
             if (partitionName.startsWith(SHADOW_PARTITION_PREFIX)) {
+                idx++;
                 continue;
             }
 
