@@ -663,6 +663,10 @@ public class SchemaTable extends Table {
         return true;
     }
 
+    public static Table getSchemaTable(String name) {
+        return TABLE_MAP.get(name);
+    }
+
     public enum SchemaTableType {
         // defination
         SCH_AUTHORS("AUTHORS", "AUTHORS", TSchemaTableType.SCH_AUTHORS),

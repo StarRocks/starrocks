@@ -511,8 +511,8 @@ public class ShowExecutor {
             TaskRunStatus taskStatus = mvNameTaskMap.get(TaskBuilder.getMvTaskName(mvId));
             ArrayList<String> resultRow = new ArrayList<>();
             resultRow.add(String.valueOf(mvId));
-            resultRow.add(mvTable.getName());
             resultRow.add(dbName);
+            resultRow.add(mvTable.getName());
             // refresh_type
             MaterializedView.MvRefreshScheme refreshScheme = mvTable.getRefreshScheme();
             if (refreshScheme == null) {
@@ -542,8 +542,8 @@ public class ShowExecutor {
             ArrayList<String> resultRow = new ArrayList<>();
             MaterializedIndexMeta mvMeta = olapTable.getVisibleIndexIdToMeta().get(mvIdx.getId());
             resultRow.add(String.valueOf(mvIdx.getId()));
-            resultRow.add(olapTable.getIndexNameById(mvIdx.getId()));
             resultRow.add(dbName);
+            resultRow.add(olapTable.getIndexNameById(mvIdx.getId()));
             // refresh_type
             resultRow.add("ROLLUP");
             // is_active

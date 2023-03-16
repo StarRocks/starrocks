@@ -35,8 +35,8 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .column("id", ScalarType.createVarchar(50))
-                    .column("name", ScalarType.createVarchar(50))
                     .column("database_name", ScalarType.createVarchar(20))
+                    .column("name", ScalarType.createVarchar(50))
                     .column("refresh_type", ScalarType.createVarchar(10))
                     .column("is_active", ScalarType.createVarchar(10))
                     .column("partition_type", ScalarType.createVarchar(16))

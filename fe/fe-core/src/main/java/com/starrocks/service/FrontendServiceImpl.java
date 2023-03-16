@@ -464,8 +464,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         for (List<String> rowSet : rowSets) {
             TMaterializedViewStatus status = new TMaterializedViewStatus();
             status.setId(rowSet.get(0));
-            status.setName(rowSet.get(1));
-            status.setDatabase_name(rowSet.get(2));
+            status.setDatabase_name(rowSet.get(1));
+            status.setName(rowSet.get(2));
             status.setRefresh_type(rowSet.get(3));
             status.setIs_active(rowSet.get(4));
             status.setPartition_type(rowSet.get(5));
