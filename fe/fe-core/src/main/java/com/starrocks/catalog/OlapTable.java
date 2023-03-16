@@ -1796,6 +1796,12 @@ public class OlapTable extends Table {
         return keysNum;
     }
 
+    public boolean isKeySet(Set<String> keyColumns) {
+        Set<String> tableKeyColumns = getKeyColumns().stream()
+                .map(column -> column.getName().toLowerCase()).collect(Collectors.toSet());
+        return tableKeyColumns.equals(keyColumns);
+    }
+
     public void setReplicationNum(Short replicationNum) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());

@@ -312,8 +312,10 @@ public class MaterializedViewRewriter {
                     continue;
                 }
                 List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
-                List<String> childKeys = columnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
-                List<String> parentKeys = columnPairs.stream().map(pair -> pair.second).collect(Collectors.toList());
+                List<String> childKeys = columnPairs.stream().map(pair -> pair.first)
+                        .map(String::toLowerCase).collect(Collectors.toList());
+                List<String> parentKeys = columnPairs.stream().map(pair -> pair.second)
+                        .map(String::toLowerCase).collect(Collectors.toList());
                 for (TableScanDesc mvParentTableScanDesc : mvParentTableScanDescs) {
                     List<ColumnRefOperator> tableCompensationColumns = Lists.newArrayList();
                     Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns = ArrayListMultimap.create();
@@ -445,12 +447,11 @@ public class MaterializedViewRewriter {
         }
     }
 
-    private boolean isUniqueKeys(OlapTable table, List<String> keys) {
+    private boolean isUniqueKeys(OlapTable table, List<String> lowerCasekeys) {
         KeysType tableKeyType = table.getKeysType();
+        Set<String> keySet = Sets.newHashSet(lowerCasekeys);
         if (tableKeyType == KeysType.PRIMARY_KEYS || tableKeyType == KeysType.UNIQUE_KEYS) {
-            List<String> tableKeyColumns = table.getKeyColumns()
-                    .stream().map(column -> column.getName()).collect(Collectors.toList());
-            if (!keys.containsAll(tableKeyColumns) || !tableKeyColumns.containsAll(keys)) {
+            if (!table.isKeySet(keySet)) {
                 return false;
             }
             return true;
@@ -460,7 +461,7 @@ public class MaterializedViewRewriter {
                 return false;
             }
             for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
-                if (uniqueConstraint.getUniqueColumns().equals(keys)) {
+                if (uniqueConstraint.isMatch(keySet)) {
                     return true;
                 }
             }
@@ -471,7 +472,7 @@ public class MaterializedViewRewriter {
 
     private ColumnRefOperator getColumnRef(String columnName, LogicalScanOperator scanOperator) {
         Optional<ColumnRefOperator> columnRef = scanOperator.getColumnMetaToColRefMap().values()
-                .stream().filter(col -> col.getName().equals(columnName)).findFirst();
+                .stream().filter(col -> col.getName().equalsIgnoreCase(columnName)).findFirst();
         return columnRef.isPresent() ? columnRef.get() : null;
     }
 
