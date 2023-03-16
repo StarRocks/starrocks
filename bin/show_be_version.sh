@@ -28,7 +28,7 @@ else
     if [[ $java_version -gt 8 ]]; then
         export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib
     else
-        export LD_LIBRARY_PATH=$JAVA_HOME/jre/lib/$jvmarch/server:$JAVA_HOME/jre/lib/$jvmarch
+        export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jindosdk:$JAVA_HOME/jre/lib/$jvmarch/server:$JAVA_HOME/jre/lib/$jvmarch
     fi
 fi
 
