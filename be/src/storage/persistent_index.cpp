@@ -2396,19 +2396,21 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
         _l1_merged_num.emplace_back(-1);
         _has_l1 = true;
     }
-    // if reload, don't update _usage_and_size_by_key_size 
+    // if reload, don't update _usage_and_size_by_key_size
     if (!reload) {
         _usage_and_size_by_key_size.clear();
         for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
             size_t total_size = 0;
             size_t total_usage = 0;
             auto [l0_shard_offset, l0_shard_size] = shard_info;
-            const auto l0_kv_pairs_size = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
-                                                          std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
-                                                          0UL, [](size_t s, const auto& e) { return s + e->size(); });
-            const auto l0_kv_pairs_usage = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
-                                                           std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
-                                                           0UL, [](size_t s, const auto& e) { return s + e->usage(); });
+            const auto l0_kv_pairs_size =
+                    std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
+                                    std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size), 0UL,
+                                    [](size_t s, const auto& e) { return s + e->size(); });
+            const auto l0_kv_pairs_usage =
+                    std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
+                                    std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size), 0UL,
+                                    [](size_t s, const auto& e) { return s + e->usage(); });
             total_size += l0_kv_pairs_size;
             total_usage += l0_kv_pairs_usage;
             if (_has_l1) {
@@ -2417,12 +2419,12 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
                     auto [l1_shard_offset, l1_shard_size] = iter->second;
                     const auto l1_kv_pairs_size =
                             std::accumulate(std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset),
-                                            std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset + l1_shard_size), 0UL,
-                                            [](size_t s, const auto& e) { return s + e.size; });
+                                            std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset + l1_shard_size),
+                                            0UL, [](size_t s, const auto& e) { return s + e.size; });
                     const auto l1_kv_pairs_usage =
                             std::accumulate(std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset),
-                                            std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset + l1_shard_size), 0UL,
-                                            [](size_t s, const auto& e) { return s + e.data_size; });
+                                            std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset + l1_shard_size),
+                                            0UL, [](size_t s, const auto& e) { return s + e.data_size; });
                     total_size += l1_kv_pairs_size;
                     total_usage += l1_kv_pairs_usage;
                 }
