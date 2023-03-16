@@ -34,6 +34,16 @@ import org.junit.Test;
 public class JoinTest extends PlanTestBase {
 
     @Test
+    public void test() throws Exception {
+        FeConstants.runningUnitTest = true;
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "explain costs select host_name() as h, exchange_speed(v1) from t0 group by h";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
+
+    @Test
     public void testColocateDistributeSatisfyShuffleColumns() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1;";
