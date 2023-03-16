@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 3.5.1)
+cmake_minimum_required(VERSION 3.11.1)
 
 # set CMAKE_C_COMPILER, this must set before project command
 if (DEFINED ENV{CC} AND DEFINED ENV{CXX})
@@ -144,9 +144,9 @@ set(BOOST_ROOT ${THIRDPARTY_DIR})
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 
 if (NOT APPLE)
-    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex program_options filesystem context)
+    find_package(Boost 1.80.0 REQUIRED COMPONENTS thread regex program_options filesystem context)
 else()
-    find_package(Boost 1.75.0 COMPONENTS thread regex program_options filesystem context)
+    find_package(Boost 1.80.0 COMPONENTS thread regex program_options filesystem context)
 endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
@@ -161,7 +161,7 @@ set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 add_library(glog STATIC IMPORTED)
 set_target_properties(glog PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libglog.a)
 
-add_library(re2 STATIC IMPORTED)
+add_library(re2 STATIC IMPORTED GLOBAL)
 set_target_properties(re2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libre2.a)
 
 add_library(pprof STATIC IMPORTED)
@@ -172,7 +172,7 @@ add_library(tcmalloc STATIC IMPORTED)
 set_target_properties(tcmalloc PROPERTIES IMPORTED_LOCATION
     ${GPERFTOOLS_HOME}/lib/libtcmalloc.a)
 
-add_library(protobuf STATIC IMPORTED)
+add_library(protobuf STATIC IMPORTED GLOBAL)
 set_target_properties(protobuf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libprotobuf.a)
 
 add_library(protoc STATIC IMPORTED)
