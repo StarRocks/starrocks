@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -52,6 +52,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.HudiTable.HUDI_BASE_PATH;
@@ -72,6 +73,11 @@ public class HiveMetastoreApiConverter {
 
     public static final IdGenerator<ConnectorTableId> CONNECTOR_ID_GENERATOR = ConnectorTableId.createGenerator();
     private static final String SPARK_SQL_SOURCE_PROVIDER = "spark.sql.sources.provider";
+
+    private static final Set<String> HUDI_INTERNAL_FIELD_NAMES =
+            ImmutableSortedSet.of("_hoodie_commit_time", "_hoodie_commit_seqno", "_hoodie_record_key",
+                    "_hoodie_partition_path",
+                    "_hoodie_file_name");
 
     private static boolean isDeltaLakeTable(Map<String, String> tableParams) {
         return tableParams.containsKey(SPARK_SQL_SOURCE_PROVIDER) &&
@@ -193,6 +199,9 @@ public class HiveMetastoreApiConverter {
         List<Schema.Field> allHudiColumns = hudiSchema.getFields();
         List<Column> fullSchema = Lists.newArrayList();
         for (Schema.Field fieldSchema : allHudiColumns) {
+            if (HUDI_INTERNAL_FIELD_NAMES.contains(fieldSchema.name())) {
+                continue;
+            }
             Type type;
             try {
                 type = fromHudiType(fieldSchema.schema());
