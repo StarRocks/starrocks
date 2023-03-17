@@ -2,7 +2,7 @@
 
 ## 功能
 
-将一列中的值（包括空值 null）串联成一个数组，可以用于列转行。
+将一列中的值（包括空值 null）串联成一个数组，可以用于多行转一行（行转列）。
 
 ## 语法
 
@@ -40,7 +40,7 @@ mysql> select * from test;
 +------+------+
 ```
 
-根据 `c1` 列分组，对 `c2` 执行列转行。
+根据 `c1` 列分组，对 `c2` 执行**行转列**。
 
 ```Plain Text
 mysql> select c1, array_agg(c2) from test group by c1;
@@ -53,7 +53,7 @@ mysql> select c1, array_agg(c2) from test group by c1;
 +------+-----------------+
 ```
 
-对整列执行列转行，如果没有满足条件的数据，聚合结果为 `NULL`。
+执行列转行时，如果没有满足条件的数据，聚合结果为 `NULL`。
 
 ```Plain Text
 mysql> select array_agg(c2) from test where c1>4;

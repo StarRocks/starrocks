@@ -4,7 +4,7 @@
 
 UNNEST 是一种表函数 (table function)，用于将一个数组展开成多行。
 
-您可以将 StarRocks 的 Lateral Join 与 UNNEST 功能结合使用，实现常见的行转列逻辑，比如展开 STRING，ARRAY，和 BITMAP 类型的数据。更多使用示例，参见 [Lateral join](../../../using_starrocks/Lateral_join.md)。
+您可以将 StarRocks 的 Lateral Join 与 UNNEST 功能结合使用，实现常见的列转行逻辑，比如展开 STRING，ARRAY，和 BITMAP 类型的数据。更多使用示例，参见 [Lateral join](../../../using_starrocks/Lateral_join.md)。
 
 ## 语法
 
