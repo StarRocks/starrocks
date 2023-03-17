@@ -178,7 +178,6 @@ void BinlogManager::_check_wait_reader_binlog_files() {
         if (binlog_file->reader_count() > 0) {
             break;
         }
-        _wait_reader_binlog_files.pop_front();
         auto& file_meta = binlog_file->file_meta();
         _total_wait_reader_binlog_file_size -= file_meta->file_size();
         for (int64_t rowset_id : file_meta->rowsets()) {
@@ -194,6 +193,8 @@ void BinlogManager::_check_wait_reader_binlog_files() {
         }
         last_file_id = file_meta->id();
         num_files += 1;
+
+        _wait_reader_binlog_files.pop_front();
 
         VLOG(3) << "Binlog file finished to wait readers, tablet: " << _tablet_id << ", file id: " << file_meta->id();
     }
@@ -230,7 +231,6 @@ void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t bi
             need_wait_reader = true;
         }
 
-        it = _alive_binlog_files.erase(it);
         _total_alive_binlog_file_size -= meta->file_size();
         if (need_wait_reader) {
             _wait_reader_binlog_files.push_back(binlog_file);
@@ -260,6 +260,8 @@ void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t bi
         num_files += 1;
         num_unused_files += need_wait_reader ? 0 : 1;
 
+        it = _alive_binlog_files.erase(it);
+
         VLOG(3) << "Binlog file is not alive, tablet: " << _tablet_id << ", file_id: " << meta->id()
                 << ", expired: " << expired << ", overcapacity: " << overcapacity
                 << ", need_wait_reader: " << need_wait_reader;
@@ -271,7 +273,7 @@ void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t bi
 }
 
 void BinlogManager::delete_unused_binlog() {
-    StatusOr<std::shared_ptr<FileSystem>> status_or;
+    StatusOr<std::shared_ptr<FileSystem>> status_or = FileSystem::CreateSharedFromString(_path);
     if (!status_or.ok()) {
         LOG(ERROR) << "Failed to delete unused binlog, tablet: " << _tablet_id << ", " << status_or.status();
         return;

@@ -104,7 +104,7 @@ protected:
     void generate_random_binlog(BinlogManager* binlog_manager, MockRowsetFetcher* rowset_fetcher,
                                 std::vector<std::shared_ptr<BinlogFileInfo>>& binlog_files, int32_t num_version,
                                 int32_t num_binlog_files);
-    void test_binlog_expired_and_overcapacity(bool expired, bool overcapacity);
+    void test_binlog_delete(bool expired, bool overcapacity);
 
     int64_t _next_rowset_uid;
     std::unique_ptr<TabletSchema> _tablet_schema;
@@ -596,7 +596,7 @@ void verify_alive_binlog_files(BinlogManager* binlog_manager, RowsetFetcher* row
     ASSERT_EQ(expect_rowset_count.size(), rowset_count_map.size());
     for (auto it = expect_rowset_count.begin(); it != expect_rowset_count.end(); it++) {
         ASSERT_EQ(1, rowset_count_map.count(it->first));
-        ASSERT_EQ(it->second, rowset_count_map.count(it->first));
+        ASSERT_EQ(it->second, rowset_count_map[it->first]);
     }
 
     ASSERT_EQ(expect_total_binlog_file_size, binlog_manager->total_alive_binlog_file_size());
@@ -626,12 +626,13 @@ void verify_wait_reader_binlog_files(BinlogManager* binlog_manager, RowsetFetche
                 expect_total_rowset_data_size += rowset_fetcher->get_rowset(rowset.rowset_id)->data_disk_size();
             }
         }
+        index += 1;
     }
 
     ASSERT_EQ(expect_rowset_count.size(), rowset_count_map.size());
     for (auto it = expect_rowset_count.begin(); it != expect_rowset_count.end(); it++) {
         ASSERT_EQ(1, rowset_count_map.count(it->first));
-        ASSERT_EQ(it->second, rowset_count_map.count(it->first));
+        ASSERT_EQ(it->second, rowset_count_map[it->first]);
     }
 
     ASSERT_EQ(expect_total_binlog_file_size, binlog_manager->total_wait_reader_binlog_file_size());
@@ -660,7 +661,7 @@ void verify_unused_binlog_files(BinlogManager* binlog_manager, std::vector<Binlo
     }
 }
 
-void BinlogManagerTest::test_binlog_expired_and_overcapacity(bool expired, bool overcapacity) {
+void BinlogManagerTest::test_binlog_delete(bool expired, bool overcapacity) {
     int64_t max_file_size = 100 * 1024 * 1024;
     int32_t max_page_size = 1024 * 1024;
     CompressionTypePB compress_type = LZ4_FRAME;
@@ -677,9 +678,9 @@ void BinlogManagerTest::test_binlog_expired_and_overcapacity(bool expired, bool 
     std::vector<ExpireAndCapacityParams> params;
     generate_params(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, params);
     bool is_alive = !expired && !overcapacity;
-    for (int i = 0; i < params.size(); i += 2) {
+    for (int i = 0; i < params.size(); i++) {
         auto& param = params[i];
-        // skip the file if it's timestamp is larger than that of the next file
+        // skip the file if it's timestamp is no less than that of the next file
         if (expired && i + 1 < params.size()) {
             int64_t t1 = binlog_file_infos[i]->rowsets.back().timestamp_in_us;
             int64_t t2 = binlog_file_infos[i + 1]->rowsets.back().timestamp_in_us;
@@ -707,19 +708,19 @@ void BinlogManagerTest::test_binlog_expired_and_overcapacity(bool expired, bool 
 }
 
 TEST_F(BinlogManagerTest, test_binlog_all_alive) {
-    test_binlog_expired_and_overcapacity(false, false);
+    test_binlog_delete(false, false);
 }
 
 TEST_F(BinlogManagerTest, test_binlog_expired) {
-    test_binlog_expired_and_overcapacity(true, false);
+    test_binlog_delete(true, false);
 }
 
 TEST_F(BinlogManagerTest, test_binlog_overcapacity) {
-    test_binlog_expired_and_overcapacity(false, true);
+    test_binlog_delete(false, true);
 }
 
 TEST_F(BinlogManagerTest, test_binlog_expired_and_overcapacity) {
-    test_binlog_expired_and_overcapacity(true, true);
+    test_binlog_delete(true, true);
 }
 
 TEST_F(BinlogManagerTest, test_wait_reader) {
