@@ -41,7 +41,7 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"MV_REFRESH_PARTITIONS", TYPE_VARCHAR, sizeof(StringValue), false},
 
         {"LAST_REFRESH_ERROR_CODE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_ERROR_REASON", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"LAST_REFRESH_ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TABLE_ROWS", TYPE_VARCHAR, sizeof(StringValue), false},
 };
@@ -244,10 +244,10 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 17: {
-            // last_refresh_error_reason
+            // last_refresh_error_message
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(17);
-                const std::string* str = &tbl_status.last_refresh_error_reason;
+                const std::string* str = &tbl_status.last_refresh_error_message;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }

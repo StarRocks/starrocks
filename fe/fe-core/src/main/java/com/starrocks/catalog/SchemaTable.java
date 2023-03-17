@@ -547,7 +547,7 @@ public class SchemaTable extends Table {
                                             .column("BASE_REFRESH_PARTITIONS", ScalarType.createVarchar(1024))
                                             .column("MV_REFRESH_PARTITIONS", ScalarType.createVarchar(1024))
                                             .column("LAST_REFRESH_ERROR_CODE", ScalarType.createVarchar(20))
-                                            .column("LAST_REFRESH_ERROR_REASON", ScalarType.createVarchar(1024))
+                                            .column("LAST_REFRESH_ERROR_MESSAGE", ScalarType.createVarchar(1024))
                                             .column("MATERIALIZED_VIEW_DEFINITION",
                                                     ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .column("TABLE_ROWS", ScalarType.createVarchar(50))
