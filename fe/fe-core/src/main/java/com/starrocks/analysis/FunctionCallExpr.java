@@ -146,11 +146,6 @@ public class FunctionCallExpr extends Expr {
         if (params.exprs() != null) {
             children.addAll(params.exprs());
         }
-        // treat order-by expressions as normal children
-        if (params.getOrderByElements() != null) {
-            children.addAll(params.getOrderByElements().stream().map(OrderByElement::getExpr)
-                    .collect(Collectors.toList()));
-        }
     }
 
     // Constructs the same agg function with new params.
@@ -166,11 +161,6 @@ public class FunctionCallExpr extends Expr {
         this.isMergeAggFn = e.isMergeAggFn;
         if (params.exprs() != null) {
             children.addAll(params.exprs());
-        }
-        // treat order-by expressions as normal children
-        if (params.getOrderByElements() != null) {
-            children.addAll(params.getOrderByElements().stream().map(OrderByElement::getExpr)
-                    .collect(Collectors.toList()));
         }
     }
 
@@ -251,11 +241,13 @@ public class FunctionCallExpr extends Expr {
         if (fnParams.isDistinct()) {
             sb.append("DISTINCT ");
         }
-        if(fnParams.getOrderByElements() == null) {
+        if (fnParams.getOrderByElements() == null) {
             sb.append(Joiner.on(", ").join(childrenToSql())).append(")");
         } else {
-            sb.append(children.get(0).toSql());
+            sb.append(Joiner.on(", ").join(firstNChildrenToSql(
+                    children.size() - fnParams.getOrderByElements().size())));
             sb.append(fnParams.getOrderByStringToSql());
+            sb.append(')');
         }
         return sb.toString();
     }
@@ -273,11 +265,13 @@ public class FunctionCallExpr extends Expr {
         if (fnParams.isDistinct()) {
             sb.append("distinct ");
         }
-        if(fnParams.getOrderByElements() == null) {
-            sb.append(Joiner.on(", ").join(childrenToExplain())).append(");");
+        if (fnParams.getOrderByElements() == null) {
+            sb.append(Joiner.on(", ").join(firstNChildrenToExplain(children.size()))).append(");");
         } else {
-            sb.append(children.get(0).explain());
+            sb.append(Joiner.on(", ").join(firstNChildrenToExplain(
+                    children.size() - fnParams.getOrderByElements().size())));
             sb.append(fnParams.getOrderByStringToExplain());
+            sb.append(')');
         }
         if (fn != null) {
             sb.append(" args: ");
@@ -296,10 +290,21 @@ public class FunctionCallExpr extends Expr {
         return sb.toString();
     }
 
-    public List<String> childrenToExplain() {
+    // explain the first N children
+    public List<String> firstNChildrenToExplain(int n) {
+        Preconditions.checkState(n < children.size());
         List<String> result = Lists.newArrayList();
-        for (Expr child : children) {
-            result.add(child.explain());
+        for (int i = 0; i < n; i++) {
+            result.add(children.get(i).explain());
+        }
+        return result;
+    }
+
+    public List<String> firstNChildrenToSql(int n) {
+        Preconditions.checkState(n < children.size());
+        List<String> result = Lists.newArrayList();
+        for (int i = 0; i < n; i++) {
+            result.add(children.get(i).toSql());
         }
         return result;
     }
@@ -409,13 +414,9 @@ public class FunctionCallExpr extends Expr {
 
     public void readFields(DataInput in) throws IOException {
         fnName = FunctionName.read(in);
-        fnParams = FunctionParams.read(in);
+        fnParams = FunctionParams.read(in, fnName);
         if (fnParams.exprs() != null) {
             children.addAll(fnParams.exprs());
-            if(fnParams.getOrderByElements() != null) {
-                children.addAll(fnParams.getOrderByElements().stream().map(OrderByElement::getExpr)
-                        .collect(Collectors.toList()));
-            }
         }
         isAnalyticFnCall = in.readBoolean();
         isMergeAggFn = in.readBoolean();
