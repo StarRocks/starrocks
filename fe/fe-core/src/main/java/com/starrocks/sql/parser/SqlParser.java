@@ -119,10 +119,48 @@ public class SqlParser {
 
     private static StarRocksParser parserBuilder(String sql, SessionVariable sessionVariable) {
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+        lexer.setSqlMode(sessionVariable.getSqlMode());
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
 
+<<<<<<< HEAD
         StarRocksParser.sqlMode = sessionVariable.getSqlMode();
+=======
+        // Unify the error message
+        parser.setErrorHandler(new DefaultErrorStrategy() {
+            @Override
+            public Token recoverInline(Parser recognizer)
+                    throws RecognitionException {
+                if (nextTokensContext == null) {
+                    throw new InputMismatchException(recognizer);
+                } else {
+                    throw new InputMismatchException(recognizer, nextTokensState, nextTokensContext);
+                }
+            }
+
+            @Override
+            protected void reportMissingToken(Parser recognizer) {
+                reportMissMatchedToken(recognizer);
+            }
+
+            @Override
+            protected void reportUnwantedToken(Parser recognizer) {
+                reportMissMatchedToken(recognizer);
+            }
+
+            private void reportMissMatchedToken(Parser recognizer) {
+                if (inErrorRecoveryMode(recognizer)) {
+                    return;
+                }
+
+                beginErrorCondition(recognizer);
+                Token t = recognizer.getCurrentToken();
+                String tokenName = getTokenDisplay(t);
+                recognizer.notifyErrorListeners(t, PARSER_ERROR_MSG.inputMismatch(tokenName), null);
+            }
+        });
+
+>>>>>>> b0713aeb0 ([BugFix] fix sql_mode in parser being overwritten (#19621))
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
