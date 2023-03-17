@@ -36,7 +36,7 @@ public class PrivilegeActions {
     private static boolean checkObjectTypeAction(UserIdentity userIdentity, Set<Long> roleIds,
                                                  PrivilegeType privilegeType,
                                                  ObjectType objectType, List<String> objectTokens) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(userIdentity, roleIds);
             return manager.checkAction(collection, objectType, privilegeType, objectTokens);
@@ -134,7 +134,7 @@ public class PrivilegeActions {
      * Check whether current user has specified privilege action on any object(table/view/mv) in the db.
      */
     public static boolean checkActionInDb(ConnectContext context, String db, PrivilegeType privilegeType) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds());
@@ -185,7 +185,7 @@ public class PrivilegeActions {
 
     private static boolean checkAnyActionOnObject(UserIdentity currentUser, Set<Long> roleIds, ObjectType objectType,
                                                   List<String> objectTokens) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(currentUser, roleIds);
             PEntryObject pEntryObject = manager.provider.generateObject(
