@@ -1273,7 +1273,7 @@ public class GlobalStateMgr {
             metastoreEventsProcessor.start();
         }
 
-        if (Config.enable_background_refresh_metadata) {
+        if (Config.enable_background_refresh_connector_metadata) {
             connectorTableMetadataProcessor.start();
         }
 

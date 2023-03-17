@@ -1686,13 +1686,13 @@ public class Config extends ConfigBase {
      * Enable background refresh all external tables all partitions metadata on internal catalog.
      */
     @ConfField
-    public static boolean enable_background_refresh_metadata = true;
+    public static boolean enable_background_refresh_connector_metadata = true;
 
     /**
      * Number of threads to refresh remote file's metadata concurrency.
      */
     @ConfField
-    public static int background_refresh_file_metadata_concurrency = 1;
+    public static int background_refresh_file_metadata_concurrency = 4;
 
     /**
      * Background refresh hive external table metadata interval in milliseconds.
