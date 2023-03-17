@@ -24,7 +24,8 @@
 #include <utility>
 
 #include "common/status.h"
-#include "fs/fs_hdfs.h"
+#include "fs/hdfs/fs_hdfs.h"
+#include "util/random.h"
 
 namespace starrocks {
 
@@ -36,8 +37,6 @@ struct HdfsFsHandle {
 // Cache for HDFS file system
 class HdfsFsCache {
 public:
-    using HdfsFsMap = std::unordered_map<std::string, HdfsFsHandle>;
-
     static HdfsFsCache* instance() {
         static HdfsFsCache s_instance;
         return &s_instance;
@@ -48,7 +47,11 @@ public:
 
 private:
     std::mutex _lock;
-    HdfsFsMap _cache;
+    int _cur_client_idx{0};
+    constexpr static int _max_cache_clients = 8;
+    std::string _cache_key[_max_cache_clients];
+    HdfsFsHandle _cache_clients[_max_cache_clients];
+    Random _rand{(uint32_t)time(nullptr)};
 
     HdfsFsCache() = default;
     HdfsFsCache(const HdfsFsCache&) = delete;

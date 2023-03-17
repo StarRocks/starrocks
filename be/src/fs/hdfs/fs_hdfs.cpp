@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/fs_hdfs.h"
+#include "fs/hdfs/fs_hdfs.h"
 
 #include <fmt/format.h>
 #include <hdfs/hdfs.h>
@@ -23,7 +23,7 @@
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
-#include "runtime/hdfs/hdfs_fs_cache.h"
+#include "fs/hdfs/hdfs_fs_cache.h"
 #include "udf/java/utils.h"
 #include "util/hdfs_util.h"
 
