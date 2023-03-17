@@ -224,6 +224,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public TaskRunStatus initStatus(String queryId, Long createTime) {
         TaskRunStatus status = new TaskRunStatus();
         status.setQueryId(queryId);
+        status.setTaskId(task.getId());
         status.setTaskName(task.getName());
         if (createTime == null) {
             status.setCreateTime(System.currentTimeMillis());

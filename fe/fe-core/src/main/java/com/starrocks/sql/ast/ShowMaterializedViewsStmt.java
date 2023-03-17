@@ -40,6 +40,8 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                     .column("refresh_type", ScalarType.createVarchar(10))
                     .column("is_active", ScalarType.createVarchar(10))
                     .column("partition_type", ScalarType.createVarchar(16))
+                    .column("task_id", ScalarType.createVarchar(20))
+                    .column("task_name", ScalarType.createVarchar(50))
                     .column("last_refresh_start_time", ScalarType.createVarchar(20))
                     .column("last_refresh_finished_time", ScalarType.createVarchar(20))
                     .column("last_refresh_duration", ScalarType.createVarchar(20))
@@ -50,7 +52,7 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                     .column("base_refresh_partitions", ScalarType.createVarchar(1024))
                     .column("mv_refresh_partitions", ScalarType.createVarchar(1024))
                     .column("last_refresh_error_code", ScalarType.createVarchar(20))
-                    .column("last_refresh_error_message", ScalarType.createVarchar(1024))
+                    .column("last_refresh_error_reason", ScalarType.createVarchar(1024))
                     .column("text", ScalarType.createVarchar(1024))
                     .column("rows", ScalarType.createVarchar(50))
                     .build();

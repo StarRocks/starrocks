@@ -367,7 +367,7 @@ struct TMaterializedViewStatus {
     8: optional string last_refresh_duration
     9: optional string last_refresh_state
     10: optional string last_refresh_error_code
-    11: optional string last_refresh_error_reason 
+    11: optional string last_refresh_error_message
     12: optional string text
     13: optional string rows
 
@@ -381,6 +381,9 @@ struct TMaterializedViewStatus {
     20: optional i64 last_check_time
     21: optional i64 create_time
     22: optional string ddl_sql
+
+    23: optional string task_id
+    24: optional string task_name
 }
 
 struct TListMaterializedViewStatusResult {

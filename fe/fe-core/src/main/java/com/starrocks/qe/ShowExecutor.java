@@ -590,6 +590,10 @@ public class ShowExecutor {
 
     private static void setTaskRunStatus(List<String> resultRow, TaskRunStatus taskStatus) {
         if (taskStatus != null) {
+            // task_id
+            resultRow.add(String.valueOf(taskStatus.getTaskId()));
+            // task_name
+            resultRow.add(taskStatus.getTaskName());
             // last_refresh_start_time
             resultRow.add(String.valueOf(TimeUtils.longToTimeString(taskStatus.getCreateTime())));
             // last_refresh_finished_time
@@ -616,7 +620,7 @@ public class ShowExecutor {
             // last_refresh_reason
             resultRow.add(taskStatus.getErrorMessage());
         } else {
-            for (int i = 0; i < 11; i++) {
+            for (int i = 0; i < 13; i++) {
                 resultRow.add("");
             }
         }

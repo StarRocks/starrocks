@@ -35,6 +35,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("queryId")
     private String queryId;
 
+    @SerializedName("taskId")
+    private long taskId;
+
     @SerializedName("taskName")
     private String taskName;
 
@@ -74,6 +77,7 @@ public class TaskRunStatus implements Writable {
 
     @SerializedName("mergeRedundant")
     private boolean mergeRedundant = false;
+
     @SerializedName("forceRefresh")
     private boolean forceRefresh;
     @SerializedName("partitionStart")
@@ -85,13 +89,20 @@ public class TaskRunStatus implements Writable {
     @SerializedName("basePartitionsToRefreshMap")
     private Map<String, Set<String>> basePartitionsToRefreshMap;
 
-
     public String getQueryId() {
         return queryId;
     }
 
     public void setQueryId(String queryId) {
         this.queryId = queryId;
+    }
+
+    public long getTaskId() {
+        return taskId;
+    }
+
+    public void setTaskId(long taskId) {
+        this.taskId = taskId;
     }
 
     public String getTaskName() {

@@ -537,12 +537,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         boolean force = Boolean.parseBoolean(properties.get(TaskRun.FORCE));
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
-        if (this.mvContext.status != null) {
-            this.mvContext.status.setForceRefresh(force);
-            this.mvContext.status.setPartitionStart(start);
-            this.mvContext.status.setPartitionEnd(end);
-        }
-
+        
         if (force && start == null && end == null) {
             return Sets.newHashSet(materializedView.getPartitionNames());
         }
@@ -589,6 +584,14 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         } else {
             throw new DmlException("unsupported partition info type:" + partitionInfo.getClass().getName());
         }
+
+        // update stats
+        if (this.mvContext.status != null) {
+            this.mvContext.status.setForceRefresh(force);
+            this.mvContext.status.setPartitionStart(start);
+            this.mvContext.status.setPartitionEnd(end);
+        }
+
         return needRefreshMvPartitionNames;
     }
 
