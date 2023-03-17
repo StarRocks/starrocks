@@ -915,7 +915,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //      plan by cost.
     //  - otherwise not try to write single table query by using candidate view-delta mvs which only
     //      try to rewrite by single table mvs and is determined by rule rather than by cost.
-    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE)
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewSingleTableViewDeltaRewrite = false;
 
     // if enable_big_query_log = true and cpu/io cost of a query exceeds the related threshold,
