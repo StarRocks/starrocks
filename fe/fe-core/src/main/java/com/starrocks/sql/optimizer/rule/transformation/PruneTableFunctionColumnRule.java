@@ -41,10 +41,10 @@ public class PruneTableFunctionColumnRule extends TransformationRule {
         LogicalTableFunctionOperator logicalTableFunctionOperator = (LogicalTableFunctionOperator) input.getOp();
         ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
 
-        ColumnRefSet newOuterColumnRefSet = new ColumnRefSet();
-        for (int columnId : logicalTableFunctionOperator.getOuterColumnRefSet().getColumnIds()) {
-            if (requiredOutputColumns.contains(columnId)) {
-                newOuterColumnRefSet.union(columnId);
+        List<ColumnRefOperator> newOuterCols = Lists.newArrayList();
+        for (ColumnRefOperator col : logicalTableFunctionOperator.getOuterColRefs()) {
+            if (requiredOutputColumns.contains(col.getId())) {
+                newOuterCols.add(col);
             }
         }
 
@@ -52,12 +52,9 @@ public class PruneTableFunctionColumnRule extends TransformationRule {
             requiredOutputColumns.union(pair.first);
         }
 
-        LogicalTableFunctionOperator newOperator = new LogicalTableFunctionOperator(
-                logicalTableFunctionOperator.getFnResultColumnRefSet(),
-                logicalTableFunctionOperator.getFn(),
-                logicalTableFunctionOperator.getFnParamColumnProject(),
-                newOuterColumnRefSet);
-        newOperator.setLimit(logicalTableFunctionOperator.getLimit());
+        LogicalTableFunctionOperator newOperator = (new LogicalTableFunctionOperator.Builder())
+                .withOperator(logicalTableFunctionOperator)
+                .setOuterColRefs(newOuterCols).build();
 
         if (logicalTableFunctionOperator.equals(newOperator)) {
             return Collections.emptyList();

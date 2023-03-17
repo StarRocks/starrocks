@@ -24,7 +24,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -38,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
@@ -201,18 +201,22 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
             optExpression.setChild(childIdx, rewrite(optExpression.inputAt(childIdx), context));
         }
 
-        ColumnRefSet bitSet = new ColumnRefSet();
+        List<ColumnRefOperator> newOuterColumns = Lists.newArrayList();
         LogicalTableFunctionOperator tableFunctionOperator = (LogicalTableFunctionOperator) optExpression.getOp();
-        for (Integer columnId : tableFunctionOperator.getOuterColumnRefSet().getColumnIds()) {
-            if (columnId == context.queryColumnRef.getId()) {
-                bitSet.union(context.mvColumnRef.getId());
+        for (ColumnRefOperator col : tableFunctionOperator.getOuterColRefs()) {
+            if (col.equals(context.queryColumnRef)) {
+                newOuterColumns.add(context.mvColumnRef);
             } else {
-                bitSet.union(columnId);
+                newOuterColumns.add(col);
             }
         }
 
-        tableFunctionOperator.setOuterColumnRefSet(bitSet);
-        return OptExpression.create(tableFunctionOperator, optExpression.getInputs());
+        LogicalTableFunctionOperator newOperator = (new LogicalTableFunctionOperator.Builder())
+                .withOperator(tableFunctionOperator)
+                .setOuterColRefs(newOuterColumns)
+                .build();
+
+        return OptExpression.create(newOperator, optExpression.getInputs());
     }
 
     @Override

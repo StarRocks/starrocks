@@ -183,7 +183,7 @@ public class AstToSQLBuilder {
         @Override
         public String visitCTE(CTERelation relation, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
-            sqlBuilder.append(relation.getName());
+            sqlBuilder.append("`" + relation.getName() + "`");
 
             if (relation.isResolvedInFromClause()) {
                 if (relation.getAlias() != null) {
@@ -193,7 +193,7 @@ public class AstToSQLBuilder {
             }
 
             if (relation.getColumnOutputNames() != null) {
-                sqlBuilder.append("(")
+                sqlBuilder.append(" (")
                         .append(Joiner.on(", ").join(
                                 relation.getColumnOutputNames().stream().map(c -> "`" + c + "`").collect(toList())))
                         .append(")");

@@ -725,8 +725,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             }
         }
 
-        Operator root = new LogicalTableFunctionOperator(
-                new ColumnRefSet(outputColumns), node.getTableFunction(), projectMap);
+        Operator root = new LogicalTableFunctionOperator(outputColumns, node.getTableFunction(), projectMap);
         return new LogicalPlan(new OptExprBuilder(root, Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputColumns)),
                 null, null);
