@@ -2,12 +2,16 @@
 
 #include "exec/vectorized/chunks_sorter.h"
 
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <gtest/gtest.h>
 
 #include <cstdio>
 #include <memory>
+#include <string_view>
 
 #include "column/column_helper.h"
+#include "column/datum.h"
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -1015,6 +1019,41 @@ TEST_F(ChunksSorterTest, find_zero) {
         std::fill(bytes.begin(), bytes.end(), 0);
         EXPECT_EQ(len, SIMD::find_nonzero(bytes, 0));
     }
+}
+
+TEST_F(ChunksSorterTest, test_compare_column) {
+    std::vector<int8_t> cmp_vector;
+    std::vector<Datum> rhs_values;
+
+    rhs_values.emplace_back(int32_t(1));
+
+    // get filter array x < 1
+    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    ColumnPtr nullable_column = ColumnHelper::create_column(type_desc, true);
+
+    nullable_column->append_datum(Datum(1));
+    nullable_column->append_datum(Datum(2));
+    nullable_column->append_nulls(2);
+
+    cmp_vector.resize(nullable_column->size());
+
+    auto desc_null_last = SortDescs();
+    desc_null_last.descs.emplace_back(false, false);
+    compare_columns(Columns{nullable_column}, cmp_vector, rhs_values, desc_null_last);
+
+    std::vector<int8_t> expected = {0, -1, 1, 1};
+    EXPECT_EQ(cmp_vector, expected);
+
+    // test asc null last
+    // get filter array x > 1
+    auto asc_null_last = SortDescs();
+    asc_null_last.descs.emplace_back(true, true);
+
+    cmp_vector.assign(4, 0);
+    compare_columns(Columns{nullable_column}, cmp_vector, rhs_values, asc_null_last);
+
+    expected = {0, 1, -1, -1};
+    EXPECT_EQ(cmp_vector, expected);
 }
 
 TEST_F(ChunksSorterTest, test_tie) {
