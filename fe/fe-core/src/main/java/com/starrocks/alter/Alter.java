@@ -325,6 +325,22 @@ public class Alter {
             properties.remove(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES);
         }
 
+        if (!properties.isEmpty()) {
+            // analyze properties
+            List<SetListItem> setListItems = Lists.newArrayList();
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                    throw new AnalysisException("Modify failed because unknown properties: " + properties +
+                            ", please add `session.` prefix if you want add session variables for mv(" +
+                            "eg, \"session.query_timeout\"=\"30000000\").");
+                }
+                String varKey = entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
+                setListItems.add(variable);
+            }
+            SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
+        }
+
         boolean isChanged = false;
         Map<String, String> curProp = materializedView.getTableProperty().getProperties();
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER) &&
@@ -351,20 +367,6 @@ public class Alter {
         }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
         if (!properties.isEmpty()) {
-            // analyze properties
-            List<SetListItem> setListItems = Lists.newArrayList();
-            for (Map.Entry<String, String> entry : properties.entrySet()) {
-                if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
-                    throw new AnalysisException("Modify failed because unknown properties: " + properties +
-                            ", please add `session.` prefix if you want add session variables for mv(" +
-                            "eg, \"session.query_timeout\"=\"30000000\").");
-                }
-                String varKey = entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
-                SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
-                setListItems.add(variable);
-            }
-            SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
-
             // set properties if there are no exceptions
             for (Map.Entry<String, String> entry : properties.entrySet()) {
                 materializedView.getTableProperty().modifyTableProperties(entry.getKey(), entry.getValue());
