@@ -197,9 +197,8 @@ private:
 };
 
 LogBlockManager::LogBlockManager(TUniqueId query_id) : _query_id(query_id) {
-    _max_container_bytes = config::experimental_spill_max_log_block_container_bytes > 0
-                                   ? config::experimental_spill_max_log_block_container_bytes
-                                   : kDefaultMaxContainerBytes;
+    _max_container_bytes = config::spill_max_log_block_container_bytes > 0 ? config::spill_max_log_block_container_bytes
+                                                                           : kDefaultMaxContainerBytes;
 }
 
 LogBlockManager::~LogBlockManager() {
@@ -231,8 +230,7 @@ StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opt
 #endif
 
     ASSIGN_OR_RETURN(auto block_container, get_or_create_container(dir, opts.plan_node_id, opts.name));
-    auto block = std::make_shared<LogBlock>(block_container, block_container->size());
-    return block;
+    return std::make_shared<LogBlock>(block_container, block_container->size());
 }
 
 Status LogBlockManager::release_block(const BlockPtr& block) {

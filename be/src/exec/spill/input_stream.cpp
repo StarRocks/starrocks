@@ -27,7 +27,9 @@ public:
     BufferedInputStream(int capacity, InputStreamPtr stream) : _capacity(capacity), _input_stream(stream) {}
     ~BufferedInputStream() override = default;
 
-    bool is_buffer_full() { return _chunk_buffer.get_size() >= _capacity || eof(); }
+    bool is_buffer_full() { return _chunk_buffer.get_size() >= _capacity; }
+    // The ChunkProvider in sort operator needs to use has_chunk to check whether the data is ready,
+    // if the InputStrema is in the eof state, it also needs to return true to driver ChunkSortCursor into the stage of obtaining data.
     bool has_chunk() { return !_chunk_buffer.empty() || eof(); }
 
     StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
@@ -62,7 +64,7 @@ private:
 StatusOr<ChunkUniquePtr> BufferedInputStream::read_from_buffer() {
     if (_chunk_buffer.empty()) {
         CHECK(eof());
-        return Status::EndOfFile("end of stream");
+        return Status::EndOfFile("end of reading spilled BufferedInputStream");
     }
     ChunkUniquePtr res;
     CHECK(_chunk_buffer.try_get(&res));
@@ -78,7 +80,7 @@ StatusOr<ChunkUniquePtr> BufferedInputStream::get_next(SerdeContext& ctx) {
 }
 
 Status BufferedInputStream::prefetch(SerdeContext& ctx) {
-    if (is_buffer_full()) {
+    if (is_buffer_full() || eof()) {
         return Status::OK();
     }
     // concurrent prefetch is not allowed, should call _acquire and _release before and after prefetch
@@ -119,7 +121,7 @@ private:
 
 StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(SerdeContext& ctx) {
     if (_current_idx >= _input_blocks.size()) {
-        return Status::EndOfFile("end of stream");
+        return Status::EndOfFile("end of reading spilled UnorderedInputStream");
     }
 
     while (true) {
@@ -210,7 +212,7 @@ StatusOr<ChunkUniquePtr> OrderedInputStream::get_next(SerdeContext& ctx) {
         return std::move(chunk);
     }
     if (eos) {
-        return Status::EndOfFile("eos");
+        return Status::EndOfFile("end of reading spilled OrderedInputStream");
     }
     DCHECK(should_exit);
     return std::make_unique<Chunk>();
@@ -225,7 +227,7 @@ Status OrderedInputStream::prefetch(SerdeContext& ctx) {
     }
     if (eof_num == _input_streams.size()) {
         mark_is_eof();
-        return Status::EndOfFile("end of stream");
+        return Status::EndOfFile("end of reading spilled OrderedInputStream");
     }
     return Status::OK();
 }
