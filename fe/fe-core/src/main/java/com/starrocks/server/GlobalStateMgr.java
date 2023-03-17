@@ -204,8 +204,8 @@ import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeActions;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -414,7 +414,7 @@ public class GlobalStateMgr {
     private AtomicBoolean usingNewPrivilege;
 
     private AuthenticationManager authenticationManager;
-    private PrivilegeManager privilegeManager;
+    private AuthorizationManager authorizationManager;
 
     private DomainResolver domainResolver;
 
@@ -760,8 +760,8 @@ public class GlobalStateMgr {
         return authenticationManager;
     }
 
-    public PrivilegeManager getPrivilegeManager() {
-        return privilegeManager;
+    public AuthorizationManager getAuthorizationManager() {
+        return authorizationManager;
     }
 
     public ResourceGroupMgr getResourceGroupMgr() {
@@ -1000,12 +1000,12 @@ public class GlobalStateMgr {
         if (usingNewPrivilege) {
             this.authenticationManager = new AuthenticationManager();
             this.domainResolver = new DomainResolver(authenticationManager);
-            this.privilegeManager = new PrivilegeManager(this, null);
+            this.authorizationManager = new AuthorizationManager(this, null);
             LOG.info("using new privilege framework..");
         } else {
             this.domainResolver = new DomainResolver(auth);
             this.authenticationManager = null;
-            this.privilegeManager = null;
+            this.authorizationManager = null;
         }
     }
 
@@ -1019,7 +1019,7 @@ public class GlobalStateMgr {
     }
 
     private boolean needUpgradedToNewPrivilege() {
-        return !privilegeManager.isLoaded() || !authenticationManager.isLoaded();
+        return !authorizationManager.isLoaded() || !authenticationManager.isLoaded();
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -1137,7 +1137,7 @@ public class GlobalStateMgr {
             if (USING_NEW_PRIVILEGE) {
                 if (needUpgradedToNewPrivilege()) {
                     reInitializeNewPrivilegeOnUpgrade();
-                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, authorizationManager, this);
                     // upgrade metadata in old privilege framework to the new one
                     upgrader.upgradeAsLeader();
                     this.domainResolver.setAuthenticationManager(authenticationManager);
@@ -1525,7 +1525,7 @@ public class GlobalStateMgr {
     public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
         if (USING_NEW_PRIVILEGE) {
             this.authenticationManager = AuthenticationManager.load(dis);
-            this.privilegeManager = PrivilegeManager.load(dis, this, null);
+            this.authorizationManager = AuthorizationManager.load(dis, this, null);
             this.domainResolver = new DomainResolver(authenticationManager);
         }
     }
@@ -1754,7 +1754,7 @@ public class GlobalStateMgr {
     public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
         if (USING_NEW_PRIVILEGE) {
             this.authenticationManager.save(dos);
-            this.privilegeManager.save(dos);
+            this.authorizationManager.save(dos);
         }
     }
 
@@ -3589,9 +3589,9 @@ public class GlobalStateMgr {
             //    privilege operation, then generate old auth journal
             // in both cases, we need a definite upgrade, so we mark the managers of
             // new privilege framework as unloaded to trigger upgrade process.
-            LOG.info("set authenticationManager and privilegeManager as unloaded because of old auth journal");
+            LOG.info("set authenticationManager and authorizationManager as unloaded because of old auth journal");
             authenticationManager.setLoaded(false);
-            privilegeManager.setLoaded(false);
+            authorizationManager.setLoaded(false);
             domainResolver = new DomainResolver(auth);
         }
         switch (code) {
@@ -3653,16 +3653,16 @@ public class GlobalStateMgr {
         // In the case where we upgrade again, i.e. upgrade->rollback->upgrade,
         // we may already load the image from last upgrade, in this case we should
         // discard the privilege data from last upgrade and only use the data from
-        // current image to upgrade, so we initialize a new PrivilegeManager and AuthenticationManger
+        // current image to upgrade, so we initialize a new AuthorizationManager and AuthenticationManger
         // instance here
         LOG.info("reinitialize privilege info before upgrade");
         this.authenticationManager = new AuthenticationManager();
-        this.privilegeManager = new PrivilegeManager(this, null);
+        this.authorizationManager = new AuthorizationManager(this, null);
     }
 
     public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
         reInitializeNewPrivilegeOnUpgrade();
-        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, authorizationManager, this);
         upgrader.replayUpgrade(info.getRoleNameToId());
         LOG.info("set usingNewPrivilege to true after auth upgrade log replayed");
         usingNewPrivilege.set(true);
