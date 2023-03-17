@@ -235,7 +235,7 @@ public class FunctionCallExpr extends Expr {
                 && fnParams.isDistinct() == o.fnParams.isDistinct()
                 && fnParams.isStar() == o.fnParams.isStar()
                 && nondeterministicId.equals(o.nondeterministicId)
-                && fnParams.getOrderByElements().equals(o.fnParams.getOrderByElements());
+                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements());
     }
 
     // TODO: process order by
@@ -274,7 +274,7 @@ public class FunctionCallExpr extends Expr {
             sb.append("distinct ");
         }
         if(fnParams.getOrderByElements() == null) {
-            sb.append(Joiner.on(", ").join(childrenToExplain())).append(")");
+            sb.append(Joiner.on(", ").join(childrenToExplain())).append(");");
         } else {
             sb.append(children.get(0).explain());
             sb.append(fnParams.getOrderByStringToExplain());

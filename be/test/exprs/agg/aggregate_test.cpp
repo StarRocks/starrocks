@@ -1768,9 +1768,8 @@ TEST_F(AggregateTest, test_array_agg) {
         ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[NULL,'cdrdfe','bcd',NULL,'esfg']"), 0);
     }
     // not nullable columns input
+    state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
     {
-        // reset first
-        array_agg_func->reset(local_ctx.get(), {}, state->state());
         auto char_type = TypeDescriptor::create_varchar_type(30);
         auto char_column = ColumnHelper::create_column(char_type, false);
         char_column->append_datum("");
@@ -1830,10 +1829,7 @@ TEST_F(AggregateTest, test_array_agg) {
                          "[{vchar:[''],int:[2]}, {vchar:['bcd'],int:[9]}, {vchar:['cdrdfe'],int:[5]}, "
                          "{vchar:['Datum()'],int:[7]}, {vchar:['esfg'],int:[6]}]"),
                   0);
-
-        auto res_array_col = ColumnHelper::create_column(type_array_char, false);
-        array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
-        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "['bcd','Datum()','esfg','cdrdfe','']"), 0);
+        // should not finalize due to following appends
     }
 
     // append only column + const column
@@ -1891,9 +1887,8 @@ TEST_F(AggregateTest, test_array_agg) {
     }
 
     // only column + const column
+    state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
     {
-        // reset first
-        array_agg_func->reset(local_ctx.get(), {}, state->state());
         auto char_column = ColumnHelper::create_const_null_column(2);
         auto int_column = ColumnHelper::create_const_column<TYPE_INT>(3, 2);
 
@@ -1940,10 +1935,6 @@ TEST_F(AggregateTest, test_array_agg) {
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(), "[{vchar:[NULL],int:[3]}, {vchar:[NULL],int:[3]}]"),
                   0);
-
-        auto res_array_col = ColumnHelper::create_column(type_array_char, false);
-        array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
-        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[NULL,NULL]"), 0);
     }
 
     // append nullable columns input
