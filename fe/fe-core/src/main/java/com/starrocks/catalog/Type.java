@@ -1054,7 +1054,7 @@ public abstract class Type implements Cloneable {
     }
 
     public static boolean canAssignCast(Type from, Type to) {
-        if (from.isMapType() || from.isStructType() && to.isJsonType()) {
+        if ((from.isMapType() || from.isStructType()) && to.isJsonType()) {
             return false;
         }
         return canCastTo(from, to);
