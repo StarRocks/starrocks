@@ -45,11 +45,6 @@ template <>
 inline constexpr bool IsTimestamp<TimestampValue> = true;
 
 template <typename T>
-constexpr bool IsTemporal() {
-    return std::is_same_v<T, DateValue> || std::is_same_v<T, TimestampValue> || std::is_same_v<T, DateTimeValue>;
-}
-
-template <typename T>
 class FixedLengthColumnBase : public ColumnFactory<Column, FixedLengthColumnBase<T>> {
     friend class ColumnFactory<Column, FixedLengthColumnBase>;
 

@@ -179,14 +179,11 @@ public:
 
     const Column& keys() const { return *_keys; }
     ColumnPtr& keys_column() { return _keys; }
-    ColumnPtr keys_column() const { return _keys; }
 
     const Column& values() const { return *_values; }
     ColumnPtr& values_column() { return _values; }
-    ColumnPtr values_column() const { return _values; }
 
     size_t get_map_size(size_t idx) const;
-    std::pair<size_t, size_t> get_map_offset_size(size_t idx) const;
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 
