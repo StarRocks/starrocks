@@ -1168,9 +1168,11 @@ Status OlapTableSink::_automatic_create_partition() {
 
     VLOG(1) << "automatic partition rpc begin request " << request;
     TNetworkAddress master_addr = get_master_address();
+    auto timeout_ms = _runtime_state->query_options().query_timeout * 1000 / 2;
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
-            [&request, &result](FrontendServiceConnection& client) { client->createPartition(result, request); }));
+            [&request, &result](FrontendServiceConnection& client) { client->createPartition(result, request); },
+            timeout_ms));
     VLOG(1) << "automatic partition rpc end response " << result;
     if (result.status.status_code == TStatusCode::OK) {
         // add new created partitions
