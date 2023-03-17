@@ -16,8 +16,13 @@ public class ColumnStatistic {
 
     // Used for the column statistics which we could not get from the statistics storage or
     // can not compute the actual column statistics for now
+<<<<<<< HEAD
     private static final ColumnStatistic
             UNKNOWN = new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 1, StatisticType.UNKNOWN);
+=======
+    private static final ColumnStatistic UNKNOWN =
+            new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 1, 1, null, StatisticType.UNKNOWN);
+>>>>>>> 57df2787e ([Enhancement] Improve row count collect speed (#19512))
 
     private final double minValue;
     private final double maxValue;
@@ -25,6 +30,7 @@ public class ColumnStatistic {
     private final double averageRowSize;
     private final double distinctValuesCount;
     private final StatisticType type;
+    private final double rowCount;
 
     // TODO deal with string max, min
     public ColumnStatistic(
@@ -33,12 +39,22 @@ public class ColumnStatistic {
             double nullsFraction,
             double averageRowSize,
             double distinctValuesCount,
+<<<<<<< HEAD
+=======
+            double rowCount,
+            Histogram histogram,
+>>>>>>> 57df2787e ([Enhancement] Improve row count collect speed (#19512))
             StatisticType type) {
         this.minValue = minValue;
         this.maxValue = maxValue;
         this.nullsFraction = nullsFraction;
         this.averageRowSize = averageRowSize;
         this.distinctValuesCount = distinctValuesCount;
+<<<<<<< HEAD
+=======
+        this.rowCount = rowCount;
+        this.histogram = histogram;
+>>>>>>> 57df2787e ([Enhancement] Improve row count collect speed (#19512))
         this.type = type;
     }
 
@@ -47,7 +63,11 @@ public class ColumnStatistic {
                            double nullsFraction,
                            double averageRowSize,
                            double distinctValuesCount) {
+<<<<<<< HEAD
         this(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, StatisticType.ESTIMATE);
+=======
+        this(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, 1, null, StatisticType.ESTIMATE);
+>>>>>>> 57df2787e ([Enhancement] Improve row count collect speed (#19512))
     }
 
     public double getMinValue() {
@@ -90,6 +110,10 @@ public class ColumnStatistic {
     public boolean isUnknownValue() {
         return this.minValue == NEGATIVE_INFINITY && this.maxValue == POSITIVE_INFINITY && this.nullsFraction == 0 &&
                 this.averageRowSize == 1 && this.distinctValuesCount == 1;
+    }
+
+    public double getRowCount() {
+        return rowCount;
     }
 
     public StatisticType getType() {
@@ -142,6 +166,7 @@ public class ColumnStatistic {
         private double averageRowSize = NaN;
         private double distinctValuesCount = NaN;
         private StatisticType type = StatisticType.ESTIMATE;
+        private double rowCount = 1;
 
         private Builder() {
         }
@@ -191,8 +216,18 @@ public class ColumnStatistic {
             return this;
         }
 
+        public Builder setRowCount(double rowCount) {
+            this.rowCount = rowCount;
+            return this;
+        }
+
         public ColumnStatistic build() {
+<<<<<<< HEAD
             return new ColumnStatistic(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, type);
+=======
+            return new ColumnStatistic(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, 
+                    rowCount, histogram, type);
+>>>>>>> 57df2787e ([Enhancement] Improve row count collect speed (#19512))
         }
     }
 }
