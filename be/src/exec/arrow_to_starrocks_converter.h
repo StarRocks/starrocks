@@ -52,7 +52,7 @@ size_t fill_null_column(const arrow::Array* array, size_t array_start_idx, size_
 // fill filter's range [column_start_idx, column_start_idx + num_elements) with
 // array's range [array_start, array_start_idx + num_elements).
 void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Filter* filter,
-                 size_t column_start_idx);
+                 size_t column_start_idx, ArrowConvertContext* ctx);
 
 // ConvertFunc is used to fill column's range [column_start_idx, column_start_idx + num_elements)
 // with array's range [array_start_idx, array_start_idx + num_elements). A slot is null if
