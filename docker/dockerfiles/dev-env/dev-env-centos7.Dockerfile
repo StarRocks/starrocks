@@ -3,8 +3,10 @@
 # Please run this command from the git repo root directory to build:
 #    # load STARLET_ARTIFACTS_TAG env
 #    . thirdparty/starlet-artifacts-version.sh
-#    DOCKER_BUILDKIT=1 docker build --rm=true --build-arg starlet_tag=$STARLET_ARTIFACTS_TAG -f docker/dockerfiles/dev-env/dev-env-ubuntu.Dockerfile -t starrocks/dev-env-ubuntu:tag .
+#    DOCKER_BUILDKIT=1 docker build --rm=true --build-arg starlet_tag=$STARLET_ARTIFACTS_TAG -f docker/dockerfiles/dev-env/dev-env-centos7.Dockerfile -t starrocks/dev-env-centos7:tag .
 
+# based on a pre-installed toolchains environment
+ARG builder=starrocks/toolchains-centos7:20230308
 # whether prebuild starrocks maven project and cache the maven artifacts
 # value: true | false
 # default: true
@@ -19,22 +21,15 @@ ARG commit_id
 ARG starlet_tag=v0.2.6
 
 
-FROM ubuntu:22.04 as base
+FROM ${builder} as base
+RUN yum install -y epel-release && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make libtool which git ccache binutils-devel python3 && \
+    yum clean all && rm -rf /var/cache/yum
 
-# Install common libraries and tools that are needed for dev environment
-RUN apt-get update -y && \
-    apt-get install --no-install-recommends -y \
-    automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 make cmake gcc g++ default-jdk git patch lld bzip2 \
-    wget unzip curl vim tree net-tools openssh-client && \
-    rm -rf /var/lib/apt/lists/*
-
-ENV JAVA_HOME=/lib/jvm/default-java
 ENV STARROCKS_THIRDPARTY=/opt/starrocks/thirdparty
-ENV STARROCKS_LINKER=lld
-
 WORKDIR /root
 
-FROM base as builder
+
+FROM base as buildstage
 ARG prebuild_maven
 ARG predownload_thirdparty
 ARG thirdparty_url
@@ -53,7 +48,7 @@ RUN if test "x$prebuild_maven" = "xtrue" ; then \
         mkdir -p /root/.m2  ;   \
     fi
 
-FROM starrocks/starlet-artifacts-ubuntu22:${starlet_tag} as starlet
+FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet
 # empty section
 
 
@@ -66,10 +61,10 @@ LABEL com.starrocks.commit=${commit_id:-"UNKNOWN"}
 ENV STARLET_INSTALL_DIR=/var/local/thirdparty/installed/starlet
 
 # Copy third-party dependencies
-COPY --from=builder $STARROCKS_THIRDPARTY $STARROCKS_THIRDPARTY
+COPY --from=buildstage $STARROCKS_THIRDPARTY $STARROCKS_THIRDPARTY
 
 # Copy maven dependencies
-COPY --from=builder /root/.m2 /root/.m2
+COPY --from=buildstage /root/.m2 /root/.m2
 
 # Copy starlet dependencies
 COPY --from=starlet /release $STARLET_INSTALL_DIR
