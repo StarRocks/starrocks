@@ -99,15 +99,15 @@ public class UDFTest extends PlanTestBase {
         String sql = "with t as (select [1,2,3] as a, [4,5,6] as b, [4,5,6] as c) select * from t,unnest(a,b,c)";
         PhysicalTableFunctionOperator tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
 
-        Assert.assertEquals(3, tp.getFnParamColumnRef().size());
+        Assert.assertEquals(3, tp.getFnParamColumnRefs().size());
         Assert.assertEquals("[6, 8, 8]",
-                tp.getFnParamColumnRef().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
+                tp.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
 
         sql = "select * from tarray, unnest(v3, v3)";
         tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
-        Assert.assertEquals(2, tp.getFnParamColumnRef().size());
+        Assert.assertEquals(2, tp.getFnParamColumnRefs().size());
         Assert.assertEquals("[3, 3]",
-                tp.getFnParamColumnRef().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
+                tp.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
 
         sql = "WITH t AS (\n" +
                 "SELECT array_sort(v3) AS a,\n" +
@@ -116,8 +116,8 @@ public class UDFTest extends PlanTestBase {
                 "GROUP BY v3 )\n" +
                 "select unnest.a, unnest.b from t, unnest(a, b) as unnest(a, b);";
         tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
-        Assert.assertEquals(2, tp.getFnParamColumnRef().size());
+        Assert.assertEquals(2, tp.getFnParamColumnRefs().size());
         Assert.assertEquals("[8, 8]",
-                tp.getFnParamColumnRef().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
+                tp.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
     }
 }
