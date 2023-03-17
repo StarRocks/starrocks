@@ -221,6 +221,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -1704,10 +1705,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        Collection<Partition> tablePartitions = olapTable.getPartitions();
         for (AddPartitionClause addPartitionClause : addPartitionClauseMap.values()) {
             try {
+                if (tablePartitions.size() > Config.max_automatic_partition_number) {
+                    throw new AnalysisException(" Automatically created partitions exceeded the maximum limit: " +
+                            Config.max_automatic_partition_number + ". You can turn this restriction on by setting" +
+                            " max_automatic_partition_number larger.");
+                }
                 state.addPartitions(db, olapTable.getName(), addPartitionClause);
-            } catch (DdlException | AnalysisException e) {
+            } catch (Exception e) {
                 LOG.warn(e);
                 errorStatus.setError_msgs(Lists.newArrayList(
                         String.format("automatic create partition failed. error:%s", e.getMessage())));
