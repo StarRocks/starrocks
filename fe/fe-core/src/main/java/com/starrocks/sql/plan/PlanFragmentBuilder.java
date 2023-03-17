@@ -2539,9 +2539,7 @@ public class PlanFragmentBuilder {
             PhysicalTableFunctionOperator physicalTableFunction = (PhysicalTableFunctionOperator) optExpression.getOp();
 
             TupleDescriptor udtfOutputTuple = context.getDescTbl().createTupleDescriptor();
-            for (int columnId : physicalTableFunction.getOutputColumns().getColumnIds()) {
-                ColumnRefOperator columnRefOperator = columnRefFactory.getColumnRef(columnId);
-
+            for (ColumnRefOperator columnRefOperator : physicalTableFunction.getOutputColRefs()) {
                 SlotDescriptor slotDesc =
                         context.getDescTbl().addSlotDescriptor(udtfOutputTuple, new SlotId(columnRefOperator.getId()));
                 slotDesc.setType(columnRefOperator.getType());
@@ -2556,12 +2554,13 @@ public class PlanFragmentBuilder {
                     inputFragment.getPlanRoot(),
                     udtfOutputTuple,
                     physicalTableFunction.getFn(),
-                    physicalTableFunction.getFnParamColumnRef().stream().map(ColumnRefOperator::getId)
+                    physicalTableFunction.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId)
                             .collect(Collectors.toList()),
-                    Arrays.stream(physicalTableFunction.getOuterColumnRefSet().getColumnIds()).boxed()
+                    physicalTableFunction.getOuterColRefs().stream().map(ColumnRefOperator::getId)
                             .collect(Collectors.toList()),
-                    Arrays.stream(physicalTableFunction.getFnResultColumnRefSet().getColumnIds()).boxed()
-                            .collect(Collectors.toList()));
+                    physicalTableFunction.getFnResultColRefs().stream().map(ColumnRefOperator::getId)
+                            .collect(Collectors.toList())
+                    );
             tableFunctionNode.computeStatistics(optExpression.getStatistics());
             tableFunctionNode.setLimit(physicalTableFunction.getLimit());
             inputFragment.setPlanRoot(tableFunctionNode);
