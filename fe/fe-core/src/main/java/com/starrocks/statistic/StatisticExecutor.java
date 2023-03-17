@@ -220,12 +220,12 @@ public class StatisticExecutor {
         Database db = statsJob.getDb();
         Table table = statsJob.getTable();
 
-        //Only update running status without edit log, make restart job status is failed
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
-        GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
-
         try {
             GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
+            //Only update running status without edit log, make restart job status is failed
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
+            GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+
             statsJob.collect(statsConnectCtx, analyzeStatus);
         } catch (Exception e) {
             LOG.warn("Collect statistics error ", e);
