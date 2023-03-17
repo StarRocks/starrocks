@@ -469,10 +469,10 @@ bool StructColumn::capacity_limit_reached(std::string* msg) const {
 void StructColumn::check_or_die() const {
     // Struct must have at least one field.
     DCHECK(_fields.size() > 0);
-    // DCHECK(_field_names.size() > 0);
+    DCHECK(_field_names.size() > 0);
 
     // fields and field_names must have the same size.
-    // DCHECK(_fields.size() == _field_names.size());
+    DCHECK(_fields.size() == _field_names.size());
 
     for (const auto& column : _fields) {
         column->check_or_die();
