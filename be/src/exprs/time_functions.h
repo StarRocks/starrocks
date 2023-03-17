@@ -604,17 +604,13 @@ public:
     constexpr static const int64_t MAX_UNIX_TIMESTAMP = 253402243199L;
 
 private:
-    template <LogicalType TIMESTAMP_TYPE>
-    DEFINE_VECTORIZED_FN(_t_from_unix_to_datetime);
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime);
 
-    template <LogicalType TIMESTAMP_TYPE>
-    DEFINE_VECTORIZED_FN(_t_to_unix_from_datetime);
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_datetime);
 
-    template <LogicalType TIMESTAMP_TYPE>
-    DEFINE_VECTORIZED_FN(_t_to_unix_from_date);
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_date);
 
-    template <LogicalType TIMESTAMP_TYPE>
-    DEFINE_VECTORIZED_FN(_t_to_unix_from_datetime_with_format);
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_datetime_with_format);
 
     // internal approach to process string content, based on any string format.
     static void str_to_date_internal(TimestampValue* ts, const Slice& fmt, const Slice& str,
@@ -622,12 +618,11 @@ private:
 
     static std::string convert_format(const Slice& format);
 
-    template <LogicalType TIMESTAMP_TYPE>
-    static StatusOr<ColumnPtr> from_unix_with_format_general(FunctionContext* context,
-                                                             const starrocks::Columns& columns);
+
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format_general);
 
     template <LogicalType TIMESTAMP_TYPE>
-    static StatusOr<ColumnPtr> from_unix_with_format_const(std::string& format_content, FunctionContext* context,
+    static StatusOr<ColumnPtr> _t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
                                                            const starrocks::Columns& columns);
 
     static StatusOr<ColumnPtr> convert_tz_general(FunctionContext* context, const Columns& columns);
