@@ -102,7 +102,7 @@ public class ExpressionContext {
         return childrenProperty.get(index).getOutputColumns();
     }
 
-    public boolean isExecuteInOneTablet(int index) {
+    public LogicalProperty.OneTabletMeta isExecuteInOneTablet(int index) {
         return childrenProperty.get(index).isExecuteInOneTablet();
     }
 
