@@ -37,6 +37,11 @@ struct HdfsFsHandle {
 // Cache for HDFS file system
 class HdfsFsCache {
 public:
+    ~HdfsFsCache() {
+        for(size_t i = 0; i < _cur_client_idx; i++) {
+            hdfsDisconnect(_cache_clients[i].hdfs_fs);
+        }
+    }
     static HdfsFsCache* instance() {
         static HdfsFsCache s_instance;
         return &s_instance;

@@ -97,6 +97,8 @@ Status HdfsFsCache::get_connection(const std::string& namenode, HdfsFsHandle* ha
     RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, handle, options));
     if (UNLIKELY(_cur_client_idx >= _max_cache_clients)) {
         uint32_t idx = _rand.Uniform(_max_cache_clients);
+        // Close evicted HDFS client first.
+        hdfsDisconnect(_cache_clients[idx].hdfs_fs);
         _cache_key[idx] = cache_key;
         _cache_clients[idx] = *handle;
     } else {
