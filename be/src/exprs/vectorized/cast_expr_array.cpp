@@ -283,7 +283,6 @@ ColumnPtr CastJsonToArray::evaluate(ExprContext* context, vectorized::Chunk* inp
             null_column->append(1);
             continue;
         }
-        null_column->append(0);
         const JsonValue* json_value = src.value(i);
         if (json_value && json_value->get_type() == JsonType::JSON_ARRAY) {
             vpack::Slice json_slice = json_value->to_vslice();
@@ -293,6 +292,7 @@ ColumnPtr CastJsonToArray::evaluate(ExprContext* context, vectorized::Chunk* inp
                 json_column_builder.append(std::move(element_value));
             }
             offset += json_slice.length();
+            null_column->append(0);
         } else {
             null_column->append(1);
         }
