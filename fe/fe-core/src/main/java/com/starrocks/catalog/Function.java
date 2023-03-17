@@ -393,7 +393,7 @@ public class Function implements Writable {
             if (other.argTypes[i].matchesType(this.argTypes[i])) {
                 continue;
             }
-            if (!Type.canAssignCast(other.argTypes[i], argTypes[i])) {
+            if (!Type.canCastTo(other.argTypes[i], argTypes[i])) {
                 return false;
             }
         }
