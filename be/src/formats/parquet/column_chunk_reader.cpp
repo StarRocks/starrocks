@@ -140,6 +140,9 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
     Slice read_data;
     auto ret = _page_reader->peek(read_size);
     if (ret.ok()) {
+        // peek dos not advance offset.
+        int64_t pos = _page_reader->get_offset();
+        _page_reader->seek_to_offset(pos + read_size);
         read_data = Slice(ret.value().data(), read_size);
     } else {
         read_buffer.reserve(read_size);
