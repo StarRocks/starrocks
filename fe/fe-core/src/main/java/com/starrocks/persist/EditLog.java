@@ -77,7 +77,6 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
@@ -972,7 +971,7 @@ public class EditLog {
                 }
                 case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
                     UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo) journal.getData();
-                    globalStateMgr.getPrivilegeManager().replayUpdateUserPrivilegeCollection(
+                    globalStateMgr.getAuthorizationManager().replayUpdateUserPrivilegeCollection(
                             info.getUserIdentity(),
                             info.getPrivilegeCollection(),
                             info.getPluginId(),
@@ -997,12 +996,12 @@ public class EditLog {
                 }
                 case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
-                    globalStateMgr.getPrivilegeManager().replayUpdateRolePrivilegeCollection(info);
+                    globalStateMgr.getAuthorizationManager().replayUpdateRolePrivilegeCollection(info);
                     break;
                 }
                 case OperationType.OP_DROP_ROLE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
-                    globalStateMgr.getPrivilegeManager().replayDropRole(info);
+                    globalStateMgr.getAuthorizationManager().replayDropRole(info);
                     break;
                 }
                 case OperationType.OP_AUTH_UPGRADE_V2: {
