@@ -304,15 +304,20 @@ public:
         return to_status(st);
     }
 
-    Status iterate_dir2(const std::string& dir,
-                        const std::function<bool(std::string_view, const FileMeta&)>& cb) override {
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dir));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        FileMeta meta;
-        auto st = (*fs_st)->list_dir(pair.first, false, [&](std::string_view name) { return cb(name, meta); });
+        using StarletDirEntry = staros::starlet::fslib::DirEntry;
+        auto st = (*fs_st)->list_dir(pair.first, false, [&](StarletDirEntry e) {
+            DirEntry entry{.name = e.name,
+                           .mtime = std::move(e.mtime),
+                           .size = std::move(e.size),
+                           .is_dir = std::move(e.is_dir)};
+            return cb(entry);
+        });
         return to_status(st);
     }
 
