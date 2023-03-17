@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
@@ -41,11 +42,12 @@ public class PushDownPredicateTableFunctionRule extends TransformationRule {
         LogicalFilterOperator filterOperator = (LogicalFilterOperator) input.getOp();
         List<ScalarOperator> filters = Utils.extractConjuncts(filterOperator.getPredicate());
         LogicalTableFunctionOperator tvfOperator = (LogicalTableFunctionOperator) input.inputAt(0).getOp();
-
+        ColumnRefSet tvfOuterColSet = new ColumnRefSet(tvfOperator.getOuterColRefs());
         List<ScalarOperator> pushDownPredicates = Lists.newArrayList();
+
         for (Iterator<ScalarOperator> iter = filters.iterator(); iter.hasNext(); ) {
             ScalarOperator filter = iter.next();
-            if (tvfOperator.getOuterColumnRefSet().containsAll(filter.getUsedColumns())) {
+            if (tvfOuterColSet.containsAll(filter.getUsedColumns())) {
                 iter.remove();
                 pushDownPredicates.add(filter);
             }

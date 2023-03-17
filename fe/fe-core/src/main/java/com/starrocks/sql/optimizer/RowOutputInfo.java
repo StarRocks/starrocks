@@ -46,7 +46,7 @@ public class RowOutputInfo {
 
     private final Map<Integer, ColumnOutputInfo> columnOutputInfoMap;
 
-    public static RowOutputInfo createEmptyDescriptor() {
+    public static RowOutputInfo createEmptyInfo() {
         return new RowOutputInfo();
     }
 
@@ -72,6 +72,10 @@ public class RowOutputInfo {
 
     public List<ColumnOutputInfo> getColumnEntries() {
         return Lists.newArrayList(columnOutputInfoMap.values());
+    }
+
+    public List<ColumnRefOperator> getColumnRefOps() {
+        return columnOutputInfoMap.values().stream().map(e -> e.getColumnRef()).collect(Collectors.toList());
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
