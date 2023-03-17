@@ -4440,6 +4440,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         unitBoundary.getDescription().toLowerCase()));
 
                 return functionCallExpr;
+            } else if (context.expression().size() == 4) {
+                Expr e1 = (Expr) visit(context.expression(0));
+                Expr e2 = (Expr) visit(context.expression(1));
+                Expr e3 = (Expr) visit(context.expression(2));
+                Expr e4 = (Expr) visit(context.expression(3));
+                return new FunctionCallExpr(fnName, ImmutableList.of(e1, e2, e3, e4));
             } else {
                 throw new ParsingException(
                         functionName + " must as format " + functionName + "(date,INTERVAL expr unit[, FLOOR"
