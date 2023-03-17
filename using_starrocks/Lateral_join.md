@@ -1,4 +1,4 @@
-# 使用 Lateral Join 实现行转列
+# 使用 Lateral Join 实现列转行
 
 本文介绍如何使用 Lateral Join 功能。
 
@@ -6,7 +6,7 @@
 
 > 注意
 >
-> * 当前版本中，Lateral Join 仅用于和 Unnest 函数配合使用，实现行转列的功能。后续会支持配合其他 Table Function 或 UDTF。
+> * 当前版本中，Lateral Join 仅用于和 Unnest 函数配合使用，实现列转行的功能。后续会支持配合其他 Table Function 或 UDTF。
 > * 当前版本中，Lateral Join 暂不支持子查询。
 
 ## 开启 CBO 优化器
@@ -234,3 +234,7 @@ FROM tests, UNNEST(scores) AS t;
     |    2 |      3 |
     +------+--------+
     ~~~
+
+## Keywords
+
+explode，爆裂函数

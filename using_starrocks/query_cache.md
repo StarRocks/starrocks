@@ -48,7 +48,6 @@ Query Cache 支持全部数据分区策略，包括 Unpartitioned、Multi-Column
 | **变量**                    | **默认值** | **是否支持动态修改** | **说明**                                                     |
 | --------------------------- | ---------- | -------------------- | ------------------------------------------------------------ |
 | enable_query_cache          | false      | 是                   | 指定是否开启 Query Cache。取值范围：`true` 和 `false`。`true` 表示开启，`false` 表示关闭。开启该功能后，只有当查询满足本文“[应用场景](../using_starrocks/query_cache.md#应用场景)”小节所述之条件时，才会启用 Query Cache。 |
-| query_cache_force_populate  | false      | 是                   | 指定是否忽略 Query Cache 中已有的计算结果。取值范围：`true` 和 `false`。`true` 表示开启，`false` 表示关闭。开启该功能后，StarRocks 在执行查询计算时，会忽略 Query Cache 中已有的计算结果，重新回源读取、计算数据并更新 Query Cache。<br>因此，`query_cache_force_populate=true` 等效于缓存不命中 (Cache Miss)。 |
 | query_cache_entry_max_bytes | 4194304    | 是                   | 指定触发 Passthrough 模式的阈值。取值范围：`0` ~ `9223372036854775807`。当一个 Tablet 上产生的计算结果的字节数或者行数超过 `query_cache_entry_max_bytes` 或 `query_cache_entry_max_rows` 指定的阈值时，则查询采用 Passthrough 模式执行。<br>当 `query_cache_entry_max_bytes` 或 `query_cache_entry_max_rows` 取值为 `0` 时, 即便 Tablet 产生结果为空，也采用 Passthrough 模式。 |
 | query_cache_entry_max_rows  | 409600     | 是                   | 同上。                                                           |
 
