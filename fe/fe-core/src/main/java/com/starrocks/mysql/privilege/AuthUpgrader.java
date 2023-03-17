@@ -27,13 +27,13 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivObjNotFoundException;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeCollection;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
@@ -60,17 +60,17 @@ public class AuthUpgrader {
     private static final String STAR = "*";
     private final Auth auth;
     private final AuthenticationManager authenticationManager;
-    private final PrivilegeManager privilegeManager;
+    private final AuthorizationManager authorizationManager;
     private final GlobalStateMgr globalStateMgr;
 
     public AuthUpgrader(
             Auth auth,
             AuthenticationManager authenticationManager,
-            PrivilegeManager privilegeManager,
+            AuthorizationManager authorizationManager,
             GlobalStateMgr globalStateMgr) {
         this.auth = auth;
         this.authenticationManager = authenticationManager;
-        this.privilegeManager = privilegeManager;
+        this.authorizationManager = authorizationManager;
         this.globalStateMgr = globalStateMgr;
     }
 
@@ -91,7 +91,7 @@ public class AuthUpgrader {
         upgradeUser();
         upgradeRole(roleNameToId);
         authenticationManager.setLoaded(true);
-        privilegeManager.setLoaded(true);
+        authorizationManager.setLoaded(true);
         LOG.info("replayed upgrade journal successfully.");
     }
 
@@ -205,7 +205,7 @@ public class AuthUpgrader {
                 upgradeUserImpersonate(impersonateUserPrivTable.getReadOnlyIteratorByUser(userIdentity), collection);
 
                 // 7. set privilege to user
-                privilegeManager.upgradeUserInitPrivilegeUnlock(userIdentity, collection);
+                authorizationManager.upgradeUserInitPrivilegeUnlock(userIdentity, collection);
             } catch (AuthUpgradeUnrecoverableException | PrivilegeException e) {
                 if (Config.ignore_invalid_privilege_authentications) {
                     LOG.warn("discard user priv entry:{}\n{}", entry, entry.toGrantSQL(), e);
@@ -249,7 +249,7 @@ public class AuthUpgrader {
                             collection);
 
                     // 6. set privilege to user
-                    privilegeManager.upgradeUserInitPrivilegeUnlock(userIdentity, collection);
+                    authorizationManager.upgradeUserInitPrivilegeUnlock(userIdentity, collection);
                 }
             } catch (AuthUpgradeUnrecoverableException | PrivilegeException e) {
                 if (Config.ignore_invalid_privilege_authentications) {
@@ -523,7 +523,7 @@ public class AuthUpgrader {
                 // 3. impersonate privileges
                 upgradeRoleImpersonatePrivileges(role.getImpersonateUsers(), collection);
 
-                privilegeManager.upgradeRoleInitPrivilegeUnlock(roleId, collection);
+                authorizationManager.upgradeRoleInitPrivilegeUnlock(roleId, collection);
             } catch (AuthUpgradeUnrecoverableException | PrivilegeException e) {
                 if (Config.ignore_invalid_privilege_authentications) {
                     LOG.warn("discard role[{}] priv:{}", roleName, role, e);
@@ -787,18 +787,18 @@ public class AuthUpgrader {
             if (db.equals(STAR)) {
                 // for *.*
                 objects = Collections.singletonList(
-                        privilegeManager.generateObject(ObjectType.DATABASE, Lists.newArrayList("*")));
+                        authorizationManager.generateObject(ObjectType.DATABASE, Lists.newArrayList("*")));
                 if (privilege == Privilege.CREATE_PRIV) {
                     // for CREATE_PRIV on *.*, we also need to grant create_database on default_catalog
                     collection.grant(ObjectType.CATALOG,
                             Collections.singletonList(PrivilegeType.CREATE_DATABASE),
-                            Collections.singletonList(privilegeManager.generateObject(ObjectType.CATALOG,
+                            Collections.singletonList(authorizationManager.generateObject(ObjectType.CATALOG,
                                     Collections.singletonList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))),
                             isGrant);
                 }
             } else {
                 // for db.*
-                objects = Collections.singletonList(privilegeManager.generateObject(
+                objects = Collections.singletonList(authorizationManager.generateObject(
                         ObjectType.DATABASE, Collections.singletonList(db)));
             }
         } catch (PrivObjNotFoundException e) {
@@ -844,15 +844,15 @@ public class AuthUpgrader {
         List<PEntryObject> objects;
         try {
             if (db.equals(STAR)) {
-                objects = Collections.singletonList(privilegeManager.generateObject(
+                objects = Collections.singletonList(authorizationManager.generateObject(
                         ObjectType.VIEW, Lists.newArrayList("*", "*")));
             } else if (view.equals(STAR)) {
                 // ALL TABLES in db
                 objects = Collections.singletonList(
-                        privilegeManager.generateObject(ObjectType.VIEW, Lists.newArrayList(db, "*")));
+                        authorizationManager.generateObject(ObjectType.VIEW, Lists.newArrayList(db, "*")));
             } else {
                 // db.view
-                objects = Collections.singletonList(privilegeManager.generateObject(
+                objects = Collections.singletonList(authorizationManager.generateObject(
                         ObjectType.VIEW, Arrays.asList(db, view)));
             }
         } catch (PrivObjNotFoundException e) {
@@ -908,15 +908,15 @@ public class AuthUpgrader {
         List<PEntryObject> objects;
         try {
             if (db.equals(STAR)) {
-                objects = Collections.singletonList(privilegeManager.generateObject(ObjectType.TABLE,
+                objects = Collections.singletonList(authorizationManager.generateObject(ObjectType.TABLE,
                         Lists.newArrayList("*", "*")));
             } else if (table.equals(STAR)) {
                 // ALL TABLES in db
-                objects = Collections.singletonList(privilegeManager.generateObject(ObjectType.TABLE,
+                objects = Collections.singletonList(authorizationManager.generateObject(ObjectType.TABLE,
                         Lists.newArrayList(db, "*")));
             } else {
                 // db.table
-                objects = Collections.singletonList(privilegeManager.generateObject(ObjectType.TABLE,
+                objects = Collections.singletonList(authorizationManager.generateObject(ObjectType.TABLE,
                         Arrays.asList(db, table)));
             }
         } catch (PrivObjNotFoundException e) {
@@ -964,15 +964,15 @@ public class AuthUpgrader {
         try {
             if (db.equals(STAR)) {
                 objects = Collections.singletonList(
-                        privilegeManager.generateObject(ObjectType.MATERIALIZED_VIEW, Lists.newArrayList("*", "*")));
+                        authorizationManager.generateObject(ObjectType.MATERIALIZED_VIEW, Lists.newArrayList("*", "*")));
             } else if (mv.equals(STAR)) {
                 // ALL TABLES in db
-                objects = Collections.singletonList(privilegeManager.generateObject(
+                objects = Collections.singletonList(authorizationManager.generateObject(
                         ObjectType.MATERIALIZED_VIEW, Lists.newArrayList(db, "*")));
             } else {
                 // db.mv
                 objects = Collections.singletonList(
-                        privilegeManager.generateObject(ObjectType.MATERIALIZED_VIEW, Arrays.asList(db, mv)));
+                        authorizationManager.generateObject(ObjectType.MATERIALIZED_VIEW, Arrays.asList(db, mv)));
             }
         } catch (PrivObjNotFoundException e) {
             LOG.info("Privilege '{}' on materialized view {}.{} is ignored when upgrading from" +
@@ -1007,11 +1007,11 @@ public class AuthUpgrader {
         List<PEntryObject> objects;
         try {
             if (db.equals(STAR)) {
-                objects = Collections.singletonList(privilegeManager.generateObject(ObjectType.FUNCTION,
+                objects = Collections.singletonList(authorizationManager.generateObject(ObjectType.FUNCTION,
                         Lists.newArrayList("*", "*")));
             } else if (function.equals(STAR)) {
                 // ALL FUNCTIONS in db
-                objects = Collections.singletonList(privilegeManager.generateObject(ObjectType.FUNCTION,
+                objects = Collections.singletonList(authorizationManager.generateObject(ObjectType.FUNCTION,
                         Lists.newArrayList(db, "*")));
             } else {
                 throw new AuthUpgradeUnrecoverableException(
@@ -1043,7 +1043,7 @@ public class AuthUpgrader {
             throws PrivilegeException {
         List<PEntryObject> objects;
         try {
-            objects = Collections.singletonList(privilegeManager.generateUserObject(ObjectType.USER, user));
+            objects = Collections.singletonList(authorizationManager.generateUserObject(ObjectType.USER, user));
         } catch (PrivObjNotFoundException e) {
             LOG.info("Privilege 'IMPERSONATE' on user {} is ignored when upgrading from" +
                     " old auth because of non-existed object, message: {}", user, e.getMessage());
@@ -1060,10 +1060,10 @@ public class AuthUpgrader {
                 List<PEntryObject> objects;
                 try {
                     if (name.equals(STAR)) {
-                        objects = Collections.singletonList(privilegeManager.generateObject(
+                        objects = Collections.singletonList(authorizationManager.generateObject(
                                 ObjectType.RESOURCE, Lists.newArrayList("*")));
                     } else {
-                        objects = Collections.singletonList(privilegeManager.generateObject(
+                        objects = Collections.singletonList(authorizationManager.generateObject(
                                 ObjectType.RESOURCE, Collections.singletonList(name)));
                     }
                 } catch (PrivObjNotFoundException e) {
@@ -1103,12 +1103,14 @@ public class AuthUpgrader {
             throws PrivilegeException {
         for (long parentRoleId : parentRoleIds) {
             RolePrivilegeCollection rolePrivilegeCollection =
-                    privilegeManager.getRolePrivilegeCollectionUnlocked(parentRoleId, true);
+                    authorizationManager.getRolePrivilegeCollectionUnlocked(parentRoleId, true);
             for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> entry :
                     rolePrivilegeCollection.getTypeToPrivilegeEntryList().entrySet()) {
                 for (PrivilegeCollection.PrivilegeEntry privEntry : entry.getValue()) {
-                    collection.grant(entry.getKey(), privilegeManager.analyzeActionSet(entry.getKey(), privEntry.getActionSet()),
-                            Collections.singletonList(privEntry.getObject()), false);
+                    collection.grant(entry.getKey(),
+                            authorizationManager.analyzeActionSet(entry.getKey(), privEntry.getActionSet()),
+                            Collections.singletonList(privEntry.getObject()),
+                            false);
                 }
             }
         }

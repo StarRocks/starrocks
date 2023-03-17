@@ -34,8 +34,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.mysql.MysqlChannel;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -84,7 +84,7 @@ public class PrivilegeCheckerV2Test {
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
 
-    private static PrivilegeManager privilegeManager;
+    private static AuthorizationManager authorizationManager;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -121,9 +121,9 @@ public class PrivilegeCheckerV2Test {
         starRocksAssert.withTable(createTblStmtStr3);
         createMvForTest(starRocksAssert.getCtx());
 
-        privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
+        authorizationManager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager();
         starRocksAssert.getCtx().setRemoteIP("localhost");
-        privilegeManager.initBuiltinRolesAndUsers();
+        authorizationManager.initBuiltinRolesAndUsers();
         ctxToRoot();
         createUsers();
     }
@@ -228,7 +228,7 @@ public class PrivilegeCheckerV2Test {
     private static void ctxToTestUser() throws PrivilegeException {
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setCurrentRoleIds(
-                starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager().getRoleIdsByUser(testUser)
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(testUser)
         );
         starRocksAssert.getCtx().setQualifiedUser(testUser.getQualifiedUser());
     }
@@ -236,7 +236,7 @@ public class PrivilegeCheckerV2Test {
     private static void ctxToRoot() throws PrivilegeException {
         starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
         starRocksAssert.getCtx().setCurrentRoleIds(
-                starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager().getRoleIdsByUser(UserIdentity.ROOT)
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(UserIdentity.ROOT)
         );
 
         starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
@@ -2269,7 +2269,7 @@ public class PrivilegeCheckerV2Test {
 
         grantRevokeSqlAsRoot("grant drop on materialized view db1.mv4 to test");
         GlobalStateMgr.getCurrentState().dropMaterializedView(statement);
-        GlobalStateMgr.getCurrentState().getPrivilegeManager().removeInvalidObject();
+        GlobalStateMgr.getCurrentState().getAuthorizationManager().removeInvalidObject();
         ctxToTestUser();
     }
 
@@ -2589,7 +2589,7 @@ public class PrivilegeCheckerV2Test {
     @Test
     public void testGrantRevokeBuiltinRole() throws Exception {
         String sql = "create role r1";
-        PrivilegeManager manager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager();
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
 

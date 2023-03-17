@@ -153,8 +153,8 @@ public class RBACExecutorTest {
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
 
-        Long roleId1 = ctx.getGlobalStateMgr().getPrivilegeManager().getRoleIdByNameAllowNull("drop_role1");
-        Long roleId2 = ctx.getGlobalStateMgr().getPrivilegeManager().getRoleIdByNameAllowNull("drop_role2");
+        Long roleId1 = ctx.getGlobalStateMgr().getAuthorizationManager().getRoleIdByNameAllowNull("drop_role1");
+        Long roleId2 = ctx.getGlobalStateMgr().getAuthorizationManager().getRoleIdByNameAllowNull("drop_role2");
         HashSet roleIds = new HashSet<>();
         roleIds.add(roleId1);
         roleIds.add(roleId2);

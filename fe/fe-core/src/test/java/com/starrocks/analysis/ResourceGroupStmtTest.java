@@ -465,7 +465,7 @@ public class ResourceGroupStmtTest {
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
         starRocksAssert.getCtx().setCurrentRoleIds(
-                starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager().getRoleIdsByUser(
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(
                         new UserIdentity(qualifiedUser, "%")
                 )
         );
