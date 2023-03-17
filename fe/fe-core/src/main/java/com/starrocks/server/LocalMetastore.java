@@ -2798,7 +2798,15 @@ public class LocalMetastore implements ConnectorMetadata {
                 // analyze properties
                 List<SetListItem> setListItems = Lists.newArrayList();
                 for (Map.Entry<String, String> entry : properties.entrySet()) {
-                    SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
+                    if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                        throw new AnalysisException("Analyze materialized properties failed " +
+                                "because unknown properties: " + properties +
+                                ", please add `session.` prefix if you want add session variables for mv(" +
+                                "eg, \"session.query_timeout\"=\"30000000\").");
+                    }
+                    String varKey = entry.getKey().substring(
+                            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                    SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
                     setListItems.add(variable);
                 }
                 SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
