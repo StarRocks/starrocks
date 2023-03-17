@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "exec/spill/log_block_manager.h"
 #include "fs/fs.h"
 #include "gen_cpp/Types_types.h"
 
@@ -27,13 +28,16 @@ namespace starrocks {
 namespace spill {
 class QuerySpillManager {
 public:
-    QuerySpillManager(const TUniqueId& uid) : _uid(uid) {}
+    QuerySpillManager(const TUniqueId& uid) : _uid(uid) { _block_manager = std::make_unique<LogBlockManager>(uid); }
     size_t pending_spilled_bytes() { return _spilled_bytes; }
     void update_spilled_bytes(size_t spilled_bytes) { _spilled_bytes += spilled_bytes; }
+
+    BlockManager* block_manager() const { return _block_manager.get(); }
 
 private:
     TUniqueId _uid;
     std::atomic_size_t _spilled_bytes;
+    std::unique_ptr<BlockManager> _block_manager;
 };
 } // namespace spill
 } // namespace starrocks

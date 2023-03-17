@@ -65,7 +65,6 @@ struct SpilledOptions {
     ChunkBuilder chunk_builder;
     std::string name;
     int32_t plan_node_id;
-    std::shared_ptr<spill::BlockManager> block_manager;
     CompressionTypePB compress_type = CompressionTypePB::LZ4;
 };
 

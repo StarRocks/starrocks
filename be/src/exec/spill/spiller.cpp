@@ -62,7 +62,7 @@ Status Spiller::prepare(RuntimeState* state) {
     ASSIGN_OR_RETURN(_serde, spill::create_serde(&_opts));
     _block_group = std::make_shared<spill::BlockGroup>(_serde);
 #ifndef BE_TEST
-    _block_manager = state->query_ctx()->spill_block_manager();
+    _block_manager = state->query_ctx()->spill_manager()->block_manager();
 #endif
 
     return Status::OK();
