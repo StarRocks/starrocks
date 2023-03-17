@@ -29,7 +29,7 @@ public:
 
     bool is_buffer_full() { return _chunk_buffer.get_size() >= _capacity; }
     // The ChunkProvider in sort operator needs to use has_chunk to check whether the data is ready,
-    // if the InputStrema is in the eof state, it also needs to return true to driver ChunkSortCursor into the stage of obtaining data.
+    // if the InputStream is in the eof state, it also needs to return true to driver ChunkSortCursor into the stage of obtaining data.
     bool has_chunk() { return !_chunk_buffer.empty() || eof(); }
 
     StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
