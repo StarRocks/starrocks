@@ -1705,12 +1705,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
-        Collection<Partition> tablePartitions = olapTable.getPartitions();
         for (AddPartitionClause addPartitionClause : addPartitionClauseMap.values()) {
             try {
-                if (tablePartitions.size() > Config.max_automatic_partition_number) {
+                if (olapTable.getNumberOfPartitions() > Config.max_automatic_partition_number) {
                     throw new AnalysisException(" Automatically created partitions exceeded the maximum limit: " +
-                            Config.max_automatic_partition_number + ". You can turn this restriction on by setting" +
+                            Config.max_automatic_partition_number + ". You can modify this restriction on by setting" +
                             " max_automatic_partition_number larger.");
                 }
                 state.addPartitions(db, olapTable.getName(), addPartitionClause);
