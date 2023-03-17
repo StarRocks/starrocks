@@ -106,7 +106,7 @@ public:
     UnorderedInputStream(const std::vector<BlockPtr>& input_blocks, SerdePtr serde)
             : InputStream(input_blocks), _serde(std::move(serde)) {}
 
-    ~UnorderedInputStream() = default;
+    ~UnorderedInputStream() override = default;
 
     StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
 
@@ -149,7 +149,7 @@ public:
     OrderedInputStream(const std::vector<BlockPtr>& blocks, RuntimeState* state)
             : InputStream(blocks), _merger(state) {}
 
-    ~OrderedInputStream() = default;
+    ~OrderedInputStream() override = default;
 
     Status init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs);
 

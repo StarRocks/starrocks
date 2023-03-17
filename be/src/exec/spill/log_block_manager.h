@@ -23,8 +23,7 @@
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
 
-namespace starrocks {
-namespace spill {
+namespace starrocks::spill {
 
 class LogBlockContainer;
 using LogBlockContainerPtr = std::shared_ptr<LogBlockContainer>;
@@ -47,7 +46,7 @@ using LogBlockContainerPtr = std::shared_ptr<LogBlockContainer>;
 class LogBlockManager : public BlockManager {
 public:
     LogBlockManager(TUniqueId query_id);
-    ~LogBlockManager();
+    ~LogBlockManager() override;
 
     Status open() override;
     void close() override;
@@ -86,5 +85,4 @@ private:
 #endif
     const static int64_t kDefaultMaxContainerBytes = 10L * 1024 * 1024 * 1024; // 10GB
 };
-} // namespace spill
-} // namespace starrocks
+} // namespace starrocks::spill

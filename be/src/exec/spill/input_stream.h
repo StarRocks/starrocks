@@ -23,14 +23,13 @@
 #include "exec/spill/block_manager.h"
 #include "exec/spill/serde.h"
 
-namespace starrocks {
-namespace spill {
+namespace starrocks::spill {
 
 // InputStream is used in restore phase to represent an input stream of a restore task.
 // InputStream reads multiple Blocks and returns the deserialized Chunks.
 class InputStream {
 public:
-    InputStream() {}
+    InputStream() = default;
     InputStream(const std::vector<BlockPtr>& input_blocks) : _input_blocks(input_blocks) {}
 
     virtual ~InputStream() = default;
@@ -68,5 +67,4 @@ private:
     std::vector<BlockPtr> _blocks;
 };
 
-} // namespace spill
-} // namespace starrocks
+} // namespace starrocks::spill

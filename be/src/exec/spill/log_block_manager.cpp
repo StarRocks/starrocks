@@ -27,8 +27,7 @@
 #include "storage/options.h"
 #include "util/uid_util.h"
 
-namespace starrocks {
-namespace spill {
+namespace starrocks::spill {
 
 class LogBlockReader {
 public:
@@ -58,9 +57,12 @@ private:
 
 class LogBlockContainer {
 public:
-    LogBlockContainer(Dir* dir, TUniqueId query_id, int32_t plan_node_id, const std::string& plan_node_name,
-                      uint64_t id)
-            : _dir(dir), _query_id(query_id), _plan_node_id(plan_node_id), _plan_node_name(plan_node_name), _id(id) {}
+    LogBlockContainer(Dir* dir, TUniqueId query_id, int32_t plan_node_id, std::string plan_node_name, uint64_t id)
+            : _dir(dir),
+              _query_id(query_id),
+              _plan_node_id(plan_node_id),
+              _plan_node_name(std::move(plan_node_name)),
+              _id(id) {}
 
     ~LogBlockContainer() {
         TRACE_SPILL_LOG << "delete spill container file: " << path();
@@ -156,7 +158,7 @@ class LogBlock : public Block {
 public:
     LogBlock(LogBlockContainerPtr container, size_t offset) : _container(container), _offset(offset) {}
 
-    virtual ~LogBlock() {
+    virtual ~LogBlock() override {
         if (_reader != nullptr) {
             _reader.reset();
         }
@@ -290,5 +292,4 @@ StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(Dir* dir
     return block_container;
 }
 
-} // namespace spill
-} // namespace starrocks
+} // namespace starrocks::spill
