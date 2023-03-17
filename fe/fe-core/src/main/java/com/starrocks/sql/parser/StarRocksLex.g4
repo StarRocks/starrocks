@@ -14,7 +14,12 @@
 
 
 lexer grammar StarRocksLex;
-@parser::members {public static long sqlMode;}
+@members {
+private long sqlMode = com.starrocks.qe.SqlModeHelper.MODE_DEFAULT;
+public void setSqlMode(long newSqlMode) {
+    sqlMode = newSqlMode;
+}
+}
 tokens {
     CONCAT
 }
@@ -411,7 +416,7 @@ ASTERISK_SYMBOL: '*';
 SLASH_SYMBOL: '/';
 PERCENT_SYMBOL: '%';
 
-LOGICAL_OR: '||' {setType((StarRocksParser.sqlMode & com.starrocks.qe.SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0 ? LOGICAL_OR : StarRocksParser.CONCAT);};
+LOGICAL_OR: '||' {setType((sqlMode & com.starrocks.qe.SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0 ? LOGICAL_OR : StarRocksParser.CONCAT);};
 LOGICAL_AND: '&&';
 LOGICAL_NOT: '!';
 
