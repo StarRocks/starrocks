@@ -2449,7 +2449,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readLock();
             try {
                 for (Table table : db.getTables()) {
-                    if (table.getType() != Table.TableType.OLAP) {
+                    if (!table.isLocalTable()) {
                         continue;
                     }
 
