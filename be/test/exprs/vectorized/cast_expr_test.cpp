@@ -1718,7 +1718,12 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     EXPECT_EQ("[1, 2, 3]", cast_json_to_array(cast_expr, TYPE_INT, "[1,   2,  3]"));
     EXPECT_EQ("[]", cast_json_to_array(cast_expr, TYPE_INT, "[]"));
     EXPECT_EQ("[]", cast_json_to_array(cast_expr, TYPE_INT, ""));
+<<<<<<< HEAD:be/test/exprs/vectorized/cast_expr_test.cpp
     EXPECT_EQ("[NULL, NULL]", cast_json_to_array(cast_expr, TYPE_INT, "[\"a\",\"b\"]"));
+=======
+    EXPECT_EQ("[]", cast_json_to_array(cast_expr, TYPE_INT, "a"));
+    EXPECT_EQ("[NULL,NULL]", cast_json_to_array(cast_expr, TYPE_INT, "[\"a\",\"b\"]"));
+>>>>>>> 96842f4b7 ([BugFix] Fix cast json to array may cause a wrong result (#19662)):be/test/exprs/cast_expr_test.cpp
 
     EXPECT_EQ("[1.1, 2.2, 3.3]", cast_json_to_array(cast_expr, TYPE_DOUBLE, "[1.1,2.2,3.3]"));
 
