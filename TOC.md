@@ -63,7 +63,7 @@
   + 数据去重
     + [使用 Bitmap 实现精确去重](/using_starrocks/Using_bitmap.md)
     + [使用 HyperLogLog 实现近似去重](/using_starrocks/Using_HLL.md)
-  + [使用 Lateral Join 实现行转列](/using_starrocks/Lateral_join.md)
+  + [使用 Lateral Join 实现列转行](/using_starrocks/Lateral_join.md)
   + [Query Cache](/using_starrocks/query_cache.md)
 + 外部系统集成
   + [概述](/integrations/intro.md)
