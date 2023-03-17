@@ -160,48 +160,23 @@ public class RangeSimplifier {
         Preconditions.checkState(scalarOperator.getChild(1) instanceof ConstantOperator);
         BinaryPredicateOperator binary = scalarOperator.cast();
         ConstantOperator right = binary.getChild(1).cast();
-
-        if (binary.getBinaryType().equals(BinaryPredicateOperator.BinaryType.LE) && validRange.hasUpperBound()) {
-            if (validRange.upperBoundType() == BoundType.CLOSED
-                    && right.compareTo(validRange.upperEndpoint()) > 0) {
-                // for validRange: [10, 20], scalar: x <= 30, skip it
-                return true;
-            } else if (validRange.upperBoundType() == BoundType.OPEN
-                    && right.compareTo(validRange.upperEndpoint()) >= 0) {
-                // for validRange: [10, 20), scalar: x <= 20, skip it
-                return true;
-            }
+        Range predicateRange = range(binary.getBinaryType(), right);
+        // only range border's predicate is non redundant
+        if (predicateRange.hasLowerBound()
+                && validRange.hasLowerBound()
+                && predicateRange.lowerBoundType() == validRange.lowerBoundType()
+                && predicateRange.lowerEndpoint().equals(validRange.lowerEndpoint())) {
+            // predicate is lower border
+            return false;
         }
-
-        if (binary.getBinaryType().equals(BinaryPredicateOperator.BinaryType.LT)
-                && validRange.hasUpperBound() && right.compareTo(validRange.upperEndpoint()) > 0) {
-            // for validRange: [10, 20], scalar: x < 20, impossible
-            // for validRange: [10, 20], scalar: x < 30, skip it
-            // for validRange: [10, 20), scalar: x < 30, skip it
-            return true;
+        if (predicateRange.hasUpperBound()
+                && validRange.hasUpperBound()
+                && predicateRange.upperBoundType() == validRange.upperBoundType()
+                && predicateRange.upperEndpoint().equals(validRange.upperEndpoint())) {
+            // predicate is upper border
+            return false;
         }
-
-        if (binary.getBinaryType().equals(BinaryPredicateOperator.BinaryType.GE) && validRange.hasLowerBound()) {
-            if (validRange.lowerBoundType() == BoundType.CLOSED
-                    && right.compareTo(validRange.lowerEndpoint()) < 0) {
-                // for validRange: [10, 20], scalar: x >= 5, skip it
-                return true;
-            } else if (validRange.lowerBoundType() == BoundType.OPEN
-                    && right.compareTo(validRange.lowerEndpoint()) <= 0) {
-                // for validRange: (10, 20], scalar: x >= 10, skip it
-                // for validRange: (10, 20], scalar: x >= 5, skip it
-                return true;
-            }
-        }
-
-        if (binary.getBinaryType().equals(BinaryPredicateOperator.BinaryType.GT)
-                && validRange.hasLowerBound() && right.compareTo(validRange.lowerEndpoint()) < 0) {
-            // for validRange: [10, 20], scalar: x < 10, impossible
-            // for validRange: [10, 20], scalar: x < 5, skip it
-            // for validRange: (10, 20], scalar: x < 5, skip it
-            return true;
-        }
-        return false;
+        return true;
     }
 
     private boolean isScalarForColumns(ScalarOperator predicate, int columnId) {
