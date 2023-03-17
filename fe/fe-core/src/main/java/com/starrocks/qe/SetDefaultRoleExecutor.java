@@ -14,8 +14,8 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.UserException;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;
 import com.starrocks.sql.ast.UserIdentity;
@@ -25,7 +25,7 @@ import java.util.Set;
 
 public class SetDefaultRoleExecutor {
     public static void execute(SetDefaultRoleStmt stmt, ConnectContext context) throws UserException, PrivilegeException {
-        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = context.getGlobalStateMgr().getAuthorizationManager();
         UserIdentity user = stmt.getUserIdentity();
         Set<Long> roleIdsForUser = manager.getRoleIdsByUser(user);
         Set<Long> roleIds;

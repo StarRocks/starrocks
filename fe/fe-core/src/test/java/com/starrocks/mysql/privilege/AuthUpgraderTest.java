@@ -112,7 +112,7 @@ public class AuthUpgraderTest {
         AuthUpgrader authUpgrader = new AuthUpgrader(
                 relayAuth,
                 ctx.getGlobalStateMgr().getAuthenticationManager(),
-                ctx.getGlobalStateMgr().getPrivilegeManager(),
+                ctx.getGlobalStateMgr().getAuthorizationManager(),
                 ctx.getGlobalStateMgr());
         if (onlyUpgradeJournal) {
             UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
@@ -418,7 +418,7 @@ public class AuthUpgraderTest {
         checkPrivilegeAsUser(selectUser, "select * from db0.tbl0");
         UserIdentity user = createUserByRole("impersonateRole");
         ctx.setCurrentUserIdentity(user);
-        ctx.getGlobalStateMgr().getPrivilegeManager().canExecuteAs(ctx, selectUser);
+        ctx.getGlobalStateMgr().getAuthorizationManager().canExecuteAs(ctx, selectUser);
 
         // restart
         ctx.getGlobalStateMgr().initAuth(true);
@@ -438,7 +438,7 @@ public class AuthUpgraderTest {
         checkPrivilegeAsUser(selectUser, "select * from db0.tbl0");
         user = createUserByRole("impersonateRole");
         ctx.setCurrentUserIdentity(user);
-        ctx.getGlobalStateMgr().getPrivilegeManager().canExecuteAs(ctx, selectUser);
+        ctx.getGlobalStateMgr().getAuthorizationManager().canExecuteAs(ctx, selectUser);
     }
 
     @Test
@@ -459,12 +459,12 @@ public class AuthUpgraderTest {
                 replayUpgrade(image);
             }
             ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("harry", "%"));
-            ctx.getGlobalStateMgr().getPrivilegeManager().canExecuteAs(
+            ctx.getGlobalStateMgr().getAuthorizationManager().canExecuteAs(
                     ctx, UserIdentity.createAnalyzedUserIdentWithIp("gregory", "%"));
 
             UserIdentity user = createUserByRole("harry");
             ctx.setCurrentUserIdentity(user);
-            ctx.getGlobalStateMgr().getPrivilegeManager().canExecuteAs(
+            ctx.getGlobalStateMgr().getAuthorizationManager().canExecuteAs(
                     ctx, UserIdentity.createAnalyzedUserIdentWithIp("gregory", "%"));
         }
     }
@@ -485,7 +485,7 @@ public class AuthUpgraderTest {
                 replayUpgrade(image);
             }
             ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("testafteruserdropped", "%"));
-            Assert.assertFalse(ctx.getGlobalStateMgr().getPrivilegeManager().canExecuteAs(
+            Assert.assertFalse(ctx.getGlobalStateMgr().getAuthorizationManager().canExecuteAs(
                     ctx, UserIdentity.createAnalyzedUserIdentWithIp("gregory1", "%")));
         }
     }

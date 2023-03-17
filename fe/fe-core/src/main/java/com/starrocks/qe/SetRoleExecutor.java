@@ -16,8 +16,8 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.UserException;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;
 import com.starrocks.sql.ast.UserIdentity;
@@ -27,7 +27,7 @@ import java.util.Set;
 
 public class SetRoleExecutor {
 
-    private static long getValidRoleId(PrivilegeManager manager, Set<Long> roleIdsForUser, String roleName,
+    private static long getValidRoleId(AuthorizationManager manager, Set<Long> roleIdsForUser, String roleName,
                                        UserIdentity userIdentity) throws UserException {
         Long id = manager.getRoleIdByNameAllowNull(roleName);
         if (id == null) {
@@ -41,7 +41,7 @@ public class SetRoleExecutor {
     }
 
     public static void execute(SetRoleStmt stmt, ConnectContext context) throws UserException, PrivilegeException {
-        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = context.getGlobalStateMgr().getAuthorizationManager();
         UserIdentity user = context.getCurrentUserIdentity();
         Set<Long> roleIdsForUser = manager.getRoleIdsByUser(user);
         Set<Long> roleIds;

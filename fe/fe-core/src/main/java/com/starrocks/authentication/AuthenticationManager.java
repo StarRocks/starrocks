@@ -27,8 +27,8 @@ import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -254,12 +254,12 @@ public class AuthenticationManager {
                 userNameToProperty.put(userIdentity.getQualifiedUser(), userProperty);
             }
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            PrivilegeManager privilegeManager = globalStateMgr.getPrivilegeManager();
+            AuthorizationManager authorizationManager = globalStateMgr.getAuthorizationManager();
             // init user privilege
-            UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity, stmt.getDefaultRoles());
+            UserPrivilegeCollection collection = authorizationManager.onCreateUser(userIdentity, stmt.getDefaultRoles());
 
-            short pluginId = privilegeManager.getProviderPluginId();
-            short pluginVersion = privilegeManager.getProviderPluginVersion();
+            short pluginId = authorizationManager.getProviderPluginId();
+            short pluginVersion = authorizationManager.getProviderPluginVersion();
             globalStateMgr.getEditLog().logCreateUser(
                     userIdentity, info, userProperty, collection, pluginId, pluginVersion);
 
@@ -333,7 +333,7 @@ public class AuthenticationManager {
         try {
             dropUserNoLock(userIdentity);
             // drop user privilege as well
-            GlobalStateMgr.getCurrentState().getPrivilegeManager().onDropUser(userIdentity);
+            GlobalStateMgr.getCurrentState().getAuthorizationManager().onDropUser(userIdentity);
             GlobalStateMgr.getCurrentState().getEditLog().logDropUser(userIdentity);
         } finally {
             writeUnlock();
@@ -345,7 +345,7 @@ public class AuthenticationManager {
         try {
             dropUserNoLock(userIdentity);
             // drop user privilege as well
-            GlobalStateMgr.getCurrentState().getPrivilegeManager().onDropUser(userIdentity);
+            GlobalStateMgr.getCurrentState().getAuthorizationManager().onDropUser(userIdentity);
         } finally {
             writeUnlock();
         }
@@ -385,7 +385,7 @@ public class AuthenticationManager {
             }
 
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            globalStateMgr.getPrivilegeManager().replayUpdateUserPrivilegeCollection(
+            globalStateMgr.getAuthorizationManager().replayUpdateUserPrivilegeCollection(
                     userIdentity, privilegeCollection, pluginId, pluginVersion);
         } finally {
             writeUnlock();

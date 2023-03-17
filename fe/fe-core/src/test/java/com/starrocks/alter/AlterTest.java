@@ -409,7 +409,7 @@ public class AlterTest {
                 ") " +
                 "as select k1, k2 from test.testTable1;";
         createMaterializedView(sql);
-        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getPrivilegeManager().getRoleIdsByUser(
+        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(
                 starRocksAssert.getCtx().getCurrentUserIdentity()));
         dropMaterializedView("drop materialized view test.mv1");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("testTable1");
@@ -504,7 +504,7 @@ public class AlterTest {
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
         refreshMaterializedView(alterStmt);
-        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getPrivilegeManager().getRoleIdsByUser(
+        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(
                 starRocksAssert.getCtx().getCurrentUserIdentity()));
         dropMaterializedView("drop materialized view test.mv1");
     }
@@ -533,7 +533,7 @@ public class AlterTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, k2 from test.testTable4;";
-        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getPrivilegeManager().getRoleIdsByUser(
+        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(
                 starRocksAssert.getCtx().getCurrentUserIdentity()));
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
@@ -1755,7 +1755,7 @@ public class AlterTest {
         starRocksAssert.getCtx().setQualifiedUser("testuser");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setCurrentRoleIds(
-                GlobalStateMgr.getCurrentState().getPrivilegeManager().getRoleIdsByUser(testUser));
+                GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(testUser));
         starRocksAssert.getCtx().setRemoteIP("%");
 
         String renameDb = "alter database test rename test0";

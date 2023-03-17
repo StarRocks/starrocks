@@ -40,7 +40,7 @@ import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.qe.SqlModeHelper;
@@ -121,15 +121,15 @@ public class SetPassVarTest {
 
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
-    private static PrivilegeManager privilegeManager;
+    private static AuthorizationManager authorizationManager;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
-        privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
+        authorizationManager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager();
         starRocksAssert.getCtx().setRemoteIP("localhost");
-        privilegeManager.initBuiltinRolesAndUsers();
+        authorizationManager.initBuiltinRolesAndUsers();
         ctxToRoot();
         createUsers();
     }

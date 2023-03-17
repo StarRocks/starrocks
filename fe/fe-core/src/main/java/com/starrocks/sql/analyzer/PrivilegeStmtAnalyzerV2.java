@@ -32,12 +32,12 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -78,11 +78,11 @@ public class PrivilegeStmtAnalyzerV2 {
 
     static class PrivilegeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         private AuthenticationManager authenticationManager = null;
-        private PrivilegeManager privilegeManager = null;
+        private AuthorizationManager authorizationManager = null;
 
         public void analyze(StatementBase statement, ConnectContext session) {
             authenticationManager = session.getGlobalStateMgr().getAuthenticationManager();
-            privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
+            authorizationManager = session.getGlobalStateMgr().getAuthorizationManager();
             visit(statement, session);
         }
 
@@ -105,7 +105,7 @@ public class PrivilegeStmtAnalyzerV2 {
             // always set to true, we can validate if it's allowed to operation on admin later
             FeNameFormat.checkRoleName(roleName, true, errMsg);
             // check if role exists
-            if (checkExist && !privilegeManager.checkRoleExists(roleName)) {
+            if (checkExist && !authorizationManager.checkRoleExists(roleName)) {
                 throw new SemanticException(errMsg + ": cannot find role " + roleName + "!");
             }
         }
@@ -224,7 +224,7 @@ public class PrivilegeStmtAnalyzerV2 {
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
             for (String roleName : stmt.getRoles()) {
                 FeNameFormat.checkRoleName(roleName, true, "Can not create role");
-                if (privilegeManager.checkRoleExists(roleName) && !stmt.isIfNotExists()) {
+                if (authorizationManager.checkRoleExists(roleName) && !stmt.isIfNotExists()) {
                     throw new SemanticException("Operation CREATE ROLE failed for " + roleName + " : role already exists");
                 }
             }
@@ -235,7 +235,7 @@ public class PrivilegeStmtAnalyzerV2 {
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
             for (String roleName : stmt.getRoles()) {
                 FeNameFormat.checkRoleName(roleName, true, "Can not create role");
-                if (!privilegeManager.checkRoleExists(roleName) && !stmt.isIfExists()) {
+                if (!authorizationManager.checkRoleExists(roleName) && !stmt.isIfExists()) {
                     throw new SemanticException("Operation DROP ROLE failed for " + roleName + " : role not exists");
                 }
             }
@@ -249,11 +249,11 @@ public class PrivilegeStmtAnalyzerV2 {
                 Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr()
                         .getFunction(searchDesc);
                 if (function == null) {
-                    return privilegeManager.generateObject(
+                    return authorizationManager.generateObject(
                             analyzeObjectType(stmt.getObjectTypeUnResolved()),
                             Collections.singletonList(GlobalFunctionPEntryObject.FUNC_NOT_FOUND));
                 } else {
-                    return privilegeManager.generateObject(
+                    return authorizationManager.generateObject(
                             analyzeObjectType(stmt.getObjectTypeUnResolved()),
                             Collections.singletonList(function.signatureString())
                     );
@@ -263,12 +263,12 @@ public class PrivilegeStmtAnalyzerV2 {
             Database db = GlobalStateMgr.getCurrentState().getDb(name.getDb());
             Function function = db.getFunction(searchDesc);
             if (null == function) {
-                return privilegeManager.generateObject(
+                return authorizationManager.generateObject(
                         analyzeObjectType(stmt.getObjectTypeUnResolved()),
                         Arrays.asList(db.getFullName(), FunctionPEntryObject.FUNC_NOT_FOUND)
                 );
             } else {
-                return privilegeManager.generateObject(
+                return authorizationManager.generateObject(
                         analyzeObjectType(stmt.getObjectTypeUnResolved()),
                         Arrays.asList(function.dbName(), function.signatureString())
                 );
@@ -292,7 +292,7 @@ public class PrivilegeStmtAnalyzerV2 {
             }
 
             PrivilegeType privilegeType = PrivilegeType.valueOf(p);
-            if (!privilegeManager.isAvailablePirvType(objectType, privilegeType)) {
+            if (!authorizationManager.isAvailablePirvType(objectType, privilegeType)) {
                 throw new SemanticException("Cannot grant or revoke " + privTypeString + " on '"
                         + objectType + "' type object");
             }
@@ -316,7 +316,7 @@ public class PrivilegeStmtAnalyzerV2 {
                         stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
                         for (UserIdentity userIdentity : stmt.getUserPrivilegeObjectList()) {
                             analyseUser(userIdentity, true);
-                            objectList.add(privilegeManager.generateUserObject(stmt.getObjectType(), userIdentity));
+                            objectList.add(authorizationManager.generateUserObject(stmt.getObjectType(), userIdentity));
                         }
                     } else if (stmt.getPrivilegeObjectNameTokensList() != null) {
                         // normal objects
@@ -324,10 +324,10 @@ public class PrivilegeStmtAnalyzerV2 {
                         stmt.setObjectType(objectType);
                         for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
                             if (objectType.equals(ObjectType.TABLE) && tokens.size() == 3) {
-                                objectList.add(privilegeManager.generateObject(objectType, tokens));
+                                objectList.add(authorizationManager.generateObject(objectType, tokens));
                                 continue;
                             } else if (objectType.equals(ObjectType.DATABASE) && tokens.size() == 2) {
-                                objectList.add(privilegeManager.generateObject(objectType, tokens));
+                                objectList.add(authorizationManager.generateObject(objectType, tokens));
                                 continue;
                             }
                             if (tokens.size() < 1 || tokens.size() > 2) {
@@ -356,7 +356,7 @@ public class PrivilegeStmtAnalyzerV2 {
                                     fullTokens.add(0, session.getCurrentCatalog());
                                 }
                             }
-                            objectList.add(privilegeManager.generateObject(objectType, fullTokens));
+                            objectList.add(authorizationManager.generateObject(objectType, fullTokens));
                         }
                     } else if (stmt.getFunctions() != null) {
                         stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
@@ -400,7 +400,7 @@ public class PrivilegeStmtAnalyzerV2 {
                             if (stmt.getTokens().size() != 1) {
                                 throw new SemanticException("invalid ALL statement for user! only support ON ALL USERS");
                             } else {
-                                objectList.add(privilegeManager.generateUserObject(objectType, null));
+                                objectList.add(authorizationManager.generateUserObject(objectType, null));
                             }
                         } else {
                             List<String> fullTokens = new LinkedList<>(stmt.getTokens());
@@ -411,7 +411,7 @@ public class PrivilegeStmtAnalyzerV2 {
                                     fullTokens.add(0, session.getCurrentCatalog());
                                 }
                             }
-                            objectList.add(privilegeManager.generateObject(objectType, fullTokens));
+                            objectList.add(authorizationManager.generateObject(objectType, fullTokens));
                         }
                     }
                     stmt.setObjectList(objectList);
@@ -424,7 +424,7 @@ public class PrivilegeStmtAnalyzerV2 {
                 for (String privTypeUnResolved : stmt.getPrivilegeTypeUnResolved()) {
                     if (privTypeUnResolved.equalsIgnoreCase("all")
                             || privTypeUnResolved.equalsIgnoreCase("all privileges")) {
-                        privilegeTypes.addAll(privilegeManager.getAvailablePrivType(stmt.getObjectType()));
+                        privilegeTypes.addAll(authorizationManager.getAvailablePrivType(stmt.getObjectType()));
                     } else {
                         privilegeTypes.add(analyzePrivType(stmt.getObjectType(), privTypeUnResolved));
                     }
@@ -432,7 +432,7 @@ public class PrivilegeStmtAnalyzerV2 {
 
                 stmt.setPrivilegeTypes(privilegeTypes);
 
-                privilegeManager.validateGrant(stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList());
+                authorizationManager.validateGrant(stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList());
             } catch (PrivilegeException | AnalysisException e) {
                 SemanticException exception = new SemanticException(e.getMessage());
                 exception.initCause(e);
@@ -456,8 +456,8 @@ public class PrivilegeStmtAnalyzerV2 {
                 for (String roleName : stmt.getRoles()) {
                     validRoleName(roleName, "Cannot set role", true);
 
-                    Long roleId = privilegeManager.getRoleIdByNameAllowNull(roleName);
-                    Set<Long> roleIdsForUser = privilegeManager.getRoleIdsByUser(stmt.getUserIdentity());
+                    Long roleId = authorizationManager.getRoleIdByNameAllowNull(roleName);
+                    Set<Long> roleIdsForUser = authorizationManager.getRoleIdsByUser(stmt.getUserIdentity());
                     if (roleId == null || !roleIdsForUser.contains(roleId)) {
                         throw new SemanticException("Role " + roleName + " is not granted to " +
                                 stmt.getUserIdentity().toString());

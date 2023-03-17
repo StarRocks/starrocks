@@ -25,9 +25,9 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -162,7 +162,7 @@ public class ResourceGroupMgr implements Writable {
 
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             try {
-                PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+                AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
                 List<String> validRoles = new ArrayList<>();
 
                 Set<Long> activeRoles = ctx.getCurrentRoleIds();
