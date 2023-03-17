@@ -57,6 +57,7 @@ public:
     size_t num_key_fields() const { return _num_keys; }
 
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
+    void append_sort_key_idx(ColumnId idx) { _sort_key_idxes.emplace_back(idx); }
 
     void reserve(size_t size) { _fields.reserve(size); }
 
