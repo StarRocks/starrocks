@@ -63,7 +63,7 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
     public ConnectorTableMetadataProcessor() {
         super(ConnectorTableMetadataProcessor.class.getName(), Config.background_refresh_metadata_interval_millis);
         refreshRemoteFileExecutor = Executors.newFixedThreadPool(Config.background_refresh_file_metadata_concurrency,
-                new ThreadFactoryBuilder().setNameFormat("refresh-hive-remote-files-%d").build());
+                new ThreadFactoryBuilder().setNameFormat("background-refresh-remote-files-%d").build());
     }
 
     @Override
