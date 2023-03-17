@@ -53,7 +53,7 @@ mysql> select c1, array_agg(c2) from test group by c1;
 +------+-----------------+
 ```
 
-执行列转行时，如果没有满足条件的数据，聚合结果为 `NULL`。
+对于整行进行转换时，如果没有满足条件的数据，聚合结果为 `NULL`。
 
 ```Plain Text
 mysql> select array_agg(c2) from test where c1>4;
