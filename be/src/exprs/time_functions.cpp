@@ -20,10 +20,11 @@
 #include "column/column_viewer.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
+#include "gen_cpp/InternalService_constants.h"
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
-#include "util/func_version_constant.h"
+
 namespace starrocks {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.
 static int day_to_first[8] = {0 /*never use*/, 6, 0, 1, 2, 3, 4, 5};
@@ -993,7 +994,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_datetime(FunctionContext* con
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime(FunctionContext* context, const Columns& columns) {
     int func_version = context->state()->func_version();
-    if (func_version >= FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+    if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
         return _t_to_unix_from_datetime<TYPE_BIGINT>(context, columns);
     } else {
         return _t_to_unix_from_datetime<TYPE_INT>(context, columns);
@@ -1038,7 +1039,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_date(FunctionContext* context
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_from_date(FunctionContext* context, const Columns& columns) {
     int func_version = context->state()->func_version();
-    if (func_version >= FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+    if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
         return _t_to_unix_from_date<TYPE_BIGINT>(context, columns);
     } else {
         return _t_to_unix_from_date<TYPE_INT>(context, columns);
@@ -1089,7 +1090,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_datetime_with_format(Function
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format(FunctionContext* context, const Columns& columns) {
     int func_version = context->state()->func_version();
-    if (func_version >= FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+    if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
         return _t_to_unix_from_datetime_with_format<TYPE_BIGINT>(context, columns);
     } else {
         return _t_to_unix_from_datetime_with_format<TYPE_INT>(context, columns);
@@ -1100,7 +1101,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now(FunctionContext* context, con
     int func_version = context->state()->func_version();
     DCHECK_EQ(columns.size(), 0);
     int64_t value = context->state()->timestamp_ms() / 1000;
-    if (func_version >= FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+    if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
         auto result = Int64Column::create();
         result->append(value);
         return ConstColumn::create(result, 1);
@@ -1155,7 +1156,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
 
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
     int func_version = context->state()->func_version();
-    if (func_version >= FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+    if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
         return _t_from_unix_to_datetime<TYPE_BIGINT>(context, columns);
     } else {
         return _t_from_unix_to_datetime<TYPE_INT>(context, columns);
@@ -1317,14 +1318,14 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format(FunctionCon
 
     if (state->const_format) {
         std::string format_content = state->format_content;
-        if (func_version >= FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+        if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
             return _t_from_unix_with_format_const<TYPE_BIGINT>(format_content, context, columns);
         } else {
             return _t_from_unix_with_format_const<TYPE_INT>(format_content, context, columns);
         }
     }
 
-    if (func_version >= FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+    if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
         return _t_from_unix_with_format_general<TYPE_BIGINT>(context, columns);
     } else {
         return _t_from_unix_with_format_general<TYPE_INT>(context, columns);

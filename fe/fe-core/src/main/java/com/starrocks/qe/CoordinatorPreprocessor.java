@@ -872,8 +872,7 @@ public class CoordinatorPreprocessor {
         return bucketShuffleFragmentIds.contains(fragmentId);
     }
 
-    // Returns the id of the leftmost node of any of the gives types in 'plan_root',
-    // or INVALID_PLAN_NODE_ID if no such node present.
+    // Returns the id of the leftmost node of any of the gives types in 'plan_root'.
     private PlanNode findLeftmostNode(PlanNode plan) {
         PlanNode newPlan = plan;
         while (newPlan.getChildren().size() != 0 && !(newPlan instanceof ExchangeNode)) {
