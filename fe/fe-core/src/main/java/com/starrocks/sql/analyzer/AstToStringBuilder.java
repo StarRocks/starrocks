@@ -97,6 +97,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -286,10 +287,16 @@ public class AstToStringBuilder {
                             + " as " + userVariable.getEvaluatedExpression().getType().toSql() + ")";
                     setVarList.add(setVarSql);
                 } else if (setVar instanceof SetPassVar) {
-                    String tmp = "PASSWORD FOR " +
-                            ((SetPassVar) setVar).getUserIdent().toString() +
-                            " = PASSWORD('***')";
-                    setVarList.add(tmp);
+                    SetPassVar setPassVar = (SetPassVar) setVar;
+                    UserIdentity userIdentity = setPassVar.getUserIdent();
+                    String setPassSql = "";
+                    if (userIdentity == null) {
+                        setPassSql += "PASSWORD";
+                    } else {
+                        setPassSql += "PASSWORD FOR " + userIdentity;
+                    }
+                    setPassSql += " = PASSWORD('***')";
+                    setVarList.add(setPassSql);
                 }
             }
 
