@@ -20,7 +20,7 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.OperationType;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetDefaultRoleExecutor;
@@ -167,54 +167,54 @@ public class AuthenticationManagerTest {
     @Test
     public void testCreateUserWithDefaultRole() throws Exception {
         AuthenticationManager masterManager = ctx.getGlobalStateMgr().getAuthenticationManager();
-        PrivilegeManager privilegeManager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager authorizationManager = ctx.getGlobalStateMgr().getAuthorizationManager();
 
         String sql = "create role test_r1";
         CreateRoleStmt createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        privilegeManager.createRole(createStmt);
+        authorizationManager.createRole(createStmt);
 
         sql = "create role test_r2";
         createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        privilegeManager.createRole(createStmt);
+        authorizationManager.createRole(createStmt);
 
         sql = "create role test_r3";
         createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        privilegeManager.createRole(createStmt);
+        authorizationManager.createRole(createStmt);
 
         sql = "create user test2 default role test_r1";
         CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         masterManager.createUser(stmt);
-        Set<Long> s = privilegeManager.getDefaultRoleIdsByUser(
+        Set<Long> s = authorizationManager.getDefaultRoleIdsByUser(
                 UserIdentity.createAnalyzedUserIdentWithIp("test2", "%"));
-        Long roleId = privilegeManager.getRoleIdByNameAllowNull("test_r1");
+        Long roleId = authorizationManager.getRoleIdByNameAllowNull("test_r1");
         Assert.assertEquals(1, s.size());
         Assert.assertTrue(s.contains(roleId));
 
         sql = "create user test_u3 default role test_r1, test_r2";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         masterManager.createUser(stmt);
-        s = privilegeManager.getDefaultRoleIdsByUser(
+        s = authorizationManager.getDefaultRoleIdsByUser(
                 UserIdentity.createAnalyzedUserIdentWithIp("test_u3", "%"));
         Assert.assertEquals(2, s.size());
 
-        roleId = privilegeManager.getRoleIdByNameAllowNull("test_r1");
+        roleId = authorizationManager.getRoleIdByNameAllowNull("test_r1");
         Assert.assertTrue(s.contains(roleId));
-        roleId = privilegeManager.getRoleIdByNameAllowNull("test_r2");
+        roleId = authorizationManager.getRoleIdByNameAllowNull("test_r2");
         Assert.assertTrue(s.contains(roleId));
 
         sql = "alter user test_u3 default role test_r1";
         SetDefaultRoleStmt setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
-        s = privilegeManager.getDefaultRoleIdsByUser(
+        s = authorizationManager.getDefaultRoleIdsByUser(
                 UserIdentity.createAnalyzedUserIdentWithIp("test_u3", "%"));
         Assert.assertEquals(1, s.size());
-        roleId = privilegeManager.getRoleIdByNameAllowNull("test_r1");
+        roleId = authorizationManager.getRoleIdByNameAllowNull("test_r1");
         Assert.assertTrue(s.contains(roleId));
 
         sql = "alter user test_u3 default role test_r1, test_r2";
         setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
-        s = privilegeManager.getDefaultRoleIdsByUser(
+        s = authorizationManager.getDefaultRoleIdsByUser(
                 UserIdentity.createAnalyzedUserIdentWithIp("test_u3", "%"));
         Assert.assertEquals(2, s.size());
 
@@ -231,14 +231,14 @@ public class AuthenticationManagerTest {
         sql = "alter user test_u3 default role NONE";
         setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
-        s = privilegeManager.getDefaultRoleIdsByUser(
+        s = authorizationManager.getDefaultRoleIdsByUser(
                 UserIdentity.createAnalyzedUserIdentWithIp("test_u3", "%"));
         Assert.assertEquals(0, s.size());
 
         sql = "alter user test_u3 default role ALL";
         setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
-        s = privilegeManager.getDefaultRoleIdsByUser(
+        s = authorizationManager.getDefaultRoleIdsByUser(
                 UserIdentity.createAnalyzedUserIdentWithIp("test_u3", "%"));
         Assert.assertEquals(2, s.size());
     }

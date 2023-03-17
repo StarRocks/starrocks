@@ -37,7 +37,14 @@ public class FunctionPEntryObject implements PEntryObject {
     }
 
     public static FunctionPEntryObject generate(GlobalStateMgr mgr, Long databaseId, Long functionId) throws PrivilegeException {
-        return new FunctionPEntryObject(databaseId, functionId);
+        FunctionPEntryObject functionPEntryObject = new FunctionPEntryObject(databaseId, functionId);
+        if (functionId != PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID) {
+            if (!functionPEntryObject.validate(mgr)) {
+                throw new PrivObjNotFoundException("cannot find function: " + functionId);
+            }
+        }
+
+        return functionPEntryObject;
     }
 
     @Override
@@ -76,7 +83,7 @@ public class FunctionPEntryObject implements PEntryObject {
         }
 
         for (Function f : allFunctions) {
-            if (f.getId() == this.functionId) {
+            if (f.getFunctionId() == this.functionId) {
                 return true;
             }
         }
@@ -133,7 +140,7 @@ public class FunctionPEntryObject implements PEntryObject {
                 return "ALL GLOBAL FUNCTIONS";
             } else {
                 for (Function f : GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunctions()) {
-                    if (f.getId() == functionId) {
+                    if (f.getFunctionId() == functionId) {
                         return f.getSignature();
                     }
                 }
@@ -155,7 +162,7 @@ public class FunctionPEntryObject implements PEntryObject {
                     sb.append(database.getFullName());
                 } else {
                     for (Function f : database.getFunctions()) {
-                        if (f.getId() == functionId) {
+                        if (f.getFunctionId() == functionId) {
                             return f.getSignature() + " in DATABASE " + database.getFullName();
                         }
                     }

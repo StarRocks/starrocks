@@ -71,6 +71,16 @@ public class TablePEntryObject implements PEntryObject {
                         PrivilegeBuiltinConstants.ALL_DATABASES_UUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID);
             }
             catalogName = tokens.get(0);
+
+            // It's very trick here.
+            // Because of the historical legacy code, create external table belongs to internal catalog from the grammatical level
+            // . In terms of code implementation, the catalog obtained from TableName turned out to be external catalog!
+            // As a result, the authorization grant stmt is authorized according to the internal catalog,
+            // but the external catalog is used for authentication.
+            if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
+                catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+            }
+
             tokens = tokens.subList(1, tokens.size());
         } else if (tokens.size() != 2) {
             throw new PrivilegeException(

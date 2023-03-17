@@ -52,7 +52,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class PrivilegeManagerTest {
+public class AuthorizationManagerTest {
     private ConnectContext ctx;
     private static final String DB_NAME = "db";
     private static final String TABLE_NAME_0 = "tbl0";
@@ -80,7 +80,7 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create view db.view1 as select * from db.tbl1", ctx), ctx);
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        globalStateMgr.getPrivilegeManager().initBuiltinRolesAndUsers();
+        globalStateMgr.getAuthorizationManager().initBuiltinRolesAndUsers();
         starRocksAssert.getCtx().setRemoteIP("localhost");
         String createResourceStmt = "create external resource 'hive0' PROPERTIES(" +
                 "\"type\"  =  \"hive\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")";
@@ -93,7 +93,7 @@ public class PrivilegeManagerTest {
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationManager().createUser(createUserStmt);
-        publicRoleId = globalStateMgr.getPrivilegeManager().getRoleIdByNameNoLock("public");
+        publicRoleId = globalStateMgr.getAuthorizationManager().getRoleIdByNameNoLock("public");
 
         ctx.getSessionVariable().setActivateAllRolesOnLogin(true);
     }
@@ -146,7 +146,7 @@ public class PrivilegeManagerTest {
         setCurrentUserAndRoles(ctx, testUser);
         ctx.setQualifiedUser(testUser.getQualifiedUser());
 
-        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = ctx.getGlobalStateMgr().getAuthorizationManager();
         Assert.assertFalse(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         Assert.assertFalse(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
@@ -267,7 +267,7 @@ public class PrivilegeManagerTest {
     @Test
     public void testPersist() throws Exception {
         GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
-        PrivilegeManager masterManager = masterGlobalStateMgr.getPrivilegeManager();
+        AuthorizationManager masterManager = masterGlobalStateMgr.getAuthorizationManager();
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
@@ -299,7 +299,7 @@ public class PrivilegeManagerTest {
 
         // start to replay
         masterGlobalStateMgr.loadRBACPrivilege(emptyImage.getDataInputStream());
-        PrivilegeManager followerManager = masterGlobalStateMgr.getPrivilegeManager();
+        AuthorizationManager followerManager = masterGlobalStateMgr.getAuthorizationManager();
 
         UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PRIVILEGE_V2);
@@ -324,7 +324,7 @@ public class PrivilegeManagerTest {
     @Test
     public void testRole() throws Exception {
         String sql = "create role test_role";
-        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = ctx.getGlobalStateMgr().getAuthorizationManager();
         Assert.assertFalse(manager.checkRoleExists("test_role"));
 
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -344,7 +344,7 @@ public class PrivilegeManagerTest {
     }
 
     // used in testPersistRole
-    private void assertTableSelectOnTest(PrivilegeManager manager, boolean canSelectTbl0, boolean canSelectTbl1)
+    private void assertTableSelectOnTest(AuthorizationManager manager, boolean canSelectTbl0, boolean canSelectTbl1)
             throws PrivilegeException {
         setCurrentUserAndRoles(ctx, testUser);
         ;
@@ -369,7 +369,7 @@ public class PrivilegeManagerTest {
     @Test
     public void testPersistRole() throws Exception {
         GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
-        PrivilegeManager masterManager = masterGlobalStateMgr.getPrivilegeManager();
+        AuthorizationManager masterManager = masterGlobalStateMgr.getAuthorizationManager();
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
 
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
@@ -437,7 +437,7 @@ public class PrivilegeManagerTest {
         // start to replay
         //
         masterGlobalStateMgr.loadRBACPrivilege(emptyImage.getDataInputStream());
-        PrivilegeManager followerManager = masterGlobalStateMgr.getPrivilegeManager();
+        AuthorizationManager followerManager = masterGlobalStateMgr.getAuthorizationManager();
         Assert.assertFalse(followerManager.checkRoleExists("test_persist_role0"));
         Assert.assertFalse(followerManager.checkRoleExists("test_persist_role1"));
 
@@ -502,7 +502,7 @@ public class PrivilegeManagerTest {
         //
         // 1. check image after create role
         masterGlobalStateMgr.loadRBACPrivilege(createRoleImage.getDataInputStream());
-        PrivilegeManager imageManager = masterGlobalStateMgr.getPrivilegeManager();
+        AuthorizationManager imageManager = masterGlobalStateMgr.getAuthorizationManager();
 
         Assert.assertTrue(imageManager.checkRoleExists("test_persist_role0"));
         Assert.assertTrue(imageManager.checkRoleExists("test_persist_role1"));
@@ -534,14 +534,14 @@ public class PrivilegeManagerTest {
         // 7. check image after drop 2 roles
         masterGlobalStateMgr.loadRBACPrivilege(
                 dropRoleImage.getDataInputStream());
-        imageManager = masterGlobalStateMgr.getPrivilegeManager();
+        imageManager = masterGlobalStateMgr.getAuthorizationManager();
         Assert.assertFalse(imageManager.checkRoleExists("test_persist_role0"));
         Assert.assertFalse(imageManager.checkRoleExists("test_persist_role1"));
     }
 
     @Test
     public void testRemoveInvalidateObject() throws Exception {
-        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = ctx.getGlobalStateMgr().getAuthorizationManager();
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         // 1. add validate entry: select on db.tbl1 to test_user
         String sql = "grant select on db.tbl1 to test_user";
@@ -611,7 +611,7 @@ public class PrivilegeManagerTest {
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
         setCurrentUserAndRoles(ctx, testUser);
         ;
-        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = ctx.getGlobalStateMgr().getAuthorizationManager();
         Assert.assertFalse(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
@@ -666,8 +666,8 @@ public class PrivilegeManagerTest {
                 ctx, DB_NAME, PrivilegeType.CREATE_TABLE));
 
         // on all users
-        PrivilegeManager privilegeManager = ctx.getGlobalStateMgr().getPrivilegeManager();
-        Assert.assertFalse(privilegeManager.canExecuteAs(ctx, UserIdentity.ROOT));
+        AuthorizationManager authorizationManager = ctx.getGlobalStateMgr().getAuthorizationManager();
+        Assert.assertFalse(authorizationManager.canExecuteAs(ctx, UserIdentity.ROOT));
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
@@ -676,7 +676,7 @@ public class PrivilegeManagerTest {
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
-        Assert.assertTrue(privilegeManager.canExecuteAs(ctx, UserIdentity.ROOT));
+        Assert.assertTrue(authorizationManager.canExecuteAs(ctx, UserIdentity.ROOT));
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
@@ -685,12 +685,12 @@ public class PrivilegeManagerTest {
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
-        Assert.assertFalse(privilegeManager.canExecuteAs(ctx, UserIdentity.ROOT));
+        Assert.assertFalse(authorizationManager.canExecuteAs(ctx, UserIdentity.ROOT));
     }
 
     @Test
     public void testImpersonate() throws Exception {
-        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = ctx.getGlobalStateMgr().getAuthorizationManager();
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
@@ -717,7 +717,7 @@ public class PrivilegeManagerTest {
 
     @Test
     public void testShowDbsTables() throws Exception {
-        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = ctx.getGlobalStateMgr().getAuthorizationManager();
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
 
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
@@ -813,7 +813,7 @@ public class PrivilegeManagerTest {
                 "create user test_role_user", ctx);
         ctx.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
         UserIdentity testUser = createUserStmt.getUserIdentity();
-        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = ctx.getGlobalStateMgr().getAuthorizationManager();
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
 
         // grant create table on database db to role1
@@ -919,7 +919,7 @@ public class PrivilegeManagerTest {
 
     @Test
     public void testRoleInheritanceDepth() throws Exception {
-        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = ctx.getGlobalStateMgr().getAuthorizationManager();
         // create role0 ~ role4
         long[] roleIds = new long[5];
         for (int i = 0; i != 5; ++i) {
@@ -1098,7 +1098,7 @@ public class PrivilegeManagerTest {
 
     @Test
     public void dropRoleWithInheritance() throws Exception {
-        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = ctx.getGlobalStateMgr().getAuthorizationManager();
         // create role0 ~ role3
         long[] roleIds = new long[4];
         for (int i = 0; i != 4; ++i) {
@@ -1174,7 +1174,7 @@ public class PrivilegeManagerTest {
     @Test
     public void testSetRole() throws Exception {
         ctx.getSessionVariable().setActivateAllRolesOnLogin(false);
-        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = ctx.getGlobalStateMgr().getAuthorizationManager();
         // create user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("create user user_test_set_role"), ctx), ctx);
@@ -1271,7 +1271,7 @@ public class PrivilegeManagerTest {
 
     @Test
     public void testBuiltinRoles() throws Exception {
-        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = ctx.getGlobalStateMgr().getAuthorizationManager();
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         // create user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1389,7 +1389,7 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user grant_same_user", ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("grant_same_user", "%");
-        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = ctx.getGlobalStateMgr().getAuthorizationManager();
         long[] roleIds = new long[3];
         for (int i = 0; i != 3; ++i) {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(

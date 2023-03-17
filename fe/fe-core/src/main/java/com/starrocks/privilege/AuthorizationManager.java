@@ -21,7 +21,6 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Function;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -63,8 +62,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class PrivilegeManager {
-    private static final Logger LOG = LogManager.getLogger(PrivilegeManager.class);
+public class AuthorizationManager {
+    private static final Logger LOG = LogManager.getLogger(AuthorizationManager.class);
 
     @SerializedName(value = "r")
     private final Map<String, Long> roleNameToId;
@@ -102,7 +101,7 @@ public class PrivilegeManager {
     private final ReentrantReadWriteLock roleLock;
 
     // only used in deserialization
-    protected PrivilegeManager() {
+    protected AuthorizationManager() {
         roleNameToId = new HashMap<>();
         userToPrivilegeCollection = new HashMap<>();
         roleIdToPrivilegeCollection = new HashMap<>();
@@ -110,7 +109,7 @@ public class PrivilegeManager {
         roleLock = new ReentrantReadWriteLock();
     }
 
-    public PrivilegeManager(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
+    public AuthorizationManager(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
         this.globalStateMgr = globalStateMgr;
         if (provider == null) {
             this.provider = new DefaultAuthorizationProvider();
@@ -657,7 +656,7 @@ public class PrivilegeManager {
 
 
     public static Set<Long> getOwnedRolesByUser(UserIdentity userIdentity) throws PrivilegeException {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
         try {
             manager.userReadLock();
             UserPrivilegeCollection userCollection = manager.getUserPrivilegeCollectionUnlocked(userIdentity);
@@ -677,15 +676,6 @@ public class PrivilegeManager {
                     objectType, objectNames, globalStateMgr);
             return provider.check(objectType, privilegeType, object, collection);
         }
-    }
-
-    protected boolean checkFunctionActions(PrivilegeCollection collection, ObjectType objectType,
-                                           PrivilegeType privilegeType,
-                                           long databaseId,
-                                           Function function) throws PrivilegeException {
-        PEntryObject object = provider.generateFunctionObject(
-                objectType, databaseId, function.getFunctionId(), globalStateMgr);
-        return provider.check(objectType, privilegeType, object, collection);
     }
 
     public boolean canExecuteAs(ConnectContext context, UserIdentity impersonateUser) {
@@ -1301,7 +1291,7 @@ public class PrivilegeManager {
      * remove invalid object periodically
      * <p>
      * lock order should always be:
-     * AuthenticationManager.lock -> PrivilegeManager.userLock -> PrivilegeManager.roleLock
+     * AuthenticationManager.lock -> AuthorizationManager.userLock -> AuthorizationManager.roleLock
      */
     public void removeInvalidObject() {
         userWriteLock();
@@ -1455,7 +1445,8 @@ public class PrivilegeManager {
      * |     header       |
      * +------------------+
      * |                  |
-     * | PrivilegeManager |
+     * | Authorization-   |
+     * | Manager          |
      * |                  |
      * +------------------+
      * |      numUser     |
@@ -1491,7 +1482,7 @@ public class PrivilegeManager {
             // 1 json for number of roles, 2 json for each role(kv)
             final int cnt = 1 + 1 + userToPrivilegeCollection.size() * 2
                     + 1 + roleIdToPrivilegeCollection.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, PrivilegeManager.class.getName(), cnt);
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AuthorizationManager.class.getName(), cnt);
             // 1 json for myself
             writer.writeJson(this);
             // 1 json for num user
@@ -1518,16 +1509,16 @@ public class PrivilegeManager {
         }
     }
 
-    public static PrivilegeManager load(
+    public static AuthorizationManager load(
             DataInputStream dis, GlobalStateMgr globalStateMgr, AuthorizationProvider provider)
             throws IOException, DdlException {
         try {
-            SRMetaBlockReader reader = new SRMetaBlockReader(dis, PrivilegeManager.class.getName());
-            PrivilegeManager ret = null;
+            SRMetaBlockReader reader = new SRMetaBlockReader(dis, AuthorizationManager.class.getName());
+            AuthorizationManager ret = null;
 
             try {
                 // 1 json for myself
-                ret = (PrivilegeManager) reader.readJson(PrivilegeManager.class);
+                ret = (AuthorizationManager) reader.readJson(AuthorizationManager.class);
                 ret.globalStateMgr = globalStateMgr;
                 if (provider == null) {
                     ret.provider = new DefaultAuthorizationProvider();
@@ -1590,7 +1581,7 @@ public class PrivilegeManager {
             ret.isLoaded = true;
             return ret;
         } catch (SRMetaBlockException | PrivilegeException e) {
-            throw new DdlException("failed to load PrivilegeManager!", e);
+            throw new DdlException("failed to load AuthorizationManager!", e);
         }
     }
 
