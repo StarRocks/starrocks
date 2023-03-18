@@ -1504,7 +1504,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "(select * from emps where empid = 1) a\n"
                 + "join depts using (deptno)";
         String query = "select empid from emps where empid = 1";
-        testRewriteFail(mv, query);
+        testRewriteOK(mv, query)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 7: empid = 1");
     }
 
     @Test

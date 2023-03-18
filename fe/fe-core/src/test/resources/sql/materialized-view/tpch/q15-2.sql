@@ -40,7 +40,7 @@ TOP-N (order by [[19: s_suppkey ASC NULLS FIRST]])
                     AGGREGATE ([GLOBAL] aggregate [{167: sum=sum(167: sum)}] group by [[68: l_suppkey]] having [167: sum IS NOT NULL]
                         EXCHANGE SHUFFLE[68]
                             AGGREGATE ([LOCAL] aggregate [{167: sum=sum(77: sum_disc_price)}] group by [[68: l_suppkey]] having [null]
-                                SCAN (mv[lineitem_agg_mv2] columns[68: l_suppkey, 69: l_shipdate, 77: sum_disc_price] predicate[69: l_shipdate <= 1995-03-31 AND 69: l_shipdate >= 1995-01-01 AND 69: l_shipdate < 1996-01-01 AND 77: sum_disc_price IS NOT NULL])
+                                SCAN (mv[lineitem_agg_mv2] columns[68: l_suppkey, 69: l_shipdate, 77: sum_disc_price] predicate[69: l_shipdate <= 1995-03-31 AND 69: l_shipdate >= 1995-01-01 AND 69: l_shipdate < 1996-01-01])
                     EXCHANGE BROADCAST
                         PREDICATE 62: max IS NOT NULL
                             ASSERT LE 1

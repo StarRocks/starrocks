@@ -1032,7 +1032,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
         @Override
         public Void visitCall(CallOperator call, CouldApplyDictOptimizeContext context) {
-            if (!call.getFunction().isCouldApplyDictOptimize()) {
+            if (call.getFunction() == null || !call.getFunction().isCouldApplyDictOptimize()) {
                 context.stopOptPropagateUpward = true;
                 return null;
             }
