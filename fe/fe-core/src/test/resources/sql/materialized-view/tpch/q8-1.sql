@@ -21,6 +21,6 @@ select
           and n1.n_regionkey = r_regionkey
           and s_nationkey = n2.n_nationkey
 [result]
-SCAN (mv[lineitem_mv] columns[100: l_saleprice, 103: o_orderyear, 104: n_name1, 105: n_regionkey1, 107: n_regionkey2] predicate[105: n_regionkey1 = 107: n_regionkey2])
+SCAN (mv[lineitem_mv] columns[115: l_saleprice, 118: o_orderyear, 119: n_name1, 120: n_regionkey1, 122: n_regionkey2] predicate[120: n_regionkey1 = 122: n_regionkey2])
 [end]
 

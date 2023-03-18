@@ -34,9 +34,9 @@ order by
 [result]
 TOP-N (order by [[48: n_name ASC NULLS FIRST, 51: year DESC NULLS LAST]])
     TOP-N (order by [[48: n_name ASC NULLS FIRST, 51: year DESC NULLS LAST]])
-        AGGREGATE ([GLOBAL] aggregate [{164: sum=sum(164: sum)}] group by [[127: n_name1, 126: o_orderyear]] having [null]
-            EXCHANGE SHUFFLE[127, 126]
-                AGGREGATE ([LOCAL] aggregate [{164: sum=sum(128: sum_amount)}] group by [[127: n_name1, 126: o_orderyear]] having [null]
-                    SCAN (mv[lineitem_mv_agg_mv1] columns[125: p_name, 126: o_orderyear, 127: n_name1, 128: sum_amount] predicate[125: p_name LIKE %peru%])
+        AGGREGATE ([GLOBAL] aggregate [{164: sum=sum(164: sum)}] group by [[122: n_name1, 121: o_orderyear]] having [null]
+            EXCHANGE SHUFFLE[122, 121]
+                AGGREGATE ([LOCAL] aggregate [{164: sum=sum(123: sum_amount)}] group by [[122: n_name1, 121: o_orderyear]] having [null]
+                    SCAN (mv[lineitem_mv_agg_mv1] columns[120: p_name, 121: o_orderyear, 122: n_name1, 123: sum_amount] predicate[120: p_name LIKE %peru%])
 [end]
 

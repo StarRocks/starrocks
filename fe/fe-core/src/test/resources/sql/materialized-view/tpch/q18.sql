@@ -39,9 +39,9 @@ TOP-N (order by [[13: o_totalprice DESC NULLS LAST, 10: o_orderdate ASC NULLS FI
                 EXCHANGE SHUFFLE[9]
                     SCAN (mv[lineitem_mv] columns[61: c_name, 67: l_orderkey, 69: l_quantity, 76: o_custkey, 77: o_orderdate, 81: o_totalprice] predicate[null])
                 EXCHANGE SHUFFLE[35]
-                    AGGREGATE ([GLOBAL] aggregate [{158: sum=sum(158: sum)}] group by [[100: l_orderkey]] having [158: sum > 315]
-                        EXCHANGE SHUFFLE[100]
-                            AGGREGATE ([LOCAL] aggregate [{158: sum=sum(104: sum_qty)}] group by [[100: l_orderkey]] having [null]
-                                SCAN (mv[lineitem_agg_mv1] columns[100: l_orderkey, 104: sum_qty] predicate[104: sum_qty > 315])
+                    AGGREGATE ([GLOBAL] aggregate [{158: sum=sum(158: sum)}] group by [[131: l_orderkey]] having [158: sum > 315]
+                        EXCHANGE SHUFFLE[131]
+                            AGGREGATE ([LOCAL] aggregate [{158: sum=sum(135: sum_qty)}] group by [[131: l_orderkey]] having [null]
+                                SCAN (mv[lineitem_agg_mv1] columns[131: l_orderkey, 135: sum_qty] predicate[null])
 [end]
 
