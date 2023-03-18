@@ -339,6 +339,8 @@ jobs:
       - name: Publish Test Results
         uses: mikepenz/action-junit-report@v3
         if: success() || failure()
+        permissions:
+          checks: write
         with:
           check_name: 'Test Results'
           detailed_summary: 'true'
