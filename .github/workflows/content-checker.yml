@@ -90,8 +90,6 @@ jobs:
           contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')
         run: |
           echo "You must mark this checkbox - I have checked the version labels which the pr will be auto backported to target branch"
-          echo "111"
-          exit 1234
 
   automerge-check:
     runs-on: ubuntu-latest
