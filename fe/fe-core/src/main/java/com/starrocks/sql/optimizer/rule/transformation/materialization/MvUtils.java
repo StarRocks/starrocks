@@ -392,8 +392,11 @@ public class MvUtils {
 
     private static void getAllPredicates(OptExpression root, List<ScalarOperator> predicates) {
         Operator operator = root.getOp();
-        if (operator.getPredicate() != null) {
-            predicates.add(root.getOp().getPredicate());
+
+        // Ignore aggregation predicates, because aggregation predicates should be rewritten after
+        // aggregation functions' rewrite and should not be pushed down into mv scan operator.
+        if (operator.getPredicate() != null && !(operator instanceof LogicalAggregationOperator)) {
+            predicates.add(operator.getPredicate());
         }
         if (operator instanceof LogicalJoinOperator) {
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
