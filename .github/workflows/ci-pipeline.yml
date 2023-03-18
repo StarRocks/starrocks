@@ -19,6 +19,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.event.number }}
+  cancel-in-progress: true
+
 jobs:
   doc-checker:
     runs-on: ubuntu-latest
