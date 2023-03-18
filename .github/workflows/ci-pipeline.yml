@@ -23,6 +23,9 @@ concurrency:
   group: ${{ github.event.number }}
   cancel-in-progress: true
 
+permissions:
+  checks: write
+
 jobs:
   doc-checker:
     runs-on: ubuntu-latest
