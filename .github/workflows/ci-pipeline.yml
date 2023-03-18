@@ -23,6 +23,9 @@ concurrency:
   group: ${{ github.event.number }}
   cancel-in-progress: true
 
+permissions:
+  checks: write
+
 jobs:
   doc-checker:
     runs-on: ubuntu-latest
@@ -310,8 +313,6 @@ jobs:
     needs: deploy
     if: always() && needs.deploy.result == 'success'
     timeout-minutes: 60
-    permissions:
-      checks: write
     env:
       PR_NUMBER: ${{ github.event.number }}
       CLUSTER_NAME: admit-default
