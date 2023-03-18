@@ -4,7 +4,6 @@ on:
   pull_request:
     types:
       - opened
-      - reopened
       - synchronize
 
     paths:
@@ -12,6 +11,10 @@ on:
       - 'be/**'
       - 'fe/**.java'
       - 'fe/**.xml'
+      - 'gensrc/**'
+      - 'run-be-ut.sh'
+      - 'run-fe-ut.sh'
+      - 'build.sh'
 
     branches:
       - main
@@ -20,7 +23,6 @@ jobs:
   doc-checker:
     runs-on: ubuntu-latest
     name: DOC FILTER
-    if: github.event.action != 'reopened' || github.event.action != 'synchronize'
     outputs:
       output1: ${{ steps.doc-changes-info.outputs.doc }}
     steps:
@@ -66,7 +68,6 @@ jobs:
   be-checker:
     runs-on: ubuntu-latest
     name: BE FILTER
-    if: github.event.action != 'reopened' || github.event.action != 'synchronize'
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
     steps:
@@ -76,6 +77,10 @@ jobs:
           filters: |
             be:
             - 'be/**'
+            - 'gensrc/**'
+            - 'run-be-ut.sh'
+            - 'build.sh'
+
       - name: BE CHECK INFO
         id: be-changes-info
         run: |
@@ -140,6 +145,9 @@ jobs:
           filters: |
             fe:
               - 'fe/**'
+              - 'gensrc/**'
+              - 'run-fe-ut.sh'
+              - 'build.sh'
 
       - run: echo ${{ steps.changes.outputs.fe }}
 
