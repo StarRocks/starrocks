@@ -875,7 +875,6 @@ public class MaterializedViewRewriter {
             // TODO: query delta
             matchMode = MatchMode.QUERY_DELTA;
         } else if (queryTables.size() < mvTables.size() && mvTables.containsAll(queryTables)) {
-            // TODO: view delta
             matchMode = MatchMode.VIEW_DELTA;
         }
         return matchMode;
