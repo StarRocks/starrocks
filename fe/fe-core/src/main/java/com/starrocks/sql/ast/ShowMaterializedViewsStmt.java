@@ -52,7 +52,7 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                     .column("base_refresh_partitions", ScalarType.createVarchar(1024))
                     .column("mv_refresh_partitions", ScalarType.createVarchar(1024))
                     .column("last_refresh_error_code", ScalarType.createVarchar(20))
-                    .column("last_refresh_error_reason", ScalarType.createVarchar(1024))
+                    .column("last_refresh_error_message", ScalarType.createVarchar(1024))
                     .column("text", ScalarType.createVarchar(1024))
                     .column("rows", ScalarType.createVarchar(50))
                     .build();

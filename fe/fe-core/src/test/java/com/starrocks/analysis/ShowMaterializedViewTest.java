@@ -87,6 +87,8 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.refresh_type AS refresh_type, " +
                         "information_schema.materialized_views.is_active AS is_active, " +
                         "information_schema.materialized_views.partition_type AS partition_type, " +
+                        "information_schema.materialized_views.task_id AS task_id, " +
+                        "information_schema.materialized_views.task_name AS task_name, " +
                         "information_schema.materialized_views.last_refresh_start_time AS last_refresh_start_time, " +
                         "information_schema.materialized_views.last_refresh_finished_time AS last_refresh_finished_time, " +
                         "information_schema.materialized_views.last_refresh_duration AS last_refresh_duration, " +
@@ -97,7 +99,7 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.base_refresh_partitions AS base_refresh_partitions, " +
                         "information_schema.materialized_views.mv_refresh_partitions AS mv_refresh_partitions, " +
                         "information_schema.materialized_views.last_refresh_error_code AS last_refresh_error_code, " +
-                        "information_schema.materialized_views.last_refresh_error_reason AS last_refresh_error_reason, " +
+                        "information_schema.materialized_views.last_refresh_error_message AS last_refresh_error_message, " +
                         "information_schema.materialized_views.text AS text, " +
                         "information_schema.materialized_views.rows AS rows " +
                         "FROM information_schema.materialized_views " +
