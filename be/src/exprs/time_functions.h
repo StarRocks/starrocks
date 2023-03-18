@@ -618,12 +618,11 @@ private:
 
     static std::string convert_format(const Slice& format);
 
-
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format_general);
 
     template <LogicalType TIMESTAMP_TYPE>
     static StatusOr<ColumnPtr> _t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
-                                                           const starrocks::Columns& columns);
+                                                              const starrocks::Columns& columns);
 
     static StatusOr<ColumnPtr> convert_tz_general(FunctionContext* context, const Columns& columns);
 
