@@ -51,9 +51,9 @@ public class CreateTableAsSelectStmt extends StatementBase {
         this.insertStmt = new InsertStmt(createTableStmt.getDbTbl(), queryStatement);
     }
 
-    public void createTable(ConnectContext session) throws AnalysisException {
+    public boolean createTable(ConnectContext session) throws AnalysisException {
         try {
-            session.getGlobalStateMgr().createTable(createTableStmt);
+            return session.getGlobalStateMgr().createTable(createTableStmt);
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
         }
