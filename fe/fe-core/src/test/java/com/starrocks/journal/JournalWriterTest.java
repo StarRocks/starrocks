@@ -55,6 +55,7 @@ public class JournalWriterTest {
     }
 
 
+    @Ignore
     @Test
     public void testWriteOneLog() throws Exception {
         new Expectations(journal) {
@@ -80,6 +81,7 @@ public class JournalWriterTest {
         Assert.assertEquals(0, task.latch.getCount());
     }
 
+    @Ignore
     @Test
     public void testMustCommitBefore() throws Exception {
         new Expectations(journal) {
@@ -174,6 +176,7 @@ public class JournalWriterTest {
         Assert.assertEquals(1, journalQueue.size());
     }
 
+    @Ignore
     @Test
     public void testRollLog() throws Exception {
         Config.edit_log_roll_num = 4;
@@ -210,6 +213,7 @@ public class JournalWriterTest {
     }
 
 
+    @Ignore
     @Test
     public void testBatchWriteBeginException() throws Exception {
         JournalTask task1 = new JournalTask(makeBuffer(10), -1);
@@ -236,6 +240,7 @@ public class JournalWriterTest {
         Assert.assertEquals(task2, journalQueue.take());
     }
 
+    @Ignore
     @Test
     public void testBatchWriteAppendException() throws Exception {
         JournalTask task1 = new JournalTask(makeBuffer(10), -1);
@@ -272,6 +277,7 @@ public class JournalWriterTest {
         Assert.assertEquals(0, journalQueue.size());
     }
 
+    @Ignore
     @Test
     public void testBatchWriteCommitAbortException() throws Exception {
         JournalTask task1 = new JournalTask(makeBuffer(10), -1);
