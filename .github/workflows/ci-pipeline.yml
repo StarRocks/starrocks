@@ -310,6 +310,8 @@ jobs:
     needs: deploy
     if: always() && needs.deploy.result == 'success'
     timeout-minutes: 60
+    permissions:
+      checks: write
     env:
       PR_NUMBER: ${{ github.event.number }}
       CLUSTER_NAME: admit-default
@@ -339,8 +341,6 @@ jobs:
       - name: Publish Test Results
         uses: mikepenz/action-junit-report@v3
         if: success() || failure()
-        permissions:
-          checks: write
         with:
           check_name: 'Test Results'
           detailed_summary: 'true'
