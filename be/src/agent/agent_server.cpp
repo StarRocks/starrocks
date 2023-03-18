@@ -115,7 +115,7 @@ private:
     std::unique_ptr<PublishVersionTaskWorkerPool> _publish_version_workers;
     std::unique_ptr<DeleteTaskWorkerPool> _delete_workers;
 
-    // These 3 worker-pool do not accept tasks from FE.
+    // These 3 worker-pool do not accept tasks from FE. s
     // It is self triggered periodically and reports to Fe master
     std::unique_ptr<ReportTaskWorkerPool> _report_task_workers;
     std::unique_ptr<ReportDiskStateTaskWorkerPool> _report_disk_state_workers;
