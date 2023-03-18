@@ -792,40 +792,24 @@ public class LocalMetastore implements ConnectorMetadata {
 
         if (stmt.isOlapEngine()) {
             createOlapOrLakeTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("mysql")) {
             createMysqlTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("elasticsearch") || engineName.equalsIgnoreCase("es")) {
             createEsTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("hive")) {
             createHiveTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("file")) {
             createFileTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("iceberg")) {
             createIcebergTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("hudi")) {
             createHudiTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("jdbc")) {
             createJDBCTable(db, stmt);
-            return;
         } else {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, engineName);
         }
-<<<<<<< HEAD
-        Preconditions.checkState(false);
-=======
-        Table table = tableFactory.createTable(this, db, stmt);
-        if (!(table instanceof OlapTable)) { // Special case: OlapTable has been added into the metastore before return.
-            registerTable(db, table, stmt);
-        }
         return true;
->>>>>>> 67aeda4ee ([BugFix] fix create failed with CTAS (#19743))
     }
 
     @Override
