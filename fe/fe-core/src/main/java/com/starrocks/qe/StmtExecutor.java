@@ -575,9 +575,15 @@ public class StmtExecutor {
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
         CreateTableAsSelectStmt createTableAsSelectStmt = (CreateTableAsSelectStmt) parsedStmt;
 
+<<<<<<< HEAD
         // if create table failed should not drop table. because table may already exists,
+=======
+        if (!createTableAsSelectStmt.createTable(context)) {
+            return;
+        }
+        // if create table failed should not drop table. because table may already exist,
+>>>>>>> 67aeda4ee ([BugFix] fix create failed with CTAS (#19743))
         // and for other cases the exception will throw and the rest of the code will not be executed.
-        createTableAsSelectStmt.createTable(context);
         try {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
