@@ -11,11 +11,20 @@ where
   and l_quantity < (
     select
             0.2 * avg(l_quantity)
+--         0.2 * sum(l_quantity) / count(l_quantity)
     from
         lineitem
     where
             l_partkey = p_partkey
 ) ;
 [result]
+AGGREGATE ([GLOBAL] aggregate [{45: sum=sum(45: sum)}] group by [[]] having [null]
+    EXCHANGE GATHER
+        AGGREGATE ([LOCAL] aggregate [{45: sum=sum(7: l_extendedprice)}] group by [[]] having [null]
+            PREDICATE cast(6: l_quantity as decimal128(38, 9)) < multiply(0.2, 149: avg)
+                ANALYTIC ({149: avg=avg(6: l_quantity)} [17: p_partkey] [] )
+                    TOP-N (order by [[17: p_partkey ASC NULLS FIRST]])
+                        EXCHANGE SHUFFLE[17]
+                            SCAN (mv[lineitem_mv] columns[75: l_extendedprice, 77: l_partkey, 78: l_quantity, 91: p_brand, 92: p_container] predicate[91: p_brand = Brand#35 AND 92: p_container = JUMBO CASE])
 [end]
 

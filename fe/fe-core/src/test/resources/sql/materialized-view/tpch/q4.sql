@@ -21,5 +21,11 @@ group by
 order by
     o_orderpriority ;
 [result]
+TOP-N (order by [[6: o_orderpriority ASC NULLS FIRST]])
+    TOP-N (order by [[6: o_orderpriority ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{128: count=sum(128: count)}] group by [[84: o_orderpriority]] having [null]
+            EXCHANGE SHUFFLE[84]
+                AGGREGATE ([LOCAL] aggregate [{128: count=sum(85: order_count)}] group by [[84: o_orderpriority]] having [null]
+                    SCAN (mv[query4_mv] columns[83: o_orderdate, 84: o_orderpriority, 85: order_count] predicate[83: o_orderdate >= 1994-09-01 AND 83: o_orderdate < 1994-12-01 AND 83: o_orderdate >= 1994-01-01 AND 83: o_orderdate < 1995-01-01])
 [end]
 

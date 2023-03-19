@@ -2235,5 +2235,58 @@ public class CreateMaterializedViewTest {
             Assert.fail();
         }
     }
+
+    @Test
+    public void testCreateMVWithDifferentDB() {
+        try{
+            ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
+            StarRocksAssert newStarRocksAssert = new StarRocksAssert(newConnectContext);
+            newStarRocksAssert.withDatabase("test_mv_different_db")
+                    .useDatabase("test_mv_different_db");
+            String sql = "create materialized view test.test_mv_use_different_tbl " +
+                    "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
+            CreateMaterializedViewStmt stmt =
+                    (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
+            Assert.assertEquals(stmt.getDBName(), "test");
+            Assert.assertEquals(stmt.getMVName(), "test_mv_use_different_tbl");
+            currentState.createMaterializedView(stmt);
+            waitingRollupJobV2Finish();
+
+            Table table = testDb.getTable("tbl5");
+            Assert.assertTrue(table != null);
+            OlapTable olapTable = (OlapTable)  table;
+            Assert.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
+            Assert.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
+                    .anyMatch(x -> x.getValue().getKeysType().isAggregationFamily()));
+            newStarRocksAssert.dropDatabase("test_mv_different_db");
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testCreateAsyncMVWithDifferentDB() {
+        try {
+            ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
+            StarRocksAssert newStarRocksAssert = new StarRocksAssert(newConnectContext);
+            newStarRocksAssert.withDatabase("test_mv_different_db")
+                    .useDatabase("test_mv_different_db");
+            String sql = "create materialized view test.test_mv_use_different_tbl " +
+                    "distributed by hash(k1) " +
+                    "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
+            Assert.assertEquals(stmt.getTableName().getDb(), "test");
+            Assert.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+
+            currentState.createMaterializedView(stmt);
+            newStarRocksAssert.dropDatabase("test_mv_different_db");
+            Table mv1 = testDb.getTable("test_mv_use_different_tbl");
+            Assert.assertTrue(mv1 instanceof MaterializedView);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+
+    }
 }
 
