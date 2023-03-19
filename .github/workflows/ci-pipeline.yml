@@ -346,4 +346,5 @@ jobs:
           check_name: 'Test Results'
           detailed_summary: 'true'
           fail_on_failure: 'true'
+          token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'StarRocksTest/result/*.xml'
