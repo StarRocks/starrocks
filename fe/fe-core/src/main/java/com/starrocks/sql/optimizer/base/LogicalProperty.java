@@ -84,27 +84,27 @@ public class LogicalProperty implements Property {
     }
 
     public static final class OneTabletMeta {
+        /*
+         * For instance, see the below example
+         *        Agg(group by v1)
+         *             |
+         *             v
+         *      Analytic(partition by b2)
+         *             |
+         *             v
+         *        Scan (bucket: v1, only one tablet)
+         * For Analytic(self=true, asChild=false):
+         *     Can perform one tablet optimization(no exchange needed).
+         *
+         * For Agg(self=false, asChild=false):
+         *     Cannot perform one tablet optimization(exchange needed), because it's child, i.e. Analytic, cannot
+         * offer one tablet guarantee because distribution has been changed.
+         */
         public final boolean self;
         public final boolean asChild;
         public final ColumnRefSet bucketColumns;
 
         private OneTabletMeta(boolean self, boolean asChild, ColumnRefSet bucketColumns) {
-            /*
-             * For instance, see the below example
-             *        Agg(group by v1)
-             *             |
-             *             v
-             *      Analytic(partition by b2)
-             *             |
-             *             v
-             *        Scan (bucket: v1, only one tablet)
-             * For Analytic(self=true, asChild=false):
-             *     Can perform one tablet optimization(no exchange needed).
-             *
-             * For Agg(self=false, asChild=false):
-             *     Cannot perform one tablet optimization(exchange needed), because it's child, i.e. Analytic, cannot
-             * offer one tablet guarantee because distribution has been changed.
-             */
             this.self = self;
             this.asChild = asChild;
             this.bucketColumns = bucketColumns;

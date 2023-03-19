@@ -294,6 +294,6 @@ public class GroupingSetTest extends PlanTestBase {
                 "  |  \n" +
                 "  6:Project\n" +
                 "  |  <slot 6> : 6: array_agg\n" +
-                "  |  <slot 9> : array_join(7: array_agg, ','))");
+                "  |  <slot 9> : array_join(7: array_agg, ',')");
     }
 }
