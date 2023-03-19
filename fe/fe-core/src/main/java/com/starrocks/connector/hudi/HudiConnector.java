@@ -77,7 +77,8 @@ public class HudiConnector implements Connector {
     }
 
     public void onCreate() {
-        if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
+        if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName) &&
+                internalMgr.isEnableBackgroundRefreshHudiMetadata()) {
             Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
             updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
                     .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));

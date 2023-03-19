@@ -95,7 +95,8 @@ public class HiveConnector implements Connector {
             updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
                     .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
         } else {
-            if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
+            if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName) &&
+                    internalMgr.isEnableBackgroundRefreshHiveMetadata()) {
                 updateProcessor
                         .ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
                                 .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
