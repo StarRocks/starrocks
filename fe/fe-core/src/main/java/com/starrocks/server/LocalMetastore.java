@@ -769,29 +769,22 @@ public class LocalMetastore implements ConnectorMetadata {
 
         if (stmt.isOlapOrLakeEngine()) {
             createOlapOrLakeTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("mysql")) {
             createMysqlTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("elasticsearch") || engineName.equalsIgnoreCase("es")) {
             createEsTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("hive")) {
             createHiveTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("iceberg")) {
             createIcebergTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("hudi")) {
             createHudiTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("jdbc")) {
             createJDBCTable(db, stmt);
-            return;
         } else {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, engineName);
         }
-        Preconditions.checkState(false);
+        return true;
     }
 
     public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
@@ -828,7 +821,6 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Failed to execute CREATE TABLE LIKE " + stmt.getExistedTableName() + ". Reason: " +
                     e.getMessage(), e);
         }
-        return true;
     }
 
     @Override

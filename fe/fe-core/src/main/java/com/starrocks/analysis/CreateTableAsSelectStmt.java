@@ -61,16 +61,12 @@ public class CreateTableAsSelectStmt extends StatementBase {
         this.insertStmt = new InsertStmt(createTableStmt.getDbTbl(), queryStatement);
     }
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/analysis/CreateTableAsSelectStmt.java
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
         throw new AnalysisException("old planner does not support CTAS statement");
     }
 
-    public void createTable(ConnectContext session) throws AnalysisException {
-=======
     public boolean createTable(ConnectContext session) throws AnalysisException {
->>>>>>> 67aeda4ee ([BugFix] fix create failed with CTAS (#19743)):fe/fe-core/src/main/java/com/starrocks/sql/ast/CreateTableAsSelectStmt.java
         try {
             return session.getGlobalStateMgr().createTable(createTableStmt);
         } catch (DdlException e) {
