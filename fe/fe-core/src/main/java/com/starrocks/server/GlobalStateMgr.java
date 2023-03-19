@@ -1273,7 +1273,9 @@ public class GlobalStateMgr {
             metastoreEventsProcessor.start();
         }
 
-        connectorTableMetadataProcessor.start();
+        if (Config.enable_background_refresh_connector_metadata) {
+            connectorTableMetadataProcessor.start();
+        }
 
         // domain resolver
         domainResolver.start();

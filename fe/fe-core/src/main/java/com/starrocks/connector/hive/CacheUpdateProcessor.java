@@ -85,9 +85,11 @@ public class CacheUpdateProcessor {
         }
     }
 
-    public void refreshTableMetaStoreInfo(String dbName, Table table, boolean onlyCachedPartitions) {
+    public void refreshTableWithExecutor(Table table, boolean onlyCachedPartitions, ExecutorService executor) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         metastore.refreshTable(hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
+        refreshRemoteFiles(hmsTbl.getTableLocation(), Operator.UPDATE, getExistPaths(hmsTbl), onlyCachedPartitions,
+                executor);
     }
 
     public Set<HiveTableName> getCachedTableNames() {
@@ -155,6 +157,12 @@ public class CacheUpdateProcessor {
 
     private void refreshRemoteFiles(String tableLocation, Operator operator, List<String> existPaths,
                                     boolean onlyCachedPartitions) {
+        refreshRemoteFiles(tableLocation, operator, existPaths, onlyCachedPartitions, executor);
+    }
+
+
+    private void refreshRemoteFiles(String tableLocation, Operator operator, List<String> existPaths,
+                                    boolean onlyCachedPartitions, ExecutorService refreshExecutor) {
         if (remoteFileIO.isPresent()) {
             List<RemotePathKey> presentPathKey;
             if (onlyCachedPartitions) {
@@ -168,9 +176,9 @@ public class CacheUpdateProcessor {
             presentPathKey.forEach(pathKey -> {
                 String pathWithSlash = pathKey.getPath().endsWith("/") ? pathKey.getPath() : pathKey.getPath() + "/";
                 if (operator == Operator.UPDATE && existPaths.contains(pathWithSlash)) {
-                    futures.add(executor.submit(() -> remoteFileIO.get().updateRemoteFiles(pathKey)));
+                    futures.add(refreshExecutor.submit(() -> remoteFileIO.get().updateRemoteFiles(pathKey)));
                 } else {
-                    futures.add(executor.submit(() -> remoteFileIO.get().invalidatePartition(pathKey)));
+                    futures.add(refreshExecutor.submit(() -> remoteFileIO.get().invalidatePartition(pathKey)));
                 }
             });
 
