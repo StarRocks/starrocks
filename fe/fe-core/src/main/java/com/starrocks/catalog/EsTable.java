@@ -131,8 +131,6 @@ public class EsTable extends Table {
     // record the latest and recently exception when sync ES table metadata (mapping, shard location)
     private Throwable lastMetaDataSyncException = null;
 
-    private String catalogName;
-
     public EsTable() {
         super(TableType.ELASTICSEARCH);
     }
@@ -142,12 +140,6 @@ public class EsTable extends Table {
         super(id, name, TableType.ELASTICSEARCH, schema);
         this.partitionInfo = partitionInfo;
         validate(properties);
-    }
-
-    public EsTable(long id, String name, List<Column> schema,
-                   Map<String, String> properties, PartitionInfo partitionInfo, String catalogName) throws DdlException {
-        this(id, name, schema, properties, partitionInfo);
-        this.catalogName = catalogName;
     }
 
     public Map<String, String> fieldsContext() {

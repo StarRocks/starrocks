@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableSet;
@@ -35,7 +34,7 @@ public enum ConnectorType {
             HUDI.getName()
     );
 
-    private ConnectorType(String name) {
+    ConnectorType(String name) {
         this.name = name;
     }
 
@@ -47,6 +46,23 @@ public enum ConnectorType {
 
     public static boolean isSupport(String name) {
         return SUPPORT_TYPE_SET.contains(name);
+    }
+
+    public static ConnectorType from(String name) {
+        switch (name) {
+            case "es":
+                return ELASTICSEARCH;
+            case "hive":
+                return HIVE;
+            case "iceberg":
+                return ICEBERG;
+            case "jdbc":
+                return JDBC;
+            case "hudi":
+                return HUDI;
+            default:
+                throw new IllegalStateException("Unexpected value: " + name);
+        }
     }
 
 }

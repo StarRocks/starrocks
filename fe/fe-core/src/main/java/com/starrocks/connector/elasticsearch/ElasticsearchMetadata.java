@@ -21,14 +21,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.elasticsearch.external.EsRestClient;
-import com.starrocks.connector.elasticsearch.external.EsUtil;
-import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.AbstractTableFactory;
 import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.DistributionDesc;
-import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.common.EngineType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -83,8 +78,8 @@ public class ElasticsearchMetadata
                                     Map<String, String> properties,
                                     String catalogName,
                                     String tableName) {
-        List<ColumnDef> columns = EsUtil.convertColumnSchema(esRestClient, tableName);
         try {
+            List<ColumnDef> columns = EsUtil.convertColumnSchema(esRestClient, tableName);
             properties.put(EsTable.INDEX, tableName);
             Database db = new Database(DEFAULT_DB_ID, DEFAULT_DB);
             TableName table = new TableName(catalogName, DEFAULT_DB,  tableName);
@@ -95,8 +90,8 @@ public class ElasticsearchMetadata
                     columns,
                     EngineType.ELASTICSEARCH.name(),
                     new KeysDesc(),
-                    new PartitionDesc(),
-                    new DistributionDesc(),
+                    null,
+                    null,
                     properties,
                     new HashMap<>(),
                     "created by internal es catalog");
@@ -107,7 +102,7 @@ public class ElasticsearchMetadata
             return esTable;
         } catch (Exception e) {
             LOG.error("transform to EsTable Error", e);
-            throw new StarRocksConnectorException("transform to EsTable Error", e);
+            throw new StarRocksESException("transform to EsTable Error");
         }
     }
 

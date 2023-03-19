@@ -36,26 +36,24 @@ package com.starrocks.connector.elasticsearch;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.TimeZone;
 
 public class EsUtil {
@@ -117,38 +115,23 @@ public class EsUtil {
     }
 
     /**
-     * @param properties
-     * @param name
-     * @return
-     * @throws DdlException
-     */
-    public static boolean tryGetBoolean(Map<String, String> properties, String name) throws DdlException {
-        String property = properties.get(name).trim();
-        try {
-            return Boolean.parseBoolean(property);
-        } catch (Exception e) {
-            throw new DdlException(String.format("fail to parse %s, %s = %s, `%s` should be like 'true' or 'false', "
-                    + "value should be double quotation marks", name, name, property, name));
-        }
-    }
-
-    /**
      * Generate columns from ElasticSearch.
      **/
-    public static List<ColumnDef> convertColumnSchema(com.starrocks.connector.elasticsearch.external.EsRestClient client, String index) {
+    public static List<ColumnDef> convertColumnSchema(EsRestClient client, String index) throws AnalysisException {
+        List<ColumnDef> columns = new ArrayList<>();
         String mappings = client.getMapping(index);
         JSONObject properties = parseProperties(index, mappings);
-        List<ColumnDef> columns = new ArrayList<>();
-        for (String columnName : (Set<String>) properties.keySet()) {
+        if (null == properties) {
+            return columns;
+        }
+        for (String columnName : properties.keySet()) {
             JSONObject columnAttr = (JSONObject) properties.get(columnName);
             //default set string.
             Type type = Type.STRING;
             if (columnAttr.has("type")) {
                 type = convertType(columnAttr.get("type").toString());
             }
-            ColumnDef column = new ColumnDef(columnName, new TypeDef(type), true,
-                    null, true,
-                    null, "es");
+            ColumnDef column = new ColumnDef(columnName, new TypeDef(type), true);
             columns.add(column);
         }
         return columns;
@@ -179,7 +162,7 @@ public class EsUtil {
             case "double":
             case "scaled_float":
                 return Type.DOUBLE;
-                //TODO
+            //TODO
             case "date":
                 return Type.DATETIME;
             case "keyword":
@@ -193,38 +176,41 @@ public class EsUtil {
     }
 
     /**
-     * {
-     *     "media_account": {
-     *         "mappings": {
-     *             "properties": {
-     *                 "@timestamp": {
-     *                     "type": "date"
-     *                 },
-     *                 "access_token": {
-     *                     "type": "keyword"
-     *                 },
-     *                 "access_token_expires": {
-     *                     "type": "long"
-     *                 }
-     *             }
-     *         }
-     *     }
+     *{
+     * 	"media_account": {
+     * 		"mappings": {
+     * 			"properties": {
+     * 				"@timestamp": {
+     * 					"type": "date"
+     *                                },
+     * 				"access_token": {
+     * 					"type": "keyword"
+     *                },
+     * 				"access_token_expires": {
+     * 					"type": "long"
+     *                }* 			}
+     *        }* 	}
+     * }
+     *
      * @param index
      * @param mapping
      * @return
      */
-    public static JSONObject parseProperties(String index, String mapping) {
+    public static JSONObject parseProperties(String index, String mapping) throws AnalysisException {
         JSONObject mappingsElement = parseMappingsElement(mapping);
         JSONObject propertiesRoot = parsePropertiesRoot(mappingsElement);
-        JSONObject properties = (JSONObject) propertiesRoot.get("properties");
-        if (null == properties) {
-            throw new StarRocksESException("index[" + index + "] 's properties not found for the ES");
+        JSONObject properties = null;
+        try {
+            properties = (JSONObject) propertiesRoot.get("properties");
+        } catch (JSONException e) {
+            throw new AnalysisException("index[" + index + "] 's properties not found for the ES");
         }
         return properties;
     }
 
     /**
      * get mappings element
+     *
      * @param indexMapping
      * @return
      */
@@ -239,6 +225,7 @@ public class EsUtil {
 
     /**
      * content
+     *
      * @param mappings
      * @return
      */
@@ -267,11 +254,9 @@ public class EsUtil {
         }
     }
 
-    public static <T> List<T> getFromJSONArray(String text, Class<T> elementClass) {
+    public static <T> T getFromJSONArray(String text, Class<T> elementClass) {
         try {
-            JavaType javaType = OBJECT_MAPPER.getTypeFactory().constructParametricType(ArrayList.class,
-                    new Class[] {elementClass});
-            return OBJECT_MAPPER.readValue(text, javaType);
+            return OBJECT_MAPPER.readValue(text, elementClass);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("getFromJSONArray exception.", e);
         }

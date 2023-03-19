@@ -15,12 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.connector.elasticsearch.external;
+package com.starrocks.connector.elasticsearch;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import static com.starrocks.connector.elasticsearch.EsUtil.getFromJSONArray;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -45,6 +46,30 @@ public class EsUtilTest {
             + "               }\n"
             + "            }}";
 
+    String jsonArray = "[{\n" +
+            "\t\"index\": \".kibana_1\"\n" +
+            "}, {\n" +
+            "\t\"index\": \".opendistro_security\"\n" +
+            "}, {\n" +
+            "\t\"index\": \"kibana_sample_data_ecommerce\"\n" +
+            "}, {\n" +
+            "\t\"index\": \"kibana_sample_data_ecommerce_2\"\n" +
+            "}, {\n" +
+            "\t\"index\": \"kibana_sample_data_flights\"\n" +
+            "}, {\n" +
+            "\t\"index\": \"kibana_sample_data_logs\"\n" +
+            "}, {\n" +
+            "\t\"index\": \"media_account\"\n" +
+            "}, {\n" +
+            "\t\"index\": \"toutiao_ad_info\"\n" +
+            "}, {\n" +
+            "\t\"index\": \"toutiao_ad_info_ext\"\n" +
+            "}, {\n" +
+            "\t\"index\": \"toutiao_campaign_info\"\n" +
+            "}, {\n" +
+            "\t\"index\": \"toutiao_strategy_rel\"\n" +
+            "}]";
+
     @Test
     public void testGetJsonObject() {
         JSONObject json = new JSONObject(jsonStr);
@@ -64,6 +89,12 @@ public class EsUtilTest {
         JSONObject json = new JSONObject(jsonStr);
         // only support json object could not get string value directly from this api, exception will be threw
         EsUtil.getJsonObject(json, "settings.index.bpack.partition.upperbound", 0);
+    }
+
+    @Test
+    public void testGetJsonArray() {
+        EsRestClient.EsIndex[] esIndices = getFromJSONArray(jsonArray, EsRestClient.EsIndex[].class);
+        System.out.println(JSONObject.valueToString(esIndices));
     }
 
 }

@@ -44,7 +44,10 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
 
         // create columns
         List<Column> baseSchema = stmt.getColumns();
-        metastore.validateColumns(baseSchema);
+        // metastore is null when external table
+        if (null != metastore) {
+            metastore.validateColumns(baseSchema);
+        }
 
         // create partition info
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
@@ -52,7 +55,7 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
         Map<String, Long> partitionNameToId = Maps.newHashMap();
         if (partitionDesc != null) {
             partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false, false);
-        } else {
+        } else if (null != metastore) {
             long partitionId = metastore.getNextId();
             // use table name as single partition name
             partitionNameToId.put(tableName, partitionId);
@@ -60,7 +63,8 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
         }
 
         long tableId = GlobalStateMgr.getCurrentState().getNextId();
-        EsTable esTable = new EsTable(tableId, tableName, baseSchema, stmt.getProperties(), partitionInfo);
+        EsTable esTable = new EsTable(tableId, tableName, baseSchema, stmt.getProperties(), partitionInfo,
+                database.getCatalogName());
         esTable.setComment(stmt.getComment());
         return esTable;
     }

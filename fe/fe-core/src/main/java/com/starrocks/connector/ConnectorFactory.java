@@ -23,6 +23,8 @@ import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.connector.jdbc.JDBCConnector;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.lang.reflect.Constructor;
 import java.util.Map;
@@ -34,6 +36,8 @@ import static com.starrocks.connector.ConnectorType.ICEBERG;
 import static com.starrocks.connector.ConnectorType.JDBC;
 
 public class ConnectorFactory {
+    private static Logger LOG = LogManager.getLogger(ConnectorFactory.class);
+
     public static Map<ConnectorType, Class> SUPPORT_CONNECTOR_TYPE = ImmutableMap.of(
             HIVE, HiveConnector.class,
             HUDI, HudiConnector.class,
@@ -52,26 +56,28 @@ public class ConnectorFactory {
      * @return a connector instance
      */
     public static Connector createConnector(ConnectorContext context) {
-        Preconditions.checkState(ConnectorType.isSupport(context.getCatalogName()),
+        Preconditions.checkState(ConnectorType.isSupport(context.getType()),
                 "not support create connector for " + context.getType());
 
-        Class<Connector> connectorClass = SUPPORT_CONNECTOR_TYPE.get(ConnectorType.valueOf(context.getType()));
-        Class<ConnectorConfig> ctConfigClass = SUPPORT_CONNECTOR_CONFIG_TYPE.get(ConnectorType.valueOf(context.getType()));
+        ConnectorType connectorType = ConnectorType.from(context.getType());
+        Class<Connector> connectorClass = SUPPORT_CONNECTOR_TYPE.get(connectorType);
+        Class<ConnectorConfig> ctConfigClass = SUPPORT_CONNECTOR_CONFIG_TYPE.get(connectorType);
         try {
             Constructor connectorConstructor =
                     connectorClass.getDeclaredConstructor(new Class[] {ConnectorContext.class});
             Connector connector = (Connector) connectorConstructor.newInstance(new Object[] {context});
 
             // init config, then load config
-            if (null != ctConfigClass) {
+            if (null != connector && null != ctConfigClass) {
                 ConnectorConfig connectorConfig = ctConfigClass.newInstance();
                 connectorConfig.loadConfig(context.getProperties());
-                connector.loadConfig(connectorConfig);
+                connector.bindConfig(connectorConfig);
             }
 
             return connector;
         } catch (Exception e) {
-            throw new RuntimeException("can't create connector for type" + context.getType(), e);
+            LOG.error("can't create connector for type: " + context.getType(), e);
+            return null;
         }
     }
 }

@@ -14,32 +14,47 @@
 
 package com.starrocks.connector.elasticsearch;
 
-import com.starrocks.catalog.EsTable;
 import com.starrocks.connector.config.Config;
 import com.starrocks.connector.config.ConnectorConfig;
+import lombok.Data;
 
+import static com.starrocks.catalog.EsTable.DOC_VALUE_SCAN;
+import static com.starrocks.catalog.EsTable.ES_NET_SSL;
+import static com.starrocks.catalog.EsTable.HOSTS;
+import static com.starrocks.catalog.EsTable.KEYWORD_SNIFF;
+import static com.starrocks.catalog.EsTable.PASSWORD;
+import static com.starrocks.catalog.EsTable.USER;
+import static com.starrocks.catalog.EsTable.WAN_ONLY;
+
+@Data
 public class EsConfig extends ConnectorConfig {
 
-    @Config(key = EsTable.HOSTS, desc = "user when connecting es cluster", defaultValue = "", nullable = false)
+    @Config(key = HOSTS, desc = "user when connecting es cluster", defaultValue = "", nullable = false)
     private String[] nodes;
-    @Config(key = "username", desc = "user when connecting es cluster", defaultValue = "", nullable = false)
+
+    @Config(key = USER, desc = "user when connecting es cluster", defaultValue = "")
     private String userName = null;
-    @Config(key = "password", desc = "password when connecting es cluster", defaultValue = "", nullable = false)
+
+    @Config(key = PASSWORD, desc = "password when connecting es cluster", defaultValue = "")
     private String password = null;
-    @Config(key = EsTable.ES_NET_SSL,
+
+    @Config(key = ES_NET_SSL,
             desc = " Whether the HTTPS protocol can be used to access your Elasticsearch cluster",
             defaultValue = "false")
     private boolean enableSsl;
-    @Config(key = EsTable.WAN_ONLY,
+
+    @Config(key = WAN_ONLY,
             desc = "indicates whether StarRocks only uses the addresses specified by hosts to access the " +
                     "Elasticsearch cluster and fetch data",
             defaultValue = "true")
     private boolean enableWanOnly;
-    @Config(key = EsTable.DOC_VALUE_SCAN,
+
+    @Config(key = DOC_VALUE_SCAN,
             desc = "Whether to enable docvalues scan optimization for fetching fields more fast",
             defaultValue = "true")
     private boolean enableDocValueScan;
-    @Config(key = EsTable.KEYWORD_SNIFF,
+    
+    @Config(key = KEYWORD_SNIFF,
             desc = " Whether to enable sniffing keyword for filtering more reasonable",
             defaultValue = "true")
     private boolean enableKeywordSniff;

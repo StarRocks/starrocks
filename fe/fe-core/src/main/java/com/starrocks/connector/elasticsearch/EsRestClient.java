@@ -32,10 +32,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.connector.elasticsearch.external;
+package com.starrocks.connector.elasticsearch;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.ImmutableList;
+import lombok.Data;
 import okhttp3.Credentials;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -54,6 +55,7 @@ import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -70,8 +72,8 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
-import static com.starrocks.connector.elasticsearch.external.EsUtil.getFromJSONArray;
-import static com.starrocks.connector.elasticsearch.external.EsUtil.readTree;
+import static com.starrocks.connector.elasticsearch.EsUtil.getFromJSONArray;
+import static com.starrocks.connector.elasticsearch.EsUtil.readTree;
 
 public class EsRestClient {
 
@@ -296,27 +298,32 @@ public class EsRestClient {
         return ssfFactory;
     }
 
+    @Data
+    public static class EsIndex {
+        private String index;
+    }
+
     /**
      * response
      [
-     {
-     "index": ".kibana_1"
-     },
-     {
-     "index": ".opendistro_security"
-     },
-     {
-     "index": "kibana_sample_data_ecommerce"
-     },
-     {
-     "index": "kibana_sample_data_ecommerce_2"
-     },
-     {
-     "index": "kibana_sample_data_flights"
-     },
-     {
-     "index": "kibana_sample_data_logs"
-     }
+        {
+        "index": ".kibana_1"
+        },
+        {
+        "index": ".opendistro_security"
+        },
+        {
+        "index": "kibana_sample_data_ecommerce"
+        },
+        {
+        "index": "kibana_sample_data_ecommerce_2"
+        },
+        {
+        "index": "kibana_sample_data_flights"
+        },
+        {
+        "index": "kibana_sample_data_logs"
+        }
      ]
      * indices are same as table
      * @return
@@ -327,17 +334,18 @@ public class EsRestClient {
             throw new StarRocksESException("es indexes are null, maybe this is error");
         }
 
-        List<String> allIndices = getFromJSONArray(response, String.class);
-        return allIndices.stream()
-                .filter(index -> !index.startsWith("."))
+        EsIndex[] esIndices = getFromJSONArray(response, EsIndex[].class);
+        return Arrays.asList(esIndices).stream()
+                .filter(index -> !index.getIndex().startsWith("."))
+                .map(index -> index.getIndex())
                 .collect(Collectors.toSet());
     }
     /**
-     * {
-     * "kibana_sample_data_ecommerce": {
-     * "aliases": {}
-     * }
-     * }
+     {
+        "kibana_sample_data_ecommerce": {
+            "aliases": {}
+        }
+     }
      * Get all alias.
      **/
     private Map<String, List<String>> getAliases() {
@@ -368,7 +376,7 @@ public class EsRestClient {
         Set<String> indices = getIndices();
         Map<String, List<String>> aliases = getAliases();
         aliases.entrySet().stream()
-                .filter(e -> !indices.contains(e.getKey()))
+                .filter(e -> (!e.getKey().startsWith(".") && !indices.contains(e.getKey())))
                 .flatMap(e -> e.getValue().stream())
                 .forEach(indices::add);
         return new ArrayList<>(indices);

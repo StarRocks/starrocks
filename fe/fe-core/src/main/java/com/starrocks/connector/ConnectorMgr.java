@@ -16,7 +16,6 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.DdlException;
 import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -32,7 +31,7 @@ public class ConnectorMgr {
     private final ConcurrentHashMap<String, ConnectorFactory> connectorFactories = new ConcurrentHashMap<>();
     private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
-    public Connector createConnector(ConnectorContext context) throws DdlException {
+    public Connector createConnector(ConnectorContext context) {
         String catalogName = context.getCatalogName();
         Connector connector = null;
         readLock();

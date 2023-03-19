@@ -37,5 +37,5 @@ public interface Connector {
     /**
      * check connector config
      */
-    default void loadConfig(ConnectorConfig config) {}
+    default void bindConfig(ConnectorConfig config) {}
 }
