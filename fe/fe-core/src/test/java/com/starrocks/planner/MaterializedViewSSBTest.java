@@ -15,32 +15,15 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class MaterializedViewSSBTest extends MaterializedViewTestBase {
-    private static final String MATERIALIZED_DB_NAME = "test_mv";
-
     @BeforeClass
     public static void setUp() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
-
-        connectContext= UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(true);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
-        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
-        FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
-                .useDatabase(MATERIALIZED_DB_NAME);
         FeConstants.USE_MOCK_DICT_MANAGER = true;
+        MaterializedViewTestBase.setUp();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
@@ -50,7 +33,6 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
 
         // create lineorder_flat_mv
         createMaterializedViews("sql/materialized-view/ssb/", Lists.newArrayList("lineorder_flat_mv"));
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
     }
 
     @Test
