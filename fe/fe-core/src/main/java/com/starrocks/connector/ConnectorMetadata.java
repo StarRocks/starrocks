@@ -79,13 +79,9 @@ public interface ConnectorMetadata {
 
     default void alterTable(AlterTableStmt stmt) throws UserException {}
 
-<<<<<<< HEAD
-    default void createTable(CreateTableStmt stmt) throws DdlException {}
-=======
     default boolean createTable(CreateTableStmt stmt) throws DdlException {
         return true;
     }
->>>>>>> 67aeda4ee ([BugFix] fix create failed with CTAS (#19743))
 
     default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {}
 
