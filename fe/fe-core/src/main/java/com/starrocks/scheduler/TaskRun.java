@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
@@ -97,7 +98,6 @@ public class TaskRun implements Comparable<TaskRun> {
     public TaskRunProcessor getProcessor() {
         return processor;
     }
-
     public void setProcessor(TaskRunProcessor processor) {
         this.processor = processor;
     }
@@ -129,8 +129,10 @@ public class TaskRun implements Comparable<TaskRun> {
             if (table == null) {
                 LOG.warn("materialized view:{} in database:{} do not exist when refreshing", mvId,
                         ctx.getDatabase());
+                return newProperties;
             }
             MaterializedView materializedView = (MaterializedView) table;
+            Preconditions.checkState(materializedView != null);
             newProperties = materializedView.getProperties();
         } catch (Exception e) {
             LOG.warn("refresh task properties failed:", e);
