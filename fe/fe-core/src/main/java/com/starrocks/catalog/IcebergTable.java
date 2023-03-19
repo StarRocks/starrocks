@@ -3,6 +3,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -36,7 +37,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class IcebergTable extends Table {
@@ -129,7 +129,7 @@ public class IcebergTable extends Table {
     }
 
     public List<String> getPartitionColumnNames() {
-        return getPartitionColumns().stream().filter(Objects::nonNull).map(Column::getName)
+        return getPartitionColumns().stream().filter(java.util.Objects::nonNull).map(Column::getName)
                 .collect(Collectors.toList());
     }
 
@@ -431,4 +431,96 @@ public class IcebergTable extends Table {
     public boolean isSupported() {
         return true;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public int hashCode() {
+        return com.google.common.base.Objects.hashCode(getCatalogName(), remoteDbName, getTableIdentifier());
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (!(other instanceof IcebergTable)) {
+            return false;
+        }
+
+        IcebergTable otherTable = (IcebergTable) other;
+        String catalogName = getCatalogName();
+        String tableIdentifier = getTableIdentifier();
+        return Objects.equal(catalogName, otherTable.getCatalogName()) &&
+                Objects.equal(remoteDbName, otherTable.remoteDbName) &&
+                Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
+
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        private long id;
+        private String srTableName;
+        private String catalogName;
+        private String resourceName;
+        private String remoteDbName;
+        private String remoteTableName;
+        private List<Column> fullSchema;
+        private Map<String, String> icebergProperties;
+        private org.apache.iceberg.Table nativeTable;
+
+        public Builder() {
+        }
+
+        public Builder setId(long id) {
+            this.id = id;
+            return this;
+        }
+
+        public Builder setSrTableName(String srTableName) {
+            this.srTableName = srTableName;
+            return this;
+        }
+
+        public Builder setCatalogName(String catalogName) {
+            this.catalogName = catalogName;
+            return this;
+        }
+
+        public Builder setResourceName(String resourceName) {
+            this.resourceName = resourceName;
+            return this;
+        }
+
+        public Builder setRemoteDbName(String remoteDbName) {
+            this.remoteDbName = remoteDbName;
+            return this;
+        }
+
+        public Builder setRemoteTableName(String remoteTableName) {
+            this.remoteTableName = remoteTableName;
+            return this;
+        }
+
+        public Builder setFullSchema(List<Column> fullSchema) {
+            this.fullSchema = fullSchema;
+            return this;
+        }
+
+        public Builder setIcebergProperties(Map<String, String> icebergProperties) {
+            this.icebergProperties = icebergProperties;
+            return this;
+        }
+
+        public Builder setNativeTable(org.apache.iceberg.Table nativeTable) {
+            this.nativeTable = nativeTable;
+            return this;
+        }
+
+        public IcebergTable build() {
+            return new IcebergTable(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName,
+                    fullSchema, nativeTable, icebergProperties);
+        }
+    }
+>>>>>>> 004fb5b9f ([BugFix] Fix query rewrite failed for external table after support view delta (#19732))
 }
