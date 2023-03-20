@@ -24,6 +24,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "storage/base_compaction.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
 #include "storage/compaction_utils.h"
@@ -60,6 +61,45 @@ public:
         ASSERT_EQ(1024, src_rowset->num_rows());
 
         tablet_meta->add_rs_meta(src_rowset->rowset_meta());
+    }
+
+    void write_new_version_and_return(const TabletSharedPtr& tablet, RowsetSharedPtr& src_rowset) {
+        RowsetWriterContext rowset_writer_context;
+        create_rowset_writer_context(&rowset_writer_context, _version);
+        _version++;
+        std::unique_ptr<RowsetWriter> rowset_writer;
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
+
+        rowset_writer_add_rows(rowset_writer);
+
+        rowset_writer->flush();
+        src_rowset = *rowset_writer->build();
+        ASSERT_TRUE(src_rowset != nullptr);
+        ASSERT_EQ(1024, src_rowset->num_rows());
+
+        ASSERT_TRUE(tablet->add_rowset(src_rowset).ok());
+    }
+
+    void delete_specify_version(const TabletSharedPtr& tablet, int64_t version, RowsetSharedPtr to_check) {
+        std::vector<RowsetSharedPtr> to_add;
+        std::vector<RowsetSharedPtr> to_delete;
+        std::vector<RowsetSharedPtr> to_replace;
+        RowsetWriterContext rowset_writer_context;
+        create_rowset_writer_context(&rowset_writer_context, version);
+        std::unique_ptr<RowsetWriter> rowset_writer;
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
+
+        rowset_writer_add_rows(rowset_writer);
+
+        rowset_writer->flush();
+        auto src_rowset = *rowset_writer->build();
+        ASSERT_TRUE(src_rowset != nullptr);
+        ASSERT_EQ(1024, src_rowset->num_rows());
+        to_delete.push_back(src_rowset);
+
+        tablet->modify_rowsets(to_add, to_delete, &to_replace);
+        ASSERT_EQ(to_replace.size(), 1);
+        ASSERT_EQ(to_replace[0]->rowset_id(), to_check->rowset_id());
     }
 
     void write_specify_version(const TabletSharedPtr& tablet, int64_t version) {
@@ -894,6 +934,36 @@ TEST_F(CumulativeCompactionTest, test_multi_segment_cumulative_compaction) {
     ASSERT_EQ(1, versions.size());
     ASSERT_EQ(0, versions[0].first);
     ASSERT_EQ(0, versions[0].second);
+}
+
+TEST_F(CumulativeCompactionTest, test_cumulative_single_rowset) {
+    create_tablet_schema(UNIQUE_KEYS);
+
+    config::max_segment_file_size = 128;
+    DeferOp defer([&] { config::max_segment_file_size = 1073741824; });
+
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+
+    TabletSharedPtr tablet =
+            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    tablet->init();
+
+    RowsetSharedPtr rowset_ptr;
+    write_new_version_and_return(tablet, rowset_ptr);
+
+    CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
+    ASSERT_TRUE(cumulative_compaction.compact().ok());
+
+    ASSERT_EQ(1, tablet->version_count());
+    ASSERT_EQ(1, tablet->cumulative_layer_point());
+    std::vector<Version> versions;
+    tablet->list_versions(&versions);
+    ASSERT_EQ(1, versions.size());
+    ASSERT_EQ(0, versions[0].first);
+    ASSERT_EQ(0, versions[0].second);
+
+    delete_specify_version(tablet, 0, rowset_ptr);
 }
 
 } // namespace starrocks
