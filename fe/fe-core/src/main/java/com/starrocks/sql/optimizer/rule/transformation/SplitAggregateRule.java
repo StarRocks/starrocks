@@ -133,7 +133,7 @@ public class SplitAggregateRule extends TransformationRule {
             return false;
         }
         // 4. If scan tablet sum leas than 1, do one phase aggregate is enough
-        if (aggStage == AUTO_MODE && input.getLogicalProperty().isExecuteInOneTablet().self) {
+        if (aggStage == AUTO_MODE && input.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
             return false;
         }
         // Default, we could generate two stage aggregate

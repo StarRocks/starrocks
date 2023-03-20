@@ -176,7 +176,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     public Void visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
         // If scan tablet sum less than 1, do one phase local aggregate is enough
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0
-                && context.getRootProperty().isExecuteInOneTablet().self
+                && context.getRootProperty().oneTabletProperty().supportOneTabletOpt
                 && node.isOnePhaseAgg()) {
             requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
             return null;
@@ -228,7 +228,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             distributionProperty = new DistributionProperty(DistributionSpec.createGatherDistributionSpec());
         } else {
             // If scan tablet sum less than 1, no distribution property is required
-            if (context.getRootProperty().isExecuteInOneTablet().self) {
+            if (context.getRootProperty().oneTabletProperty().supportOneTabletOpt) {
                 distributionProperty = DistributionProperty.EMPTY;
             } else {
                 distributionProperty = createShuffleAggProperty(partitionColumnRefSet);

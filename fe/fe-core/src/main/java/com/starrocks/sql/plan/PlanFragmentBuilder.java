@@ -1702,7 +1702,7 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
-                if (optExpr.getLogicalProperty().isExecuteInOneTablet().self) {
+                if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
                     clearOlapScanNodePartitions(aggregationNode);
                 }
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
@@ -2359,7 +2359,7 @@ public class PlanFragmentBuilder {
                 sortNode.setAnalyticPartitionExprs(analyticEvalNode.getPartitionExprs());
             }
 
-            if (optExpr.getLogicalProperty().isExecuteInOneTablet().self) {
+            if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
                 clearOlapScanNodePartitions(analyticEvalNode);
             }
 

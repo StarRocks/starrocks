@@ -50,7 +50,7 @@ public class LogicalProperty implements Property {
     private ColumnRefSet outputColumns;
 
     // The flag for execute upon less than or equal one tablet
-    private OneTabletMeta isExecuteInOneTablet;
+    private OneTabletProperty oneTabletProperty;
 
     public ColumnRefSet getOutputColumns() {
         return outputColumns;
@@ -60,8 +60,8 @@ public class LogicalProperty implements Property {
         this.outputColumns = outputColumns;
     }
 
-    public OneTabletMeta isExecuteInOneTablet() {
-        return isExecuteInOneTablet;
+    public OneTabletProperty oneTabletProperty() {
+        return oneTabletProperty;
     }
 
     public LogicalProperty() {
@@ -74,69 +74,54 @@ public class LogicalProperty implements Property {
 
     public LogicalProperty(LogicalProperty other) {
         outputColumns = other.outputColumns.clone();
-        isExecuteInOneTablet = other.isExecuteInOneTablet;
+        oneTabletProperty = other.oneTabletProperty;
     }
 
     public void derive(ExpressionContext expressionContext) {
         LogicalOperator op = (LogicalOperator) expressionContext.getOp();
         outputColumns = op.getOutputColumns(expressionContext);
-        isExecuteInOneTablet = op.accept(new OneTabletExecutorVisitor(), expressionContext);
+        oneTabletProperty = op.accept(new OneTabletExecutorVisitor(), expressionContext);
     }
 
-    public static final class OneTabletMeta {
-        /*
-         * For instance, see the below example
-         *        Agg(group by v1)
-         *             |
-         *             v
-         *      Analytic(partition by b2)
-         *             |
-         *             v
-         *        Scan (bucket: v1, only one tablet)
-         * For Analytic(self=true, asChild=false):
-         *     Can perform one tablet optimization(no exchange needed).
-         *
-         * For Agg(self=false, asChild=false):
-         *     Cannot perform one tablet optimization(exchange needed), because it's child, i.e. Analytic, cannot
-         * offer one tablet guarantee because distribution has been changed.
-         */
-        public final boolean self;
-        public final boolean asChild;
+    public static final class OneTabletProperty {
+        public final boolean supportOneTabletOpt;
+        public final boolean distributionIntact;
         public final ColumnRefSet bucketColumns;
 
-        private OneTabletMeta(boolean self, boolean asChild, ColumnRefSet bucketColumns) {
-            this.self = self;
-            this.asChild = asChild;
+        private OneTabletProperty(boolean supportOneTabletOpt, boolean distributionIntact,
+                                  ColumnRefSet bucketColumns) {
+            this.supportOneTabletOpt = supportOneTabletOpt;
+            this.distributionIntact = distributionIntact;
             this.bucketColumns = bucketColumns;
         }
 
-        private static OneTabletMeta onlySelf(ColumnRefSet bucketColumns) {
-            return new OneTabletMeta(true, false, bucketColumns);
+        private static OneTabletProperty supportButChangeDistribution(ColumnRefSet bucketColumns) {
+            return new OneTabletProperty(true, false, bucketColumns);
         }
 
-        private static OneTabletMeta both(ColumnRefSet bucketColumns) {
-            return new OneTabletMeta(true, true, bucketColumns);
+        private static OneTabletProperty supportWithoutChangeDistribution(ColumnRefSet bucketColumns) {
+            return new OneTabletProperty(true, true, bucketColumns);
         }
 
-        private static OneTabletMeta neither() {
-            return new OneTabletMeta(false, false, null);
+        private static OneTabletProperty notSupport() {
+            return new OneTabletProperty(false, false, null);
         }
     }
 
-    static class OneTabletExecutorVisitor extends OperatorVisitor<OneTabletMeta, ExpressionContext> {
+    static class OneTabletExecutorVisitor extends OperatorVisitor<OneTabletProperty, ExpressionContext> {
         @Override
-        public OneTabletMeta visitOperator(Operator node, ExpressionContext context) {
+        public OneTabletProperty visitOperator(Operator node, ExpressionContext context) {
             Preconditions.checkState(context.arity() != 0);
-            return context.isExecuteInOneTablet(0);
+            return context.oneTabletProperty(0);
         }
 
         @Override
-        public OneTabletMeta visitMockOperator(MockOperator node, ExpressionContext context) {
-            return OneTabletMeta.both(new ColumnRefSet());
+        public OneTabletProperty visitMockOperator(MockOperator node, ExpressionContext context) {
+            return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet());
         }
 
         @Override
-        public OneTabletMeta visitLogicalTableScan(LogicalScanOperator node, ExpressionContext context) {
+        public OneTabletProperty visitLogicalTableScan(LogicalScanOperator node, ExpressionContext context) {
             if (node instanceof LogicalOlapScanOperator) {
                 if (((LogicalOlapScanOperator) node).getSelectedTabletId().size() <= 1) {
                     Set<String> distributionColumnNames = node.getTable().getDistributionColumnNames();
@@ -146,24 +131,24 @@ public class LogicalProperty implements Property {
                             bucketColumns.add(entry.getKey());
                         }
                     }
-                    return OneTabletMeta.both(new ColumnRefSet(bucketColumns));
+                    return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet(bucketColumns));
                 }
-                return OneTabletMeta.neither();
+                return OneTabletProperty.notSupport();
             } else if (node instanceof LogicalMysqlScanOperator || node instanceof LogicalJDBCScanOperator) {
-                return OneTabletMeta.both(new ColumnRefSet());
+                return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet());
             }
-            return OneTabletMeta.neither();
+            return OneTabletProperty.notSupport();
         }
 
         @Override
-        public OneTabletMeta visitLogicalValues(LogicalValuesOperator node, ExpressionContext context) {
-            return OneTabletMeta.both(new ColumnRefSet());
+        public OneTabletProperty visitLogicalValues(LogicalValuesOperator node, ExpressionContext context) {
+            return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet());
         }
 
         @Override
-        public OneTabletMeta visitLogicalAnalytic(LogicalWindowOperator node, ExpressionContext context) {
-            OneTabletMeta isExecuteInOneTablet = context.isExecuteInOneTablet(0);
-            if (isExecuteInOneTablet.asChild) {
+        public OneTabletProperty visitLogicalAnalytic(LogicalWindowOperator node, ExpressionContext context) {
+            OneTabletProperty isExecuteInOneTablet = context.oneTabletProperty(0);
+            if (isExecuteInOneTablet.distributionIntact) {
                 List<Integer> partitionColumnRefSet = new ArrayList<>();
                 node.getPartitionExpressions().forEach(e -> partitionColumnRefSet
                         .addAll(Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList())));
@@ -171,59 +156,60 @@ public class LogicalProperty implements Property {
                 if (partitionColumns.isSame(isExecuteInOneTablet.bucketColumns)) {
                     return isExecuteInOneTablet;
                 }
-                return OneTabletMeta.onlySelf(isExecuteInOneTablet.bucketColumns);
+                return OneTabletProperty.supportButChangeDistribution(isExecuteInOneTablet.bucketColumns);
             }
-            return OneTabletMeta.neither();
+            return OneTabletProperty.notSupport();
         }
 
         @Override
-        public OneTabletMeta visitLogicalAggregation(LogicalAggregationOperator node,
-                                                     ExpressionContext context) {
-            OneTabletMeta isExecuteInOneTablet = context.isExecuteInOneTablet(0);
-            if (isExecuteInOneTablet.asChild) {
+        public OneTabletProperty visitLogicalAggregation(LogicalAggregationOperator node,
+                                                         ExpressionContext context) {
+            OneTabletProperty isExecuteInOneTablet = context.oneTabletProperty(0);
+            if (isExecuteInOneTablet.distributionIntact) {
                 ColumnRefSet groupByColumns = new ColumnRefSet(node.getGroupingKeys());
                 if (groupByColumns.isSame(isExecuteInOneTablet.bucketColumns)) {
                     return isExecuteInOneTablet;
                 }
-                return OneTabletMeta.onlySelf(isExecuteInOneTablet.bucketColumns);
+                return OneTabletProperty.supportButChangeDistribution(isExecuteInOneTablet.bucketColumns);
             }
-            return OneTabletMeta.neither();
+            return OneTabletProperty.notSupport();
         }
 
         @Override
-        public OneTabletMeta visitLogicalJoin(LogicalJoinOperator node, ExpressionContext context) {
-            return OneTabletMeta.neither();
+        public OneTabletProperty visitLogicalJoin(LogicalJoinOperator node, ExpressionContext context) {
+            return OneTabletProperty.notSupport();
         }
 
         @Override
-        public OneTabletMeta visitLogicalUnion(LogicalUnionOperator node, ExpressionContext context) {
-            return OneTabletMeta.neither();
+        public OneTabletProperty visitLogicalUnion(LogicalUnionOperator node, ExpressionContext context) {
+            return OneTabletProperty.notSupport();
         }
 
         @Override
-        public OneTabletMeta visitLogicalExcept(LogicalExceptOperator node, ExpressionContext context) {
-            return OneTabletMeta.neither();
+        public OneTabletProperty visitLogicalExcept(LogicalExceptOperator node, ExpressionContext context) {
+            return OneTabletProperty.notSupport();
         }
 
         @Override
-        public OneTabletMeta visitLogicalIntersect(LogicalIntersectOperator node, ExpressionContext context) {
-            return OneTabletMeta.neither();
+        public OneTabletProperty visitLogicalIntersect(LogicalIntersectOperator node, ExpressionContext context) {
+            return OneTabletProperty.notSupport();
         }
 
         @Override
-        public OneTabletMeta visitLogicalTableFunction(LogicalTableFunctionOperator node, ExpressionContext context) {
-            return OneTabletMeta.neither();
+        public OneTabletProperty visitLogicalTableFunction(LogicalTableFunctionOperator node,
+                                                           ExpressionContext context) {
+            return OneTabletProperty.notSupport();
         }
 
         @Override
-        public OneTabletMeta visitLogicalCTEAnchor(LogicalCTEAnchorOperator node, ExpressionContext context) {
+        public OneTabletProperty visitLogicalCTEAnchor(LogicalCTEAnchorOperator node, ExpressionContext context) {
             Preconditions.checkState(context.arity() == 2);
-            return context.isExecuteInOneTablet(1);
+            return context.oneTabletProperty(1);
         }
 
         @Override
-        public OneTabletMeta visitLogicalCTEConsume(LogicalCTEConsumeOperator node, ExpressionContext context) {
-            return OneTabletMeta.neither();
+        public OneTabletProperty visitLogicalCTEConsume(LogicalCTEConsumeOperator node, ExpressionContext context) {
+            return OneTabletProperty.notSupport();
         }
     }
 }
