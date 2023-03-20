@@ -186,12 +186,12 @@ public class ColumnRewriter {
             if (enableRelationRewrite && srcToDstRelationIdMapping != null) {
                 Integer srcRelationId = srcRefFactory.getRelationId(columnRef.getId());
                 if (srcRelationId < 0) {
-                    return null;
+                    return result;
                 }
                 Integer targetRelationId = srcToDstRelationIdMapping.get(srcRelationId);
                 Map<String, ColumnRefOperator> relationColumns = dstRelationIdToColumns.get(targetRelationId);
                 if (relationColumns == null) {
-                    return null;
+                    return result;
                 }
                 result = relationColumns.getOrDefault(columnRef.getName(), columnRef);
             }
