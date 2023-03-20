@@ -85,8 +85,11 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         // for an example, when bucketNum=8; the remainder will be
         // -3, -2, -1, 0, 1, 2, 3, 4, NULL
         ConstantOperator bucketConstOp = new ConstantOperator(bucketNum / 2, Type.INT);
+        Function modFunc = Expr.getBuiltinFunction(FunctionSet.MOD,
+                new Type[] {callHashFuncOp.getType(), bucketConstOp.getType()},
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         CallOperator modBucketOp =
-                new CallOperator(FunctionSet.MOD, Type.INT, Arrays.asList(callHashFuncOp, bucketConstOp));
+                new CallOperator(FunctionSet.MOD, Type.INT, Arrays.asList(callHashFuncOp, bucketConstOp), modFunc);
         ScalarOperator op = new CastOperator(type, modBucketOp, true);
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         return rewriter.rewrite(op, Collections.singletonList(new ReduceCastRule()));
