@@ -188,7 +188,7 @@ Run a load job to update the record whose `id` is `101` in `example1.csv` to `ta
     ```SQL
     CREATE ROUTINE LOAD test_db.table1 ON table1
     COLUMNS TERMINATED BY ",",
-    COLUMNS (id, name, score, __op ='upsert')
+    COLUMNS (id, name, score, __op = upsert)
     PROPERTIES
     (
         "desired_concurrent_number" = "3",
@@ -378,7 +378,7 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
   curl --location-trusted -u root: \
       -H "label:label4" \
       -H "column_separator:," \
-      -H "columns: id, name, score, temp, __op = 'temp'" \
+      -H "columns: id, name, score, temp, __op = temp" \
       -T example3.csv -XPUT\
       http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
   ```
