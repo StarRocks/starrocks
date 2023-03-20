@@ -1053,16 +1053,6 @@ public abstract class Type implements Cloneable {
         }
     }
 
-    /**
-     * Specialize some type casting, disable the type cast for function match, but enable it with explicit cast
-     */
-    public static boolean canAssignCast(Type from, Type to) {
-        if ((from.isMapType() || from.isStructType()) && to.isJsonType()) {
-            return false;
-        }
-        return canCastTo(from, to);
-    }
-
     public static boolean canCastTo(Type from, Type to) {
         if (from.isNull()) {
             return true;
@@ -1093,8 +1083,6 @@ public abstract class Type implements Cloneable {
             return true;
         } else if (from.isJsonType() && to.isArrayScalar()) {
             // now we only support cast json to one dimensional array
-            return true;
-        } else if ((from.isStructType() || from.isMapType()) && to.isJsonType()) {
             return true;
         } else {
             return false;
