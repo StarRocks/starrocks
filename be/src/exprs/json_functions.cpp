@@ -23,6 +23,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/status.h"
+#include "exprs/cast_expr.h"
 #include "exprs/function_context.h"
 #include "exprs/jsonpath.h"
 #include "glog/logging.h"
@@ -745,6 +746,11 @@ StatusOr<ColumnPtr> JsonFunctions::json_keys(FunctionContext* context, const Col
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> JsonFunctions::to_json(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    return cast_nested_to_json(columns[0]);
 }
 
 } // namespace starrocks
