@@ -72,7 +72,7 @@ public:
     }
 
     // Number of partitions
-    int32_t num_partitions() const { return _hash_map_variant.size(); }
+    int32_t num_partitions() const { return static_cast<int>(_hash_map_variant.size()); }
 
     bool is_passthrough() const { return _is_passthrough; }
 

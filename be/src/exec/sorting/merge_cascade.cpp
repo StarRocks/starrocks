@@ -232,7 +232,7 @@ Status MergeCursorsCascade::init(const SortDescs& sort_desc,
         std::vector<std::unique_ptr<SimpleChunkSortCursor>> next_level;
         next_level.reserve(current_level.size() / 2);
 
-        int level_size = current_level.size() & ~1;
+        int level_size = static_cast<int>(current_level.size() & ~1);
         for (int i = 0; i < level_size; i += 2) {
             auto& left = current_level[i];
             auto& right = current_level[i + 1];

@@ -141,10 +141,11 @@ void ExceptHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunk, const std
         // The serialized buffer is always nullable.
         if (key_column->is_nullable()) {
             key_column->serialize_batch(buffer_state->buffer, buffer_state->slice_sizes, chunk_size,
-                                        buffer_state->max_one_row_size);
+                                        static_cast<uint32_t>(buffer_state->max_one_row_size));
         } else {
             key_column->serialize_batch_with_null_masks(buffer_state->buffer, buffer_state->slice_sizes, chunk_size,
-                                                        static_cast<uint32_t>(buffer_state->max_one_row_size), nullptr, false);
+                                                        static_cast<uint32_t>(buffer_state->max_one_row_size), nullptr,
+                                                        false);
         }
     }
 }

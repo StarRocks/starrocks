@@ -166,7 +166,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
         std::vector<TabletInfo> tablet_infos;
         StorageEngine::instance()->tablet_manager()->get_tablets_by_partition(partition_version.partition_id,
                                                                               tablet_infos);
-        total_tablet_cnt += tablet_infos.size();
+        total_tablet_cnt += static_cast<int>(tablet_infos.size());
         for (const auto& tablet_info : tablet_infos) {
             TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_info.tablet_id);
             if (!tablet) {

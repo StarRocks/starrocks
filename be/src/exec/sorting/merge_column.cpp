@@ -83,14 +83,14 @@ public:
                 }
                 if (x <= 0) {
                     for (size_t i = left_range.first; i < left_range.second; i++) {
-                        (*_perm)[output_index++] = PermutationItem(kLeftIndex, i);
+                        (*_perm)[output_index++] = PermutationItem(kLeftIndex, static_cast<uint32_t>(i));
                     }
                     lhs = left_range.second;
                     left_range = fetch_equal(lhs, lhs_end, equal_left);
                 }
                 if (x >= 0) {
                     for (size_t i = right_range.first; i < right_range.second; i++) {
-                        (*_perm)[output_index++] = PermutationItem(kRightIndex, i);
+                        (*_perm)[output_index++] = PermutationItem(kRightIndex, static_cast<uint32_t>(i));
                     }
                     rhs = right_range.second;
                     right_range = fetch_equal(rhs, rhs_end, equal_right);
@@ -107,8 +107,8 @@ public:
 
     template <class Equal>
     EqualRange::Range fetch_equal(size_t lhs, size_t lhs_end, Equal equal) {
-        uint32_t first = lhs;
-        uint32_t last = lhs + 1;
+        uint32_t first = static_cast<uint32_t>(lhs);
+        uint32_t last = static_cast<uint32_t>(lhs) + 1;
         while (last < lhs_end && equal(last - 1, last)) {
             last++;
         }
@@ -223,14 +223,14 @@ public:
             output->resize(count);
             for (size_t i = 0; i < count; i++) {
                 (*output)[i].chunk_index = kRightChunkIndex;
-                (*output)[i].index_in_chunk = i + right_run.range.first;
+                (*output)[i].index_in_chunk = static_cast<uint32_t>(i) + right_run.range.first;
             }
         } else if (right_run.empty()) {
             size_t count = left_run.num_rows();
             output->resize(count);
             for (size_t i = 0; i < count; i++) {
                 (*output)[i].chunk_index = kLeftChunkIndex;
-                (*output)[i].index_in_chunk = i + left_run.range.first;
+                (*output)[i].index_in_chunk = static_cast<uint32_t>(i) + left_run.range.first;
             }
         } else {
             int intersect = left_run.intersect(sort_desc, right_run);
@@ -369,7 +369,7 @@ ChunkPtr SortedRun::steal_chunk(size_t size, size_t skipped_rows) {
         size_t required_rows = std::min(size, reserved_rows);
         ChunkPtr res = chunk->clone_empty(required_rows);
         res->append(*chunk, range.first + skipped_rows, required_rows);
-        range.first += skipped_rows + required_rows;
+        range.first += static_cast<uint32_t>(skipped_rows + required_rows);
         return res;
     }
 }
@@ -432,7 +432,7 @@ bool SortedRuns::is_sorted(const SortDescs& sort_desc) const {
                 return false;
             }
         }
-        for (int row = run.start_index() + 1; row < run.end_index(); row++) {
+        for (int row = static_cast<int>(run.start_index() + 1); row < run.end_index(); row++) {
             int x = run.compare_row(sort_desc, run, row - 1, row);
             if (x > 0) {
                 return false;
@@ -513,10 +513,10 @@ Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns
     while ((index_of_merging < limit) && (index_of_left < left_size) && (index_of_right < right_size)) {
         int cmp = compare_chunk_row(descs, left_columns, right_columns, index_of_left, index_of_right);
         if (cmp <= 0) {
-            output->emplace_back(PermutationItem(kLeftChunkIndex, index_of_left));
+            output->emplace_back(PermutationItem(kLeftChunkIndex, static_cast<uint32_t>(index_of_left)));
             ++index_of_left;
         } else {
-            output->emplace_back(PermutationItem(kRightChunkIndex, index_of_right));
+            output->emplace_back(PermutationItem(kRightChunkIndex, static_cast<uint32_t>(index_of_right)));
             ++index_of_right;
         }
         ++index_of_merging;

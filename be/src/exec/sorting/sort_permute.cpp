@@ -43,7 +43,7 @@ bool TieIterator::next() {
     if (_inner_range_first == 0 && tie[_inner_range_first] == 1) {
         // Just start from the 0
     } else {
-        _inner_range_first = SIMD::find_nonzero(tie, _inner_range_first + 1);
+        _inner_range_first = static_cast<int>(SIMD::find_nonzero(tie, _inner_range_first + 1));
         if (_inner_range_first >= end) {
             return false;
         }
@@ -51,7 +51,7 @@ bool TieIterator::next() {
     }
 
     // Find the zero, or the end of range
-    _inner_range_last = SIMD::find_zero(tie, _inner_range_first + 1);
+    _inner_range_last = static_cast<int>(SIMD::find_zero(tie, _inner_range_first + 1));
     _inner_range_last = std::min(_inner_range_last, end);
 
     if (_inner_range_first >= _inner_range_last) {
@@ -75,7 +75,7 @@ public:
             return Status::OK();
         }
 
-        uint32_t orig_size = dst->size();
+        uint32_t orig_size = static_cast<uint32_t>(dst->size());
         Columns null_columns, data_columns;
         for (auto& col : _columns) {
             const auto* src_column = down_cast<const NullableColumn*>(col.get());
@@ -201,14 +201,14 @@ public:
         offsets.resize(num_offsets + _perm.size());
         for (auto& p : _perm) {
             Slice slice = (*srcs[p.chunk_index])[p.index_in_chunk];
-            offsets[num_offsets] = offsets[num_offsets - 1] + slice.get_size();
+            offsets[num_offsets] = offsets[num_offsets - 1] + static_cast<uint32_t>(slice.get_size());
             ++num_offsets;
             num_bytes += slice.get_size();
         }
 
         bytes.resize(num_bytes);
         for (size_t i = 0; i < _perm.size(); i++) {
-            Slice slice = (*srcs[_perm[i].chunk_index])[_perm[i].index_in_chunk];
+            Slice slice = (*srcs[_perm[static_cast<int>(i)].chunk_index])[_perm[static_cast<int>(i)].index_in_chunk];
             strings::memcpy_inlined(bytes.data() + offsets[old_rows + i], slice.get_data(), slice.get_size());
         }
 

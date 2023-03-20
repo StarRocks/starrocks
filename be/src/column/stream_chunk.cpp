@@ -120,7 +120,7 @@ ChunkPtr StreamChunkConverter::to_chunk(const StreamChunkPtr& stream_chunk) {
         DCHECK(extra_column_data);
         auto mock_slot_id = stream_chunk->num_columns();
         for (auto& extra_column : extra_column_data->columns()) {
-            stream_chunk->append_column(extra_column, mock_slot_id++);
+            stream_chunk->append_column(extra_column, static_cast<SlotId>(mock_slot_id++));
         }
         stream_chunk->set_extra_data(nullptr);
     }

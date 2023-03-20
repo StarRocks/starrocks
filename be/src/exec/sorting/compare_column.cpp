@@ -45,7 +45,7 @@ static inline size_t compare_column_helper(CompareVector& cmp_vector, DataCompar
         for (size_t i = 0; i < cmp_vector.size(); i++) {
             // Only consider rows that are queal at previous columns
             if (cmp_vector[i] == 0) {
-                cmp_vector[i] = cmp(i);
+                cmp_vector[i] = static_cast<int8_t>(cmp(static_cast<int>(i)));
             }
         }
     } else {
@@ -56,7 +56,7 @@ static inline size_t compare_column_helper(CompareVector& cmp_vector, DataCompar
                 break;
             }
 
-            cmp_vector[pos] = cmp(pos);
+            cmp_vector[pos] = static_cast<int8_t>(cmp(static_cast<int>(pos)));
             idx = pos + 1;
         }
     }
@@ -114,7 +114,7 @@ public:
         if (_rhs_value.is_null()) {
             for (size_t i = 0; i < null_data.size(); i++) {
                 if (null_data[i] == 0) {
-                    cmp_vector[i] = -nan_direction;
+                    cmp_vector[i] = static_cast<int8_t>(-nan_direction);
                 } else {
                     cmp_vector[i] = null_vector[i];
                 }
@@ -267,7 +267,7 @@ public:
         //    which are equal, so just compare the value directly
         const NullData& null_data = column.immutable_null_column_data();
         for (size_t i = 1; i < column.size(); i++) {
-            (*_tie)[i] &= (null_data[i - 1] == null_data[i]);
+            (*_tie)[i] &= static_cast<uint8_t>(null_data[i - 1] == null_data[i]);
         }
 
         build_tie_for_column(column.data_column(), _tie, column.null_column());
@@ -283,7 +283,7 @@ public:
         }
         for (size_t i = 1; i < column.size(); i++) {
             if ((null_data == nullptr) || ((*null_data)[i - 1] != 1 && (*null_data)[i] != 1)) {
-                (*_tie)[i] &= SorterComparator<Slice>::compare(data[i - 1], data[i]) == 0;
+                (*_tie)[i] &= static_cast<uint8_t>(SorterComparator<Slice>::compare(data[i - 1], data[i]) == 0);
             }
         }
         return Status::OK();
@@ -298,7 +298,7 @@ public:
         }
         for (size_t i = 1; i < column.size(); i++) {
             if ((null_data == nullptr) || ((*null_data)[i - 1] != 1 && (*null_data)[i] != 1)) {
-                (*_tie)[i] &= SorterComparator<T>::compare(data[i - 1], data[i]) == 0;
+                (*_tie)[i] &= static_cast<uint8_t>(SorterComparator<T>::compare(data[i - 1], data[i]) == 0);
             }
         }
         return Status::OK();
@@ -324,7 +324,7 @@ int compare_column(const ColumnPtr& column, CompareVector& cmp_vector, Datum rhs
 
     [[maybe_unused]] Status st = column->accept(&compare);
     DCHECK(st.ok());
-    return compare.get_equal_count();
+    return static_cast<int>(compare.get_equal_count());
 }
 
 void compare_columns(const Columns& columns, std::vector<int8_t>& cmp_vector, const std::vector<Datum>& rhs_values,
@@ -340,7 +340,8 @@ void compare_columns(const Columns& columns, std::vector<int8_t>& cmp_vector, co
     for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
         const Datum& rhs_value = rhs_values[col_idx];
 
-        int equal_count = compare_column(columns[col_idx], cmp_vector, rhs_value, sort_desc.get_column_desc(col_idx));
+        int equal_count = compare_column(columns[col_idx], cmp_vector, rhs_value,
+                                         sort_desc.get_column_desc(static_cast<int>(col_idx)));
         if (equal_count == 0) {
             break;
         }

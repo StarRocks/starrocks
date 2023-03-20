@@ -32,7 +32,7 @@ public:
     using MovableType = RunTimeCppMovableType<Type>;
 
     ColumnBuilder(size_t chunk_size) {
-        static_assert(!pt_is_decimal<Type>, "Not support Decimal32/64/128 types");
+        static_assert(!lt_is_decimal<Type>, "Not support Decimal32/64/128 types");
         _has_null = false;
         _column = RunTimeColumnType<Type>::create();
         _null_column = NullColumn::create();

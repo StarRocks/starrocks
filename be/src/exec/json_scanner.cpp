@@ -90,7 +90,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
 
     Status status;
     try {
-        status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size);
+        status = _cur_file_reader->read_chunk(src_chunk.get(), static_cast<int32_t>(_max_chunk_size));
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = "Unrecognized json format, stop json loader.";
         LOG(WARNING) << err_msg;
@@ -564,7 +564,7 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
                 auto slot_desc = itr->second;
 
                 // update the prev parsed position
-                column_index = chunk->get_index_by_slot_id(slot_desc->id());
+                column_index = static_cast<int>(chunk->get_index_by_slot_id(slot_desc->id()));
                 if (_prev_parsed_position.size() <= key_index) {
                     _prev_parsed_position.emplace_back(key, column_index, slot_desc->type());
                 } else {

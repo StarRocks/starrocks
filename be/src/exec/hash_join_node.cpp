@@ -487,8 +487,8 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
-        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators,
-                                                                              context->degree_of_parallelism());
+        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(
+                runtime_state(), lhs_operators, static_cast<int>(context->degree_of_parallelism()));
     } else {
         if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
             lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators);
@@ -746,7 +746,7 @@ Status HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& fi
     }
 
     if (!filter_all) {
-        int zero_count = SIMD::count_zero(filter.data(), filter.size());
+        int zero_count = static_cast<int>(SIMD::count_zero(filter.data(), filter.size()));
         if (zero_count == 0) {
             hit_all = true;
         }

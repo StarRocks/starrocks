@@ -159,7 +159,7 @@ void ChunksPartitioner::_init_hash_map_variant() {
                 type = PartitionHashMapVariant::Type::phase1_slice_fx16;
             }
             if (!has_null_column) {
-                fixed_byte_size = max_size;
+                fixed_byte_size = static_cast<int>(max_size);
             }
         }
     }

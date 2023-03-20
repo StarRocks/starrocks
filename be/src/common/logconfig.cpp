@@ -88,7 +88,7 @@ static void dump_trace_info() {
         char buffer[256] = {};
 
         // write build version
-        int res = get_build_version(buffer, sizeof(buffer));
+        size_t res = get_build_version(buffer, sizeof(buffer));
         [[maybe_unused]] auto wt = write(STDERR_FILENO, buffer, res);
 
         res = sprintf(buffer, "query_id:");

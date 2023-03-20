@@ -322,7 +322,7 @@ Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNo
             break;
         }
         case TYPE_VARCHAR: {
-            int len = t_expr.string_literal.value.size();
+            int len = static_cast<int>(t_expr.string_literal.value.size());
             const char* str_val = t_expr.string_literal.value.c_str();
             Slice value(str_val, len);
             auto* column = down_cast<BinaryColumn*>(_partition_columns[i].get());
@@ -424,7 +424,7 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
         bool is_list_partition = _t_param.partitions[0].__isset.in_keys;
         for (size_t i = 0; i < num_rows; ++i) {
             if ((*selection)[i]) {
-                row.index = i;
+                row.index = static_cast<uint32_t>(i);
                 auto it = is_list_partition ? _partitions_map.find(&row) : _partitions_map.upper_bound(&row);
                 if (UNLIKELY(it == _partitions_map.end())) {
                     if (partition_not_exist_row_values) {
@@ -443,7 +443,7 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                         (*partitions)[i] = nullptr;
                         (*selection)[i] = 0;
                         if (invalid_row_index != nullptr) {
-                            *invalid_row_index = i;
+                            *invalid_row_index = static_cast<int>(i);
                         }
                     }
                 } else if (LIKELY(is_list_partition || _part_contains(it->second, &row))) {
@@ -466,7 +466,7 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                         (*partitions)[i] = nullptr;
                         (*selection)[i] = 0;
                         if (invalid_row_index != nullptr) {
-                            *invalid_row_index = i;
+                            *invalid_row_index = static_cast<int>(i);
                         }
                     }
                 }

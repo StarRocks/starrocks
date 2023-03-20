@@ -240,7 +240,8 @@ Status JniScanner::_append_datetime_data(const FillColumnArgs& args) {
             std::string origin_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
             std::string datetime_str = origin_str.substr(0, origin_str.find('.'));
             TimestampValue tsv;
-            if (!tsv.from_datetime_format_str(datetime_str.c_str(), datetime_str.size(), "%Y-%m-%d %H:%i:%s")) {
+            if (!tsv.from_datetime_format_str(datetime_str.c_str(), static_cast<int>(datetime_str.size()),
+                                              "%Y-%m-%d %H:%i:%s")) {
                 return Status::DataQualityError(fmt::format(
                         "Invalid datetime value occurs on column[{}], value is [{}]", args.slot_name, origin_str));
             }

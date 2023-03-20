@@ -225,7 +225,7 @@ void ParquetBuilder::_generate_rg_writer() {
 
 #define DISPATCH_PARQUET_NUMERIC_WRITER(WRITER, COLUMN_TYPE, NATIVE_TYPE)                                         \
     ParquetBuilder::_generate_rg_writer();                                                                        \
-    parquet::WRITER* col_writer = static_cast<parquet::WRITER*>(_rg_writer->column(i));                           \
+    parquet::WRITER* col_writer = static_cast<parquet::WRITER*>(_rg_writer->column(static_cast<int>(i)));         \
     col_writer->WriteBatch(                                                                                       \
             num_rows, nullable ? def_level.data() : nullptr, nullptr,                                             \
             reinterpret_cast<const NATIVE_TYPE*>(down_cast<const COLUMN_TYPE*>(data_column)->get_data().data())); \

@@ -98,7 +98,9 @@ public:
                                       BinlogBuilderParamsPtr& builder_params, BinlogBuildResult* result);
 
     // For testing
-    int32_t num_files() { return (_params->active_file_meta == nullptr ? 0 : 1) + _new_files.size(); }
+    int32_t num_files() {
+        return static_cast<int32_t>((_params->active_file_meta == nullptr ? 0 : 1) + _new_files.size());
+    }
 
     int64_t current_write_file_size() { return _current_writer == nullptr ? 0 : _current_writer->file_size(); }
 

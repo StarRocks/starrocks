@@ -87,7 +87,7 @@ bool Column::empty_null_in_complex_column(const Filter& null_data, const std::ve
     if (need_empty) {
         auto new_column = clone_empty();
         uint32_t from = 0;
-        uint32_t to = size;
+        auto to = static_cast<uint32_t>(size);
         while (from < to) {
             uint32_t new_from = from + 1;
             while (new_from < to && null_data[from] == null_data[new_from]) {

@@ -1543,7 +1543,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
         }
 
         if (_probe_state->cur_row_match_count <= 0) {
-            _probe_state->probe_index[match_count] = i;
+            _probe_state->probe_index[match_count] = static_cast<uint32_t>(i);
             _probe_state->build_index[match_count] = 0;
             match_count++;
 
@@ -1572,8 +1572,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join_
 
         while (build_index != 0) {
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
-                _probe_state->probe_index[match_count] = i;
-                _probe_state->build_index[match_count] = build_index;
+                _probe_state->probe_index[match_count] = static_cast<uint32_t>(i);
+                _probe_state->build_index[match_count] = static_cast<uint32_t>(build_index);
                 match_count++;
 
                 RETURN_IF_CHUNK_FULL()
@@ -1603,7 +1603,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join_w
 
         while (build_index != 0) {
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
-                _probe_state->probe_index[match_count] = i;
+                _probe_state->probe_index[match_count] = static_cast<uint32_t>(i);
                 _probe_state->build_index[match_count] = build_index;
                 match_count++;
 
@@ -1634,7 +1634,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join_w
 
         while (build_index != 0) {
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
-                _probe_state->probe_index[match_count] = i;
+                _probe_state->probe_index[match_count] = static_cast<uint32_t>(i);
                 _probe_state->build_index[match_count] = build_index;
                 match_count++;
 
@@ -1681,7 +1681,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_w
         } else {
             while (build_index != 0) {
                 if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
-                    _probe_state->probe_index[match_count] = i;
+                    _probe_state->probe_index[match_count] = static_cast<uint32_t>(i);
                     _probe_state->build_index[match_count] = build_index;
                     _probe_state->probe_match_index[i]++;
                     _probe_state->cur_row_match_count++;
@@ -1692,7 +1692,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_w
                 build_index = _table_items->next[build_index];
             }
             if (_probe_state->cur_row_match_count <= 0) {
-                _probe_state->probe_index[match_count] = i;
+                _probe_state->probe_index[match_count] = static_cast<uint32_t>(i);
                 _probe_state->build_index[match_count] = 0;
                 match_count++;
 

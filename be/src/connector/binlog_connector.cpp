@@ -172,7 +172,7 @@ BinlogMetaFieldMap BinlogDataSource::_build_binlog_meta_fields(ColumnId start_ci
     return fields;
 }
 
-StatusOr<VectorizedSchema> BinlogDataSource::_build_binlog_schema() {
+StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
     BinlogMetaFieldMap binlog_meta_map =
             _build_binlog_meta_fields(static_cast<ColumnId>(_tablet->tablet_schema().num_columns()));
     std::vector<uint32_t> data_column_cids;

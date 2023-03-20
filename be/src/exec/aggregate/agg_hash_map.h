@@ -258,14 +258,16 @@ struct AggHashMapWithOneNumberKeyWithNullable
             FieldType key = column->get_data()[i];
 
             if constexpr (allocate_and_compute_state) {
-                auto iter = this->hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
-                    if constexpr (compute_not_founds) {
-                        DCHECK(not_founds);
-                        (*not_founds)[i] = 1;
-                    }
-                    AggDataPtr pv = allocate_func(key);
-                    ctor(key, pv);
-                });
+                auto iter = this->hash_map.lazy_emplace_with_hash(
+                        static_cast<typename HashMap::template key_arg<FieldType>>(key), hash_values[i],
+                        [&](const auto& ctor) {
+                            if constexpr (compute_not_founds) {
+                                DCHECK(not_founds);
+                                (*not_founds)[i] = 1;
+                            }
+                            AggDataPtr pv = allocate_func(key);
+                            ctor(key, pv);
+                        });
                 (*agg_states)[i] = iter->second;
             } else if constexpr (compute_not_founds) {
                 DCHECK(not_founds);

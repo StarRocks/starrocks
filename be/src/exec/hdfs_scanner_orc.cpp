@@ -255,12 +255,12 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                 offsets[i] = static_cast<uint32_t>(total_size);
                 total_size += new_size;
             }
-            offsets[dict_size] = total_size;
+            offsets[dict_size] = static_cast<uint32_t>(total_size);
         } else {
             bytes.insert(bytes.end(), start, end);
             // type mismatch, have to use loop to assign.
             for (size_t i = 0; i < offset_size; i++) {
-                offsets[i] = offset_data[i];
+                offsets[i] = static_cast<uint32_t>(offset_data[i]);
             }
         }
 
