@@ -323,6 +323,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
         _lake_update_manager = new lake::UpdateManager(_lake_location_provider, update_mem_tracker());
         _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, _lake_update_manager,
                                                        config::lake_metadata_cache_limit);
+        if (starrocks::config::starlet_cache_dir.empty()) {
+            for (int i = 0; i < store_paths.size(); ++i) {
+                starrocks::config::starlet_cache_dir += store_paths[i].path + "/starlet_cache";
+                if (i != paths.size() - 1) {
+                    starrocks::config::starlet_cache_dir += ":";
+                }
+            }
+        }
 #elif defined(BE_TEST)
         _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
         _lake_update_manager = new lake::UpdateManager(_lake_location_provider, update_mem_tracker());
