@@ -60,8 +60,8 @@ public:
 
 private:
     std::mutex _lock;
-    int _cur_client_idx{0};
-    constexpr static int _max_cache_clients = 8;
+    uint32_t _cur_client_idx{0};
+    constexpr static uint32_t _max_cache_clients = 8;
     std::string _cache_key[_max_cache_clients];
     std::shared_ptr<HdfsFsClient> _cache_clients[_max_cache_clients];
     Random _rand{(uint32_t)time(nullptr)};
