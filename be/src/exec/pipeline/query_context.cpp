@@ -144,9 +144,7 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
                 st = maybe_token.status();
             }
 
-            _spill_manager = std::make_unique<QuerySpillManager>();
-            auto init_status = _spill_manager->init(_query_id);
-            st = init_status.ok() ? st : init_status;
+            _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id);
         });
     }
 

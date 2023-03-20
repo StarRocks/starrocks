@@ -120,7 +120,8 @@ public:
 
     // operation in rowsets
     Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
-    void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete);
+    void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
+                        std::vector<RowsetSharedPtr>* to_replace);
 
     // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
     // The caller must call hold _meta_lock when call this two function.

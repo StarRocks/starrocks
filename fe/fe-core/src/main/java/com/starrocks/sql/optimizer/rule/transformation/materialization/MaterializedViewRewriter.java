@@ -312,8 +312,10 @@ public class MaterializedViewRewriter {
                     continue;
                 }
                 List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
-                List<String> childKeys = columnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
-                List<String> parentKeys = columnPairs.stream().map(pair -> pair.second).collect(Collectors.toList());
+                List<String> childKeys = columnPairs.stream().map(pair -> pair.first)
+                        .map(String::toLowerCase).collect(Collectors.toList());
+                List<String> parentKeys = columnPairs.stream().map(pair -> pair.second)
+                        .map(String::toLowerCase).collect(Collectors.toList());
                 for (TableScanDesc mvParentTableScanDesc : mvParentTableScanDescs) {
                     List<ColumnRefOperator> tableCompensationColumns = Lists.newArrayList();
                     Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns = ArrayListMultimap.create();
@@ -445,21 +447,21 @@ public class MaterializedViewRewriter {
         }
     }
 
-    private boolean isUniqueKeys(OlapTable table, List<String> keys) {
+    private boolean isUniqueKeys(OlapTable table, List<String> lowerCasekeys) {
         KeysType tableKeyType = table.getKeysType();
+        Set<String> keySet = Sets.newHashSet(lowerCasekeys);
         if (tableKeyType == KeysType.PRIMARY_KEYS || tableKeyType == KeysType.UNIQUE_KEYS) {
-            List<String> tableKeyColumns = table.getKeyColumns()
-                    .stream().map(column -> column.getName()).collect(Collectors.toList());
-            if (!keys.containsAll(tableKeyColumns) || !tableKeyColumns.containsAll(keys)) {
+            if (!table.isKeySet(keySet)) {
                 return false;
             }
+            return true;
         } else if (tableKeyType == KeysType.DUP_KEYS) {
             List<UniqueConstraint> uniqueConstraints = table.getUniqueConstraints();
             if (uniqueConstraints == null || uniqueConstraints.isEmpty()) {
                 return false;
             }
             for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
-                if (uniqueConstraint.getUniqueColumns().equals(keys)) {
+                if (uniqueConstraint.isMatch(keySet)) {
                     return true;
                 }
             }
@@ -470,7 +472,7 @@ public class MaterializedViewRewriter {
 
     private ColumnRefOperator getColumnRef(String columnName, LogicalScanOperator scanOperator) {
         Optional<ColumnRefOperator> columnRef = scanOperator.getColumnMetaToColRefMap().values()
-                .stream().filter(col -> col.getName().equals(columnName)).findFirst();
+                .stream().filter(col -> col.getName().equalsIgnoreCase(columnName)).findFirst();
         return columnRef.isPresent() ? columnRef.get() : null;
     }
 
@@ -873,7 +875,6 @@ public class MaterializedViewRewriter {
             // TODO: query delta
             matchMode = MatchMode.QUERY_DELTA;
         } else if (queryTables.size() < mvTables.size() && mvTables.containsAll(queryTables)) {
-            // TODO: view delta
             matchMode = MatchMode.VIEW_DELTA;
         }
         return matchMode;
@@ -1155,7 +1156,13 @@ public class MaterializedViewRewriter {
         if (srcPu == null && targetPu != null) {
             // query: empid < 5
             // mv: empid < 5 or salary > 100
-            srcPu = Utils.compoundAnd(compensationEqualPredicate, compensationPr);
+            if (!isQueryAgainstView) {
+                // compensationEqualPredicate and compensationPr is based on query, need to change it to view based
+                srcPu = Utils.compoundAnd(columnRewriter.rewriteQueryToView(compensationEqualPredicate),
+                        columnRewriter.rewriteQueryToView(compensationPr));
+            } else {
+                srcPu = Utils.compoundAnd(compensationEqualPredicate, compensationPr);
+            }
         }
         ScalarOperator compensationPu =
                 getCompensationResidualPredicate(srcPu, targetPu, columnRewriter, isQueryAgainstView);
@@ -1178,25 +1185,25 @@ public class MaterializedViewRewriter {
         } else if (targetPu == null) {
             compensationPu = srcPu;
         } else {
-            ScalarOperator canonizedSrcPu = MvUtils.canonizePredicateForRewrite(srcPu.clone());
-            ScalarOperator canonizedTargetPu = MvUtils.canonizePredicateForRewrite(targetPu.clone());
             ScalarOperator swappedSrcPu;
             ScalarOperator swappedTargetPu;
             if (isQueryAgainstView) {
                 // src is query
-                swappedSrcPu = columnRewriter.rewriteByQueryEc(canonizedSrcPu);
+                swappedSrcPu = columnRewriter.rewriteByQueryEc(srcPu.clone());
                 // target is view
-                swappedTargetPu = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPu);
+                swappedTargetPu = columnRewriter.rewriteViewToQueryWithQueryEc(targetPu.clone());
             } else {
                 // src is view
-                swappedSrcPu = columnRewriter.rewriteViewToQueryWithViewEc(canonizedSrcPu);
+                swappedSrcPu = columnRewriter.rewriteViewToQueryWithViewEc(srcPu.clone());
                 // target is query
-                swappedTargetPu = columnRewriter.rewriteByViewEc(canonizedTargetPu);
+                swappedTargetPu = columnRewriter.rewriteByViewEc(targetPu.clone());
             }
+            ScalarOperator canonizedSrcPu = MvUtils.canonizePredicateForRewrite(swappedSrcPu);
+            ScalarOperator canonizedTargetPu = MvUtils.canonizePredicateForRewrite(swappedTargetPu);
 
-            compensationPu = MvUtils.getCompensationPredicateForDisjunctive(swappedSrcPu, swappedTargetPu);
+            compensationPu = MvUtils.getCompensationPredicateForDisjunctive(canonizedSrcPu, canonizedTargetPu);
             if (compensationPu == null) {
-                compensationPu = getCompensationResidualPredicate(swappedSrcPu, swappedTargetPu);
+                compensationPu = getCompensationResidualPredicate(canonizedSrcPu, canonizedTargetPu);
                 if (compensationPu == null) {
                     return null;
                 }
@@ -1234,24 +1241,23 @@ public class MaterializedViewRewriter {
         } else if (srcPr == null) {
             return null;
         } else {
-            ScalarOperator canonizedSrcPr = MvUtils.canonizePredicateForRewrite(srcPr.clone());
-            ScalarOperator canonizedTargetPr = MvUtils.canonizePredicateForRewrite(targetPr.clone());
             // swap column by query EC
             ScalarOperator swappedSrcPr;
             ScalarOperator swappedTargetPr;
             if (isQueryAgainstView) {
                 // for query
-                swappedSrcPr = columnRewriter.rewriteByQueryEc(canonizedSrcPr);
+                swappedSrcPr = columnRewriter.rewriteByQueryEc(srcPr.clone());
                 // for view, swap column by relation mapping and query ec
-                swappedTargetPr = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPr);
+                swappedTargetPr = columnRewriter.rewriteViewToQueryWithQueryEc(targetPr.clone());
             } else {
                 // for view
-                swappedSrcPr = columnRewriter.rewriteViewToQueryWithViewEc(canonizedSrcPr);
+                swappedSrcPr = columnRewriter.rewriteViewToQueryWithViewEc(srcPr.clone());
                 // for query
-                swappedTargetPr = columnRewriter.rewriteByViewEc(canonizedTargetPr);
+                swappedTargetPr = columnRewriter.rewriteByViewEc(targetPr.clone());
             }
-
-            compensationPr = getCompensationRangePredicate(swappedSrcPr, swappedTargetPr);
+            ScalarOperator canonizedSrcPr = MvUtils.canonizePredicateForRewrite(swappedSrcPr);
+            ScalarOperator canonizedTargetPr = MvUtils.canonizePredicateForRewrite(swappedTargetPr);
+            compensationPr = getCompensationRangePredicate(canonizedSrcPr, canonizedTargetPr);
         }
         return MvUtils.canonizePredicate(compensationPr);
     }

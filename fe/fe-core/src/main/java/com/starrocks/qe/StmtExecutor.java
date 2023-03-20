@@ -588,9 +588,11 @@ public class StmtExecutor {
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
         CreateTableAsSelectStmt createTableAsSelectStmt = (CreateTableAsSelectStmt) parsedStmt;
 
+        if (!createTableAsSelectStmt.createTable(context)) {
+            return;
+        }
         // if create table failed should not drop table. because table may already exist,
         // and for other cases the exception will throw and the rest of the code will not be executed.
-        createTableAsSelectStmt.createTable(context);
         try {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
@@ -869,16 +871,15 @@ public class StmtExecutor {
 
         if (analyzeStmt.isAsync()) {
             try {
-                GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool().submit(() -> {
-                    executeAnalyze(analyzeStmt, analyzeStatus, db, table);
-                });
+                GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
+                        .submit(() -> executeAnalyze(true, analyzeStmt, analyzeStatus, db, table));
             } catch (RejectedExecutionException e) {
                 analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
                 analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
                 GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
             }
         } else {
-            executeAnalyze(analyzeStmt, analyzeStatus, db, table);
+            executeAnalyze(false, analyzeStmt, analyzeStatus, db, table);
         }
 
         ShowResultSet resultSet = analyzeStatus.toShowResult();
@@ -891,21 +892,28 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
-    private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
-        StatisticExecutor statisticExecutor = new StatisticExecutor();
-
+    private void executeAnalyze(boolean isAsync, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         // from current session, may execute analyze stmt
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
 
+        if (isAsync) {
+            statsConnectCtx.setThreadLocalInfo();
+        }
+        executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
+    }
+
+    private void executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus,
+                                Database db, Table table) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
             statisticExecutor.collectStatistics(statsConnectCtx,
                     new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
                             StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                             analyzeStmt.getProperties()),
                     analyzeStatus,
-                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                    // Sync load cache, auto-populate column statistic cache after Analyze table manually
                     false);
         } else {
             statisticExecutor.collectStatistics(statsConnectCtx,
@@ -915,7 +923,7 @@ public class StmtExecutor {
                                     StatsConstants.AnalyzeType.FULL,
                             StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
                     analyzeStatus,
-                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                    // Sync load cache, auto-populate column statistic cache after Analyze table manually
                     false);
         }
     }
@@ -952,7 +960,7 @@ public class StmtExecutor {
             PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
         }
         // Try to kill the job anyway.
-        analyzeManager.unregisterConnection(analyzeId, true);
+        analyzeManager.killConnection(analyzeId);
     }
 
     private void handleAddSqlBlackListStmt() {

@@ -37,10 +37,10 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -1015,8 +1015,8 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitExecuteAsStatement(ExecuteAsStmt statement, ConnectContext context) {
-            PrivilegeManager privilegeManager = context.getGlobalStateMgr().getPrivilegeManager();
-            if (!privilegeManager.canExecuteAs(context, statement.getToUser())) {
+            AuthorizationManager authorizationManager = context.getGlobalStateMgr().getAuthorizationManager();
+            if (!authorizationManager.canExecuteAs(context, statement.getToUser())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "IMPERSONATE");
             }
             return null;
@@ -1096,8 +1096,8 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext context) {
-            PrivilegeManager privilegeManager = context.getGlobalStateMgr().getPrivilegeManager();
-            if (!privilegeManager.allowGrant(context, stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList())) {
+            AuthorizationManager authorizationManager = context.getGlobalStateMgr().getAuthorizationManager();
+            if (!authorizationManager.allowGrant(context, stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
             return null;
@@ -1110,9 +1110,9 @@ public class PrivilegeCheckerV2 {
                     && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             } else if (statement.getRole() != null) {
-                PrivilegeManager privilegeManager = context.getGlobalStateMgr().getPrivilegeManager();
+                AuthorizationManager authorizationManager = context.getGlobalStateMgr().getAuthorizationManager();
                 try {
-                    List<String> roleNames = privilegeManager.getRoleNamesByUser(context.getCurrentUserIdentity());
+                    List<String> roleNames = authorizationManager.getRoleNamesByUser(context.getCurrentUserIdentity());
                     if (!roleNames.contains(statement.getRole())
                             && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");

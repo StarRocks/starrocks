@@ -30,7 +30,7 @@ Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(PartitionSortSinkOperator::prepare(state));
     RETURN_IF_ERROR(_chunks_sorter->spiller()->prepare(state));
     if (state->spill_mode() == TSpillMode::FORCE) {
-        _chunks_sorter->set_spill_stragety(SpillStrategy::SPILL_ALL);
+        _chunks_sorter->set_spill_stragety(spill::SpillStrategy::SPILL_ALL);
     }
     return Status::OK();
 }
@@ -70,7 +70,7 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
                     _is_finished = true;
                     return Status::OK();
                 },
-                state, *io_executor, MemTrackerGuard(tls_mem_tracker));
+                state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
     };
 
     if (_chunks_sorter->spill_channel()->is_working()) {
@@ -123,15 +123,15 @@ Status SpillablePartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     auto* sort_desc = state->obj_pool()->add(new SortDescs(_is_asc_order, _is_null_first));
 
     // init spill parameters
-    auto* spill_manager = state->query_ctx()->spill_manager();
-    _spill_options = std::make_shared<SpilledOptions>(&_sort_exec_exprs, sort_desc);
+    _spill_options = std::make_shared<spill::SpilledOptions>(&_sort_exec_exprs, sort_desc);
     _spill_options->spill_file_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
-    _spill_options->spill_type = SpillFormaterType::SPILL_BY_COLUMN;
+    _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->chunk_builder = [&]() {
         return ChunkHelper::new_chunk(*_materialized_tuple_desc, _state->chunk_size());
     };
-    _spill_options->path_provider_factory = spill_manager->provider(fmt::format("local-sort-spill-{}", _plan_node_id));
+    _spill_options->name = "local-sort-spill";
+    _spill_options->plan_node_id = _plan_node_id;
 
     return Status::OK();
 }

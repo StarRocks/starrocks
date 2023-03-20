@@ -342,7 +342,8 @@ public class OlapScanNode extends ScanNode {
 
     // update TScanRangeLocations based on the latest olapTable tablet distributions, 
     // this function will make sure the version of each TScanRangeLocations doesn't change.
-    public List<TScanRangeLocations> updateScanRangeLocations(List<TScanRangeLocations> locations) throws UserException {
+    public List<TScanRangeLocations> updateScanRangeLocations(List<TScanRangeLocations> locations)
+            throws UserException {
         if (selectedPartitionIds.size() == 0) {
             throw new UserException("Scan node's partition is empty");
         }
@@ -365,7 +366,8 @@ public class OlapScanNode extends ScanNode {
 
             int schemaHash = olapTable.getSchemaHashByIndexId(selectedTable.getId());
             if (schemaHash != expectedSchemaHash) {
-                throw new UserException("Tablet " + tabletId + " schema hash " + schemaHash + " has changed, doesn't equal to expected schema hash " + expectedSchemaHash);
+                throw new UserException("Tablet " + tabletId + " schema hash " + schemaHash +
+                        " has changed, doesn't equal to expected schema hash " + expectedSchemaHash);
             }
 
             // random shuffle List && only collect one copy
@@ -715,7 +717,8 @@ public class OlapScanNode extends ScanNode {
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
-                    output.append(prefix).append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                    output.append(prefix)
+                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
             }
         }
@@ -937,7 +940,6 @@ public class OlapScanNode extends ScanNode {
                 .filter(s -> partColNames.contains(s.second)).map(s -> s.first).collect(Collectors.toSet());
     }
 
-
     private Optional<SlotId> associateSlotIdsWithColumns(FragmentNormalizer normalizer, TNormalPlanNode planNode,
                                                          Optional<Column> optPartitionColumn) {
         List<SlotDescriptor> slots = normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots();
@@ -1109,7 +1111,8 @@ public class OlapScanNode extends ScanNode {
         List<Integer> dictIntIds = dictStringIds.stream().map(dictStringIdToIntIds::get).collect(Collectors.toList());
         scanNode.setDict_string_ids(dictStringIds);
         scanNode.setDict_int_ids(dictIntIds);
-        planNode.setNode_type(TPlanNodeType.OLAP_SCAN_NODE);
+        planNode.setNode_type(olapTable.isCloudNativeTable() ?
+                TPlanNodeType.LAKE_SCAN_NODE : TPlanNodeType.OLAP_SCAN_NODE);
         planNode.setOlap_scan_node(scanNode);
         normalizeConjuncts(normalizer, planNode, conjuncts);
     }
