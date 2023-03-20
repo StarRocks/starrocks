@@ -23,17 +23,20 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
+#include "exec/spill/input_stream.h"
 #include "exec/spill/mem_table.h"
-#include "exec/spill/spilled_stream.h"
+#include "exec/spill/serde.h"
 #include "exec/spill/spiller_factory.h"
-#include "exec/spill/spiller_path_provider.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/blocking_queue.hpp"
+#include "util/compression/block_compression.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
+namespace spill {
 enum class SpillFormaterType { NONE, SPILL_BY_COLUMN };
 
 using ChunkBuilder = std::function<ChunkUniquePtr()>;
@@ -58,10 +61,11 @@ struct SpilledOptions {
     size_t spill_file_size{};
     // spilled format type
     SpillFormaterType spill_type{};
-    // file path for spiller
-    SpillPathProviderFactory path_provider_factory;
     // creator for create a spilling chunk
     ChunkBuilder chunk_builder;
+    std::string name;
+    int32_t plan_node_id;
+    CompressionTypePB compress_type = CompressionTypePB::LZ4;
 };
 
 // some metrics for spill
@@ -86,22 +90,6 @@ struct SpillFormatContext {
 enum class SpillStrategy {
     NO_SPILL,
     SPILL_ALL,
-};
-
-// thread safe formater
-class SpillFormater {
-public:
-    virtual ~SpillFormater() = default;
-    // spilled data format
-    virtual Status spill_as_fmt(SpillFormatContext& context, std::unique_ptr<WritableFile>& writable,
-                                const ChunkPtr& chunk) const noexcept = 0;
-    // restore chunk data from input stream
-    virtual StatusOr<ChunkUniquePtr> restore_from_fmt(SpillFormatContext& context,
-                                                      std::unique_ptr<RawInputStreamWrapper>& readable) const = 0;
-    // write footer and flush data for output stream
-    virtual Status flush(std::unique_ptr<WritableFile>& writable) const = 0;
-    // create a concrete formater
-    static StatusOr<std::unique_ptr<SpillFormater>> create(SpillFormaterType type, ChunkBuilder chunk_builder);
 };
 
 // major spill interfaces
@@ -171,8 +159,7 @@ public:
         return _decrease_running_flush_tasks();
     }
 
-    bool has_output_data() { return _current_stream && _current_stream->is_ready(); }
-
+    bool has_output_data() const { return _input_stream && _input_stream->is_ready(); }
     size_t spilled_append_rows() { return _spilled_append_rows; }
 
     size_t restore_read_rows() { return _restore_read_rows; }
@@ -188,6 +175,8 @@ public:
             _mem_table_pool.push(std::move(_mem_table));
         }
     }
+    // only used in UT
+    void set_block_manager(spill::BlockManager* block_manager) { _block_manager = block_manager; }
 
 private:
     // open stage
@@ -196,11 +185,11 @@ private:
 
     Status _run_flush_task(RuntimeState* state, const MemTablePtr& writable);
 
-    // should running in executor threads
-    // flush and close
-    Status _flush_and_closed(std::unique_ptr<WritableFile>& writable);
-
     void _update_spilled_task_status(Status&& st);
+    Status _get_spilled_task_status() {
+        std::lock_guard l(_mutex);
+        return _spilled_task_status;
+    }
 
     MemTablePtr _acquire_mem_table_from_pool() {
         std::lock_guard guard(_mutex);
@@ -212,7 +201,7 @@ private:
         return res;
     }
 
-    StatusOr<std::shared_ptr<SpilledInputStream>> _acquire_input_stream(RuntimeState* state);
+    Status _acquire_input_stream(RuntimeState* state);
 
     Status _decrease_running_flush_tasks();
 
@@ -222,7 +211,6 @@ private:
     std::weak_ptr<SpillerFactory> _parent;
 
     bool _has_opened = false;
-    std::shared_ptr<SpillerPathProvider> _path_provider;
 
     std::mutex _mutex;
     std::queue<MemTablePtr> _mem_table_pool;
@@ -231,13 +219,7 @@ private:
     FlushAllCallBack _flush_all_callback;
     FlushAllCallBack _inner_flush_all_callback;
 
-    std::unique_ptr<SpillFormater> _spill_fmt;
-    std::shared_ptr<SpilledFileGroup> _file_group;
     Status _spilled_task_status;
-
-    // std::atomic_int32_t _total_restore_tasks{};
-    std::shared_ptr<SpilledInputStream> _current_stream;
-    std::queue<SpillRestoreTaskPtr> _restore_tasks;
 
     // stats
     std::atomic_uint64_t _total_restore_tasks{};
@@ -248,6 +230,11 @@ private:
 
     size_t _spilled_append_rows{};
     size_t _restore_read_rows{};
-    SpillFormatContext _spill_read_ctx;
+
+    std::shared_ptr<spill::Serde> _serde;
+    spill::BlockManager* _block_manager = nullptr;
+    std::shared_ptr<spill::BlockGroup> _block_group;
+    std::shared_ptr<spill::InputStream> _input_stream;
 };
+} // namespace spill
 } // namespace starrocks

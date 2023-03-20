@@ -22,6 +22,7 @@
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
+namespace spill {
 struct EmptyMemGuard {
     void scoped_begin() const {}
     void scoped_end() const {}
@@ -56,5 +57,5 @@ struct SyncTaskExecutor {
         return Status::OK();
     }
 };
-
+} // namespace spill
 } // namespace starrocks
