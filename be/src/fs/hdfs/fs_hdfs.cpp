@@ -21,9 +21,9 @@
 #include <utility>
 
 #include "fs/fs_util.h"
+#include "fs/hdfs/hdfs_fs_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
-#include "fs/hdfs/hdfs_fs_cache.h"
 #include "udf/java/utils.h"
 #include "util/hdfs_util.h"
 

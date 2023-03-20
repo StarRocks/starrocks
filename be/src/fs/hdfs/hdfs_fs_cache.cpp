@@ -38,7 +38,8 @@ static const std::vector<TCloudProperty>* get_azure_cloud_properties(const FSOpt
     return nullptr;
 }
 
-static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr<HdfsFsClient> hdfs_client, const FSOptions& options) {
+static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr<HdfsFsClient> hdfs_client,
+                                    const FSOptions& options) {
     auto hdfs_builder = hdfsNewBuilder();
     hdfsBuilderSetNameNode(hdfs_builder, namenode.c_str());
     const THdfsProperties* properties = options.hdfs_properties();
@@ -67,7 +68,8 @@ static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr
     return Status::OK();
 }
 
-Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<HdfsFsClient>& hdfs_client, const FSOptions& options) {
+Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<HdfsFsClient>& hdfs_client,
+                                   const FSOptions& options) {
     std::lock_guard<std::mutex> l(_lock);
     std::string cache_key = namenode;
     const THdfsProperties* properties = options.hdfs_properties();
@@ -84,7 +86,7 @@ Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<
         }
     }
 
-    for(size_t idx = 0; idx < _cur_client_idx; idx++) {
+    for (size_t idx = 0; idx < _cur_client_idx; idx++) {
         if (_cache_key[idx] == cache_key) {
             hdfs_client = _cache_clients[idx];
             // Found cache client, return directly
