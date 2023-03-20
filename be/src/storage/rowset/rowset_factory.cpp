@@ -28,15 +28,13 @@
 #include "rowset_writer_adapter.h"
 #include "storage/rowset/beta_rowset_writer.h"
 #include "storage/rowset/rowset_writer.h"
-#include "storage/type_utils.h"
 
 namespace starrocks {
 
 Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::string& rowset_path,
                                     const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset) {
     if (rowset_meta->rowset_type() == BETA_ROWSET) {
-        *rowset =
-                BetaRowset::create(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), schema, rowset_path, rowset_meta);
+        *rowset = BetaRowset::create(ExecEnv::GetInstance()->metadata_mem_tracker(), schema, rowset_path, rowset_meta);
         RETURN_IF_ERROR((*rowset)->init());
         return Status::OK();
     }
