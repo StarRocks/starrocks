@@ -1093,7 +1093,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 ") t where rm < 10";
         plan = getCostExplain(sql);
 
-        Assert.assertTrue(plan.contains("  3:SORT\n" +
+        Assert.assertTrue(plan.contains("  2:SORT\n" +
                 "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC"));
         Assert.assertTrue(plan.contains("  1:PARTITION-TOP-N\n" +
                 "  |  partition by: [20: L_COMMENT, INT, false] "));
