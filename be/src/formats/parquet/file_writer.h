@@ -30,6 +30,7 @@
 #include "column/chunk.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::parquet {
 
@@ -99,7 +100,8 @@ protected:
     std::vector<ExprContext*> _output_expr_ctxs;
     std::shared_ptr<::parquet::FileMetaData> _file_metadata;
 
-    int64_t _max_row_group_size = 128 * 1024 * 1024; // 128 * 1024 * 1024;
+    const static int64_t kDefaultMaxRowGroupSize = 128 * 1024 * 1024; // 128MB
+    int64_t _max_row_group_size = kDefaultMaxRowGroupSize;
     std::vector<int64_t> _buffered_values_estimate;
 };
 
@@ -124,7 +126,8 @@ public:
     AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::string file_name, std::string& file_dir,
                     std::shared_ptr<::parquet::WriterProperties> properties,
                     std::shared_ptr<::parquet::schema::GroupNode> schema,
-                    const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile);
+                    const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
+                    RuntimeProfile* parent_profile);
 
     ~AsyncFileWriter() override = default;
 
@@ -148,7 +151,10 @@ private:
     std::string _file_dir;
 
     std::atomic<bool> _closed = false;
-    RuntimeProfile* _parent_profile;
+
+    PriorityThreadPool* _executor_pool;
+
+    RuntimeProfile* _parent_profile = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
 
     std::condition_variable _cv;

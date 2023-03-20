@@ -20,7 +20,6 @@
 #include "common/logging.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
-#include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
 
@@ -373,10 +372,12 @@ Status SyncFileWriter::close() {
 AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::string file_name,
                                  std::string& file_dir, std::shared_ptr<::parquet::WriterProperties> properties,
                                  std::shared_ptr<::parquet::schema::GroupNode> schema,
-                                 const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile)
+                                 const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
+                                 RuntimeProfile* parent_profile)
         : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs),
           _file_name(file_name),
           _file_dir(file_dir),
+          _executor_pool(executor_pool),
           _parent_profile(parent_profile) {
     _io_timer = ADD_TIMER(_parent_profile, "FileWriterIoTimer");
 }
@@ -386,7 +387,7 @@ void AsyncFileWriter::_flush_row_group() {
         auto lock = std::unique_lock(_m);
         _rg_writer_closing = true;
     }
-    bool ret = ExecEnv::GetInstance()->pipeline_sink_io_pool()->try_offer([&]() {
+    bool ret = _executor_pool->try_offer([&]() {
         SCOPED_TIMER(_io_timer);
         _rg_writer->Close();
         _rg_writer = nullptr;
@@ -410,7 +411,7 @@ void AsyncFileWriter::_flush_row_group() {
 
 Status AsyncFileWriter::close(RuntimeState* state,
                               std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> cb) {
-    bool ret = ExecEnv::GetInstance()->pipeline_sink_io_pool()->try_offer([&, state, cb]() {
+    bool ret = _executor_pool->try_offer([&, state, cb]() {
         SCOPED_TIMER(_io_timer);
         {
             auto lock = std::unique_lock(_m);

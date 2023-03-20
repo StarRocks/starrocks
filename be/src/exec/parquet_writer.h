@@ -64,15 +64,15 @@ struct PartitionInfo {
     }
 };
 
-class ParquetWriterWrap {
+class RollingAsyncParquetWriter {
 public:
-    ParquetWriterWrap(const TableInfo& tableInfo, const PartitionInfo& partitionInfo,
-                      const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile);
-    ~ParquetWriterWrap() = default;
+    RollingAsyncParquetWriter(const TableInfo& tableInfo, const PartitionInfo& partitionInfo,
+                              const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile);
+    ~RollingAsyncParquetWriter() = default;
 
     Status append_chunk(Chunk* chunk, RuntimeState* state); //check if we need a new file, file_writer->write
     // init filesystem, init writeproperties, schema
-    Status init_parquet_writer(const TableInfo& tableInfo, const PartitionInfo& partitionInfo);
+    Status init_rolling_writer(const TableInfo& tableInfo, const PartitionInfo& partitionInfo);
     Status close(RuntimeState* state);
     bool writable() const { return _writer == nullptr || _writer->writable(); }
     bool closed();
@@ -85,7 +85,7 @@ private:
     Status close_current_writer(RuntimeState* state);
 
     std::shared_ptr<FileSystem> _fs;
-    std::shared_ptr<starrocks::parquet::AsyncFileWriter> _writer = nullptr;
+    std::shared_ptr<starrocks::parquet::AsyncFileWriter> _writer;
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
     std::string _partition_dir;

@@ -23,13 +23,14 @@
 
 namespace starrocks {
 
-ParquetWriterWrap::ParquetWriterWrap(const TableInfo& tableInfo, const PartitionInfo& partitionInfo,
-                                     const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile)
+RollingAsyncParquetWriter::RollingAsyncParquetWriter(const TableInfo& tableInfo, const PartitionInfo& partitionInfo,
+                                                     const std::vector<ExprContext*>& output_expr_ctxs,
+                                                     RuntimeProfile* parent_profile)
         : _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {
-    init_parquet_writer(tableInfo, partitionInfo);
+    init_rolling_writer(tableInfo, partitionInfo);
 }
 
-Status ParquetWriterWrap::init_parquet_writer(const TableInfo& tableInfo, const PartitionInfo& partitionInfo) {
+Status RollingAsyncParquetWriter::init_rolling_writer(const TableInfo& tableInfo, const PartitionInfo& partitionInfo) {
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(tableInfo._table_location));
     _schema = tableInfo._schema;
     ::parquet::WriterProperties::Builder builder;
@@ -52,24 +53,24 @@ Status ParquetWriterWrap::init_parquet_writer(const TableInfo& tableInfo, const 
     return Status::OK();
 }
 
-std::string ParquetWriterWrap::get_new_file_name() {
+std::string RollingAsyncParquetWriter::get_new_file_name() {
     _cnt += 1;
     _location = _partition_dir + fmt::format("{}_{}.parquet", _cnt, generate_uuid_string());
     return _location;
 }
 
-Status ParquetWriterWrap::new_file_writer() {
+Status RollingAsyncParquetWriter::new_file_writer() {
     std::string file_name = get_new_file_name();
     WritableFileOptions options{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto writable_file, _fs->new_writable_file(options, file_name));
-    _writer = std::make_shared<starrocks::parquet::AsyncFileWriter>(std::move(writable_file), file_name, _partition_dir,
-                                                                    _properties, _schema, _output_expr_ctxs,
-                                                                    _parent_profile);
+    _writer = std::make_shared<starrocks::parquet::AsyncFileWriter>(
+            std::move(writable_file), file_name, _partition_dir, _properties, _schema, _output_expr_ctxs,
+            ExecEnv::GetInstance()->pipeline_sink_io_pool(), _parent_profile);
     auto st = _writer->init();
     return st;
 }
 
-Status ParquetWriterWrap::append_chunk(Chunk* chunk, RuntimeState* state) {
+Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state) {
     if (_writer == nullptr) {
         auto status = new_file_writer();
         if (!status.ok()) {
@@ -87,8 +88,8 @@ Status ParquetWriterWrap::append_chunk(Chunk* chunk, RuntimeState* state) {
     return st;
 }
 
-Status ParquetWriterWrap::close_current_writer(RuntimeState* state) {
-    Status st = _writer->close(state, ParquetWriterWrap::add_iceberg_commit_info);
+Status RollingAsyncParquetWriter::close_current_writer(RuntimeState* state) {
+    Status st = _writer->close(state, RollingAsyncParquetWriter::add_iceberg_commit_info);
     if (st.ok()) {
         _pending_commits.emplace_back(_writer);
         return Status::OK();
@@ -98,7 +99,7 @@ Status ParquetWriterWrap::close_current_writer(RuntimeState* state) {
     }
 }
 
-Status ParquetWriterWrap::close(RuntimeState* state) {
+Status RollingAsyncParquetWriter::close(RuntimeState* state) {
     if (_writer != nullptr) {
         auto st = close_current_writer(state);
         if (!st.ok()) {
@@ -108,7 +109,7 @@ Status ParquetWriterWrap::close(RuntimeState* state) {
     return Status::OK();
 }
 
-bool ParquetWriterWrap::closed() {
+bool RollingAsyncParquetWriter::closed() {
     for (auto& writer : _pending_commits) {
         if (writer != nullptr && writer->closed()) {
             writer = nullptr;
@@ -125,7 +126,8 @@ bool ParquetWriterWrap::closed() {
     return true;
 }
 
-void ParquetWriterWrap::add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state) {
+void RollingAsyncParquetWriter::add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer,
+                                                        RuntimeState* state) {
     TIcebergDataFile dataFile;
     dataFile.partition_path = writer->file_dir();
     dataFile.path = writer->file_name();
