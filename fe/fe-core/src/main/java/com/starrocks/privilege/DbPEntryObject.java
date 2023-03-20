@@ -29,9 +29,6 @@ import java.util.Objects;
 import java.util.Optional;
 
 public class DbPEntryObject implements PEntryObject {
-    public static final long ALL_CATALOGS_ID = -1;
-    public static final String ALL_DATABASES_UUID = "ALL_DATABASES_UUID"; // represent all databases
-
     @SerializedName(value = "ci")
     private long catalogId;
     @SerializedName(value = "i")
@@ -61,7 +58,8 @@ public class DbPEntryObject implements PEntryObject {
         if (tokens.size() == 2) {
             // This is true only when we are initializing built-in roles like root and db_admin
             if (tokens.get(0).equals("*")) {
-                return new DbPEntryObject(ALL_CATALOGS_ID, ALL_DATABASES_UUID);
+                return new DbPEntryObject(PrivilegeBuiltinConstants.ALL_CATALOGS_ID,
+                        PrivilegeBuiltinConstants.ALL_DATABASES_UUID);
             }
             catalogName = tokens.get(0);
             tokens = tokens.subList(1, tokens.size());
@@ -83,7 +81,7 @@ public class DbPEntryObject implements PEntryObject {
         }
 
         if (tokens.get(0).equals("*")) {
-            return new DbPEntryObject(catalogId, ALL_DATABASES_UUID);
+            return new DbPEntryObject(catalogId, PrivilegeBuiltinConstants.ALL_DATABASES_UUID);
         }
 
         Database database = mgr.getMetadataMgr().getDb(catalogName, tokens.get(0));
@@ -106,10 +104,10 @@ public class DbPEntryObject implements PEntryObject {
             return false;
         }
         DbPEntryObject other = (DbPEntryObject) obj;
-        if (other.catalogId == ALL_CATALOGS_ID) {
+        if (other.catalogId == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
             return true;
         }
-        if (Objects.equals(other.uuid, ALL_DATABASES_UUID)) {
+        if (Objects.equals(other.uuid, PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
             return this.catalogId == other.catalogId;
         }
         return this.catalogId == other.catalogId && Objects.equals(other.uuid, this.uuid);
@@ -117,7 +115,8 @@ public class DbPEntryObject implements PEntryObject {
 
     @Override
     public boolean isFuzzyMatching() {
-        return ALL_CATALOGS_ID == catalogId || ALL_DATABASES_UUID.equals(uuid);
+        return PrivilegeBuiltinConstants.ALL_CATALOGS_ID == catalogId
+                || PrivilegeBuiltinConstants.ALL_DATABASES_UUID.equals(uuid);
     }
 
     @Override
@@ -150,16 +149,16 @@ public class DbPEntryObject implements PEntryObject {
             // when sorting in ascendant order.
             if (Objects.equals(this.uuid, o.uuid)) {
                 return 0;
-            } else if (Objects.equals(this.uuid, ALL_DATABASES_UUID)) {
+            } else if (Objects.equals(this.uuid, PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
                 return -1;
-            } else if (Objects.equals(o.uuid, ALL_DATABASES_UUID)) {
+            } else if (Objects.equals(o.uuid, PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
                 return 1;
             } else {
                 return this.uuid.compareTo(o.uuid);
             }
-        } else if (this.catalogId == ALL_CATALOGS_ID) {
+        } else if (this.catalogId == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
             return -1;
-        } else if (o.catalogId == ALL_CATALOGS_ID) {
+        } else if (o.catalogId == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
             return 1;
         } else {
             return (int) (this.catalogId - o.catalogId);
@@ -185,7 +184,7 @@ public class DbPEntryObject implements PEntryObject {
 
     @Override
     public String toString() {
-        if (uuid.equalsIgnoreCase(ALL_DATABASES_UUID)) {
+        if (uuid.equalsIgnoreCase(PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
             return "ALL DATABASES";
         } else {
             if (CatalogMgr.isInternalCatalog(catalogId)) {

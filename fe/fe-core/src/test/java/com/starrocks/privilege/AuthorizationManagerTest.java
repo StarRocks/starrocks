@@ -564,7 +564,7 @@ public class AuthorizationManagerTest {
         objects = Arrays.asList(new DbPEntryObject("-1"));
         manager.grantToUser(grantDbStmt.getObjectType(), grantDbStmt.getPrivilegeTypes(), objects, false, testUser);
         // 6. add valid entry: ALL databases
-        objects = Arrays.asList(new DbPEntryObject(DbPEntryObject.ALL_DATABASES_UUID));
+        objects = Arrays.asList(new DbPEntryObject(PrivilegeBuiltinConstants.ALL_DATABASES_UUID));
         manager.grantToUser(grantDbStmt.getObjectType(), grantDbStmt.getPrivilegeTypes(), objects, false, testUser);
         // 7. add valid user
         sql = "grant impersonate on USER root to test_user";

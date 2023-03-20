@@ -2467,7 +2467,7 @@ public class PrivilegeCheckerV2Test {
     public void testUseGlobalFunc() throws Exception {
         FunctionName fn = FunctionName.createFnName("my_udf_json_get");
         fn.setAsGlobalFunction();
-        Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        Function function = new Function(1, fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
             GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
         } catch (Throwable e) {
@@ -2515,7 +2515,7 @@ public class PrivilegeCheckerV2Test {
 
         fn = FunctionName.createFnName("my_udf_json_get2");
         fn.setAsGlobalFunction();
-        function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        function = new Function(2, fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
             GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
         } catch (Throwable e) {

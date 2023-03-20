@@ -1007,12 +1007,16 @@ public class AuthUpgrader {
         List<PEntryObject> objects;
         try {
             if (db.equals(STAR)) {
-                objects = Collections.singletonList(authorizationManager.generateObject(ObjectType.FUNCTION,
-                        Lists.newArrayList("*", "*")));
+                objects = Collections.singletonList(authorizationManager.generateFunctionObject(ObjectType.FUNCTION,
+                        PrivilegeBuiltinConstants.ALL_DATABASE_ID, PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID));
             } else if (function.equals(STAR)) {
                 // ALL FUNCTIONS in db
-                objects = Collections.singletonList(authorizationManager.generateObject(ObjectType.FUNCTION,
-                        Lists.newArrayList(db, "*")));
+                Database database = globalStateMgr.getDb(db);
+                if (database == null) {
+                    throw new PrivObjNotFoundException("Not find database " + db);
+                }
+                objects = Collections.singletonList(authorizationManager.generateFunctionObject(ObjectType.FUNCTION,
+                        database.getId(), PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID));
             } else {
                 throw new AuthUpgradeUnrecoverableException(
                         "old auth doesn't support grant privilege on specified function");

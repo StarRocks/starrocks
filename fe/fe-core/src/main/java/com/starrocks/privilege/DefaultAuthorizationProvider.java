@@ -152,14 +152,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case CATALOG:
                 return CatalogPEntryObject.generate(mgr, objectTokens);
 
-            case FUNCTION:
-                return FunctionPEntryObject.generate(mgr, objectTokens);
-
             case RESOURCE_GROUP:
                 return ResourceGroupPEntryObject.generate(mgr, objectTokens);
-
-            case GLOBAL_FUNCTION:
-                return GlobalFunctionPEntryObject.generate(mgr, objectTokens);
 
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
@@ -171,6 +165,15 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             ObjectType objectType, UserIdentity user, GlobalStateMgr globalStateMgr) throws PrivilegeException {
         if (objectType.equals(ObjectType.USER)) {
             return UserPEntryObject.generate(globalStateMgr, user);
+        }
+        throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
+    }
+
+    @Override
+    public PEntryObject generateFunctionObject(ObjectType objectType, Long databaseId, Long functionId,
+                                               GlobalStateMgr globalStateMgr) throws PrivilegeException {
+        if (objectType.equals(ObjectType.FUNCTION) || objectType.equals(ObjectType.GLOBAL_FUNCTION)) {
+            return FunctionPEntryObject.generate(globalStateMgr, databaseId, functionId);
         }
         throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
     }
