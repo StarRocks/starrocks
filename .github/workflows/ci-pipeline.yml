@@ -242,7 +242,7 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
-    if: always() && (needs.be-ut.result == 'success' || needs.fe-ut.result == 'success')
+    if: always() && (needs.be-ut.result == 'success' || needs.fe-ut.result == 'success') && (needs.be-ut.result != 'failure' && needs.fe-ut.result != 'failure') && (needs.be-ut.result != 'cancelled' && needs.fe-ut.result != 'cancelled')
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
