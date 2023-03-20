@@ -26,23 +26,14 @@ import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
 
 public class DateUtils {
-    // These are marked as deprecated because they don't support year 0000 parsing
-    @Deprecated
-    public static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    @Deprecated
-    public static final DateTimeFormatter DATEKEY_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
-    @Deprecated
-    public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    @Deprecated
-    public static final DateTimeFormatter MINUTE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
-    @Deprecated
-    public static final DateTimeFormatter HOUR_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHH");
-    @Deprecated
-    public static final DateTimeFormatter YEAR_FORMATTER = DateTimeFormatter.ofPattern("yyyy");
-    @Deprecated
-    public static final DateTimeFormatter QUARTER_FORMATTER = DateTimeFormatter.ofPattern("yyyy'Q'q");
-    @Deprecated
-    public static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyyMM");
+    public static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd");
+    public static final DateTimeFormatter DATEKEY_FORMATTER = DateTimeFormatter.ofPattern("uuuuMMdd");
+    public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss");
+    public static final DateTimeFormatter MINUTE_FORMATTER = DateTimeFormatter.ofPattern("uuuuMMddHHmm");
+    public static final DateTimeFormatter HOUR_FORMATTER = DateTimeFormatter.ofPattern("uuuuMMddHH");
+    public static final DateTimeFormatter YEAR_FORMATTER = DateTimeFormatter.ofPattern("uuuu");
+    public static final DateTimeFormatter QUARTER_FORMATTER = DateTimeFormatter.ofPattern("uuuu'Q'q");
+    public static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("uuuuMM");
 
     public static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
