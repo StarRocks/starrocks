@@ -1256,11 +1256,8 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
             }
         } else {
             // put first
-            size_t start = result_elements->size();
             result_elements->append(*elements, offset, 1);
 
-            // uint32_t hash[array_size];
-            // elements->fnv_hash(hash, offset, offset + array_size);
             sets.clear();
             sets.emplace(hash[offset]);
 
@@ -1275,8 +1272,8 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
 
                 // find same hash
                 bool is_contains = false;
-                for (size_t k = 0; k < j; k++) {
-                    if (hash[k] == hash[elements_idx] && result_elements->equals(start + k, *elements, elements_idx)) {
+                for (size_t k = offset; k < elements_idx; k++) {
+                    if (hash[k] == hash[elements_idx] && elements->equals(k, *elements, elements_idx)) {
                         is_contains = true;
                         break;
                     }

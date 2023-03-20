@@ -5035,6 +5035,24 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_STREQ(dest_column->debug_string().c_str(), "[['5','33','666'], ['5','33','666'], ['5','33','666']]");
     }
+    // test array[null]
+    {
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        src_column->append_datum(DatumArray{"5", Datum(), Datum(), "5", "33", "666", Datum()});
+        src_column = std::make_shared<ConstColumn>(src_column, 1);
+        auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
+        ASSERT_EQ(dest_column->size(), 1);
+        ASSERT_STREQ(dest_column->debug_string().c_str(), "[['5',NULL,'33','666']]");
+    }
+    // test null array
+    {
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        src_column->append_datum(DatumArray{"5", "5", "33", "666"});
+        src_column->append_nulls(2);
+        auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_STREQ(dest_column->debug_string().c_str(), "[['5','33','666'], NULL, NULL]");
+    }
     // test normal
     {
         auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
