@@ -81,9 +81,9 @@ public class ShowMaterializedViewTest {
                 "SHOW MATERIALIZED VIEWS FROM abc where name = 'mv1';", ctx);
         Assert.assertEquals("abc", stmt.getDb());
         Assert.assertEquals(
-                "SELECT information_schema.materialized_views.id AS id, " +
-                        "information_schema.materialized_views.database_name AS database_name, " +
-                        "information_schema.materialized_views.name AS name, " +
+                "SELECT information_schema.materialized_views.MATERIALIZED_VIEW_ID AS id, " +
+                        "information_schema.materialized_views.TABLE_SCHEMA AS database_name, " +
+                        "information_schema.materialized_views.TABLE_NAME AS name, " +
                         "information_schema.materialized_views.refresh_type AS refresh_type, " +
                         "information_schema.materialized_views.is_active AS is_active, " +
                         "information_schema.materialized_views.partition_type AS partition_type, " +
@@ -93,17 +93,19 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.last_refresh_finished_time AS last_refresh_finished_time, " +
                         "information_schema.materialized_views.last_refresh_duration AS last_refresh_duration, " +
                         "information_schema.materialized_views.last_refresh_state AS last_refresh_state, " +
-                        "information_schema.materialized_views.last_refresh_force_refresh AS force_refresh, " +
-                        "information_schema.materialized_views.last_refresh_start_partition AS start_partition, " +
-                        "information_schema.materialized_views.last_refresh_end_partition AS end_partition, " +
-                        "information_schema.materialized_views.last_refresh_base_refresh_partitions AS base_refresh_partitions, " +
-                        "information_schema.materialized_views.last_refresh_mv_refresh_partitions AS mv_refresh_partitions, " +
+                        "information_schema.materialized_views.last_refresh_force_refresh AS last_refresh_force_refresh, " +
+                        "information_schema.materialized_views.last_refresh_start_partition AS last_refresh_start_partition," +
+                        " information_schema.materialized_views.last_refresh_end_partition AS last_refresh_end_partition, " +
+                        "information_schema.materialized_views.last_refresh_base_refresh_partitions " +
+                        "AS last_refresh_base_refresh_partitions," +
+                        " information_schema.materialized_views.last_refresh_mv_refresh_partitions " +
+                        "AS last_refresh_mv_refresh_partitions, " +
                         "information_schema.materialized_views.last_refresh_error_code AS last_refresh_error_code, " +
                         "information_schema.materialized_views.last_refresh_error_message AS last_refresh_error_message, " +
-                        "information_schema.materialized_views.text AS text, " +
-                        "information_schema.materialized_views.rows AS rows " +
+                        "information_schema.materialized_views.MATERIALIZED_VIEW_DEFINITION AS text, " +
+                        "information_schema.materialized_views.TABLE_ROWS AS rows " +
                         "FROM information_schema.materialized_views " +
-                        "WHERE information_schema.materialized_views.name = 'mv1'",
+                        "WHERE information_schema.materialized_views.TABLE_NAME = 'mv1'",
                 AstToStringBuilder.toString(stmt.toSelectStmt()));
         checkShowMaterializedViewsStmt(stmt);
     }
