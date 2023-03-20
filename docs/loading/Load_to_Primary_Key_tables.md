@@ -188,7 +188,7 @@ Run a load job to update the record whose `id` is `101` in `example1.csv` to `ta
     ```SQL
     CREATE ROUTINE LOAD test_db.table1 ON table1
     COLUMNS TERMINATED BY ",",
-    COLUMNS (id, name, score, __op = upsert)
+    COLUMNS (id, name, score, __op ='upsert')
     PROPERTIES
     (
         "desired_concurrent_number" = "3",
