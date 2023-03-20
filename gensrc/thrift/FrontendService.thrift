@@ -371,12 +371,12 @@ struct TMaterializedViewStatus {
     12: optional string text
     13: optional string rows
 
-    14: optional string partition_type 
-    15: optional string force_refresh
-    16: optional string start_partition
-    17: optional string end_partition
-    18: optional string base_refresh_partitions
-    19: optional string mv_refresh_partitions
+    14: optional string last_refresh_partition_type 
+    15: optional string last_refresh_force_refresh
+    16: optional string last_refresh_start_partition
+    17: optional string last_refresh_end_partition
+    18: optional string last_refresh_base_refresh_partitions
+    19: optional string last_refresh_mv_refresh_partitions
 
     20: optional i64 last_check_time
     21: optional i64 create_time
