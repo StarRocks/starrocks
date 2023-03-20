@@ -67,7 +67,7 @@ Returns a value that has the same type as `x`.
     ```
 
 3. Obtain the subject that has the lowest score.
-   The subject `english` has the lowest score `70` which is returned.
+   The subject `english` that has the lowest score `70` is returned.
 
     ```Plain
     SELECT min_by(subject, exam_result) FROM exam;
