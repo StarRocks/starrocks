@@ -33,7 +33,8 @@ public class PartitionDesc implements ParseNode {
         throw new NotImplementedException();
     }
 
-    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
+    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId,
+                                         boolean isTemp, boolean isExprPartition)
             throws DdlException {
         throw new NotImplementedException();
     }

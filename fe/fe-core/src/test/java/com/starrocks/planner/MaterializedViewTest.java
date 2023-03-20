@@ -17,7 +17,6 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableList;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -25,13 +24,13 @@ import org.junit.Test;
 import java.util.List;
 
 public class MaterializedViewTest extends MaterializedViewTestBase {
-    private static final Logger LOG = LogManager.getLogger(MaterializedViewTest.class);
-    private static final String MATERIALIZED_DB_NAME = "test_mv";
     private static final List<String> outerJoinTypes = ImmutableList.of("left", "right");
 
     @BeforeClass
     public static void setUp() throws Exception {
         MaterializedViewTestBase.setUp();
+
+        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         String deptsTable = "" +
                 "CREATE TABLE depts(    \n" +
@@ -82,7 +81,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
 
-        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME)
+        starRocksAssert
                 .withTable(deptsTable)
                 .withTable(empsTable)
                 .withTable(locationsTable)
@@ -309,25 +308,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
     }
 
-    @AfterClass
-    public static void afterClass() {
-        try {
-            starRocksAssert.dropDatabase(MATERIALIZED_DB_NAME);
-        } catch (Exception e) {
-            LOG.warn("drop database failed:", e);
-        }
-    }
-
     @Test
     public void testFilter0() {
         String mv = "select empid + 1 as col1 from emps where deptno = 10";
         testRewriteOK(mv, "select empid + 1 from emps where deptno = 10");
         testRewriteOK(mv, "select max(empid + 1) from emps where deptno = 10");
-        testRewriteFail(mv, "select max(empid) from emps where deptno = 10");
+        testRewriteOK(mv, "select max(empid) from emps where deptno = 10").contains("col1 - 1");
 
         testRewriteFail(mv, "select max(empid) from emps where deptno = 11");
         testRewriteFail(mv, "select max(empid) from emps");
-        testRewriteFail(mv, "select empid from emps where deptno = 10");
+        testRewriteOK(mv, "select empid from emps where deptno = 10").contains("col1 - 1");
     }
 
     @Test
@@ -508,8 +498,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggregate8() {
-        // TODO: support rewrite query by using mv's binary predicate later
-        testRewriteFail("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
+        testRewriteOK("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
                 "select deptno + 1, sum(empid) + 1 as s\n"
                         + "from emps where deptno > 10 group by deptno");
@@ -719,13 +708,13 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "from emps where deptno > 10 group by deptno");
     }
 
-    @Ignore
-    // TODO: Support deptno + 1 rewrite to deptno
+    @Test
     public void testAggregateMaterializationAggregateFuncs8() {
-        testRewriteOK("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
+        testRewriteOK("select empid, deptno + 1 as col, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
+
                 "select deptno + 1, sum(empid) + 1 as s\n"
-                        + "from emps where deptno > 10 group by deptno");
+                        + "from emps where deptno > 10 group by deptno").contains("col - 1");
     }
 
     @Test
@@ -1516,7 +1505,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "(select * from emps where empid = 1) a\n"
                 + "join depts using (deptno)";
         String query = "select empid from emps where empid = 1";
-        testRewriteFail(mv, query);
+        testRewriteOK(mv, query)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 7: empid = 1");
     }
 
     @Test

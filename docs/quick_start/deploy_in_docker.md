@@ -1,4 +1,4 @@
-## Introdcution
+## Introduction
 
 This document is used to deploy the simplest StarRocks cluster, which contains one FE and one BE.
 

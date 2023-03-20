@@ -92,6 +92,10 @@ public class ColumnRefFactory {
         return columnRefOperators;
     }
 
+    public List<ColumnRefOperator> getColumnRefs() {
+        return columnRefs;
+    }
+
     public void updateColumnRefToColumns(ColumnRefOperator columnRef, Column column, Table table) {
         columnRefToColumns.put(columnRef, column);
         columnRefToTable.put(columnRef, table);

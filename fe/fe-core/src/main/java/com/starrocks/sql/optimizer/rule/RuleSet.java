@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.rule.transformation.EliminateLimitZeroRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2OuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctDataSkewEliminateRule;
 import com.starrocks.sql.optimizer.rule.transformation.InlineOneCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.IntersectAddDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
@@ -350,6 +351,7 @@ public class RuleSet {
     public RuleSet() {
         // Add common transform rule
         transformRules.add(SplitAggregateRule.getInstance());
+        transformRules.add(GroupByCountDistinctDataSkewEliminateRule.getInstance());
         transformRules.add(SplitTopNRule.getInstance());
     }
 
@@ -400,6 +402,10 @@ public class RuleSet {
         // TODO: implement merge join
         // this.implementRules.add(MergeJoinImplementationRule.getInstance());
         this.implementRules.add(NestLoopJoinImplementationRule.getInstance());
+    }
+
+    public void addSingleTableMvRewriteRule() {
+        transformRules.addAll(getRewriteRulesByType(RuleSetType.SINGLE_TABLE_MV_REWRITE));
     }
 
 }

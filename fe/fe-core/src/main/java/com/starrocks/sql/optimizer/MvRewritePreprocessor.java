@@ -9,6 +9,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
@@ -24,6 +25,7 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -34,6 +36,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getMvPartialPartitionPredicates;
 
 public class MvRewritePreprocessor {
     private final ConnectContext connectContext;
@@ -52,41 +56,60 @@ public class MvRewritePreprocessor {
     }
 
     public void prepareMvCandidatesForPlan() {
-        List<Table> tables = MvUtils.getAllTables(logicOperatorTree);
+        List<Table> queryTables = MvUtils.getAllTables(logicOperatorTree);
 
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
-                MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), tables);
+                MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
 
+        Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
             if (!mv.isActive()) {
                 continue;
             }
+
+            MaterializedView.MvRewriteContext mvRewriteContext = mv.getPlanContext();
+            if (mvRewriteContext == null) {
+                // build mv query logical plan
+                MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
+                mvRewriteContext = mvOptimizer.optimize(mv, connectContext);
+                mv.setPlanContext(mvRewriteContext);
+            }
+            if (!mvRewriteContext.isValidMvPlan()) {
+                continue;
+            }
+
             Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
             PartitionInfo partitionInfo = mv.getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {
                 if (!partitionNamesToRefresh.isEmpty()) {
                     continue;
                 }
-            } else if (partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
+            } else if (!mv.getPartitionNames().isEmpty() &&
+                    partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
                 // if the mv is partitioned, and all partitions need refresh,
                 // then it can not be an candidate
                 continue;
             }
 
-            // 1. build mv query logical plan
-            ColumnRefFactory mvColumnRefFactory = new ColumnRefFactory();
-            MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-            OptExpression mvPlan = mvOptimizer.optimize(mv, mvColumnRefFactory, connectContext, partitionNamesToRefresh);
-            if (!MvUtils.isValidMVPlan(mvPlan)) {
-                continue;
+            OptExpression mvPlan = mvRewriteContext.getLogicalPlan();
+            ScalarOperator mvPartialPartitionPredicates = null;
+            if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
+                // when mv is partitioned and there are some refreshed partitions,
+                // when should calculate latest partition range predicates for partition-by base table
+                mvPartialPartitionPredicates = getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
+                if (mvPartialPartitionPredicates == null) {
+                    continue;
+                }
             }
 
             List<Table> baseTables = MvUtils.getAllTables(mvPlan);
-            List<ColumnRefOperator> mvOutputColumns = mvOptimizer.getOutputExpressions();
+            List<Table> intersectingTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
             MaterializationContext materializationContext =
-                    new MaterializationContext(mv, mvPlan, queryColumnRefFactory,
-                            mvColumnRefFactory, partitionNamesToRefresh, baseTables);
+                    new MaterializationContext(context, mv, mvPlan, queryColumnRefFactory,
+                            mv.getPlanContext().getRefFactory(), partitionNamesToRefresh,
+                            baseTables, originQueryColumns, intersectingTables, mvPartialPartitionPredicates);
+            List<ColumnRefOperator> mvOutputColumns = mv.getPlanContext().getOutputColumns();
             // generate scan mv plan here to reuse it in rule applications
             LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext);
             materializationContext.setScanMvOperator(scanMvOp);
@@ -190,6 +213,13 @@ public class MvRewritePreprocessor {
                 .collect(Collectors.toSet());
         // Case1: keeps original predicates which belong to MV table(which are not pruned after mv's partition pruning)
         for (ScalarOperator conj : conjuncts) {
+            // ignore binary predicates which cannot be used for pruning.
+            if (conj instanceof BinaryPredicateOperator) {
+                BinaryPredicateOperator conjOp = (BinaryPredicateOperator) conj;
+                if (conjOp.getChild(0).isColumnRef() && conjOp.getChild(1).isColumnRef()) {
+                    continue;
+                }
+            }
             final List<Integer> conjColumnRefOperators =
                     Utils.extractColumnRef(conj).stream().map(ref -> ref.getId()).collect(Collectors.toList());
             if (mvPruneColumnIdSet.containsAll(conjColumnRefOperators)) {

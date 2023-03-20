@@ -999,6 +999,7 @@ dataDesc
         INTO TABLE dstTableName=identifier
         partitions=partitionNames?
         (COLUMNS TERMINATED BY colSep=string)?
+        (ROWS TERMINATED BY rowSep=string)?
         format=fileFormat?
         colList=columnAliases?
         (COLUMNS FROM PATH AS colFromPath=identifierList)?
@@ -1761,7 +1762,7 @@ functionCall
 aggregationFunction
     : AVG '(' DISTINCT? expression ')'
     | COUNT '(' ASTERISK_SYMBOL? ')'
-    | COUNT '(' DISTINCT? (expression (',' expression)*)? ')'
+    | COUNT '(' (DISTINCT bracketHint?)? (expression (',' expression)*)? ')'
     | MAX '(' DISTINCT? expression ')'
     | MIN '(' DISTINCT? expression ')'
     | SUM '(' DISTINCT? expression ')'

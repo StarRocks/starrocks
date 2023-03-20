@@ -347,6 +347,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
@@ -2002,6 +2003,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> files = context.srcFiles.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue())
                 .collect(toList());
         ColumnSeparator colSep = getColumnSeparator(context.colSep);
+        RowDelimiter rowDelimiter = getRowDelimiter(context.rowSep);
         String format = null;
         if (context.format != null) {
             if (context.format.identifier() != null) {
@@ -2020,7 +2022,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             List<Identifier> identifiers = visit(context.colFromPath.identifier(), Identifier.class);
             colFromPath = identifiers.stream().map(Identifier::getValue).collect(toList());
         }
-        return new DataDescription(dstTableName, partitionNames, files, colList, colSep, null, format,
+        return new DataDescription(dstTableName, partitionNames, files, colList, colSep, rowDelimiter, format,
                 colFromPath, context.NEGATIVE() != null, colMappingList, whereExpr);
     }
 
@@ -2028,6 +2030,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context != null) {
             String sep = ((StringLiteral) visit(context)).getValue();
             return new ColumnSeparator(sep);
+        }
+        return null;
+    }
+
+    private RowDelimiter getRowDelimiter(StarRocksParser.StringContext context) {
+        if (context != null) {
+            String sep = ((StringLiteral) visit(context)).getValue();
+            return new RowDelimiter(sep);
         }
         return null;
     }
@@ -4430,6 +4440,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         unitBoundary.getDescription().toLowerCase()));
 
                 return functionCallExpr;
+            } else if (context.expression().size() == 4) {
+                Expr e1 = (Expr) visit(context.expression(0));
+                Expr e2 = (Expr) visit(context.expression(1));
+                Expr e3 = (Expr) visit(context.expression(2));
+                Expr e4 = (Expr) visit(context.expression(3));
+                return new FunctionCallExpr(fnName, ImmutableList.of(e1, e2, e3, e4));
             } else {
                 throw new ParsingException(
                         functionName + " must as format " + functionName + "(date,INTERVAL expr unit[, FLOOR"
@@ -4489,12 +4505,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new StarRocksPlannerException("Aggregate functions are not being parsed correctly",
                     ErrorType.INTERNAL_ERROR);
         }
+
+        List<String> hints = Lists.newArrayList();
+        if (context.aggregationFunction().bracketHint() != null) {
+            hints = context.aggregationFunction().bracketHint().identifier().stream().map(
+                    RuleContext::getText).collect(Collectors.toList());
+        }
+
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 context.aggregationFunction().ASTERISK_SYMBOL() == null ?
                         new FunctionParams(context.aggregationFunction().DISTINCT() != null,
                                 visit(context.aggregationFunction().expression(), Expr.class)) :
                         FunctionParams.createStarParam());
 
+        functionCallExpr.setHints(hints);
         if (context.over() != null) {
             return buildOverClause(functionCallExpr, context.over());
         }
