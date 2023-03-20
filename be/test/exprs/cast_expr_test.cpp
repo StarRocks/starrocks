@@ -1971,7 +1971,7 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
 }
 
 // Test string to array with const input
-TEST_F(VectorizedCastExprTest, const_string_to_array) {
+TEST_F(VectorizedCastExprTest, string_to_array_with_const_input) {
     TExprNode cast_expr;
     cast_expr.opcode = TExprOpcode::CAST;
     cast_expr.node_type = TExprNodeType::CAST_EXPR;
@@ -1991,8 +1991,20 @@ TEST_F(VectorizedCastExprTest, const_string_to_array) {
     result = cast_string_to_array_ptr(cast_expr, TYPE_VARCHAR, src);
     DCHECK(result->is_constant());
     DCHECK_EQ(result->size(), 2);
-    const auto v = ColumnHelper::as_column<ConstColumn>(result);
     EXPECT_EQ("CONST: ['a','b']", result->debug_item(0));
+
+    // const string: multi-dims
+    src = ColumnHelper::create_const_column<TYPE_VARCHAR>(R"([[[4]],[[1, 2]]])", 2);
+    result = cast_string_to_array_ptr(cast_expr, TYPE_VARCHAR, src);
+    DCHECK(result->is_constant());
+    DCHECK_EQ(result->size(), 2);
+    EXPECT_EQ("CONST: ['[[4]]','[[1, 2]]']", result->debug_item(0));
+
+    src = ColumnHelper::create_const_column<TYPE_VARCHAR>(R"([[1, 2, 3], [1, 2, 3]])", 2);
+    result = cast_string_to_array_ptr(cast_expr, TYPE_VARCHAR, src);
+    DCHECK(result->is_constant());
+    DCHECK_EQ(result->size(), 2);
+    EXPECT_EQ("CONST: ['[1, 2, 3]','[1, 2, 3]']", result->debug_item(0));
 }
 
 void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vector<char>& stack);
