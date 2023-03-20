@@ -1869,7 +1869,6 @@ static std::string cast_string_to_array(TExprNode& cast_expr, TTypeDesc type_des
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
     MockVectorizedExpr<TYPE_VARCHAR> col1(cast_expr, 1, str);
     expr->_children.push_back(&col1);
-
     ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
     if (ptr->size() != 1) {
         return "EMPTY";
@@ -1901,6 +1900,18 @@ TTypeDesc gen_array_type_desc(const TPrimitiveType::type field_type) {
 static std::string cast_string_to_array(TExprNode& cast_expr, LogicalType element_type, const std::string& str) {
     auto type_desc = gen_array_type_desc(to_thrift(element_type));
     return cast_string_to_array(cast_expr, type_desc, str);
+}
+
+static ColumnPtr cast_string_to_array_ptr(TExprNode& cast_expr, LogicalType element_type, const ColumnPtr& src) {
+    auto type_desc = gen_array_type_desc(to_thrift(element_type));
+    cast_expr.child_type = to_thrift(TYPE_VARCHAR);
+    cast_expr.type = type_desc;
+
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+    std::unique_ptr<starrocks::Expr> child_expr = std::make_unique<MockExpr>(cast_expr, src);
+    expr->_children.push_back(child_expr.get());
+    return expr->evaluate(nullptr, nullptr);
 }
 
 TEST_F(VectorizedCastExprTest, string_to_array) {
@@ -1957,6 +1968,31 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
         //  select cast('[[4],[[1, 2]]]' as array<array<array<string>>>);
         EXPECT_EQ(R"([[['4']],[['1','2']]])", cast_string_to_array(cast_expr, type, R"([[[4]],[[1, 2]]])"));
     }
+}
+
+// Test string to array with const input
+TEST_F(VectorizedCastExprTest, const_string_to_array) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+
+    // const null
+    auto src = ColumnHelper::create_const_null_column(2);
+    auto result = cast_string_to_array_ptr(cast_expr, TYPE_VARCHAR, src);
+    DCHECK_EQ(result->size(), 2);
+    DCHECK(result->is_constant());
+    DCHECK(result->only_null());
+
+    // const string
+    src = ColumnHelper::create_const_column<TYPE_VARCHAR>(R"(["a","b"])", 2);
+    result = cast_string_to_array_ptr(cast_expr, TYPE_VARCHAR, src);
+    DCHECK(result->is_constant());
+    DCHECK_EQ(result->size(), 2);
+    const auto v = ColumnHelper::as_column<ConstColumn>(result);
+    EXPECT_EQ("CONST: ['a','b']", result->debug_item(0));
 }
 
 void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vector<char>& stack);
