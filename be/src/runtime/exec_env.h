@@ -98,6 +98,9 @@ class LocationProvider;
 class TabletManager;
 class UpdateManager;
 } // namespace lake
+namespace spill {
+class DirManager;
+}
 
 // Execution environment for queries/plan fragments.
 // Contains all required global structures, and handles to
@@ -232,6 +235,8 @@ public:
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
+    spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
+
 private:
     Status _init(const std::vector<StorePath>& store_paths);
     void _destroy();
@@ -351,6 +356,7 @@ private:
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
+    std::shared_ptr<spill::DirManager> _spill_dir_mgr;
 };
 
 template <>
