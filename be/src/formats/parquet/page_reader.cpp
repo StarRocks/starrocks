@@ -78,6 +78,7 @@ Status PageReader::skip_bytes(size_t size) {
         return Status::InternalError("Size to skip exceed page size");
     }
     _offset += size;
+    _stream->skip(size);
     return Status::OK();
 }
 
