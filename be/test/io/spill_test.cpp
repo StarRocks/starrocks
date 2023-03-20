@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <iterator>
 #include <memory>
 #include <utility>
@@ -35,10 +36,10 @@
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "exec/spill/executor.h"
+#include "exec/spill/log_block_manager.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
 #include "exec/spill/spiller_factory.h"
-#include "exec/spill/spiller_path_provider.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "fs/fs.h"
@@ -159,13 +160,31 @@ private:
     std::vector<std::thread> _threads;
 };
 
+using SpillProcessMetrics = spill::SpillProcessMetrics;
+using EmptyMemGuard = spill::EmptyMemGuard;
+using SpilledOptions = spill::SpilledOptions;
+
 class SpillTest : public ::testing::Test {
 public:
     void SetUp() override {
+        config::storage_root_path = std::filesystem::current_path().string() + "/spill_test_data";
+        auto fs = FileSystem::Default();
+        fs->delete_dir_recursive(config::storage_root_path);
+        ASSERT_OK(fs->create_dir_recursive(config::storage_root_path));
+        dummy_dir_mgr = std::make_unique<spill::DirManager>();
+        ASSERT_OK(dummy_dir_mgr->init());
+
+        TUniqueId dummy_query_id;
+        dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id);
+        dummy_block_mgr->set_dir_manager(dummy_dir_mgr.get());
+
         dummy_rt_st.set_chunk_size(config::vector_chunk_size);
+
         metrics = SpillProcessMetrics(&dummy_profile);
     }
     void TearDown() override {}
+    std::unique_ptr<spill::DirManager> dummy_dir_mgr;
+    std::unique_ptr<spill::LogBlockManager> dummy_block_mgr;
     RuntimeState dummy_rt_st;
     RuntimeProfile dummy_profile{"dummy"};
     std::vector<std::string> clean_up;
@@ -226,17 +245,7 @@ TEST_F(SpillTest, unsorted_process) {
 
     // create spilled factory
     // auto factory_options = SpilledFactoryOptions(ctx->partition_nums, ctx->parition_exprs, ctx->sort_exprs, ctx->sort_descs, false);
-    auto factory = make_spilled_factory();
-
-    SpillPaths paths = {"spill-test-1/", "spill-test-2/", "spill-test-3/"};
-    auto clean_up = [paths]() {
-        auto fs = FileSystem::Default();
-        for (const auto& dir : paths) {
-            fs->delete_dir_recursive(dir);
-        }
-    };
-    clean_up();
-    auto defer = DeferOp(clean_up);
+    auto factory = spill::make_spilled_factory();
 
     // create spiller
     SpilledOptions spill_options;
@@ -245,16 +254,13 @@ TEST_F(SpillTest, unsorted_process) {
     // file size: 1M
     spill_options.spill_file_size = 1 * 1024 * 1024;
     // spill format type
-    spill_options.spill_type = SpillFormaterType::SPILL_BY_COLUMN;
-    //
-    spill_options.path_provider_factory = [&paths]() -> StatusOr<std::shared_ptr<SpillerPathProvider>> {
-        return std::make_shared<LocalPathProvider>(paths, "unordered-spill", FileSystem::Default());
-    };
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
 
     auto chunk_empty = chunk_builder.gen(tuple, nullables);
     spill_options.chunk_builder = [&chunk_empty]() { return chunk_empty->clone_empty(); };
 
     auto spiller = factory->create(spill_options);
+    spiller->set_block_manager(dummy_block_mgr.get());
     spiller->set_metrics(metrics);
     ASSERT_OK(spiller->prepare(&dummy_rt_st));
 
@@ -273,21 +279,12 @@ TEST_F(SpillTest, unsorted_process) {
     for (const auto& chunk : holder) {
         input_rows += chunk->num_rows();
     }
-    // check file lists
-    {
-        auto fs = FileSystem::Default();
-        std::vector<std::string> files;
-        for (const auto& path : paths) {
-            std::vector<std::string> res;
-            ASSERT_OK(fs->get_children(path, &res));
-            files.insert(files.end(), res.begin(), res.end());
-        }
-        ASSERT_EQ(files.size(), 24);
-    }
+
     // test restore
     {
         std::vector<ChunkPtr> restored;
         ASSERT_OK(spiller->trigger_restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+
         for (size_t i = 0; i < test_loop; ++i) {
             auto chunk_st = spiller->restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{});
             ASSERT_OK(chunk_st.status());
@@ -342,17 +339,7 @@ TEST_F(SpillTest, order_by_process) {
     RandomChunkBuilder chunk_builder;
 
     // create spilled factory
-    auto factory = make_spilled_factory();
-
-    SpillPaths paths = {"spill-test-1/", "spill-test-4/"};
-    auto clean_up = [paths]() {
-        auto fs = FileSystem::Default();
-        for (const auto& dir : paths) {
-            fs->delete_dir_recursive(dir);
-        }
-    };
-    clean_up();
-    auto defer = DeferOp(clean_up);
+    auto factory = spill::make_spilled_factory();
 
     // create spiller
     SpilledOptions spill_options(&ctx->sort_exprs, &ctx->sort_descs);
@@ -361,11 +348,7 @@ TEST_F(SpillTest, order_by_process) {
     // file size: 1M
     spill_options.spill_file_size = 1 * 1024 * 1024;
     // spill format type
-    spill_options.spill_type = SpillFormaterType::SPILL_BY_COLUMN;
-    //
-    spill_options.path_provider_factory = [&paths]() -> StatusOr<std::shared_ptr<SpillerPathProvider>> {
-        return std::make_shared<LocalPathProvider>(paths, "ordered-spill", FileSystem::Default());
-    };
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
 
     auto chunk_empty = chunk_builder.gen(tuple, nullables);
     spill_options.chunk_builder = [&chunk_empty]() { return chunk_empty->clone_empty(); };
@@ -374,6 +357,7 @@ TEST_F(SpillTest, order_by_process) {
     {
         auto spiller = factory->create(spill_options);
         spiller->set_metrics(metrics);
+        spiller->set_block_manager(dummy_block_mgr.get());
         ASSERT_OK(spiller->prepare(&dummy_rt_st));
 
         size_t test_loop = 1024;

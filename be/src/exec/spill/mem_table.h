@@ -28,6 +28,7 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
+namespace spill {
 using FlushCallBack = std::function<Status(const ChunkPtr&)>;
 
 //  This component is the intermediate buffer for our spill data, which may be ordered or unordered,
@@ -102,5 +103,6 @@ private:
     ChunkPtr _chunk;
     ChunkSharedSlice _chunk_slice;
 };
+} // namespace spill
 
 } // namespace starrocks

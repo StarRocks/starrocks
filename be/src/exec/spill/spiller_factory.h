@@ -20,11 +20,11 @@
 
 #include "exec/sort_exec_exprs.h"
 #include "exec/sorting/sorting.h"
-#include "exec/spill/spiller_path_provider.h"
 #include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
+namespace spill {
 struct SpilledOptions;
 class Spiller;
 
@@ -46,5 +46,5 @@ private:
 
 using SpillerFactoryPtr = std::shared_ptr<SpillerFactory>;
 SpillerFactoryPtr make_spilled_factory();
-
+} // namespace spill
 } // namespace starrocks

@@ -27,7 +27,9 @@
 
 namespace starrocks {
 class SpillProcessChannel;
+namespace spill {
 class Spiller;
+}
 
 class SpillProcessTask {
 public:
@@ -50,16 +52,16 @@ using SpillProcessChannelPtr = std::shared_ptr<SpillProcessChannel>;
 class SpillProcessChannelFactory {
 public:
     //
-    SpillProcessChannelFactory(size_t degree, std::shared_ptr<IOTaskExecutor> executor)
+    SpillProcessChannelFactory(size_t degree, std::shared_ptr<spill::IOTaskExecutor> executor)
             : _channels(degree), _executor(std::move(executor)) {}
 
     SpillProcessChannelPtr get_or_create(int32_t sequence);
 
-    std::shared_ptr<IOTaskExecutor>& executor() { return _executor; };
+    std::shared_ptr<spill::IOTaskExecutor>& executor() { return _executor; };
 
 private:
     std::vector<SpillProcessChannelPtr> _channels;
-    std::shared_ptr<IOTaskExecutor> _executor;
+    std::shared_ptr<spill::IOTaskExecutor> _executor;
 };
 using SpillProcessChannelFactoryPtr = std::shared_ptr<SpillProcessChannelFactory>;
 
@@ -91,13 +93,13 @@ public:
 
     bool is_finished() { return is_finishing() && !has_spill_task() && !_current_task; }
 
-    void set_spiller(std::shared_ptr<Spiller> spiller) { _spiller = std::move(spiller); }
-    const std::shared_ptr<Spiller>& spiller() { return _spiller; }
+    void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
+    const std::shared_ptr<spill::Spiller>& spiller() { return _spiller; }
 
 private:
     bool _is_finishing = false;
     bool _is_working = false;
-    std::shared_ptr<Spiller> _spiller;
+    std::shared_ptr<spill::Spiller> _spiller;
     UnboundedBlockingQueue<SpillProcessTask> _spill_tasks;
     SpillProcessTask _current_task;
     SpillProcessChannelFactory* _parent;
