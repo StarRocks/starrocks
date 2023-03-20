@@ -370,7 +370,7 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
   curl --location-trusted -u root: \
       -H "label:label4" \
       -H "column_separator:," \
-      -H "columns: id, name, score, temp, __op = 'temp'" \
+      -H "columns: id, name, score, temp, __op = temp" \
       -T example3.csv -XPUT\
       http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
   ```
@@ -396,7 +396,11 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
 
   ```SQL
   CREATE ROUTINE LOAD test_db.table3 ON table3
+<<<<<<< HEAD
   COLUMNS(id, name, score, __op)
+=======
+  COLUMNS(id, name, score, temp, __op = temp)
+>>>>>>> 3ac617308 ( [Doc] correctify create routine load demo (#19814))
   PROPERTIES
   (
       "desired_concurrent_number" = "3",
