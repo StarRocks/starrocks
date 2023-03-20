@@ -127,8 +127,6 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
 
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
             Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn);
-            // for empty table, meta scan may return NULL result, so we force set usedColumn to nullable.
-            c.setIsAllowNull(true);
             newScanColumnRefs.put(metaColumn, c);
 
             Function aggFunction = aggCall.getFunction();
