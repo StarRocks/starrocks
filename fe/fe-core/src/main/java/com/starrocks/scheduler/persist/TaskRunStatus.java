@@ -277,6 +277,15 @@ public class TaskRunStatus implements Writable {
         return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
     }
 
+    public String getExtraMessage() {
+        if (basePartitionsToRefreshMap != null) {
+            String basePartitionToRefresh = basePartitionsToRefreshMap.toString();
+            return StringUtils.substring(basePartitionToRefresh, 0, 1024);
+        } else {
+            return "";
+        }
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);

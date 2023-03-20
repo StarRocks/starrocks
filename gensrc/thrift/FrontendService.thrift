@@ -371,7 +371,7 @@ struct TMaterializedViewStatus {
     12: optional string text
     13: optional string rows
 
-    14: optional string last_refresh_partition_type 
+    14: optional string partition_type 
     15: optional string last_refresh_force_refresh
     16: optional string last_refresh_start_partition
     17: optional string last_refresh_end_partition
@@ -422,11 +422,7 @@ struct TTaskRunInfo {
     10: optional string error_message
     11: optional string progress
 
-    12: optional string force_refresh
-    13: optional string start_partition
-    14: optional string end_partition
-    15: optional string base_refresh_partitions
-    16: optional string mv_refresh_partitions
+    12: optional string extra_message
 }
 
 struct TGetTaskRunInfoResult {

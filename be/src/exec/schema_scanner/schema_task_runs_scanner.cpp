@@ -31,18 +31,13 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"FINISH_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
-
-        {"FORCE_REFRESH", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"START_PARTITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"END_PARTITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"BASE_REFRESH_PARTITIONS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"MV_REFRESH_PARTITIONS", TYPE_VARCHAR, sizeof(StringValue), false},
-
         {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true},
         {"ERROR_CODE", TYPE_BIGINT, sizeof(StringValue), true},
         {"ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true}
+        };
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -67,7 +62,6 @@ Status SchemaTaskRunsScanner::start(RuntimeState* state) {
 Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
     const TTaskRunInfo& task_run_info = _task_run_result.task_runs[_task_run_index];
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
-
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
         switch (slot_id) {
         case 1: {
@@ -151,69 +145,19 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 7: {
-            // FORCE_REFRESH
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
-                const std::string* str = &task_run_info.force_refresh;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-            }
-            break;
-        }
-        case 8: {
-            // START_PARTITION
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
-                const std::string* str = &task_run_info.start_partition;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-            }
-            break;
-        }
-        case 9: {
-            // END_PARTITION
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
-                const std::string* str = &task_run_info.end_partition;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-            }
-            break;
-        }
-        case 10: {
-            // BASE_REFRESH_PARTITIONS
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
-                const std::string* str = &task_run_info.base_refresh_partitions;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-            }
-            break;
-        }
-        case 11: {
-            // MV_REFRESH_PARTITIONS
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
-                const std::string* str = &task_run_info.mv_refresh_partitions;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-            }
-            break;
-        }
-        case 12: {
             // DEFINITION
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
                 const std::string* str = &task_run_info.definition;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
-        case 13: {
+        case 8: {
             // EXPIRE_TIME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
                 auto* nullable_column = down_cast<NullableColumn*>(column.get());
                 if (task_run_info.__isset.expire_time) {
                     int64_t expire_time = task_run_info.expire_time;
@@ -230,10 +174,10 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 14: {
+        case 9: {
             // ERROR_CODE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(14);
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
                 if (task_run_info.__isset.error_code) {
                     int64_t value = task_run_info.error_code;
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
@@ -243,10 +187,10 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 15: {
+        case 10: {
             // ERROR_MESSAGE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(15);
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
                 if (task_run_info.__isset.error_message) {
                     const std::string* str = &task_run_info.error_message;
                     Slice value(str->c_str(), str->length());
@@ -258,12 +202,27 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 16: {
+        case 11: {
             // progress
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
                 if (task_run_info.__isset.progress) {
                     const std::string* str = &task_run_info.progress;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                    nullable_column->append_nulls(1);
+                }
+            }
+            break;
+        }
+        case 12: {
+            // extra_message
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
+                if (task_run_info.__isset.extra_message) {
+                    const std::string* str = &task_run_info.extra_message;
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {

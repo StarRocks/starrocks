@@ -478,11 +478,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setLast_refresh_duration(rowSet.get(10));
             status.setLast_refresh_state(rowSet.get(11));
 
-            status.setForce_refresh(rowSet.get(12));
-            status.setStart_partition(rowSet.get(13));
-            status.setEnd_partition(rowSet.get(14));
-            status.setBase_refresh_partitions(rowSet.get(15));
-            status.setMv_refresh_partitions(rowSet.get(16));
+            status.setLast_refresh_force_refresh(rowSet.get(12));
+            status.setLast_refresh_start_partition(rowSet.get(13));
+            status.setLast_refresh_end_partition(rowSet.get(14));
+            status.setLast_refresh_base_refresh_partitions(rowSet.get(15));
+            status.setLast_refresh_mv_refresh_partitions(rowSet.get(16));
 
             status.setLast_refresh_error_code(rowSet.get(17));
             status.setLast_refresh_error_message(rowSet.get(18));
@@ -625,11 +625,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setError_message(status.getErrorMessage());
             info.setExpire_time(status.getExpireTime() / 1000);
             info.setProgress(status.getProgress() + "%");
-            info.setForce_refresh(status.isForceRefresh() ? "true" : "false");
-            info.setStart_partition(status.getPartitionStart());
-            info.setEnd_partition(status.getPartitionEnd());
-            info.setBase_refresh_partitions(status.getBasePartitionsToRefreshMapString());
-            info.setMv_refresh_partitions(status.getMvPartitionsToRefreshString());
+            info.setExtra_message(status.getExtraMessage());
             tasksResult.add(info);
         }
         return result;

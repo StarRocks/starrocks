@@ -514,16 +514,12 @@ public class SchemaTable extends Table {
                                             .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                                             .column("STATE", ScalarType.createVarchar(16))
                                             .column("DATABASE", ScalarType.createVarchar(64))
-                                            .column("FORCE_REFRESH", ScalarType.createVarchar(8))
-                                            .column("START_PARTITION", ScalarType.createVarchar(1024))
-                                            .column("END_PARTITION", ScalarType.createVarchar(1024))
-                                            .column("BASE_REFRESH_PARTITIONS", ScalarType.createVarchar(1024))
-                                            .column("MV_REFRESH_PARTITIONS", ScalarType.createVarchar(1024))
                                             .column("DEFINITION", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .column("EXPIRE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                                             .column("ERROR_CODE", ScalarType.createType(PrimitiveType.BIGINT))
                                             .column("ERROR_MESSAGE", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .column("PROGRESS", ScalarType.createVarchar(64))
+                                            .column("EXTRA_MESSAGE", ScalarType.createVarchar(8192))
                                             .build()))
                     .put("materialized_views",
                             new SchemaTable(
