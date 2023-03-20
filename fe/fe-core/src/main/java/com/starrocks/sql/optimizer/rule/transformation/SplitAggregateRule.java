@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
@@ -72,7 +71,6 @@ public class SplitAggregateRule extends TransformationRule {
     private static final int ONE_STAGE = 1;
 
     private static final int TWO_STAGE = 2;
-
 
     public static SplitAggregateRule getInstance() {
         return INSTANCE;
@@ -135,7 +133,7 @@ public class SplitAggregateRule extends TransformationRule {
             return false;
         }
         // 4. If scan tablet sum leas than 1, do one phase aggregate is enough
-        if (aggStage == AUTO_MODE && input.getLogicalProperty().isExecuteInOneTablet()) {
+        if (aggStage == AUTO_MODE && input.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
             return false;
         }
         // Default, we could generate two stage aggregate
@@ -644,8 +642,9 @@ public class SplitAggregateRule extends TransformationRule {
             CallOperator callOperator;
             if (!type.isLocal()) {
                 List<ScalarOperator> arguments =
-                        Lists.newArrayList(new ColumnRefOperator(column.getId(), aggregation.getType(), column.getName(),
-                                aggregation.isNullable()));
+                        Lists.newArrayList(
+                                new ColumnRefOperator(column.getId(), aggregation.getType(), column.getName(),
+                                        aggregation.isNullable()));
                 appendConstantColumns(arguments, aggregation);
 
                 callOperator = new CallOperator(
