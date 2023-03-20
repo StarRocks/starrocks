@@ -223,7 +223,8 @@ void ParquetBuilder::_generate_rg_writer() {
     }
 }
 
-void ParquetBuilder::_write_varchar_chunk_column(size_t num_rows, size_t col_idx, const Column* data_column, std::vector<int16_t>& def_level) {
+void ParquetBuilder::_write_varchar_chunk_column(size_t num_rows, size_t col_idx, const Column* data_column,
+                                                 std::vector<int16_t>& def_level) {
     ParquetBuilder::_generate_rg_writer();
     auto col_writer = static_cast<parquet::ByteArrayWriter*>(_rg_writer->column(col_idx));
     auto raw_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(data_column);
