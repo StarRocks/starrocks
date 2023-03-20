@@ -29,7 +29,11 @@
 
 namespace starrocks {
 
-struct HdfsFsHandle {
+class HdfsFsClient {
+public:
+    ~HdfsFsClient() {
+        hdfsDisconnect(hdfs_fs);
+    }
     std::string namenode;
     hdfsFS hdfs_fs;
 };
@@ -39,7 +43,7 @@ class HdfsFsCache {
 public:
     ~HdfsFsCache() {
         for(size_t i = 0; i < _cur_client_idx; i++) {
-            hdfsDisconnect(_cache_clients[i].hdfs_fs);
+            hdfsDisconnect(_cache_clients[i]->hdfs_fs);
         }
     }
     static HdfsFsCache* instance() {
@@ -48,14 +52,14 @@ public:
     }
 
     // This function is thread-safe
-    Status get_connection(const std::string& namenode, HdfsFsHandle* handle, const FSOptions& options);
+    Status get_connection(const std::string& namenode, std::shared_ptr<HdfsFsClient>& hdfs_client, const FSOptions& options);
 
 private:
     std::mutex _lock;
     int _cur_client_idx{0};
     constexpr static int _max_cache_clients = 8;
     std::string _cache_key[_max_cache_clients];
-    HdfsFsHandle _cache_clients[_max_cache_clients];
+    std::shared_ptr<HdfsFsClient> _cache_clients[_max_cache_clients];
     Random _rand{(uint32_t)time(nullptr)};
 
     HdfsFsCache() = default;

@@ -38,7 +38,7 @@ static const std::vector<TCloudProperty>* get_azure_cloud_properties(const FSOpt
     return nullptr;
 }
 
-static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* handle, const FSOptions& options) {
+static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr<HdfsFsClient> hdfs_client, const FSOptions& options) {
     auto hdfs_builder = hdfsNewBuilder();
     hdfsBuilderSetNameNode(hdfs_builder, namenode.c_str());
     const THdfsProperties* properties = options.hdfs_properties();
@@ -59,15 +59,15 @@ static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* h
             hdfsBuilderConfSetStr(hdfs_builder, cloud_property.key.data(), cloud_property.value.data());
         }
     }
-    handle->hdfs_fs = hdfsBuilderConnect(hdfs_builder);
-    if (handle->hdfs_fs == nullptr) {
+    hdfs_client->hdfs_fs = hdfsBuilderConnect(hdfs_builder);
+    if (hdfs_client->hdfs_fs == nullptr) {
         return Status::InternalError(strings::Substitute("fail to connect hdfs namenode, namenode=$0, err=$1", namenode,
                                                          get_hdfs_err_msg()));
     }
     return Status::OK();
 }
 
-Status HdfsFsCache::get_connection(const std::string& namenode, HdfsFsHandle* handle, const FSOptions& options) {
+Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<HdfsFsClient>& hdfs_client, const FSOptions& options) {
     std::lock_guard<std::mutex> l(_lock);
     std::string cache_key = namenode;
     const THdfsProperties* properties = options.hdfs_properties();
@@ -86,24 +86,22 @@ Status HdfsFsCache::get_connection(const std::string& namenode, HdfsFsHandle* ha
 
     for(size_t idx = 0; idx < _cur_client_idx; idx++) {
         if (_cache_key[idx] == cache_key) {
-            *handle = _cache_clients[idx];
+            hdfs_client = _cache_clients[idx];
             // Found cache client, return directly
             return Status::OK();
         }
     }
 
     // Not found cached client, create a new one
-    handle->namenode = namenode;
-    RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, handle, options));
+    hdfs_client->namenode = namenode;
+    RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, hdfs_client, options));
     if (UNLIKELY(_cur_client_idx >= _max_cache_clients)) {
         uint32_t idx = _rand.Uniform(_max_cache_clients);
-        // Close evicted HDFS client first.
-        hdfsDisconnect(_cache_clients[idx].hdfs_fs);
         _cache_key[idx] = cache_key;
-        _cache_clients[idx] = *handle;
+        _cache_clients[idx] = hdfs_client;
     } else {
         _cache_key[_cur_client_idx] = cache_key;
-        _cache_clients[_cur_client_idx] = *handle;
+        _cache_clients[_cur_client_idx] = hdfs_client;
         _cur_client_idx++;
     }
     return Status::OK();
