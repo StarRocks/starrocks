@@ -292,7 +292,7 @@ public class FunctionCallExpr extends Expr {
 
     // explain the first N children
     public List<String> firstNChildrenToExplain(int n) {
-        Preconditions.checkState(n < children.size());
+        Preconditions.checkState(n <= children.size());
         List<String> result = Lists.newArrayList();
         for (int i = 0; i < n; i++) {
             result.add(children.get(i).explain());
@@ -301,7 +301,7 @@ public class FunctionCallExpr extends Expr {
     }
 
     public List<String> firstNChildrenToSql(int n) {
-        Preconditions.checkState(n < children.size());
+        Preconditions.checkState(n <= children.size());
         List<String> result = Lists.newArrayList();
         for (int i = 0; i < n; i++) {
             result.add(children.get(i).toSql());
