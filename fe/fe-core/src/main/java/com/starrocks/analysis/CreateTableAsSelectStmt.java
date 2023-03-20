@@ -66,9 +66,9 @@ public class CreateTableAsSelectStmt extends StatementBase {
         throw new AnalysisException("old planner does not support CTAS statement");
     }
 
-    public void createTable(ConnectContext session) throws AnalysisException {
+    public boolean createTable(ConnectContext session) throws AnalysisException {
         try {
-            session.getGlobalStateMgr().createTable(createTableStmt);
+            return session.getGlobalStateMgr().createTable(createTableStmt);
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
         }

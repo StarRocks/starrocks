@@ -79,7 +79,9 @@ public interface ConnectorMetadata {
 
     default void alterTable(AlterTableStmt stmt) throws UserException {}
 
-    default void createTable(CreateTableStmt stmt) throws DdlException {}
+    default boolean createTable(CreateTableStmt stmt) throws DdlException {
+        return true;
+    }
 
     default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {}
 
