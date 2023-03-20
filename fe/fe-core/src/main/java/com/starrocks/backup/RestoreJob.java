@@ -488,6 +488,7 @@ public class RestoreJob extends AbstractJob {
                 Table localTbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                 if (localTbl != null) {
                     if (localTbl instanceof OlapTable && localTbl.hasAutoIncrementColumn()) {
+                        // it must be !isReplay == true
                         ((OlapTable) localTbl).sendDropAutoIncrementMapTask();
                     }
 
