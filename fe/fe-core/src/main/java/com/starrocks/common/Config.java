@@ -1586,6 +1586,12 @@ public class Config extends ConfigBase {
     public static long max_partitions_in_one_batch = 4096;
 
     /**
+     * Used to limit num of partition for automatic partition table automatically created
+     */
+    @ConfField(mutable = true)
+    public static long max_automatic_partition_number = 4096;
+
+    /**
      * Used to limit num of agent task for one be. currently only for drop task.
      */
     @ConfField(mutable = true)
