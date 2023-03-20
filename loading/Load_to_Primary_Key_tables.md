@@ -14,7 +14,7 @@ StarRocks 还支持部分更新 (Partial Update)。
 
 StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分 INSERT 和 UPDATE 操作。
 
-在创建导入作业时，StarRocks 支持在导入作业的创建语句或或命令中添加 `__op` 字段，用于指定操作类型。
+在创建导入作业时，StarRocks 支持在导入作业的创建语句或命令中添加 `__op` 字段，用于指定操作类型。
 
 > **说明**
 >
@@ -371,7 +371,7 @@ MySQL [test_db]> SELECT * FROM table2;
   curl --location-trusted -u root: \
       -H "label:label4" \
       -H "column_separator:," \
-      -H "columns: id, name, score, temp, __op = 'temp'" \
+      -H "columns: id, name, score, temp, __op = temp" \
       -T example3.csv -XPUT\
       http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
   ```
@@ -399,7 +399,7 @@ MySQL [test_db]> SELECT * FROM table2;
 
   ```SQL
   CREATE ROUTINE LOAD test_db.table3 ON table3
-  COLUMNS(id, name, score, temp, __op = 'temp')
+  COLUMNS(id, name, score, temp, __op = temp)
   PROPERTIES
   (
       "desired_concurrent_number" = "3",
