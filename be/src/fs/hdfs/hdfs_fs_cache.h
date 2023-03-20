@@ -31,7 +31,12 @@ namespace starrocks {
 
 class HdfsFsClient {
 public:
-    ~HdfsFsClient() { hdfsDisconnect(hdfs_fs); }
+    ~HdfsFsClient() {
+        if (hdfs_fs != nullptr) {
+            // hdfs_fs maybe a nullptr, if it create failed.
+            hdfsDisconnect(hdfs_fs);
+        }
+    }
     std::string namenode;
     hdfsFS hdfs_fs;
 };

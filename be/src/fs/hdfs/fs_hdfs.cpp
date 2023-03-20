@@ -307,7 +307,7 @@ private:
 Status HdfsFileSystem::path_exists(const std::string& path) {
     std::string namenode;
     RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
-    std::shared_ptr<HdfsFsClient> hdfs_client;
+    std::shared_ptr<HdfsFsClient> hdfs_client = std::make_unique<HdfsFsClient>();
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     return _path_exists(hdfs_client->hdfs_fs, path);
 }
@@ -315,7 +315,7 @@ Status HdfsFileSystem::path_exists(const std::string& path) {
 Status HdfsFileSystem::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
     std::string namenode;
     RETURN_IF_ERROR(get_namenode_from_path(dir, &namenode));
-    std::shared_ptr<HdfsFsClient> hdfs_client;
+    std::shared_ptr<HdfsFsClient> hdfs_client = std::make_unique<HdfsFsClient>();
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     Status status = _path_exists(hdfs_client->hdfs_fs, dir);
     if (!status.ok()) {
@@ -350,7 +350,7 @@ Status HdfsFileSystem::iterate_dir(const std::string& dir, const std::function<b
 Status HdfsFileSystem::iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
     std::string namenode;
     RETURN_IF_ERROR(get_namenode_from_path(dir, &namenode));
-    std::shared_ptr<HdfsFsClient> hdfs_client;
+    std::shared_ptr<HdfsFsClient> hdfs_client = std::make_unique<HdfsFsClient>();
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     Status status = _path_exists(hdfs_client->hdfs_fs, dir);
     if (!status.ok()) {
@@ -399,7 +399,7 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
                                                                           const std::string& path) {
     std::string namenode;
     RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
-    std::shared_ptr<HdfsFsClient> hdfs_client;
+    std::shared_ptr<HdfsFsClient> hdfs_client = std::make_unique<HdfsFsClient>();
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     int flags = O_WRONLY;
     if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
@@ -445,7 +445,7 @@ StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(co
     (void)opts;
     std::string namenode;
     RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
-    std::shared_ptr<HdfsFsClient> hdfs_client;
+    std::shared_ptr<HdfsFsClient> hdfs_client = std::make_unique<HdfsFsClient>();
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     // pass zero to hdfsOpenFile will use the default hdfs_read_buffer_size
     int hdfs_read_buffer_size = 0;
@@ -467,7 +467,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
                                                                                    const std::string& path) {
     std::string namenode;
     RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
-    std::shared_ptr<HdfsFsClient> hdfs_client;
+    std::shared_ptr<HdfsFsClient> hdfs_client = std::make_unique<HdfsFsClient>();
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     // pass zero to hdfsOpenFile will use the default hdfs_read_buffer_size
     int hdfs_read_buffer_size = 0;
@@ -488,7 +488,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
 Status HdfsFileSystem::rename_file(const std::string& src, const std::string& target) {
     std::string namenode;
     RETURN_IF_ERROR(get_namenode_from_path(src, &namenode));
-    std::shared_ptr<HdfsFsClient> hdfs_client;
+    std::shared_ptr<HdfsFsClient> hdfs_client = std::make_unique<HdfsFsClient>();
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     int ret = hdfsRename(hdfs_client->hdfs_fs, src.data(), target.data());
     if (ret != 0) {
