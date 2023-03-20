@@ -148,6 +148,10 @@ public class FunctionParams implements Writable {
         } else {
             out.writeBoolean(false);
         }
+        // in order to reduce effecting upgrading or downgrading versions, write it only when the function support
+        // order-by elements, no effects on functions without order-by elements. However, if new versions write
+        // order-by elements, older versions not recognize them as expected, as older versions did not support the
+        // corresponding functions, like array_agg(a order by b).
         if (orderByElements != null) {
             out.writeBoolean(true);
             out.writeInt(orderByElements.size());
@@ -156,9 +160,12 @@ public class FunctionParams implements Writable {
                 out.writeBoolean(elem.getIsAsc());
                 out.writeBoolean(elem.getNullsFirstParam());
             }
-        } else {
-            out.writeBoolean(false);
         }
+        // disable it as upgrading issue that the older version does not recognize this field,
+        // enable this in later new versions when the older version un-supporting order-by elements is obsolete.
+        // else {
+        //     out.writeBoolean(false);
+        // }
     }
 
     public void readFields(DataInput in) throws IOException {
