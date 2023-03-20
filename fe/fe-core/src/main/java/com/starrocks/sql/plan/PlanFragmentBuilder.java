@@ -285,7 +285,8 @@ public class PlanFragmentBuilder {
             // Key columns and value columns cannot be pruned in the non-skip-aggr scan stage.
             // - All the keys columns must be retained to merge and aggregate rows.
             // - Value columns can only be used after merging and aggregating.
-            MaterializedIndexMeta materializedIndexMeta = referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
+            MaterializedIndexMeta materializedIndexMeta =
+                    referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
             if (materializedIndexMeta.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
                 return;
             }
@@ -1245,7 +1246,12 @@ public class PlanFragmentBuilder {
                 }
 
                 // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
+<<<<<<< HEAD
                 if (!node.isUseStreamingPreAgg() && hasColocateOlapScanChildInFragment(aggregationNode)) {
+=======
+                if (!withLocalShuffle && !node.isUseStreamingPreAgg() &&
+                        hasColocateOlapScanChildInFragment(aggregationNode)) {
+>>>>>>> 45f45d98e1 ([BugFix] Fix wrong state of 'isExecuteInOneTablet' when it comes to agg or analytic (#19690))
                     aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isGlobal()) {
@@ -1346,10 +1352,15 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
+<<<<<<< HEAD
             // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
             if ((node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal())
                     && hasNoExchangeNodes(inputFragment.getPlanRoot())) {
                 if (optExpr.getLogicalProperty().isExecuteInOneTablet()) {
+=======
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
+                if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
+>>>>>>> 45f45d98e1 ([BugFix] Fix wrong state of 'isExecuteInOneTablet' when it comes to agg or analytic (#19690))
                     clearOlapScanNodePartitions(aggregationNode);
                 }
                 estimateDopOfOnePhaseAgg(inputFragment);
@@ -2198,6 +2209,10 @@ public class PlanFragmentBuilder {
             if (root instanceof SortNode) {
                 SortNode sortNode = (SortNode) root;
                 sortNode.setAnalyticPartitionExprs(analyticEvalNode.getPartitionExprs());
+            }
+
+            if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
+                clearOlapScanNodePartitions(analyticEvalNode);
             }
 
             inputFragment.setPlanRoot(analyticEvalNode);
