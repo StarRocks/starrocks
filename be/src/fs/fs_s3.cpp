@@ -340,8 +340,7 @@ public:
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
 
-    Status iterate_dir2(const std::string& dir,
-                        const std::function<bool(std::string_view, const FileMeta&)>& cb) override;
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override;
 
     Status delete_file(const std::string& path) override;
 
@@ -529,8 +528,7 @@ Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<boo
     return directory_exist ? Status::OK() : Status::NotFound(dir);
 }
 
-Status S3FileSystem::iterate_dir2(const std::string& dir,
-                                  const std::function<bool(std::string_view, const FileMeta&)>& cb) {
+Status S3FileSystem::iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
     S3URI uri;
     if (!uri.parse(dir)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
@@ -561,9 +559,8 @@ Status S3FileSystem::iterate_dir2(const std::string& dir,
             const auto& full_name = cp.GetPrefix();
 
             std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
-            FileMeta stat;
-            stat.set_is_dir(true);
-            if (!cb(name, stat)) {
+            DirEntry entry{.name = name, .is_dir = {true}};
+            if (!cb(entry)) {
                 return Status::OK();
             }
         }
@@ -574,24 +571,25 @@ Status S3FileSystem::iterate_dir2(const std::string& dir,
             DCHECK(HasPrefixString(obj.GetKey(), uri.key()));
 
             std::string_view obj_key(obj.GetKey());
-            FileMeta stat;
+            DirEntry entry;
             if (obj.LastModifiedHasBeenSet()) {
-                stat.set_modify_time(obj.GetLastModified().Seconds());
+                entry.mtime = obj.GetLastModified().Seconds();
             }
             if (obj_key.back() == '/') {
                 obj_key = std::string_view(obj_key.data(), obj_key.size() - 1);
-                stat.set_is_dir(true);
+                entry.is_dir = true;
             } else {
                 DCHECK(obj.SizeHasBeenSet());
-                stat.set_is_dir(false);
+                entry.is_dir = false;
                 if (obj.SizeHasBeenSet()) {
-                    stat.set_size(obj.GetSize());
+                    entry.size = obj.GetSize();
                 }
             }
 
             std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
+            entry.name = name;
 
-            if (!cb(name, stat)) {
+            if (!cb(entry)) {
                 return Status::OK();
             }
         }

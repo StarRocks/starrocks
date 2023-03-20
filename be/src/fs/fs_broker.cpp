@@ -405,10 +405,8 @@ Status BrokerFileSystem::iterate_dir(const std::string& dir, const std::function
     return Status::OK();
 }
 
-Status BrokerFileSystem::iterate_dir2(const std::string& dir,
-                                      const std::function<bool(std::string_view, const FileMeta&)>& cb) {
-    FileMeta meta;
-    return iterate_dir(dir, [&](std::string_view name) { return cb(name, meta); });
+Status BrokerFileSystem::iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
+    return iterate_dir(dir, [&](std::string_view name) { return cb(DirEntry{.name = name}); });
 }
 
 Status BrokerFileSystem::delete_file(const std::string& path) {

@@ -803,27 +803,27 @@ Status SnapshotLoader::_get_existing_files_from_remote_without_broker(const std:
                                                                       std::map<std::string, FileStat>* files) {
     int64_t file_num = 0;
     Status st;
-    st.update(fs->iterate_dir2(remote_path, [&](std::string_view name, const FileMeta& meta) {
-        if (UNLIKELY(!meta.has_is_dir())) {
+    st.update(fs->iterate_dir2(remote_path, [&](DirEntry entry) {
+        if (UNLIKELY(!entry.is_dir.has_value())) {
             st.update(Status::InternalError("Unable to recognize the file type"));
             return false;
         }
         file_num++;
-        if (meta.is_dir()) {
+        if (entry.is_dir.value()) {
             return true;
         }
-        if (UNLIKELY(!meta.has_size())) {
+        if (UNLIKELY(!entry.size.has_value())) {
             st.update(Status::InternalError("Unable to get file size"));
             return false;
         }
-        size_t pos = name.find_last_of('.');
-        if (pos == std::string::npos || pos == name.size() - 1) {
+        size_t pos = entry.name.find_last_of('.');
+        if (pos == std::string::npos || pos == entry.name.size() - 1) {
             // Not found checksum separator, ignore this file
             return true;
         }
-        std::string name_part(name.data(), name.data() + pos);
-        std::string md5_part(name.data() + pos + 1, name.data() + name.size());
-        FileStat stat = {name_part, md5_part, meta.size()};
+        std::string name_part(entry.name.data(), entry.name.data() + pos);
+        std::string md5_part(entry.name.data() + pos + 1, entry.name.data() + entry.name.size());
+        FileStat stat = {.name = name_part, .md5 = md5_part, .size = entry.size.value()};
         files->emplace(name_part, stat);
         VLOG(2) << "split remote file: " << name_part << ", checksum: " << md5_part;
         return true;
