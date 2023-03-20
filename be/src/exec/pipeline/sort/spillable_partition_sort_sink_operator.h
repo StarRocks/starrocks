@@ -39,7 +39,7 @@ public:
     void mark_need_spill() override {
         Operator::mark_need_spill();
         if (_chunks_sorter) {
-            _chunks_sorter->set_spill_stragety(SpillStrategy::SPILL_ALL);
+            _chunks_sorter->set_spill_stragety(spill::SpillStrategy::SPILL_ALL);
         }
     }
 
@@ -64,8 +64,8 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    std::shared_ptr<SpilledOptions> _spill_options;
-    std::shared_ptr<SpillerFactory> _spill_factory = std::make_shared<SpillerFactory>();
+    std::shared_ptr<spill::SpilledOptions> _spill_options;
+    std::shared_ptr<spill::SpillerFactory> _spill_factory = std::make_shared<spill::SpillerFactory>();
 };
 
 } // namespace starrocks::pipeline
