@@ -275,6 +275,21 @@ Status ParquetBuilder::add_chunk(Chunk* chunk) {
             DISPATCH_PARQUET_NUMERIC_WRITER(DoubleWriter, DoubleColumn, double)
             break;
         }
+        case TYPE_VARCHAR: {
+            ParquetBuilder::_generate_rg_writer();
+            auto col_writer = static_cast<parquet::ByteArrayWriter*>(_rg_writer->column(i));
+            auto raw_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(data_column);
+            auto vo = raw_col->get_offset();
+            auto vb = raw_col->get_bytes();
+            for (size_t j = 0; j < num_rows; j++) {
+                parquet::ByteArray value;
+                value.ptr = reinterpret_cast<const uint8_t*>(vb.data() + vo[j]);
+                value.len = vo[j + 1] - vo[j];
+                col_writer->WriteBatch(1, def_level.data() + j, nullptr, &value);
+            }
+            _buffered_values_estimate[i] = col_writer->EstimatedBufferedValueBytes();
+            break;
+        }
         default: {
             return Status::InvalidArgument("Unsupported type");
         }
