@@ -10,6 +10,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -96,49 +97,11 @@ struct RandomAccessFileOptions {
     bool skip_fill_local_cache = false;
 };
 
-class FileMeta {
-public:
-    // REQUIRE: size >= 0
-    FileMeta& with_size(int64_t size) {
-        _size = size;
-        return *this;
-    }
-
-    // REQUIRE: mtime > 0
-    FileMeta& with_modify_time(int64_t mtime) {
-        _mtime = mtime;
-        return *this;
-    }
-
-    FileMeta& with_is_dir(bool is_dir) {
-        _is_dir = is_dir;
-        return *this;
-    }
-
-    bool has_size() const { return _size >= 0; }
-
-    // REQUIRE: size >= 0
-    void set_size(int64_t size) { _size = size; }
-
-    int64_t size() const { return _size; }
-
-    bool has_modify_time() const { return _mtime > 0; }
-
-    // REQUIRE: mtime > 0
-    void set_modify_time(int64_t mtime) { _mtime = mtime; }
-
-    int64_t modify_time() const { return _mtime; }
-
-    bool has_is_dir() const { return _is_dir >= 0; }
-
-    void set_is_dir(bool is_dir) { _is_dir = is_dir; }
-
-    bool is_dir() const { return _is_dir > 0; }
-
-private:
-    int64_t _size = -1;
-    int64_t _mtime = -1;
-    int _is_dir = -1;
+struct DirEntry {
+    std::string_view name;
+    std::optional<int64_t> mtime;
+    std::optional<int64_t> size; // Undefined if "is_dir" is true
+    std::optional<bool> is_dir;
 };
 
 class FileSystem {
@@ -237,12 +200,7 @@ public:
 
     // `iterate_dir2` is similar to `iterate_dir` but in addition to returning the directory entry name, it
     // also returns some file statistics.
-    //
-    // For performance reason, some implementations may leave some fields in FileMeta unfilled, the caller
-    // should always check the value of `FileMeta::has_xxx()` before accessing the corresponding field of
-    // FileMeta.
-    virtual Status iterate_dir2(const std::string& dir,
-                                const std::function<bool(std::string_view, const FileMeta&)>& cb) = 0;
+    virtual Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) = 0;
 
     // Delete the named file.
     // FIXME: If the named file does not exist, OK or NOT_FOUND is returned, depend on the implementation.
