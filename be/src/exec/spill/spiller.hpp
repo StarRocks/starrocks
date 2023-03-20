@@ -26,7 +26,7 @@
 #include "util/defer_op.h"
 
 namespace starrocks {
-
+namespace spill {
 template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, ChunkPtr chunk, TaskExecutor&& executor, MemGuard&& guard) {
     SCOPED_TIMER(_metrics.spill_timer);
@@ -88,68 +88,47 @@ Status Spiller::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& g
 template <class TaskExecutor, class MemGuard>
 StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
     SCOPED_TIMER(_metrics.restore_timer);
-    RETURN_IF_ERROR(_spilled_task_status);
-    ChunkPtr chunk;
-
-    if (_current_stream == nullptr) {
-        ASSIGN_OR_RETURN(_current_stream, _acquire_input_stream(state));
-    }
-
     DCHECK(has_output_data());
-    // read chunk from buffer
-    ASSIGN_OR_RETURN(chunk, _current_stream->read(_spill_read_ctx));
-    TRACE_SPILL_LOG << "read rows:" << chunk->num_rows() << " cumulative:" << _restore_read_rows
-                    << ", spiller:" << this;
+
+    RETURN_IF_ERROR(_get_spilled_task_status());
+    RETURN_IF_ERROR(_acquire_input_stream(state));
+
+    ChunkPtr chunk;
+    // @TODO(silverbullet233): reuse ctx
+    SerdeContext ctx;
+    ASSIGN_OR_RETURN(chunk, _input_stream->get_next(ctx));
     COUNTER_UPDATE(_metrics.restore_rows, chunk->num_rows());
     _restore_read_rows += chunk->num_rows();
-
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
-
     return chunk;
 }
 
 template <class TaskExecutor, class MemGuard>
 Status Spiller::trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    if (_current_stream == nullptr) {
-        ASSIGN_OR_RETURN(_current_stream, _acquire_input_stream(state));
-    }
+    RETURN_IF_ERROR(_get_spilled_task_status());
+    RETURN_IF_ERROR(_acquire_input_stream(state));
 
-    std::queue<SpillRestoreTaskPtr> captured_restore_tasks;
-    {
-        std::lock_guard guard(_mutex);
-        captured_restore_tasks = std::move(_restore_tasks);
-    }
-    // submit restore task
-    while (!captured_restore_tasks.empty()) {
-        DCHECK(captured_restore_tasks.front() != nullptr);
-        auto task = std::move(captured_restore_tasks.front());
-        RETURN_IF_ERROR(executor.submit([this, state, guard, task = std::move(task)]() {
+    DCHECK(_input_stream->enable_prefetch());
+    // if all is well and input stream enable prefetch and not eof
+    if (!_input_stream->eof()) {
+        auto restore_task = [this, state, guard]() {
             _running_restore_tasks++;
             guard.scoped_begin();
-
-            auto caller = [state, this, task]() -> Status {
-                SpillFormatContext spill_ctx;
-                RETURN_IF_ERROR(task->do_read(spill_ctx));
-                return Status::OK();
-            };
-
-            auto res = caller();
+            // @TODO(silverbullet233): reuse ctx
+            SerdeContext ctx;
+            auto res = _input_stream->prefetch(ctx);
 
             _update_spilled_task_status(res.is_end_of_file() ? Status::OK() : res);
-            if (!res.ok()) {
-                _finished_restore_tasks++;
-            } else {
-                std::lock_guard guard(_mutex);
-                _restore_tasks.push(std::move(task));
-            }
-
             guard.scoped_end();
             _running_restore_tasks--;
-            return Status::OK();
-        }));
-        captured_restore_tasks.pop();
+            if (!res.ok()) {
+                _finished_restore_tasks++;
+                return;
+            }
+        };
+        RETURN_IF_ERROR(executor.submit(std::move(restore_task)));
     }
     return Status::OK();
 }
-
+} // namespace spill
 } // namespace starrocks

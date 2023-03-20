@@ -46,7 +46,7 @@ private:
     Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
 
     SortedStreamingAggregatorPtr _aggregator;
-    SpillStrategy _spill_strategy = SpillStrategy::NO_SPILL;
+    spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
 
     bool _is_finished = false;
 };
@@ -71,8 +71,8 @@ private:
     SortExecExprs _sort_exprs;
     SortDescs _sort_desc;
 
-    std::shared_ptr<SpilledOptions> _spill_options;
-    std::shared_ptr<SpillerFactory> _spill_factory = std::make_shared<SpillerFactory>();
+    std::shared_ptr<spill::SpilledOptions> _spill_options;
+    std::shared_ptr<spill::SpillerFactory> _spill_factory = std::make_shared<spill::SpillerFactory>();
     StreamingAggregatorFactoryPtr _aggregator_factory;
     SpillProcessChannelFactoryPtr _spill_channel_factory;
 };
