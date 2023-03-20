@@ -2,7 +2,7 @@
 
 ## Description
 
-Aggregates the values including `NULL` in a column into an array. This way, you can turn values from a column to a row.
+Aggregates the values including `NULL` in a column into an array.
 
 ## Syntax
 
