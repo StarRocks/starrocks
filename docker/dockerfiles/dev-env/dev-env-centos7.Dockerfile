@@ -25,7 +25,7 @@ FROM ${builder} as base
 RUN yum install -y epel-release && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make libtool which git ccache binutils-devel python3 && \
     yum clean all && rm -rf /var/cache/yum
 
-ENV STARROCKS_THIRDPARTY=/opt/starrocks/thirdparty
+ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 WORKDIR /root
 
 
@@ -58,7 +58,7 @@ ARG commit_id
 LABEL org.opencontainers.image.source="https://github.com/StarRocks/starrocks"
 LABEL com.starrocks.commit=${commit_id:-"UNKNOWN"}
 
-ENV STARLET_INSTALL_DIR=/var/local/thirdparty/installed/starlet
+ENV STARLET_INSTALL_DIR=$STARROCKS_THIRDPARTY/installed/starlet
 
 # Copy third-party dependencies
 COPY --from=buildstage $STARROCKS_THIRDPARTY $STARROCKS_THIRDPARTY
