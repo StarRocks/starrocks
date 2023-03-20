@@ -403,6 +403,7 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
     }
     std::vector<RowsetSharedPtr> to_add;
     std::vector<RowsetSharedPtr> to_remove;
+    std::vector<RowsetSharedPtr> to_replace;
     int64_t rid = 10000;
     for (auto&& ver : ver_list) {
         RowsetWriterContext rowset_writer_context;
@@ -416,7 +417,9 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
         RowsetSharedPtr src_rowset = *rowset_writer->build();
         to_add.push_back(std::move(src_rowset));
     }
-    tablet->modify_rowsets(to_add, to_remove);
+
+    tablet->modify_rowsets(to_add, to_remove, &to_replace);
+    ASSERT_EQ(to_replace.size(), 0);
     tmp_list.clear();
     tablet->list_versions(&tmp_list);
     debug = "";
@@ -434,6 +437,35 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
     ASSERT_TRUE(!tablet->contains_version(Version(4, 4)).ok()) << debug;
     ASSERT_TRUE(!tablet->contains_version(Version(4, 5)).ok()) << debug;
     ASSERT_TRUE(!tablet->contains_version(Version(6, 6)).ok()) << debug;
+
+    // delete rowset
+    for (int i = 0; i < 3; i++) {
+        to_remove.push_back(to_add[i]);
+    }
+    to_add.clear();
+    tablet->modify_rowsets(to_add, to_remove, &to_replace);
+    ASSERT_EQ(to_replace.size(), 0);
+
+    // delete same rowset again
+    tablet->modify_rowsets(to_add, to_remove, &to_replace);
+    ASSERT_EQ(to_replace.size(), 0);
+
+    // replace stale rowset
+    to_remove.clear();
+    for (int i = 0; i < 3; i++) {
+        RowsetWriterContext rowset_writer_context;
+        create_rowset_writer_context(&rowset_writer_context, tablet->schema_hash_path(), &tablet_schema,
+                                     ver_list[i].first, ver_list[i].second, rid++);
+        std::unique_ptr<RowsetWriter> rowset_writer;
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
+
+        rowset_writer_add_rows(rowset_writer, tablet_schema);
+        rowset_writer->flush();
+        RowsetSharedPtr src_rowset = *rowset_writer->build();
+        to_remove.push_back(std::move(src_rowset));
+    }
+    tablet->modify_rowsets(to_add, to_remove, &to_replace);
+    ASSERT_EQ(to_replace.size(), 3);
 }
 
 } // namespace starrocks
