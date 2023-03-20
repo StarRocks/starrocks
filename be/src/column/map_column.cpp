@@ -631,7 +631,8 @@ void MapColumn::remove_duplicated_keys() {
     offsets_vec.push_back(0);
 
     uint32_t new_offset = 0;
-    for (auto i = 0; i < _offsets->size() - 1; ++i) {
+    size_t size = this->size();
+    for (auto i = 0; i < size; ++i) {
         for (auto j = _offsets->get_data()[i]; j < _offsets->get_data()[i + 1]; ++j) {
             for (auto k = j + 1; k < _offsets->get_data()[i + 1]; ++k) {
                 if (_keys->equals(j, *_keys, k)) {
