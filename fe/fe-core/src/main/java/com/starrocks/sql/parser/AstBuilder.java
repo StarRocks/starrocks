@@ -584,70 +584,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionDescList.add(rangePartitionDesc);
             }
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
-            String functionName = functionCallExpr.getFnName().getFunction();
-            List<String> columnList = Lists.newArrayList();
-            List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
-            if (FunctionSet.DATE_TRUNC.equals(functionName)) {
-                if (paramsExpr.size() != 2) {
-                    throw new ParsingException("The date_trunc function should have 2 parameters");
-                }
-                Expr firstExpr = paramsExpr.get(0);
-                Expr secondExpr = paramsExpr.get(1);
-                String partitionColumnName;
-                if (secondExpr instanceof SlotRef) {
-                    partitionColumnName = ((SlotRef) secondExpr).getColumnName();
-                    columnList.add(partitionColumnName);
-                } else {
-                    throw new ParsingException("The second parameter of date_trunc only supports fields");
-                }
-                if (firstExpr instanceof StringLiteral) {
-                    StringLiteral stringLiteral = (StringLiteral) firstExpr;
-                    String fmt = stringLiteral.getValue();
-                    if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
-                        throw new ParsingException("Unsupported date_trunc format %s", fmt);
-                    }
-                    checkPartitionColumnTypeValid(columnDefs, partitionColumnName, fmt);
-                } else {
-                    throw new ParsingException("Unsupported date_trunc params: %s", firstExpr.toSql());
-                }
-            } else if (FunctionSet.TIME_SLICE.equals(functionName)) {
-                if (paramsExpr.size() != 4) {
-                    throw new ParsingException("The time_slice function should have 4 parameters");
-                }
-                Expr firstExpr = paramsExpr.get(0);
-                String partitionColumnName;
-                if (firstExpr instanceof SlotRef) {
-                    partitionColumnName = ((SlotRef) firstExpr).getColumnName();
-                    columnList.add(partitionColumnName);
-                } else {
-                    throw new ParsingException("The first parameter of time_slice only supports fields");
-                }
-                Expr secondExpr = paramsExpr.get(1);
-                Expr thirdExpr = paramsExpr.get(2);
-                if (secondExpr instanceof IntLiteral && thirdExpr instanceof StringLiteral) {
-                    StringLiteral stringLiteral = (StringLiteral) thirdExpr;
-                    String fmt = stringLiteral.getValue();
-                    if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
-                        throw new ParsingException("Unsupported time_slice format %s", fmt);
-                    }
-                    checkPartitionColumnTypeValid(columnDefs, partitionColumnName, fmt);
-                } else {
-                    throw new ParsingException("Unsupported time_slice params: %s %s",
-                            secondExpr.toSql(), thirdExpr.toSql());
-                }
-                Expr fourthExpr = paramsExpr.get(3);
-                if (fourthExpr instanceof StringLiteral) {
-                    StringLiteral boundaryLiteral = (StringLiteral) fourthExpr;
-                    String boundary = boundaryLiteral.getValue();
-                    if (!"floor".equalsIgnoreCase(boundary)) {
-                        throw new ParsingException("Automatic partitioning does not support the ceil parameter");
-                    }
-                } else {
-                    throw new ParsingException("Unsupported partition expression: %s", functionCallExpr.toSql());
-                }
-            } else {
-                throw new ParsingException("Unsupported partition expression: %s", functionCallExpr.toSql());
-            }
+            List<String> columnList = checkAndExtractPartitionCol(functionCallExpr, columnDefs);
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
             return new ExpressionPartitionDesc(rangePartitionDesc, functionCallExpr);
         }
@@ -808,6 +745,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
+        PartitionDesc partitionDesc = null;
+        if (context.partitionDesc() != null) {
+            partitionDesc = (PartitionDesc) visit(context.partitionDesc());
+        }
+
+        if (partitionDesc instanceof ExpressionPartitionDesc) {
+            throw new ParsingException("CTAS does not support automatic partition tables");
+        }
+
         CreateTableStmt createTableStmt = new CreateTableStmt(
                 context.IF() != null,
                 false,
@@ -815,7 +761,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 null,
                 EngineType.defaultEngine().name(),
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
-                context.partitionDesc() == null ? null : (PartitionDesc) visit(context.partitionDesc()),
+                partitionDesc,
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
                 properties,
                 null,
@@ -827,6 +773,78 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 createTableStmt,
                 columns == null ? null : columns.stream().map(Identifier::getValue).collect(toList()),
                 (QueryStatement) visit(context.queryStatement()));
+    }
+
+    // check the partition expr is legal and extract partition columns
+    private List<String> checkAndExtractPartitionCol(FunctionCallExpr expr, List<ColumnDef> columnDefs) {
+        String functionName = expr.getFnName().getFunction();
+        List<String> columnList = Lists.newArrayList();
+        List<Expr> paramsExpr = expr.getParams().exprs();
+        if (FunctionSet.DATE_TRUNC.equals(functionName)) {
+            if (paramsExpr.size() != 2) {
+                throw new ParsingException("The date_trunc function should have 2 parameters");
+            }
+            Expr firstExpr = paramsExpr.get(0);
+            Expr secondExpr = paramsExpr.get(1);
+            String partitionColumnName;
+            if (secondExpr instanceof SlotRef) {
+                partitionColumnName = ((SlotRef) secondExpr).getColumnName();
+                columnList.add(partitionColumnName);
+            } else {
+                throw new ParsingException("The second parameter of date_trunc only supports fields");
+            }
+
+            if (firstExpr instanceof StringLiteral) {
+                StringLiteral stringLiteral = (StringLiteral) firstExpr;
+                String fmt = stringLiteral.getValue();
+                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                    throw new ParsingException("Unsupported date_trunc format %s", fmt);
+                }
+                checkPartitionColumnTypeValid(columnDefs, partitionColumnName, fmt);
+            } else {
+                throw new ParsingException("Unsupported date_trunc params: %s", firstExpr.toSql());
+            }
+
+        } else if (FunctionSet.TIME_SLICE.equals(functionName)) {
+            if (paramsExpr.size() != 4) {
+                throw new ParsingException("The time_slice function should have 4 parameters");
+            }
+            Expr firstExpr = paramsExpr.get(0);
+            String partitionColumnName;
+            if (firstExpr instanceof SlotRef) {
+                partitionColumnName = ((SlotRef) firstExpr).getColumnName();
+                columnList.add(partitionColumnName);
+            } else {
+                throw new ParsingException("The first parameter of time_slice only supports fields");
+            }
+            Expr secondExpr = paramsExpr.get(1);
+            Expr thirdExpr = paramsExpr.get(2);
+            if (secondExpr instanceof IntLiteral && thirdExpr instanceof StringLiteral) {
+                StringLiteral stringLiteral = (StringLiteral) thirdExpr;
+                String fmt = stringLiteral.getValue();
+                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                    throw new ParsingException("Unsupported time_slice format %s", fmt);
+                }
+                // For materialized views currently columnDefs == null
+                checkPartitionColumnTypeValid(columnDefs, partitionColumnName, fmt);
+            } else {
+                throw new ParsingException("Unsupported time_slice params: %s %s",
+                        secondExpr.toSql(), thirdExpr.toSql());
+            }
+            Expr fourthExpr = paramsExpr.get(3);
+            if (fourthExpr instanceof StringLiteral) {
+                StringLiteral boundaryLiteral = (StringLiteral) fourthExpr;
+                String boundary = boundaryLiteral.getValue();
+                if (!"floor".equalsIgnoreCase(boundary)) {
+                    throw new ParsingException("Automatic partitioning does not support the ceil parameter");
+                }
+            } else {
+                throw new ParsingException("Unsupported partition expression: %s", expr.toSql());
+            }
+        } else {
+            throw new ParsingException("Unsupported partition expression: %s", expr.toSql());
+        }
+        return columnList;
     }
 
     @Override
@@ -5414,7 +5432,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitPartitionDesc(StarRocksParser.PartitionDescContext context) {
-        List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+        List<PartitionDesc> partitionDescList = new ArrayList<>();
+        StarRocksParser.IdentifierListContext identifierListContext = context.identifierList();
+        if (context.functionCall() != null) {
+            for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
+                final PartitionDesc rangePartitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
+                partitionDescList.add(rangePartitionDesc);
+            }
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
+            List<String> columnList = checkAndExtractPartitionCol(functionCallExpr, null);
+            RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
+            return new ExpressionPartitionDesc(rangePartitionDesc, functionCallExpr);
+        }
+        List<Identifier> identifierList = visit(identifierListContext.identifier(), Identifier.class);
         List<PartitionDesc> partitionDesc = visit(context.rangePartitionDesc(), PartitionDesc.class);
         return new RangePartitionDesc(
                 identifierList.stream().map(Identifier::getValue).collect(toList()),

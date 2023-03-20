@@ -43,6 +43,7 @@ import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -55,7 +56,10 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
@@ -284,6 +288,59 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     // Maintenance plan for this MV
     private transient ExecPlan maintenancePlan;
+
+    public static class MvRewriteContext {
+        // mv's logical plan
+        private final OptExpression logicalPlan;
+
+        // mv plan's output columns, used for mv rewrite
+        private final List<ColumnRefOperator> outputColumns;
+
+        // column ref factory used when compile mv plan
+        private final ColumnRefFactory refFactory;
+
+        // indidate whether this mv is a SPJG plan
+        // if not, we do not store other fields to save memory,
+        // because we will not use other fields
+        private boolean isValidMvPlan;
+
+        public MvRewriteContext() {
+            this.logicalPlan = null;
+            this.outputColumns = null;
+            this.refFactory = null;
+            this.isValidMvPlan = false;
+        }
+
+        public MvRewriteContext(
+                OptExpression logicalPlan,
+                List<ColumnRefOperator> outputColumns,
+                ColumnRefFactory refFactory) {
+            this.logicalPlan = logicalPlan;
+            this.outputColumns = outputColumns;
+            this.refFactory = refFactory;
+            this.isValidMvPlan = true;
+        }
+
+        public OptExpression getLogicalPlan() {
+            return logicalPlan;
+        }
+
+        public List<ColumnRefOperator> getOutputColumns() {
+            return outputColumns;
+        }
+
+        public ColumnRefFactory getRefFactory() {
+            return refFactory;
+        }
+
+        public boolean isValidMvPlan() {
+            return isValidMvPlan;
+        }
+    }
+    // context used in mv rewrite
+    // just in memory now
+    // there are only reads after first-time write
+    private MvRewriteContext mvRewriteContext;
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -570,6 +627,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // set privilege
         connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         // currently, mv only supports one expression
         Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
@@ -960,5 +1018,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setMaintenancePlan(ExecPlan maintenancePlan) {
         this.maintenancePlan = maintenancePlan;
+    }
+
+    public MvRewriteContext getPlanContext() {
+        return mvRewriteContext;
+    }
+
+    public void setPlanContext(MvRewriteContext mvRewriteContext) {
+        this.mvRewriteContext = mvRewriteContext;
     }
 }

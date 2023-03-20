@@ -615,6 +615,20 @@ under the License.
                 <version>${hadoop.version}</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-azure-datalake -->
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-azure-datalake</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-azure -->
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-azure</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/com.fasterxml.uuid/java-uuid-generator -->
             <dependency>
                 <groupId>com.fasterxml.uuid</groupId>

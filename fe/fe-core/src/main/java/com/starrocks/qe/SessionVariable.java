@@ -334,8 +334,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
+
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE =
+            "enable_materialized_view_view_delta_rewrite";
+
+    public static final String ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE =
+            "enable_materialized_view_single_table_view_delta_rewrite";
 
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
@@ -877,6 +883,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
 
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE)
+    private boolean enableMaterializedViewViewDeltaRewrite = true;
+
+    //  Whether to enable view delta compensation for single table,
+    //  - try to rewrite single table query into candidate view-delta mvs if enabled which will choose
+    //      plan by cost.
+    //  - otherwise not try to write single table query by using candidate view-delta mvs which only
+    //      try to rewrite by single table mvs and is determined by rule rather than by cost.
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE, flag = VariableMgr.INVISIBLE)
+    private boolean enableMaterializedViewSingleTableViewDeltaRewrite = false;
+
     // if enable_big_query_log = true and cpu/io cost of a query exceeds the related threshold,
     // the information will be written to the big query log
     @VarAttr(name = ENABLE_BIG_QUERY_LOG)
@@ -983,6 +1000,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             return true;
         } else {
             return false;
+        }
+    }
+
+    public void setActivateAllRolesOnLogin(boolean activateAll) {
+        if (activateAll) {
+            activateAllRolesOnLogin = "ON";
+        } else {
+            activateAllRolesOnLogin = "OFF";
         }
     }
 
@@ -1701,6 +1726,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRuleBasedMaterializedViewRewrite(boolean enableRuleBasedMaterializedViewRewrite) {
         this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
+    }
+
+    public boolean isEnableMaterializedViewViewDeltaRewrite() {
+        return enableMaterializedViewViewDeltaRewrite;
+    }
+
+    public void setEnableMaterializedViewViewDeltaRewrite(boolean enableMaterializedViewViewDeltaRewrite) {
+        this.enableMaterializedViewViewDeltaRewrite = enableMaterializedViewViewDeltaRewrite;
+    }
+
+    public boolean isEnableMaterializedViewSingleTableViewDeltaRewrite() {
+        return enableMaterializedViewSingleTableViewDeltaRewrite;
+    }
+
+    public void setEnableMaterializedViewSingleTableViewDeltaRewrite(
+            boolean enableMaterializedViewSingleTableViewDeltaRewrite) {
+        this.enableMaterializedViewSingleTableViewDeltaRewrite = enableMaterializedViewSingleTableViewDeltaRewrite;
     }
 
     public boolean isEnableBigQueryLog() {
