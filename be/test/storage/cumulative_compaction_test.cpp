@@ -7,6 +7,12 @@
 
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
+=======
+#include "runtime/mem_pool.h"
+#include "runtime/mem_tracker.h"
+#include "storage/base_compaction.h"
+>>>>>>> c1f6a4df2 ([BugFix] fix rowset leak when cumulative compaction single rowset (#19665))
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
 #include "storage/compaction_utils.h"
@@ -23,7 +29,111 @@ static StorageEngine* k_engine = nullptr;
 
 class CumulativeCompactionTest : public testing::Test {
 public:
+<<<<<<< HEAD
     void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context) {
+=======
+    ~CumulativeCompactionTest() override {
+        if (_engine) {
+            _engine->stop();
+            delete _engine;
+            _engine = nullptr;
+        }
+    }
+    void write_new_version(const TabletMetaSharedPtr& tablet_meta) {
+        RowsetWriterContext rowset_writer_context;
+        create_rowset_writer_context(&rowset_writer_context, _version);
+        _version++;
+        std::unique_ptr<RowsetWriter> rowset_writer;
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
+
+        rowset_writer_add_rows(rowset_writer);
+
+        rowset_writer->flush();
+        RowsetSharedPtr src_rowset = *rowset_writer->build();
+        ASSERT_TRUE(src_rowset != nullptr);
+        ASSERT_EQ(1024, src_rowset->num_rows());
+
+        tablet_meta->add_rs_meta(src_rowset->rowset_meta());
+    }
+
+    void write_new_version_and_return(const TabletSharedPtr& tablet, RowsetSharedPtr& src_rowset) {
+        RowsetWriterContext rowset_writer_context;
+        create_rowset_writer_context(&rowset_writer_context, _version);
+        _version++;
+        std::unique_ptr<RowsetWriter> rowset_writer;
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
+
+        rowset_writer_add_rows(rowset_writer);
+
+        rowset_writer->flush();
+        src_rowset = *rowset_writer->build();
+        ASSERT_TRUE(src_rowset != nullptr);
+        ASSERT_EQ(1024, src_rowset->num_rows());
+
+        ASSERT_TRUE(tablet->add_rowset(src_rowset).ok());
+    }
+
+    void delete_specify_version(const TabletSharedPtr& tablet, int64_t version, RowsetSharedPtr to_check) {
+        std::vector<RowsetSharedPtr> to_add;
+        std::vector<RowsetSharedPtr> to_delete;
+        std::vector<RowsetSharedPtr> to_replace;
+        RowsetWriterContext rowset_writer_context;
+        create_rowset_writer_context(&rowset_writer_context, version);
+        std::unique_ptr<RowsetWriter> rowset_writer;
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
+
+        rowset_writer_add_rows(rowset_writer);
+
+        rowset_writer->flush();
+        auto src_rowset = *rowset_writer->build();
+        ASSERT_TRUE(src_rowset != nullptr);
+        ASSERT_EQ(1024, src_rowset->num_rows());
+        to_delete.push_back(src_rowset);
+
+        tablet->modify_rowsets(to_add, to_delete, &to_replace);
+        ASSERT_EQ(to_replace.size(), 1);
+        ASSERT_EQ(to_replace[0]->rowset_id(), to_check->rowset_id());
+    }
+
+    void write_specify_version(const TabletSharedPtr& tablet, int64_t version) {
+        RowsetWriterContext rowset_writer_context;
+        create_rowset_writer_context(&rowset_writer_context, version);
+        std::unique_ptr<RowsetWriter> rowset_writer;
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
+
+        rowset_writer_add_rows(rowset_writer);
+
+        rowset_writer->flush();
+        RowsetSharedPtr src_rowset = *rowset_writer->build();
+        ASSERT_TRUE(src_rowset != nullptr);
+        ASSERT_EQ(1024, src_rowset->num_rows());
+
+        ASSERT_TRUE(tablet->add_rowset(src_rowset).ok());
+    }
+
+    void write_delete_version(const TabletMetaSharedPtr& tablet_meta, int64_t version) {
+        RowsetWriterContext rowset_writer_context;
+        create_rowset_writer_context(&rowset_writer_context, version);
+        std::unique_ptr<RowsetWriter> rowset_writer;
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
+
+        rowset_writer->flush();
+        RowsetSharedPtr src_rowset = *rowset_writer->build();
+        ASSERT_TRUE(src_rowset != nullptr);
+        ASSERT_EQ(0, src_rowset->num_rows());
+
+        auto* delete_predicate = src_rowset->rowset_meta()->mutable_delete_predicate();
+        delete_predicate->set_version(version);
+        auto* in_pred = delete_predicate->add_in_predicates();
+        in_pred->set_column_name("k1");
+        in_pred->set_is_not_in(false);
+        in_pred->add_values("0");
+
+        tablet_meta->add_rs_meta(src_rowset->rowset_meta());
+    }
+
+    void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context, int64_t version) {
+>>>>>>> c1f6a4df2 ([BugFix] fix rowset leak when cumulative compaction single rowset (#19665))
         RowsetId rowset_id;
         rowset_id.init(10000);
         rowset_writer_context->rowset_id = rowset_id;
@@ -268,4 +378,67 @@ TEST_F(CumulativeCompactionTest, test_read_chunk_size) {
                                                                       total_mem_footprint, source_num));
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+TEST_F(CumulativeCompactionTest, test_multi_segment_cumulative_compaction) {
+    LOG(INFO) << "test_multi_segment_cumulative_compaction";
+    create_tablet_schema(UNIQUE_KEYS);
+
+    config::max_segment_file_size = 128;
+    DeferOp defer([&] { config::max_segment_file_size = 1073741824; });
+
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+
+    write_new_version(tablet_meta);
+
+    TabletSharedPtr tablet =
+            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    tablet->init();
+
+    CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
+    auto res = cumulative_compaction.compact();
+    ASSERT_TRUE(res.ok());
+
+    ASSERT_EQ(1, tablet->version_count());
+    ASSERT_EQ(1, tablet->cumulative_layer_point());
+    std::vector<Version> versions;
+    tablet->list_versions(&versions);
+    ASSERT_EQ(1, versions.size());
+    ASSERT_EQ(0, versions[0].first);
+    ASSERT_EQ(0, versions[0].second);
+}
+
+TEST_F(CumulativeCompactionTest, test_cumulative_single_rowset) {
+    create_tablet_schema(UNIQUE_KEYS);
+
+    config::max_segment_file_size = 128;
+    DeferOp defer([&] { config::max_segment_file_size = 1073741824; });
+
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+
+    TabletSharedPtr tablet =
+            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    tablet->init();
+
+    RowsetSharedPtr rowset_ptr;
+    write_new_version_and_return(tablet, rowset_ptr);
+
+    CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
+    ASSERT_TRUE(cumulative_compaction.compact().ok());
+
+    ASSERT_EQ(1, tablet->version_count());
+    ASSERT_EQ(1, tablet->cumulative_layer_point());
+    std::vector<Version> versions;
+    tablet->list_versions(&versions);
+    ASSERT_EQ(1, versions.size());
+    ASSERT_EQ(0, versions[0].first);
+    ASSERT_EQ(0, versions[0].second);
+
+    delete_specify_version(tablet, 0, rowset_ptr);
+}
+
+} // namespace starrocks
+>>>>>>> c1f6a4df2 ([BugFix] fix rowset leak when cumulative compaction single rowset (#19665))

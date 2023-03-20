@@ -354,13 +354,22 @@ Status Compaction::modify_rowsets() {
         return Status::InternalError("Process is going to quit. The compaction will stop.");
     }
 
+<<<<<<< HEAD
     std::vector<RowsetSharedPtr> output_rowsets;
     output_rowsets.push_back(_output_rowset);
 
     std::unique_lock wrlock(_tablet->get_header_lock());
     _tablet->modify_rowsets(output_rowsets, _input_rowsets);
+=======
+    std::vector<RowsetSharedPtr> to_replace;
+    std::unique_lock wrlock(_tablet->get_header_lock());
+    _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
+>>>>>>> c1f6a4df2 ([BugFix] fix rowset leak when cumulative compaction single rowset (#19665))
     _tablet->save_meta();
     Rowset::close_rowsets(_input_rowsets);
+    for (auto& rs : to_replace) {
+        StorageEngine::instance()->add_unused_rowset(rs);
+    }
 
     return Status::OK();
 }
