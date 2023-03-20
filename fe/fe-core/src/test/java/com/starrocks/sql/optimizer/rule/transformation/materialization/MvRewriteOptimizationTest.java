@@ -27,6 +27,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -57,6 +58,7 @@ import org.junit.Test;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class MvRewriteOptimizationTest {
     private static ConnectContext connectContext;
@@ -2132,5 +2134,36 @@ public class MvRewriteOptimizationTest {
         dropMv("test", "hive_nested_mv_1");
         dropMv("test", "hive_nested_mv_2");
         dropMv("test", "hive_nested_mv_3");
+    }
+
+    @Test
+    public void testTabletHintForbidMvRewrite() throws Exception {
+        createAndRefreshMv("test", "forbid_mv_1", "create materialized view forbid_mv_1" +
+                " distributed by hash(t1d) as SELECT " +
+                " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from test_all_type" +
+                " group by test_all_type.t1d");
+
+        String query1 = "SELECT test_all_type.t1d," +
+                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from test_all_type" +
+                " group by test_all_type.t1d";
+        String plan1 = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan1, "  0:OlapScanNode\n" +
+                "     TABLE: forbid_mv_1\n" +
+                "     PREAGGREGATION: ON");
+        ShowResultSet tablets = starRocksAssert.showTablet("test", "test_all_type");
+        List<String> tabletIds = tablets.getResultRows().stream().map(r -> r.get(0)).collect(Collectors.toList());
+        String tabletHint = String.format("tablet(%s)", tabletIds.get(0));
+        String query2 = "SELECT test_all_type.t1d," +
+                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from test_all_type " + tabletHint +
+                " group by test_all_type.t1d";
+
+        String plan2 = getFragmentPlan(query2);
+        PlanTestBase.assertContains(plan2, "  0:OlapScanNode\n" +
+                "     TABLE: test_all_type\n" +
+                "     PREAGGREGATION: ON");
+        dropMv("test", "forbid_mv_1");
     }
 }

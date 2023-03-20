@@ -118,6 +118,10 @@ public class MaterializedViewRule extends Rule {
 
         init(optExpression);
 
+        if (scanOperators.stream().anyMatch(LogicalOlapScanOperator::hasTabletOrPartitionHints)) {
+            return Lists.newArrayList(optExpression);
+        }
+
         for (LogicalOlapScanOperator scan : scanOperators) {
             int relationId = factory.getRelationId(scan.getOutputColumns().get(0).getId());
             // clear rewrite context since we are going to handle another scan operator.
