@@ -807,7 +807,6 @@ public class Load {
                 FunctionCallExpr newFn = new FunctionCallExpr("if", exprs);
                 return newFn;
             } else if (funcName.equalsIgnoreCase(FunctionSet.STRFTIME)) {
-                // TODO(yan): we need to do some cast here?
                 // FROM_UNIXTIME(val)
                 FunctionName fromUnixName = new FunctionName(FunctionSet.FROM_UNIXTIME);
                 List<Expr> fromUnixArgs = Lists.newArrayList(funcExpr.getChild(1));
@@ -834,8 +833,6 @@ public class Load {
                  * UNIX_TIMESTAMP(DATE_FORMAT(FROM_UNIXTIME(ts), "%Y-01-01 00:00:00"));
                  *
                  */
-
-                // TODO(yan): we nedd to do some cast here?
                 // FROM_UNIXTIME
                 FunctionName fromUnixName = new FunctionName(FunctionSet.FROM_UNIXTIME);
                 List<Expr> fromUnixArgs = Lists.newArrayList(funcExpr.getChild(1));
