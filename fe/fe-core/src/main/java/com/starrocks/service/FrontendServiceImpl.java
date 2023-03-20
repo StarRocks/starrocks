@@ -472,12 +472,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             status.setTask_id(rowSet.get(6));
             status.setTask_name(rowSet.get(7));
-
             status.setLast_refresh_start_time(rowSet.get(8));
             status.setLast_refresh_finished_time(rowSet.get(9));
             status.setLast_refresh_duration(rowSet.get(10));
             status.setLast_refresh_state(rowSet.get(11));
-
             status.setLast_refresh_force_refresh(rowSet.get(12));
             status.setLast_refresh_start_partition(rowSet.get(13));
             status.setLast_refresh_end_partition(rowSet.get(14));

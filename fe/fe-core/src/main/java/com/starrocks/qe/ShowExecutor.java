@@ -122,6 +122,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -604,16 +605,17 @@ public class ShowExecutor {
             // last_refresh_state
             resultRow.add(String.valueOf(taskStatus.getState()));
 
+            MVTaskRunExtraMessage extraMessage = taskStatus.getMvTaskRunExtraMessage();
             // force refresh
-            resultRow.add(taskStatus.isForceRefresh() ? "true" : "false");
+            resultRow.add(extraMessage.isForceRefresh() ? "true" : "false");
             // last_refresh partition start
-            resultRow.add(taskStatus.getPartitionStart());
+            resultRow.add(extraMessage.getPartitionStart());
             // last_refresh partition end
-            resultRow.add(taskStatus.getPartitionEnd());
+            resultRow.add(extraMessage.getPartitionEnd());
             // last_refresh base table refresh map
-            resultRow.add(taskStatus.getBasePartitionsToRefreshMapString());
+            resultRow.add(extraMessage.getBasePartitionsToRefreshMapString());
             // last_refresh mv partitions
-            resultRow.add(taskStatus.getMvPartitionsToRefreshString());
+            resultRow.add(extraMessage.getMvPartitionsToRefreshString());
 
             // last_refresh_code
             resultRow.add(String.valueOf(taskStatus.getErrorCode()));

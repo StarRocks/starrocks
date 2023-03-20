@@ -226,6 +226,7 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setQueryId(queryId);
         status.setTaskId(task.getId());
         status.setTaskName(task.getName());
+        status.setSource(task.getSource());
         if (createTime == null) {
             status.setCreateTime(System.currentTimeMillis());
         } else {

@@ -59,6 +59,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -178,9 +179,10 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 Map<String, Set<String>> sourceTablePartitions = getSourceTablePartitions(partitionsToRefresh);
                 LOG.debug("materialized view:{} source partitions :{}",
                         materializedView.getName(), sourceTablePartitions);
-                if (this.mvContext.status != null) {
-                    this.mvContext.status.setMvPartitionsToRefresh(partitionsToRefresh);
-                    this.mvContext.status.setBasePartitionsToRefreshMap(sourceTablePartitions);
+                if (this.getMVTaskRunExtraMessage() != null) {
+                    MVTaskRunExtraMessage extraMessage = getMVTaskRunExtraMessage();
+                    extraMessage.setMvPartitionsToRefresh(partitionsToRefresh);
+                    extraMessage.setBasePartitionsToRefreshMap(sourceTablePartitions);
                 }
 
                 // create ExecPlan
@@ -212,6 +214,13 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         if (mvContext.hasNextBatchPartition()) {
             generateNextTaskRun();
         }
+    }
+
+    public MVTaskRunExtraMessage getMVTaskRunExtraMessage() {
+        if (this.mvContext.status == null) {
+            return null;
+        }
+        return this.mvContext.status.getMvTaskRunExtraMessage();
     }
 
     @VisibleForTesting
@@ -535,13 +544,28 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         String start = properties.get(TaskRun.PARTITION_START);
         String end = properties.get(TaskRun.PARTITION_END);
         boolean force = Boolean.parseBoolean(properties.get(TaskRun.FORCE));
-        Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
-        
+        Set<String> needRefreshMvPartitionNames = getPartitionsToRefreshForMaterializedView(partitionInfo,
+                start, end, force);
+        // update stats
+        if (this.getMVTaskRunExtraMessage() != null) {
+            MVTaskRunExtraMessage extraMessage = this.getMVTaskRunExtraMessage();
+            extraMessage.setForceRefresh(force);
+            extraMessage.setPartitionStart(start);
+            extraMessage.setPartitionEnd(end);
+        }
+        return needRefreshMvPartitionNames;
+    }
+
+    private Set<String> getPartitionsToRefreshForMaterializedView(PartitionInfo partitionInfo,
+                                                                  String start,
+                                                                  String end,
+                                                                  boolean force) throws AnalysisException {
         if (force && start == null && end == null) {
             return Sets.newHashSet(materializedView.getPartitionNames());
         }
 
+        Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
             if (force || unPartitionedMVNeedToRefresh()) {
@@ -584,14 +608,6 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         } else {
             throw new DmlException("unsupported partition info type:" + partitionInfo.getClass().getName());
         }
-
-        // update stats
-        if (this.mvContext.status != null) {
-            this.mvContext.status.setForceRefresh(force);
-            this.mvContext.status.setPartitionStart(start);
-            this.mvContext.status.setPartitionEnd(end);
-        }
-
         return needRefreshMvPartitionNames;
     }
 

@@ -15,20 +15,16 @@
 
 package com.starrocks.scheduler.persist;
 
-import com.google.common.base.Joiner;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
-import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Map;
-import java.util.Set;
 
 public class TaskRunStatus implements Writable {
 
@@ -78,16 +74,13 @@ public class TaskRunStatus implements Writable {
     @SerializedName("mergeRedundant")
     private boolean mergeRedundant = false;
 
-    @SerializedName("forceRefresh")
-    private boolean forceRefresh;
-    @SerializedName("partitionStart")
-    private String partitionStart;
-    @SerializedName("partitionEnd")
-    private String partitionEnd;
-    @SerializedName("mvPartitionsToRefresh")
-    private Set<String> mvPartitionsToRefresh;
-    @SerializedName("basePartitionsToRefreshMap")
-    private Map<String, Set<String>> basePartitionsToRefreshMap;
+    @SerializedName("source")
+    private Constants.TaskSource source = Constants.TaskSource.CTAS;
+
+    @SerializedName("mvExtraMessage")
+    private MVTaskRunExtraMessage mvTaskRunExtraMessage = new MVTaskRunExtraMessage();
+
+    public TaskRunStatus() {}
 
     public String getQueryId() {
         return queryId;
@@ -210,80 +203,33 @@ public class TaskRunStatus implements Writable {
         this.mergeRedundant = mergeRedundant;
     }
 
-
-    public boolean isForceRefresh() {
-        return forceRefresh;
+    public Constants.TaskSource getSource() {
+        return source;
     }
 
-    public void setForceRefresh(boolean forceRefresh) {
-        this.forceRefresh = forceRefresh;
+    public void setSource(Constants.TaskSource source) {
+        this.source = source;
     }
 
-    public String getPartitionStart() {
-        return partitionStart;
+    public MVTaskRunExtraMessage getMvTaskRunExtraMessage() {
+        return mvTaskRunExtraMessage;
     }
 
-    public void setPartitionStart(String basePartitionStart) {
-        this.partitionStart = basePartitionStart;
+    public void setMvTaskRunExtraMessage(MVTaskRunExtraMessage mvTaskRunExtraMessage) {
+        this.mvTaskRunExtraMessage = mvTaskRunExtraMessage;
     }
 
-    public String getPartitionEnd() {
-        return partitionEnd;
-    }
-
-    public void setPartitionEnd(String basePartitionEnd) {
-        this.partitionEnd = basePartitionEnd;
-    }
-
-    public Set<String> getMvPartitionsToRefresh() {
-        return mvPartitionsToRefresh;
-    }
-
-
-
-    public void setMvPartitionsToRefresh(Set<String> mvPartitionsToRefresh) {
-        this.mvPartitionsToRefresh = mvPartitionsToRefresh;
-    }
-
-    public Map<String, Set<String>> getBasePartitionsToRefreshMap() {
-        return basePartitionsToRefreshMap;
-    }
-
-    public String getMvPartitionsToRefreshString() {
-        if (mvPartitionsToRefresh != null)  {
-            String mvPartitionToRefresh = Joiner.on(",").join(mvPartitionsToRefresh);
-            return StringUtils.substring(mvPartitionToRefresh, 0, 1024);
+    public String getExtraMessage() {
+        if (source == Constants.TaskSource.MV) {
+            return GsonUtils.GSON.toJson(mvTaskRunExtraMessage);
         } else {
             return "";
         }
-    }
-
-    public String getBasePartitionsToRefreshMapString() {
-        if (basePartitionsToRefreshMap != null) {
-            String basePartitionToRefresh = basePartitionsToRefreshMap.toString();
-            return StringUtils.substring(basePartitionToRefresh, 0, 1024);
-        } else {
-            return "";
-        }
-    }
-
-    public void setBasePartitionsToRefreshMap(
-            Map<String, Set<String>> basePartitionsToRefreshMap) {
-        this.basePartitionsToRefreshMap = basePartitionsToRefreshMap;
     }
 
     public static TaskRunStatus read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
-    }
-
-    public String getExtraMessage() {
-        if (basePartitionsToRefreshMap != null) {
-            String basePartitionToRefresh = basePartitionsToRefreshMap.toString();
-            return StringUtils.substring(basePartitionToRefresh, 0, 1024);
-        } else {
-            return "";
-        }
     }
 
     @Override

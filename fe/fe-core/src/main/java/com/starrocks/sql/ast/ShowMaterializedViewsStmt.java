@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.RedirectStatus;
@@ -26,6 +27,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
 
 // Show rollup statement, used to show rollup information of one table.
 //
@@ -56,6 +59,14 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                     .column("text", ScalarType.createVarchar(1024))
                     .column("rows", ScalarType.createVarchar(50))
                     .build();
+
+    private static final Map<String, String> ALIAS_MAP = ImmutableMap.of(
+            "id", "MATERIALIZED_VIEW_ID",
+            "database_name", "TABLE_SCHEMA",
+            "name", "TABLE_NAME",
+            "text", "MATERIALIZED_VIEW_DEFINITION",
+            "rows", "TABLE_ROWS"
+    );
 
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "materialized_views");
 
@@ -105,9 +116,16 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
         SelectList selectList = new SelectList();
         ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
         for (Column column : META_DATA.getColumns()) {
-            SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, column.getName()), column.getName());
-            selectList.addItem(item);
-            aliasMap.put(new SlotRef(null, column.getName()), item.getExpr().clone(null));
+            if (ALIAS_MAP.containsKey(column.getName())) {
+                SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, ALIAS_MAP.get(column.getName())),
+                        column.getName());
+                selectList.addItem(item);
+                aliasMap.put(new SlotRef(null, column.getName()), item.getExpr().clone(null));
+            } else {
+                SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, column.getName()), column.getName());
+                selectList.addItem(item);
+                aliasMap.put(new SlotRef(null, column.getName()), item.getExpr().clone(null));
+            }
         }
         where = where.substitute(aliasMap);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
