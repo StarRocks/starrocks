@@ -352,7 +352,7 @@
       + [bitmap_to_string](/sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)
       + [bitmap_to_array](/sql-reference/sql-functions/bitmap-functions/bitmap_to_array.md)
       + [to_bitmap](/sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
-    + 数组函数
+    + Array 函数
       + [array_agg](/sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_concat](/sql-reference/sql-functions/array-functions/array_concat.md)
       + [array_difference](/sql-reference/sql-functions/array-functions/array_difference.md)
@@ -373,7 +373,7 @@
       + [array_remove](/sql-reference/sql-functions/array-functions/array_remove.md)
       + [reverse](/sql-reference/sql-functions/string-functions/reverse.md)
       + [unnest](/sql-reference/sql-functions/array-functions/unnest.md)
-    + bit函数
+    + Bit 函数
       + [bitand](/sql-reference/sql-functions/bit-functions/bitand.md)
       + [bitnot](/sql-reference/sql-functions/bit-functions/bitnot.md)
       + [bitor](/sql-reference/sql-functions/bit-functions/bitor.md)
