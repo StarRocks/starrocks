@@ -223,6 +223,21 @@ void ParquetBuilder::_generate_rg_writer() {
     }
 }
 
+void ParquetBuilder::_write_varchar_chunk_column(size_t num_rows, size_t col_idx, const Column* data_column, std::vector<int16_t>& def_level) {
+    ParquetBuilder::_generate_rg_writer();
+    auto col_writer = static_cast<parquet::ByteArrayWriter*>(_rg_writer->column(col_idx));
+    auto raw_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(data_column);
+    auto vo = raw_col->get_offset();
+    auto vb = raw_col->get_bytes();
+    for (size_t j = 0; j < num_rows; j++) {
+        parquet::ByteArray value;
+        value.ptr = reinterpret_cast<const uint8_t*>(vb.data() + vo[j]);
+        value.len = vo[j + 1] - vo[j];
+        col_writer->WriteBatch(1, def_level.data() + j, nullptr, &value);
+    }
+    _buffered_values_estimate[col_idx] = col_writer->EstimatedBufferedValueBytes();
+}
+
 #define DISPATCH_PARQUET_NUMERIC_WRITER(WRITER, COLUMN_TYPE, NATIVE_TYPE)                                         \
     ParquetBuilder::_generate_rg_writer();                                                                        \
     parquet::WRITER* col_writer = static_cast<parquet::WRITER*>(_rg_writer->column(i));                           \
@@ -276,18 +291,7 @@ Status ParquetBuilder::add_chunk(Chunk* chunk) {
             break;
         }
         case TYPE_VARCHAR: {
-            ParquetBuilder::_generate_rg_writer();
-            auto col_writer = static_cast<parquet::ByteArrayWriter*>(_rg_writer->column(i));
-            auto raw_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(data_column);
-            auto vo = raw_col->get_offset();
-            auto vb = raw_col->get_bytes();
-            for (size_t j = 0; j < num_rows; j++) {
-                parquet::ByteArray value;
-                value.ptr = reinterpret_cast<const uint8_t*>(vb.data() + vo[j]);
-                value.len = vo[j + 1] - vo[j];
-                col_writer->WriteBatch(1, def_level.data() + j, nullptr, &value);
-            }
-            _buffered_values_estimate[i] = col_writer->EstimatedBufferedValueBytes();
+            _write_varchar_chunk_column(num_rows, i, data_column, def_level);
             break;
         }
         default: {

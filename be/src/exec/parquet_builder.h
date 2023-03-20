@@ -93,6 +93,8 @@ private:
     void _flush_row_group();
     size_t _get_rg_written_bytes();
     void _check_size();
+    void _write_varchar_chunk_column(size_t num_rows, size_t col_idx, const Column *data_column,
+                                     std::vector<int16_t> &def_level);
 
     std::unique_ptr<WritableFile> _writable_file;
     std::shared_ptr<ParquetOutputStream> _output_stream;
