@@ -46,8 +46,7 @@ public class LambdaArgument extends Expr {
         super(rhs);
         name = rhs.getName();
     }
-
-
+    
     public String getName() {
         return name;
     }
