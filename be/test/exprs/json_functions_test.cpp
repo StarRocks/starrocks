@@ -984,7 +984,7 @@ TEST_F(JsonFunctionsTest, struct_to_json) {
     // Cast to JSON
     Columns input_columns{struct_column};
     auto maybe_res = JsonFunctions::to_json(ctx.get(), input_columns);
-    ASSERT_OK(maybe_res);
+    ASSERT_TRUE(maybe_res.ok());
     ColumnPtr ptr = maybe_res.value();
 
     ASSERT_EQ(2, ptr->size());
@@ -1016,7 +1016,7 @@ TEST_F(JsonFunctionsTest, map_to_json) {
     // Call to_json
     Columns input_columns{struct_column};
     auto maybe_res = JsonFunctions::to_json(ctx.get(), input_columns);
-    ASSERT_OK(maybe_res);
+    ASSERT_TRUE(maybe_res.ok());
     ColumnPtr ptr = maybe_res.value();
 
     ASSERT_EQ(2, ptr->size());
