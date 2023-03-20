@@ -439,7 +439,7 @@
       + [bitmap_xor](/sql-reference/sql-functions/bitmap-functions/bitmap_xor.md)
       + [intersect_count](/sql-reference/sql-functions/bitmap-functions/intersect_count.md)
       + [to_bitmap](/sql-reference/sql-functions/bitmap-functions/to_bitmap.md)  
-    + 数组函数
+    + Array 函数
       + [array_agg](/sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_append](/sql-reference/sql-functions/array-functions/array_append.md)
       + [array_avg](/sql-reference/sql-functions/array-functions/array_avg.md)
@@ -463,7 +463,7 @@
       + [array_to_bitmap](/sql-reference/sql-functions/array-functions/array_to_bitmap.md)
       + [reverse](/sql-reference/sql-functions/string-functions/reverse.md)
       + [unnest](/sql-reference/sql-functions/array-functions/unnest.md)
-    + bit函数
+    + Bit 函数
       + [bitand](/sql-reference/sql-functions/bit-functions/bitand.md)
       + [bitnot](/sql-reference/sql-functions/bit-functions/bitnot.md)
       + [bitor](/sql-reference/sql-functions/bit-functions/bitor.md)
