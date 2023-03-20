@@ -93,11 +93,11 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.last_refresh_finished_time AS last_refresh_finished_time, " +
                         "information_schema.materialized_views.last_refresh_duration AS last_refresh_duration, " +
                         "information_schema.materialized_views.last_refresh_state AS last_refresh_state, " +
-                        "information_schema.materialized_views.force_refresh AS force_refresh, " +
-                        "information_schema.materialized_views.start_partition AS start_partition, " +
-                        "information_schema.materialized_views.end_partition AS end_partition, " +
-                        "information_schema.materialized_views.base_refresh_partitions AS base_refresh_partitions, " +
-                        "information_schema.materialized_views.mv_refresh_partitions AS mv_refresh_partitions, " +
+                        "information_schema.materialized_views.last_refresh_force_refresh AS force_refresh, " +
+                        "information_schema.materialized_views.last_refresh_start_partition AS start_partition, " +
+                        "information_schema.materialized_views.last_refresh_end_partition AS end_partition, " +
+                        "information_schema.materialized_views.last_refresh_base_refresh_partitions AS base_refresh_partitions, " +
+                        "information_schema.materialized_views.last_refresh_mv_refresh_partitions AS mv_refresh_partitions, " +
                         "information_schema.materialized_views.last_refresh_error_code AS last_refresh_error_code, " +
                         "information_schema.materialized_views.last_refresh_error_message AS last_refresh_error_message, " +
                         "information_schema.materialized_views.text AS text, " +
