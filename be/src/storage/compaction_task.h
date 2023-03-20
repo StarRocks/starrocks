@@ -9,6 +9,7 @@
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "util/runtime_profile.h"
 #include "util/time.h"
@@ -243,8 +244,26 @@ protected:
     void _commit_compaction() {
         std::unique_lock wrlock(_tablet->get_header_lock());
         std::stringstream input_stream_info;
+<<<<<<< HEAD
         for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
             input_stream_info << _input_rowsets[i]->version() << ";";
+=======
+        {
+            std::unique_lock wrlock(_tablet->get_header_lock());
+            for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
+                input_stream_info << _input_rowsets[i]->version() << ";";
+            }
+            if (_input_rowsets.size() > 5) {
+                input_stream_info << ".." << (*_input_rowsets.rbegin())->version();
+            }
+            std::vector<RowsetSharedPtr> to_replace;
+            _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
+            _tablet->save_meta();
+            Rowset::close_rowsets(_input_rowsets);
+            for (auto& rs : to_replace) {
+                StorageEngine::instance()->add_unused_rowset(rs);
+            }
+>>>>>>> c1f6a4df2 ([BugFix] fix rowset leak when cumulative compaction single rowset (#19665))
         }
         if (_input_rowsets.size() > 5) {
             input_stream_info << ".." << (*_input_rowsets.rbegin())->version();
