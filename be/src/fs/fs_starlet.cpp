@@ -301,9 +301,7 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        auto st = (*fs_st)->list_dir(pair.first, false, [&](EntryStat stat) {
-            return cb(stat.name);
-        });
+        auto st = (*fs_st)->list_dir(pair.first, false, [&](EntryStat stat) { return cb(stat.name); });
         return to_status(st);
     }
 
