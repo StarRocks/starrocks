@@ -1,14 +1,16 @@
-# Single-table Materialized View
+# Synchronized materialized view
 
-This topic describes how to create, use, and manage a **single-table materialized view** (Rollup). For the usage of **Multi-table asynchronous refresh materialized views**, see [Multi-table asynchronous refresh materialized view](../using_starrocks/Materialized_view.md).
+This topic describes how to create, use, and manage a **synchronized materialized view** (Rollup).
 
-A single-table Materialized Views in StarRocks is a special index for query acceleration. It cannot be queried directly.
+Synchronized materialized views in StarRocks can be created only on a single base table from [the default catalog](../data_source/catalog/default_catalog.md). All changes in the base table are simultaneously updated to the corresponding synchronized materialized views. This made synchronized materialized views suitable for the transparent acceleration of the real-time, single-table aggregation queries.
 
-If there are a considerable number of predictable queries or queries that use a same set of sub-query results repetitively, you can build single-table materialized views to accelerate these queries.
+Synchronized materialized views are essentially a special index for query acceleration. You cannot query synchronized materialized views directly. However, they are significantly inexpensive to maintain and update.
+
+From v2.4 onwards, StarRocks provides asynchronous materialized views, which supports creation on multiple tables and more aggregation operators For the usage of **asynchronous materialized views**, see [Asynchronous materialized view](../using_starrocks/Materialized_view.md).
 
 ## Preparation
 
-Before creating the single-table materialized view, check if your data warehouse is eligible for query acceleration through single-table materialized views. For example, check if the queries reuse certain subquery statements.
+Before creating a synchronized materialized view, check if your data warehouse is eligible for query acceleration through synchronized materialized views. For example, check if the queries reuse certain sub-query statements.
 
 The following example is based on the table `sales_records`, which contains the transaction ID `record_id`, salesperson ID `seller_id`, store ID `store_id`, date `sale_date`, and sales amount `sale_amt` for each transaction. Follow these steps to create the table and insert data into it:
 
@@ -31,7 +33,7 @@ VALUES
     (006,02,2,"2022-03-17",9515);
 ```
 
-The business scenario of this example demands frequent analyses on the sales amounts of different stores. As a result, the sum function is used on each query, consuming a massive amount of computing resources. You can run the query to record its time, and view its query profile by using EXPLAIN command.
+The business scenario of this example demands frequent analyses on the sales amounts of different stores. As a result, the `sum()` function is used on each query, consuming a massive amount of compute resources. You can run the query to record its time, and view its query profile by using EXPLAIN command.
 
 ```Plain
 MySQL > SELECT store_id, SUM(sale_amt)
@@ -101,13 +103,13 @@ GROUP BY store_id;
 45 rows in set (0.00 sec)
 ```
 
-It can be observed that the query takes about 0.02 seconds, and no single-table materialized view is used to accelerate the query because the output of `rollup` section in the query profile is `sales_records`, which is the base table.
+It can be observed that the query takes about 0.02 seconds, and no synchronized materialized view is used to accelerate the query because the value of `rollup` field in the query profile is `sales_records`, which is the base table.
 
-## Create a single-table materialized view
+## Create a synchronized materialized view
 
-You can create a single-table materialized view based on a specific query statement using [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
+You can create a synchronized materialized view based on a specific query statement using [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
 
-Based on the table `sales_records` and the query statement mentioned above, the following example creates the single-table materialized view `store_amt` to analyze the sum of sales amount in each store.
+Based on the table `sales_records` and the query statement mentioned above, the following example creates the synchronized materialized view `store_amt` to analyze the sum of sales amount in each store.
 
 ```SQL
 CREATE MATERIALIZED VIEW store_amt AS
@@ -116,9 +118,43 @@ FROM sales_records
 GROUP BY store_id;
 ```
 
-## Query with the single-table materialized view
+> **CAUTION**
+>
+> - When using aggregate functions in synchronized materialized views, you must use the GROUP BY clause and specify the GROUP BY column in your SELECT list.
+> - Synchronized materialized views do not support using one aggregate function on multiple columns. Query statements in the form of `sum(a+b)` are not supported.
+> - Synchronized materialized views do not support using multiple aggregate functions on one column. Query statements in the form of `select sum(a), min(a) from table` are not supported.
+> - JOIN and WHERE clauses are not supported when creating a synchronized materialized view.
+> - When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you need to ensure that all synchronized materialized views of the base table do not contain the dropped column, otherwise the drop operation cannot be performed. To drop a column that used in synchronized materialized views, you need to first drop all synchronized materialized views that contain the column, and then drop the column.
+> - Creating too many synchronized materialized views for a table will affect the data load efficiency. When data is being loaded to the base table, the data in synchronized materialized views and base table are updated synchronously. If the base table contains `n` synchronized materialized views, the efficiency of loading data into the base table is about the same as that of loading data into `n` tables.
+> - Currently, StarRocks does not support creating multiple synchronized materialized views at the same time. A new synchronized materialized view can only be created when the previous one is completed.
 
-The single-table materialized view you created contains the complete set of pre-computed results in accordance with the query statement. Subsequent queries will use the data within it. You can run the same query to test the query time as you did in the preparation.
+## Check the building status of a synchronized materialized view
+
+Creating a synchronized materialized view is an asynchronous operation. Executing CREATE MATERIALIZED VIEW successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the synchronized materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md).
+
+```Plain
+MySQL > SHOW ALTER MATERIALIZED VIEW\G
+*************************** 1. row ***************************
+          JobId: 12090
+      TableName: sales_records
+     CreateTime: 2022-08-25 19:41:10
+   FinishedTime: 2022-08-25 19:41:39
+  BaseIndexName: sales_records
+RollupIndexName: store_amt
+       RollupId: 12091
+  TransactionId: 10
+          State: FINISHED
+            Msg: 
+       Progress: NULL
+        Timeout: 86400
+1 row in set (0.00 sec)
+```
+
+The `RollupIndexName` section indicates the name of the synchronized materialized view, and `State` section indicates if the building is completed.
+
+## Query with the synchronized materialized view
+
+The synchronized materialized view you created contains the complete set of pre-computed results in accordance with the query statement. Subsequent queries use the data within it. You can run the same query to test the query time as you did in the preparation.
 
 ```Plain
 MySQL > SELECT store_id, SUM(sale_amt)
@@ -136,9 +172,9 @@ GROUP BY store_id;
 
 It can be observed that the query time is reduced to 0.01 seconds.
 
-## Check if a query hits the single-table materialized view
+## Check if a query hits the synchronized materialized view
 
-Run EXPLAIN command again to check if the query hits the single-table materialized view.
+Execute EXPLAIN command again to check if the query hits the synchronized materialized view.
 
 ```Plain
 MySQL > EXPLAIN SELECT store_id, SUM(sale_amt) FROM sales_records GROUP BY store_id;
@@ -194,35 +230,11 @@ MySQL > EXPLAIN SELECT store_id, SUM(sale_amt) FROM sales_records GROUP BY store
 45 rows in set (0.00 sec)
 ```
 
-As you can see, now the output of `rollup` section in the query profile is `store_amt`, which is the single-table materialized view you have built. That means this query has hit the single-table materialized view.
+It can be observed that the value of `rollup` section in the query profile is now `store_amt`, which is the synchronized materialized view you have built. That means this query has hit the synchronized materialized view.
 
-## Check the building status of a single-table materialized view
+## Show synchronized materialized views
 
-Creating a single-table materialized view is an asynchronous operation. Running CREATE MATERIALIZED VIEW command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the single-table materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) command.
-
-```Plain
-MySQL > SHOW ALTER MATERIALIZED VIEW\G
-*************************** 1. row ***************************
-          JobId: 12090
-      TableName: sales_records
-     CreateTime: 2022-08-25 19:41:10
-   FinishedTime: 2022-08-25 19:41:39
-  BaseIndexName: sales_records
-RollupIndexName: store_amt
-       RollupId: 12091
-  TransactionId: 10
-          State: FINISHED
-            Msg: 
-       Progress: NULL
-        Timeout: 86400
-1 row in set (0.00 sec)
-```
-
-The `RollupIndexName` section indicates the name of the single-table materialized view, and `State` section indicates if the building is completed.
-
-## Check the schema of a single-table materialized view
-
-You can use DESC tbl_name ALL command to check the schema of a table and its subordinate single-table materialized views.
+You can execute DESC \<tbl_name\> ALL to check the schema of a table and its subordinate synchronized materialized views.
 
 ```Plain
 MySQL > DESC sales_records ALL;
@@ -241,27 +253,25 @@ MySQL > DESC sales_records ALL;
 8 rows in set (0.00 sec)
 ```
 
-## Drop a single-table materialized view
+## Drop a synchronized materialized view
 
-Under the following circumstances, you need to drop a single-table materialized view:
+Under the following circumstances, you need to drop the synchronized materialized view:
 
 - You have created a wrong materialized view and you need to drop it before the building completed.
-
 - You have created too many materialized views, which results in a huge drop in load performance, and some of the materialized views are duplicate.
-
 - The frequency of the involved queries is low, and you can tolerate a relatively high query latency.
 
-### Drop an unfinished single-table materialized view
+### Drop an unfinished synchronized materialized view
 
-You can drop a single-table materialized view that is being created by canceling the in-progress creation task. First, you need to get the job ID `JobID` of the materialized view creation task by [checking the building status of the materialized view](#check-the-building-status-of-a-single-table-materialized-view). After getting the job ID, you need to cancel the creation task with the CANCEL ALTER command.
+You can drop a synchronized materialized view that is being created by canceling the in-progress creation task. First, you need to get the job ID `JobID` of the materialized view creation task by [checking the building status of the materialized view](#check-the-building-status-of-a-synchronized-materialized-view). After getting the job ID, you need to cancel the creation task with the CANCEL ALTER command.
 
 ```Plain
 CANCEL ALTER TABLE ROLLUP FROM sales_records (12090);
 ```
 
-### Drop an existing single-table materialized view
+### Drop an existing synchronized materialized view
 
-You can drop an existing single-table materialized view with the [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md) command.
+You can drop an existing synchronized materialized view with the [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md) command.
 
 ```SQL
 DROP MATERIALIZED VIEW store_amt;
@@ -290,7 +300,7 @@ FROM advertiser_view_record
 GROUP BY advertiser, channel;
 ```
 
-To accelerate exact count distinct, you can create a single-table materialized view based on this table and use the bitmap_union function to pre-aggregate the data.
+To accelerate exact count distinct, you can create a synchronized materialized view based on this table and use the bitmap_union function to pre-aggregate the data.
 
 ```SQL
 CREATE MATERIALIZED VIEW advertiser_uv AS
@@ -299,11 +309,11 @@ FROM advertiser_view_record
 GROUP BY advertiser, channel;
 ```
 
-After the single-table materialized view is created, the sub-query `count(distinct user_id)` in the subsequent queries will be automatically rewritten as `bitmap_union_count (to_bitmap(user_id))` so that they can hit the single-table materialized view.
+After the synchronized materialized view is created, the sub-query `count(distinct user_id)` in the subsequent queries will be automatically rewritten as `bitmap_union_count (to_bitmap(user_id))` so that they can hit the synchronized materialized view.
 
 ### Approximate count distinct
 
-Use the table `advertiser_view_record` above as an example again. To accelerate approximate count distinct, you can create a single-table materialized view based on this table and use the [hll_union()](../sql-reference/sql-functions/aggregate-functions/hll_union.md) function to pre-aggregate the data.
+Use the table `advertiser_view_record` above as an example again. To accelerate approximate count distinct, you can create a synchronized materialized view based on this table and use the [hll_union()](../sql-reference/sql-functions/aggregate-functions/hll_union.md) function to pre-aggregate the data.
 
 ```SQL
 CREATE MATERIALIZED VIEW advertiser_uv2 AS
@@ -314,7 +324,7 @@ GROUP BY advertiser, channel;
 
 ### Set extra sort keys
 
-Suppose that the base table `tableA` contains columns `k1`, `k2` and `k3`, where only `k1` and `k2` are sort keys. If the query including the sub-query `where k3=x` must be accelerated, you can create a single-table materialized view with `k3` as the first column.
+Suppose that the base table `tableA` contains columns `k1`, `k2` and `k3`, where only `k1` and `k2` are sort keys. If the query including the sub-query `where k3=x` must be accelerated, you can create a synchronized materialized view with `k3` as the first column.
 
 ```SQL
 CREATE MATERIALIZED VIEW k3_as_key AS
@@ -324,7 +334,7 @@ FROM tableA
 
 ## Correspondence of aggregate functions
 
-When a query is executed with a single-table materialized view, the original query statement will be automatically rewritten and used to query the intermediate results stored in the single-table materialized view. The following table shows the correspondence between the aggregate function in the original query and the aggregate function used to construct the single-table materialized view. You can select the corresponding aggregate function to build a single-table materialized view according to your business scenario.
+When a query is executed with a synchronized materialized view, the original query statement will be automatically rewritten and used to query the intermediate results stored in the synchronized materialized view. The following table shows the correspondence between the aggregate function in the original query and the aggregate function used to construct the synchronized materialized view. You can select the corresponding aggregate function to build a synchronized materialized view according to your business scenario.
 
 | **aggregate function in the original query**           | **aggregate function of the materialized view** |
 | ------------------------------------------------------ | ----------------------------------------------- |
@@ -334,19 +344,3 @@ When a query is executed with a single-table materialized view, the original que
 | count                                                  | count                                           |
 | bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                    |
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                       |
-
-## Caution
-
-- Single-table  materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
-
-- Clauses such as JOIN, and WHERE are not supported in the single-table materialized view creation statements.
-
-- The current version of StarRocks does not support creating multiple single-table materialized views at the same time. A new single-table materialized view can only be created when the one before is completed.
-
-- A single-table materialized view supports only one aggregate function for each column of the base table. Query statements such as `select sum(a), min(a) from table` are not supported.
-
-- When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you need to ensure that all single-table materialized views of the base table contain the dropped column, otherwise the drop operation cannot be performed. If you have to drop the column, you need to first drop all single-table materialized views that do not contain the column, and then drop the column.
-
-- Creating too many single-table materialized views for a table will affect the data load efficiency. When data is being loaded to the base table, the data in single-table materialized view and base table will be updated synchronously. If a base table contains `n` single-table materialized views, the efficiency of loading data into the base table is about the same as the efficiency of loading data into `n` tables.
-
-- You must use the GROUP BY clause when using aggregate functions and specify the GROUP BY column in your SELECT list.
