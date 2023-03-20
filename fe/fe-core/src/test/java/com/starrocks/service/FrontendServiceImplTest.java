@@ -372,6 +372,28 @@ public class FrontendServiceImplTest {
         Assert.assertEquals(2, partition.partitions.size());
     }
 
+    @Test
+    public void testAutomaticPartitionLimitExceed() throws TException {
+        Config.max_automatic_partition_number = 1;
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_slice");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1991-04-24");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assert.assertTrue(partition.getStatus().getError_msgs().get(0).contains("max_automatic_partition_number"));
+        Config.max_automatic_partition_number = 4096;
+    }
+
 
     @Test
     public void testCreatePartitionApiHour() throws TException {
