@@ -22,6 +22,7 @@
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "util/runtime_profile.h"
 #include "util/time.h"
@@ -245,9 +246,13 @@ protected:
             if (_input_rowsets.size() > 5) {
                 input_stream_info << ".." << (*_input_rowsets.rbegin())->version();
             }
-            _tablet->modify_rowsets({_output_rowset}, _input_rowsets);
+            std::vector<RowsetSharedPtr> to_replace;
+            _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
             _tablet->save_meta();
             Rowset::close_rowsets(_input_rowsets);
+            for (auto& rs : to_replace) {
+                StorageEngine::instance()->add_unused_rowset(rs);
+            }
         }
         VLOG(1) << "commit compaction. output version:" << _task_info.output_version
                 << ", output rowset version:" << _output_rowset->version()
