@@ -96,12 +96,17 @@ public class ExpressionContext {
         return childrenProperty.get(index).getOutputColumns();
     }
 
+<<<<<<< HEAD
     public int getChildLeftMostScanTabletsNum(int index) {
         return childrenProperty.get(index).getLeftMostScanTabletsNum();
     }
 
     public boolean isExecuteInOneTablet(int index) {
         return childrenProperty.get(index).isExecuteInOneTablet();
+=======
+    public LogicalProperty.OneTabletProperty oneTabletProperty(int index) {
+        return childrenProperty.get(index).oneTabletProperty();
+>>>>>>> 45f45d98e1 ([BugFix] Fix wrong state of 'isExecuteInOneTablet' when it comes to agg or analytic (#19690))
     }
 
     public Operator getChildOperator(int index) {

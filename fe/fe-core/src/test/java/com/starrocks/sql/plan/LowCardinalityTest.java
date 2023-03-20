@@ -923,6 +923,58 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testAnalytic() throws Exception {
+        // Test partition by string column
+        String sql;
+        String plan;
+        // Analytic with where
+        sql = "select sum(rm) from (" +
+                "select row_number() over( partition by L_COMMENT order by L_PARTKEY) as rm from lineitem" +
+                ") t where rm < 10";
+        plan = getCostExplain(sql);
+
+        Assert.assertTrue(plan.contains("  2:SORT\n" +
+                "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC"));
+        Assert.assertTrue(plan.contains("  1:PARTITION-TOP-N\n" +
+                "  |  partition by: [20: L_COMMENT, INT, false] "));
+        Assert.assertTrue(plan.contains("  |  order by: [20, INT, false] ASC, [2, INT, false] ASC"));
+
+        // row number
+        sql = "select * from (select L_COMMENT,l_quantity, row_number() over " +
+                "(partition by L_COMMENT order by l_quantity desc) rn from lineitem )t where rn <= 10;";
+        plan = getCostExplain(sql);
+        assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                "  |  partition by: [19: L_COMMENT, INT, false] \n" +
+                "  |  partition limit: 10\n" +
+                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC\n" +
+                "  |  offset: 0");
+
+        // rank
+        sql = "select * from (select L_COMMENT,l_quantity, rank() over " +
+                "(partition by L_COMMENT order by l_quantity desc) rn from lineitem )t where rn <= 10;";
+        plan = getCostExplain(sql);
+        assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                "  |  type: RANK\n" +
+                "  |  partition by: [19: L_COMMENT, INT, false] \n" +
+                "  |  partition limit: 10\n" +
+                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC");
+
+        // mul-column partition by
+        sql = "select * from (select L_COMMENT,l_quantity, rank() over " +
+                "(partition by L_COMMENT, l_shipmode order by l_quantity desc) rn from lineitem )t where rn <= 10;";
+        plan = getCostExplain(sql);
+        assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                "  |  type: RANK\n" +
+                "  |  partition by: [19: L_COMMENT, INT, false] , [15: L_SHIPMODE, CHAR, false] \n" +
+                "  |  partition limit: 10\n" +
+                "  |  order by: [19, INT, false] ASC, [15, VARCHAR, false] ASC, [5, DOUBLE, false] DESC\n" +
+                "  |  offset: 0");
+    }
+
+    @Test
+>>>>>>> 45f45d98e1 ([BugFix] Fix wrong state of 'isExecuteInOneTablet' when it comes to agg or analytic (#19690))
     public void testProjectionPredicate() throws Exception {
         String sql = "select count(t.a) from(select S_ADDRESS in ('kks', 'kks2') as a from supplier) as t";
         String plan = getVerboseExplain(sql);
