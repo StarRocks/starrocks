@@ -143,7 +143,7 @@ public class AnalyzeUtilTest {
         m = AnalyzerUtils.collectAllTableAndView(analyzeSuccess(
                 "with tp2cte as (select * from tprimary2 where v2 < 10) update tprimary set v2 = tp2cte.v2 " +
                         "from tp2cte where tprimary.pk = tp2cte.pk"));
-        Assert.assertEquals("[tp2cte, test.tprimary2, test.tprimary]", m.keySet().toString());
+        Assert.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
 
         m = AnalyzerUtils.collectAllTableAndView(
                 analyzeSuccess("delete from tprimary using tprimary2 tp2 where tprimary.pk = tp2.pk"));
@@ -157,6 +157,6 @@ public class AnalyzeUtilTest {
         m = AnalyzerUtils.collectAllTableAndView(analyzeSuccess(
                 "with tp2cte as (select * from tprimary2 where v2 < 10) delete from tprimary using " +
                         "tp2cte where tprimary.pk = tp2cte.pk"));
-        Assert.assertEquals("[tp2cte, test.tprimary2, test.tprimary]", m.keySet().toString());
+        Assert.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
     }
 }

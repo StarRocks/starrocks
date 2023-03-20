@@ -468,7 +468,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("ALL TABLES must be restricted with database"));
+            Assert.assertTrue(e.getMessage().contains("Invalid grant statement with error privilege object"));
         }
 
         sql = "revoke select on ALL tables IN ALL tables IN all databases from test_user";
@@ -495,7 +495,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("invalid object tokens"));
+            Assert.assertTrue(e.getMessage().contains("Invalid grant statement with error privilege object"));
         }
 
         sql = "grant impersonate on ALL users in all databases to test_user";
@@ -503,7 +503,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for user! only support ON ALL USERS"));
+            Assert.assertTrue(e.getMessage().contains("Invalid grant statement with error privilege object"));
         }
 
     }
@@ -555,7 +555,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (Exception e) {
             System.err.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one: [*, *]"));
+            Assert.assertTrue(e.getMessage().contains("Invalid grant statement with error privilege object"));
         }
 
         try {
@@ -564,7 +564,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (Exception e) {
             System.err.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one"));
+            Assert.assertTrue(e.getMessage().contains("Invalid grant statement with error privilege object"));
         }
 
         try {
@@ -609,7 +609,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("ALL VIEWS must be restricted with database"));
+            Assert.assertTrue(e.getMessage().contains("Invalid grant statement with error privilege object"));
         }
 
         sql = "revoke select on ALL views IN ALL views IN all databases from test_user";
@@ -765,9 +765,40 @@ public class PrivilegeStmtAnalyzerV2Test {
     @Test
     public void testGrantFunction() {
         String sql = "GRANT usage ON GLOBAL FUNCTION xxx to user test_user";
-        analyzeFail(sql, "cannot find function: xxx");
+        analyzeFail(sql, "syntax error");
 
         sql = "GRANT usage ON FUNCTION db1.xxx to user test_user";
-        analyzeFail(sql, "cannot find function: xxx");
+        analyzeFail(sql, "syntax error");
+
+        sql = "GRANT usage ON GLOBAL FUNCTION TO USER test_user";
+        analyzeFail(sql, "syntax error");
+    }
+
+    @Test
+    public void testErrorParam() {
+        analyzeFail("grant SELECT on ALL TABLES to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant SELECT on ALL DATABASES in all databases to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant IMPERSONATE on ALL USERS in all databases to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant USAGE on ALL RESOURCES in all databases to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant USAGE on ALL CATALOGS in all databases to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant USAGE on ALL RESOURCE GROUPS in all databases to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant USAGE on ALL FUNCTIONS to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant USAGE on ALL GLOBAL FUNCTIONS in all databases to test_user",
+                "Invalid grant statement with error privilege object");
+
     }
 }
