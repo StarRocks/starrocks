@@ -216,17 +216,10 @@ public class SelectStmtWithCaseWhenTest {
                         "Predicates: [1: region, VARCHAR, false] != 'Japan', 1: region IN ('China', 'Japan')",
                 }
         };
-        int i = 0;
         for (String[] tc : testCases) {
-            if (i < 0) {
-                ++i;
-                continue;
-            }
             String sql = tc[0];
-            System.out.printf("Q%d:%s\n", i, sql);
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
             Assert.assertTrue(plan, Stream.of(tc).skip(1).anyMatch(plan::contains));
-            ++i;
         }
     }
 
@@ -309,7 +302,7 @@ public class SelectStmtWithCaseWhenTest {
                 {"select * from test.t0 where \n" +
                         "(case when region = 'USA' then 1 when region = 'UK' then 2 " +
                         "when region = 'China' then 2 end) <> 2",
-                        "Predicates: CASE WHEN",
+                        "[1: region, VARCHAR, false] = 'USA'",
                 },
 
                 {"select * from test.t0 where \n" +
@@ -335,7 +328,10 @@ public class SelectStmtWithCaseWhenTest {
                 // Q18
                 {"select * from test.t0 where \n" +
                         "(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) not in (3)",
-                        "Predicates: ((1: region = 'Japan') AND (1: region != 'China')) OR (1: region = 'China')",
+                        "((1: region = 'Japan') AND (1: region != 'China')) OR (1: region = 'China')",
+                        "(1: region = 'China') OR ((1: region = 'Japan') AND (1: region != 'China')), " +
+                                "(1: region = 'China') OR ((1: region = 'Japan') AND (1: region != 'China')) " +
+                                "IS NOT NULL",
                 },
 
                 {"select * from test.t0 where \n" +
@@ -378,17 +374,10 @@ public class SelectStmtWithCaseWhenTest {
                                 "(1: region = 'Japan'), (1: region != 'China') AND (1: region != 'Japan') IS NOT NULL",
                 }
         };
-        int i = 0;
         for (String[] tc : testCases) {
-            if (i != 9) {
-                ++i;
-                continue;
-            }
             String sql = tc[0];
-            System.out.printf("Q%d: %s\n", i, sql);
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
             Assert.assertTrue(plan, Stream.of(tc).skip(1).anyMatch(plan::contains));
-            ++i;
         }
     }
 
@@ -468,13 +457,10 @@ public class SelectStmtWithCaseWhenTest {
                                 "     actualRows=0, avgRowSize=4.0\n" +
                                 "     cardinality: 1"},
         };
-        int i = 0;
         for (String[] tc : testCases) {
             String sql = String.format(sqlTemp, tc[0]);
-            System.out.printf("Q%d: %s\n", i, sql);
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
             Assert.assertTrue(plan, Stream.of(tc).skip(1).anyMatch(plan::contains));
-            ++i;
         }
     }
 
@@ -541,13 +527,57 @@ public class SelectStmtWithCaseWhenTest {
                 {"select * from test.t0 where nullif('China', region) <>  'USA'", "Predicates: nullif"},
         };
 
-        int i = 0;
         for (String[] tc : testCases) {
             String sql = tc[0];
-            System.out.printf("Q%d: %s\n", i, sql);
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
             Assert.assertTrue(plan, Stream.of(tc).skip(1).anyMatch(plan::contains));
-            ++i;
+        }
+    }
+
+    @Test
+    public void testCaseInvolvingNull() throws Exception {
+        String[][] testCases = new String[][] {
+                {"select * from test.t0 where \n" +
+                        "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) = NULL",
+                        "0:EMPTYSET",
+                },
+                {"select * from test.t0 where \n" +
+                        "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) <> NULL",
+                        "0:EMPTYSET",
+                },
+                {"select * from test.t0 where \n" +
+                        "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) <=> NULL",
+                        "Predicates: CASE",
+                },
+                {"select * from test.t0 where \n" +
+                        "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (1,NULL)",
+                        "[1: region, VARCHAR, false] = 'China'",
+                },
+                {"select * from test.t0 where \n" +
+                        "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (1,NULL)",
+                        "[1: region, VARCHAR, false] != 'China'",
+                },
+                {"select * from test.t0 where \n" +
+                        "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (NULL,NULL)",
+                        "0:EMPTYSET",
+                },
+                {"select * from test.t0 where \n" +
+                        "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (NULL,NULL)",
+                        "0:EMPTYSET",
+                },
+                {"select * from test.t0 where \n" +
+                        "if (region = 'China', 1, 2) = NULL",
+                        "0:EMPTYSET",
+                },
+                {"select * from test.t0 where \n" +
+                        "if (region = 'China', 1, 2) not in (NULL, 1)",
+                        "[1: region, VARCHAR, false] != 'China', 1: region != 'China' IS NOT NULL",
+                },
+        };
+        for (String[] tc : testCases) {
+            String sql = tc[0];
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan, Stream.of(tc).skip(1).anyMatch(plan::contains));
         }
     }
 }

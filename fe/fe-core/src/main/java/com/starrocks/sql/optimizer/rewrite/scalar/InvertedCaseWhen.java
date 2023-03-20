@@ -300,16 +300,21 @@ public class InvertedCaseWhen {
 
         @Override
         public Optional<ScalarOperator> visitInPredicate(InPredicateOperator predicate, Void context) {
-            if (predicate.getChildren().stream().skip(1)
-                    .allMatch(child -> !child.isConstantRef() || child.isConstantNull())) {
+            Set<ScalarOperator> inSet = predicate.getChildren().stream().skip(1).collect(Collectors.toSet());
+            if (!inSet.stream().allMatch(ScalarOperator::isConstantRef)) {
                 return Optional.empty();
+            }
+            // case when ... in (NULL, NULL) is equivalent to NULL
+            // case when ... in (NULL, c1) is equivalent to case when ... in (c1)
+            inSet.removeIf(ScalarOperator::isConstantNull);
+            if (inSet.isEmpty()) {
+                return Optional.of(ConstantOperator.NULL);
             }
             Optional<InvertedCaseWhen> maybeInvertedCaseWhen = from(predicate.getChild(0));
             if (!maybeInvertedCaseWhen.isPresent()) {
                 return Optional.empty();
             }
             InvertedCaseWhen invertedCaseWhen = maybeInvertedCaseWhen.get();
-            Set<ScalarOperator> inSet = predicate.getChildren().stream().skip(1).collect(Collectors.toSet());
             boolean isNotIn = predicate.isNotIn();
             Map<ScalarOperator, WhenAndOrdinal> selected = Maps.newHashMap();
             Map<ScalarOperator, WhenAndOrdinal> unSelected = Maps.newHashMap();
