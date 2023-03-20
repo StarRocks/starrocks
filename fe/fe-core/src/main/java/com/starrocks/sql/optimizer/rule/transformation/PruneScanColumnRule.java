@@ -63,7 +63,7 @@ public class PruneScanColumnRule extends TransformationRule {
         // including columns in predicate or some specialized columns defined by scan operator.
         Set<ColumnRefOperator> outputColumns =
                 scanOperator.getColRefToColumnMetaMap().keySet().stream().filter(requiredOutputColumns::contains)
-                        .collect(Collectors.toSet()); //  requiredOutputColumns.cardinality() == outputColumns.size()
+                        .collect(Collectors.toSet());
         outputColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
 
         if (outputColumns.size() == 0) {
