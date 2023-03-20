@@ -60,6 +60,7 @@ using FileSystemPtr = std::unique_ptr<staros::starlet::fslib::FileSystem>;
 using ReadOnlyFilePtr = std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>;
 using WritableFilePtr = std::unique_ptr<staros::starlet::fslib::WritableFile>;
 using Anchor = staros::starlet::fslib::Stream::Anchor;
+using EntryStat = staros::starlet::fslib::EntryStat;
 
 bool is_starlet_uri(std::string_view uri) {
     return HasPrefixString(uri, "staros://");
@@ -300,19 +301,23 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        auto st = (*fs_st)->list_dir(pair.first, false, cb);
+        auto st = (*fs_st)->list_dir(pair.first, false, [&](EntryStat stat) { return cb(stat.name); });
         return to_status(st);
     }
 
-    Status iterate_dir2(const std::string& dir,
-                        const std::function<bool(std::string_view, const FileMeta&)>& cb) override {
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dir));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        FileMeta meta;
-        auto st = (*fs_st)->list_dir(pair.first, false, [&](std::string_view name) { return cb(name, meta); });
+        auto st = (*fs_st)->list_dir(pair.first, false, [&](EntryStat e) {
+            DirEntry entry{.name = e.name,
+                           .mtime = std::move(e.mtime),
+                           .size = std::move(e.size),
+                           .is_dir = std::move(e.is_dir)};
+            return cb(entry);
+        });
         return to_status(st);
     }
 
@@ -352,7 +357,7 @@ public:
         }
         // TODO: leave this check to starlet.
         bool dir_empty = true;
-        auto cb = [&dir_empty](std::string_view file) {
+        auto cb = [&dir_empty](EntryStat stat) {
             dir_empty = false;
             // break the iteration
             return false;

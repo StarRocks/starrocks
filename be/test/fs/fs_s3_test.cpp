@@ -184,26 +184,27 @@ TEST_F(S3FileSystemTest, test_directory) {
     EXPECT_OK(fs->create_dir(S3Path("/dirname2/subdir0")));
     CheckIsDirectory(fs.get(), S3Path("/dirname2/subdir0"), true, true);
 
-    EXPECT_OK(fs->iterate_dir2(S3Path("/dirname2/"), [&](std::string_view name, const FileMeta& meta) {
+    EXPECT_OK(fs->iterate_dir2(S3Path("/dirname2/"), [&](DirEntry entry) {
+        auto name = entry.name;
         if (name == "0.dat") {
-            CHECK(meta.has_is_dir());
-            CHECK(!meta.is_dir());
-            CHECK(meta.has_size());
-            CHECK_EQ(/* length of "hello" = */ 5, meta.size());
-            CHECK(meta.has_modify_time());
-            CHECK_GE(meta.modify_time(), now);
+            CHECK(entry.is_dir.has_value());
+            CHECK(!entry.is_dir.value());
+            CHECK(entry.size.has_value());
+            CHECK_EQ(/* length of "hello" = */ 5, entry.size.value());
+            CHECK(entry.mtime.has_value());
+            CHECK_GE(entry.mtime.value(), now);
         } else if (name == "1.dat") {
-            CHECK(meta.has_is_dir());
-            CHECK(!meta.is_dir());
-            CHECK(meta.has_size());
-            CHECK_EQ(/* length of "starrocks" = */ 9, meta.size());
-            CHECK(meta.has_modify_time());
-            CHECK_GE(meta.modify_time(), now);
+            CHECK(entry.is_dir.has_value());
+            CHECK(!entry.is_dir.value());
+            CHECK(entry.size.has_value());
+            CHECK_EQ(/* length of "starrocks" = */ 9, entry.size.value());
+            CHECK(entry.mtime.has_value());
+            CHECK_GE(entry.mtime.value(), now);
         } else if (name == "subdir0") {
-            CHECK(meta.has_is_dir());
-            CHECK(meta.is_dir());
-            CHECK(!meta.has_size());
-            CHECK(!meta.has_modify_time());
+            CHECK(entry.is_dir.has_value());
+            CHECK(entry.is_dir.value());
+            CHECK(!entry.size.has_value());
+            CHECK(!entry.mtime.has_value());
         } else {
             CHECK(false) << "Unexpected file " << name;
         }

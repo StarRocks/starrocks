@@ -182,7 +182,7 @@ public:
         return Status::OK();
     }
 
-    Status iterate_dir2(const butil::FilePath& path, const std::function<bool(std::string_view, const FileMeta&)>& cb) {
+    Status iterate_dir2(const butil::FilePath& path, const std::function<bool(DirEntry)>& cb) {
         auto inode = get_inode(path);
         if (inode == nullptr || inode->type != kDir) {
             return Status::NotFound(path.value());
@@ -194,12 +194,12 @@ public:
             if (!child.starts_with(s)) {
                 break;
             }
-            FileMeta meta;
+            DirEntry entry;
             ASSIGN_OR_RETURN(bool is_dir, is_directory(butil::FilePath(child.to_string())));
-            meta.set_is_dir(is_dir);
+            entry.is_dir = is_dir;
             if (!is_dir) {
                 ASSIGN_OR_RETURN(int64_t size, get_file_size(butil::FilePath(child.to_string())));
-                meta.set_size(size);
+                entry.size = size;
             }
             // Get the relative path.
             child.remove_prefix(s.size());
@@ -210,7 +210,8 @@ public:
             if (slash != nullptr) {
                 continue;
             }
-            if (!cb(child.data, meta)) {
+            entry.name = child.data;
+            if (!cb(entry)) {
                 break;
             }
         }
@@ -455,8 +456,7 @@ Status MemoryFileSystem::iterate_dir(const std::string& dir, const std::function
     return _impl->iterate_dir(butil::FilePath(new_path), cb);
 }
 
-Status MemoryFileSystem::iterate_dir2(const std::string& dir,
-                                      const std::function<bool(std::string_view, const FileMeta&)>& cb) {
+Status MemoryFileSystem::iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(dir, &new_path));
     return _impl->iterate_dir2(butil::FilePath(new_path), cb);
