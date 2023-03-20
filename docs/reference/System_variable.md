@@ -145,7 +145,7 @@ SELECT /*+ SET_VAR
 
 * enable_insert_strict
 
-  Used to enable the strict mode when importing data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Load data using INSERT](../loading/InsertInto.md)".
+  Used to enable the strict mode when importing data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md)".
 
 * enable_spilling
 
@@ -236,10 +236,6 @@ SELECT /*+ SET_VAR
 * enable_query_cache (2.5 and later)
 
   Specifies whether to enable the Query Cache feature. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. When this feature is enabled, it works only for queries that meet the conditions specified in the application scenarios of [Query Cache](../using_starrocks/query_cache.md#application-scenarios).
-
-* query_cache_force_populate (2.5 and later)
-
-  Specifies whether to ignore the computation results saved in the query cache. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. If this feature is enabled, StarRocks ignores the cached computation results when it performs computations required by queries. In this case, StarRocks once again reads data from the source, computes the data, and updates the computation results saved in the query cache. In this sense, the `query_cache_force_populate=true` setting resembles cache misses.
 
 * query_cache_entry_max_bytes (2.5 and later)
 
