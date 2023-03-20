@@ -53,7 +53,6 @@ jobs:
       - name: add document label
         uses: actions-ecosystem/action-add-labels@v1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: documentation
 
   markdownlint:
@@ -136,6 +135,7 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be
 
       - name: clean ECI
+        if: always()
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
@@ -203,7 +203,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
-
   fe-ut:
     runs-on: [self-hosted]
     needs: fe-codestyle-check
@@ -230,6 +229,7 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe
 
       - name: clean ECI
+        if: always()
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
@@ -262,6 +262,7 @@ jobs:
           echo ${{ steps.run_build.outputs.OUTPUT_TAR }}
 
       - name: clean ECI
+        if: always()
         run: |
           echo ${{ steps.run_build.outputs.ECI_ID }}
           eci rm ${{ steps.run_build.outputs.ECI_ID }}
@@ -346,5 +347,5 @@ jobs:
           check_name: 'Test Results'
           detailed_summary: 'true'
           fail_on_failure: 'true'
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT }}
           report_paths: 'StarRocksTest/result/*.xml'
