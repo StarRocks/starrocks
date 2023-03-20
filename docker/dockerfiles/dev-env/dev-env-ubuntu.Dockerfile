@@ -29,7 +29,7 @@ RUN apt-get update -y && \
     rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/lib/jvm/default-java
-ENV STARROCKS_THIRDPARTY=/opt/starrocks/thirdparty
+ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 ENV STARROCKS_LINKER=lld
 
 WORKDIR /root
@@ -63,7 +63,7 @@ ARG commit_id
 LABEL org.opencontainers.image.source="https://github.com/StarRocks/starrocks"
 LABEL com.starrocks.commit=${commit_id:-"UNKNOWN"}
 
-ENV STARLET_INSTALL_DIR=/var/local/thirdparty/installed/starlet
+ENV STARLET_INSTALL_DIR=$STARROCKS_THIRDPARTY/installed/starlet
 
 # Copy third-party dependencies
 COPY --from=builder $STARROCKS_THIRDPARTY $STARROCKS_THIRDPARTY
