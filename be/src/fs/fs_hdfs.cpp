@@ -250,8 +250,7 @@ public:
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
 
-    Status iterate_dir2(const std::string& dir,
-                        const std::function<bool(std::string_view, const FileMeta&)>& cb) override;
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override;
 
     Status delete_file(const std::string& path) override { return Status::NotSupported("HdfsFileSystem::delete_file"); }
 
@@ -348,8 +347,7 @@ Status HdfsFileSystem::iterate_dir(const std::string& dir, const std::function<b
     return Status::OK();
 }
 
-Status HdfsFileSystem::iterate_dir2(const std::string& dir,
-                                    const std::function<bool(std::string_view, const FileMeta&)>& cb) {
+Status HdfsFileSystem::iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
     std::string namenode;
     RETURN_IF_ERROR(get_namenode_from_path(dir, &namenode));
     HdfsFsHandle handle;
@@ -374,11 +372,11 @@ Status HdfsFileSystem::iterate_dir2(const std::string& dir,
             dir_size = dir.size() + 1;
         }
         std::string_view name(fileinfo[i].mName + dir_size);
-        FileMeta meta;
-        meta.with_is_dir(fileinfo[i].mKind == tObjectKind::kObjectKindDirectory)
-                .with_size(fileinfo[i].mSize)
-                .with_modify_time(fileinfo[i].mLastMod);
-        if (!cb(name, meta)) {
+        DirEntry entry{.name = name,
+                       .mtime = fileinfo[i].mLastMod,
+                       .size = fileinfo[i].mSize,
+                       .is_dir = fileinfo[i].mKind == tObjectKind::kObjectKindDirectory};
+        if (!cb(entry)) {
             break;
         }
     }
