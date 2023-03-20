@@ -2164,5 +2164,6 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan2, "  0:OlapScanNode\n" +
                 "     TABLE: test_all_type\n" +
                 "     PREAGGREGATION: ON");
+        dropMv("test", "forbid_mv_1");
     }
 }
