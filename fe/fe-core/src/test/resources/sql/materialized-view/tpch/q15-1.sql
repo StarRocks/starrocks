@@ -13,8 +13,10 @@ from
          group by
              l_suppkey) b;
 [result]
-AGGREGATE ([GLOBAL] aggregate [{19: max=max(18: sum)}] group by [[]] having [null]
-    AGGREGATE ([GLOBAL] aggregate [{110: sum=sum(33: sum_disc_price)}] group by [[24: l_suppkey]] having [null]
-        SCAN (mv[lineitem_agg_mv2] columns[24: l_suppkey, 25: l_shipdate, 33: sum_disc_price] predicate[25: l_shipdate >= 1995-07-01 AND 25: l_shipdate < 1995-10-01 AND 25: l_shipdate >= 1995-01-01 AND 25: l_shipdate < 1996-01-01])
+AGGREGATE ([GLOBAL] aggregate [{19: max=max(19: max)}] group by [[]] having [null]
+    EXCHANGE GATHER
+        AGGREGATE ([LOCAL] aggregate [{19: max=max(18: sum)}] group by [[]] having [null]
+            AGGREGATE ([GLOBAL] aggregate [{110: sum=sum(33: sum_disc_price)}] group by [[24: l_suppkey]] having [null]
+                SCAN (mv[lineitem_agg_mv2] columns[24: l_suppkey, 25: l_shipdate, 33: sum_disc_price] predicate[25: l_shipdate >= 1995-07-01 AND 25: l_shipdate < 1995-10-01 AND 25: l_shipdate >= 1995-01-01 AND 25: l_shipdate < 1996-01-01])
 [end]
 

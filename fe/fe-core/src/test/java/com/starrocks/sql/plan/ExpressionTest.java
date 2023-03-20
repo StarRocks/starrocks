@@ -683,10 +683,10 @@ public class ExpressionTest extends PlanTestBase {
         // window functions
         sql = "select count(c1) over (partition by array_sum(array_map(x->x+1, [1]))) from test_array12";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  4:ANALYTIC\n" +
+        Assert.assertTrue(plan.contains("  3:ANALYTIC\n" +
                 "  |  functions: [, count(6: c1), ]\n" +
                 "  |  partition by: 8: array_sum"));
-        Assert.assertTrue(plan.contains("  3:SORT\n" +
+        Assert.assertTrue(plan.contains("  2:SORT\n" +
                 "  |  order by: <slot 8> 8: array_sum ASC\n" +
                 "  |  offset:"));
         Assert.assertTrue(plan.contains("  1:Project\n" +
