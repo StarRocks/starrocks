@@ -487,7 +487,13 @@ public class TabletScheduler extends MasterDaemon {
                 tabletCtx.increaseFailedSchedCounter();
                 tabletCtx.setErrMsg(e.getMessage());
 
+<<<<<<< HEAD
                 if (e.getStatus() == Status.SCHEDULE_FAILED) {
+=======
+                if (e.getStatus() == Status.SCHEDULE_RETRY) {
+                    LOG.debug("scheduling for tablet[{}] failed, type: {}, reason: {}",
+                            tabletCtx.getTabletId(), tabletCtx.getType().name(), e.getMessage());
+>>>>>>> 13914b1c6 ([Enhancement] Improve the tablet scheduler logic (#19635))
                     if (tabletCtx.getType() == Type.BALANCE) {
                         // if balance is disabled, remove this tablet
                         if (Config.disable_balance) {
@@ -869,8 +875,13 @@ public class TabletScheduler extends MasterDaemon {
                     tabletCtx.getTabletId(), tabletCtx.getTablet().getReplicaInfos(),
                     tabletCtx.getSrcReplica().getBackendId(), tabletCtx.getDestBackendId());
         } catch (SchedException e) {
+<<<<<<< HEAD
             if (e.getStatus() == Status.SCHEDULE_FAILED) {
                 LOG.info("failed to find version incomplete replica from tablet relocating. " +
+=======
+            if (e.getStatus() == Status.SCHEDULE_RETRY) {
+                LOG.debug("failed to find version incomplete replica from tablet relocating. " +
+>>>>>>> 13914b1c6 ([Enhancement] Improve the tablet scheduler logic (#19635))
                                 "reason: [{}], tablet: [{}], replicas: {} dest:{} try to find a new backend", e.getMessage(),
                         tabletCtx.getTabletId(), tabletCtx.getTablet().getReplicaInfos(),
                         tabletCtx.getDestBackendId());
@@ -920,7 +931,7 @@ public class TabletScheduler extends MasterDaemon {
             // to remove this tablet from the pendingTablets(consider it as finished)
             throw new SchedException(Status.FINISHED, "redundant replica is deleted");
         }
-        throw new SchedException(Status.SCHEDULE_FAILED, "unable to delete any redundant replicas");
+        throw new SchedException(Status.UNRECOVERABLE, "unable to delete any redundant replicas");
     }
 
     private boolean deleteBackendDropped(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
@@ -1124,7 +1135,7 @@ public class TabletScheduler extends MasterDaemon {
             deleteReplicaInternal(tabletCtx, replica, "colocate redundant", forceDropBad);
             throw new SchedException(Status.FINISHED, "colocate redundant replica is deleted");
         }
-        throw new SchedException(Status.SCHEDULE_FAILED, "unable to delete any colocate redundant replicas");
+        throw new SchedException(Status.UNRECOVERABLE, "unable to delete any colocate redundant replicas");
     }
 
     private void deleteReplicaInternal(TabletSchedCtx tabletCtx, Replica replica, String reason, boolean force)
@@ -1150,13 +1161,13 @@ public class TabletScheduler extends MasterDaemon {
             LOG.info("decommission tablet:" + tabletCtx.getTabletId() + " type:" + tabletCtx.getType() + " replica:" +
                     replica.getBackendId() + " reason:" + reason + " watermark:" + nextTxnId + " replicas:" +
                     tabletCtx.getTablet().getReplicaInfos());
-            throw new SchedException(Status.SCHEDULE_FAILED, "set watermark txn " + nextTxnId);
+            throw new SchedException(Status.SCHEDULE_RETRY, "set watermark txn " + nextTxnId);
         } else if (replica.getState() == ReplicaState.DECOMMISSION && replica.getWatermarkTxnId() != -1) {
             long watermarkTxnId = replica.getWatermarkTxnId();
             try {
                 if (!GlobalStateMgr.getCurrentGlobalTransactionMgr().isPreviousTransactionsFinished(watermarkTxnId,
                         tabletCtx.getDbId(), Lists.newArrayList(tabletCtx.getTblId()))) {
-                    throw new SchedException(Status.SCHEDULE_FAILED,
+                    throw new SchedException(Status.SCHEDULE_RETRY,
                             "wait txn before " + watermarkTxnId + " to be finished");
                 }
             } catch (AnalysisException e) {
@@ -1303,16 +1314,27 @@ public class TabletScheduler extends MasterDaemon {
         }
 
         if (allFitPaths.isEmpty()) {
-            throw new SchedException(Status.SCHEDULE_FAILED, "unable to find dest path for new replica");
+            throw new SchedException(Status.UNRECOVERABLE, "unable to find dest path for new replica");
         }
 
         // all fit paths has already been sorted by load score in 'allFitPaths' in ascend order.
         // just get first available path.
+<<<<<<< HEAD
         // we try to find a path with specified media type, if not find, arbitrarily use one.
         for (RootPathLoadStatistic rootPathLoadStatistic : allFitPaths) {
             if (rootPathLoadStatistic.getStorageMedium() != tabletCtx.getStorageMedium()) {
                 continue;
             }
+=======
+        // we try to find a path with specified medium type, if not find, arbitrarily select one.
+        RootPathLoadStatistic path = findAvailablePath(tabletCtx, allFitPaths);
+        if (path != null) {
+            return path;
+        } else {
+            throw new SchedException(Status.SCHEDULE_RETRY, "path busy, wait for next round");
+        }
+    }
+>>>>>>> 13914b1c6 ([Enhancement] Improve the tablet scheduler logic (#19635))
 
             PathSlot slot = backendsWorkingSlots.get(rootPathLoadStatistic.getBeId());
             if (slot == null) {
@@ -1419,11 +1441,7 @@ public class TabletScheduler extends MasterDaemon {
         } catch (SchedException e) {
             tabletCtx.increaseFailedRunningCounter();
             tabletCtx.setErrMsg(e.getMessage());
-            if (e.getStatus() == Status.RUNNING_FAILED) {
-                stat.counterCloneTaskFailed.incrementAndGet();
-                addToRunningTablets(tabletCtx);
-                return false;
-            } else if (e.getStatus() == Status.UNRECOVERABLE) {
+            if (e.getStatus() == Status.UNRECOVERABLE) {
                 // unrecoverable
                 stat.counterTabletScheduledDiscard.incrementAndGet();
                 finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.CANCELLED, e.getMessage());
@@ -1629,7 +1647,7 @@ public class TabletScheduler extends MasterDaemon {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("path hash is not set.", new Exception());
                 }
-                throw new SchedException(Status.SCHEDULE_FAILED, "path hash is not set");
+                throw new SchedException(Status.UNRECOVERABLE, "path hash is not set");
             }
 
             Slot slot = pathSlots.get(pathHash);
