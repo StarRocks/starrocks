@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
@@ -33,6 +34,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -72,7 +74,7 @@ public class StatisticUtils {
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentUserIdentity(UserIdentity.ROOT);
-        context.setCurrentRoleIds(UserIdentity.ROOT);
+        context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         context.setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
         context.setQueryId(UUIDUtil.genUUID());
         context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));

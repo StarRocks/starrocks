@@ -115,6 +115,7 @@ import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeCollection;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
@@ -671,12 +672,14 @@ public class ShowExecutor {
             // like predicate
             if (showStmt.getWild() == null || showStmt.like(function.functionName())) {
                 if (showStmt.getIsGlobal()) {
-                    if (!PrivilegeActions.checkAnyActionOnGlobalFunction(connectContext, function.getSignature())) {
+                    if (!PrivilegeActions.checkAnyActionOnGlobalFunction(connectContext, function.getFunctionId())) {
                         continue;
                     }
                 } else if (!showStmt.getIsBuiltin()) {
-                    if (!PrivilegeActions.checkAnyActionOnFunction(connectContext,
-                            showStmt.getDbName(), function.getSignature())) {
+                    Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDbName());
+                    if (!PrivilegeActions.checkAnyActionOnFunction(
+                            connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                            db.getId(), function.getFunctionId())) {
                         continue;
                     }
                 }
@@ -2017,20 +2020,20 @@ public class ShowExecutor {
         if (objectType.equals(ObjectType.CATALOG)) {
             CatalogPEntryObject catalogPEntryObject =
                     (CatalogPEntryObject) privilegeEntry.getObject();
-            if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOGS_ID) {
+            if (catalogPEntryObject.getId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
                 return null;
             } else {
                 return getCatalogNameById(catalogPEntryObject.getId());
             }
         } else if (objectType.equals(ObjectType.DATABASE)) {
             DbPEntryObject dbPEntryObject = (DbPEntryObject) privilegeEntry.getObject();
-            if (dbPEntryObject.getCatalogId() == DbPEntryObject.ALL_CATALOGS_ID) {
+            if (dbPEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
                 return null;
             }
             return getCatalogNameById(dbPEntryObject.getCatalogId());
         } else if (objectType.equals(ObjectType.TABLE)) {
             TablePEntryObject tablePEntryObject = (TablePEntryObject) privilegeEntry.getObject();
-            if (tablePEntryObject.getCatalogId() == TablePEntryObject.ALL_CATALOGS_ID) {
+            if (tablePEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
                 return null;
             }
             return getCatalogNameById(tablePEntryObject.getCatalogId());

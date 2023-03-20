@@ -1270,24 +1270,27 @@ grantRevokeClause
     ;
 
 grantPrivilegeStatement
-    : GRANT IMPERSONATE ON USER user (',' user)* TO grantRevokeClause (WITH GRANT OPTION)?              #grantImpersonate
-    | GRANT privilegeTypeList ON privObjectNameList TO grantRevokeClause (WITH GRANT OPTION)?           #grantTablePrivBrief
-    | GRANT privilegeTypeList ON privObjectType (privObjectNameList)?
-        TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithType
+    : GRANT IMPERSONATE ON USER user (',' user)* TO grantRevokeClause (WITH GRANT OPTION)?              #grantOnUser
+    | GRANT privilegeTypeList ON privObjectNameList TO grantRevokeClause (WITH GRANT OPTION)?           #grantOnTableBrief
+
     | GRANT privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
-        TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithFunc
+        TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantOnFunc
+    | GRANT privilegeTypeList ON SYSTEM TO grantRevokeClause (WITH GRANT OPTION)?                       #grantOnSystem
+    | GRANT privilegeTypeList ON privObjectType privObjectNameList
+        TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantOnPrimaryObj
     | GRANT privilegeTypeList ON ALL privObjectTypePlural
         (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? TO grantRevokeClause
         (WITH GRANT OPTION)?                                                                            #grantOnAll
     ;
 
 revokePrivilegeStatement
-    : REVOKE IMPERSONATE ON USER user (',' user)* FROM grantRevokeClause                                #revokeImpersonate
-    | REVOKE privilegeTypeList ON privObjectNameList FROM grantRevokeClause                             #revokeTablePrivBrief
-    | REVOKE privilegeTypeList ON privObjectType (privObjectNameList)?
-        FROM grantRevokeClause                                                                          #revokePrivWithType
+    : REVOKE IMPERSONATE ON USER user (',' user)* FROM grantRevokeClause                                #revokeOnUser
+    | REVOKE privilegeTypeList ON privObjectNameList FROM grantRevokeClause                             #revokeOnTableBrief
     | REVOKE privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
-        FROM grantRevokeClause                                                                          #revokePrivWithFunc
+        FROM grantRevokeClause                                                                          #revokeOnFunc
+    | REVOKE privilegeTypeList ON SYSTEM FROM grantRevokeClause                                         #revokeOnSystem
+    | REVOKE privilegeTypeList ON privObjectType privObjectNameList
+        FROM grantRevokeClause                                                                          #revokeOnPrimaryObj
     | REVOKE privilegeTypeList ON ALL privObjectTypePlural
         (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? FROM grantRevokeClause                #revokeOnAll
     ;
@@ -1328,8 +1331,7 @@ privilegeType
     ;
 
 privObjectType
-    : TABLE| DATABASE| SYSTEM| USER| RESOURCE| VIEW| CATALOG| MATERIALIZED VIEW| FUNCTION| RESOURCE GROUP
-    | GLOBAL FUNCTION
+    : TABLE| DATABASE| SYSTEM | RESOURCE| VIEW| CATALOG| MATERIALIZED VIEW| RESOURCE GROUP
     ;
 
 privObjectTypePlural

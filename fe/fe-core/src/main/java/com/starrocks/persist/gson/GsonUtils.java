@@ -106,7 +106,6 @@ import com.starrocks.persist.SinglePartitionPersistInfo;
 import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.FunctionPEntryObject;
-import com.starrocks.privilege.GlobalFunctionPEntryObject;
 import com.starrocks.privilege.MaterializedViewPEntryObject;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.ResourceGroupPEntryObject;
@@ -247,8 +246,6 @@ public class GsonUtils {
                     .registerSubtype(ViewPEntryObject.class, ViewPEntryObject.class.getSimpleName())
                     .registerSubtype(MaterializedViewPEntryObject.class,
                             MaterializedViewPEntryObject.class.getSimpleName())
-                    .registerSubtype(GlobalFunctionPEntryObject.class,
-                            GlobalFunctionPEntryObject.class.getSimpleName())
                     .registerSubtype(FunctionPEntryObject.class, FunctionPEntryObject.class.getSimpleName())
                     .registerSubtype(CatalogPEntryObject.class, CatalogPEntryObject.class.getSimpleName())
                     .registerSubtype(ResourceGroupPEntryObject.class,
