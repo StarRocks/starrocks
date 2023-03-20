@@ -48,6 +48,10 @@ public class TableRelation extends Relation {
         return partitionNames;
     }
 
+    public boolean getHasHintsPartitionNames() {
+        return partitionNames != null;
+    }
+
     public List<Long> getTabletIds() {
         return tabletIds;
     }
