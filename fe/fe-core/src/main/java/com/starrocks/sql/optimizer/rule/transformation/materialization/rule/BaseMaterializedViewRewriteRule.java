@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -43,9 +44,22 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         super(type, pattern);
     }
 
+    private boolean checkOlapScanWithoutTabletOrPartitionHints(OptExpression input) {
+        if (input.getOp() instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator scan = input.getOp().cast();
+            if (scan.hasTabletOrPartitionHints()) {
+                return false;
+            }
+        }
+        if (input.getInputs().isEmpty()) {
+            return true;
+        }
+        return input.getInputs().stream().allMatch(this::checkOlapScanWithoutTabletOrPartitionHints);
+    }
+
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        return !context.getCandidateMvs().isEmpty();
+        return !context.getCandidateMvs().isEmpty() && checkOlapScanWithoutTabletOrPartitionHints(input);
     }
 
     @Override
