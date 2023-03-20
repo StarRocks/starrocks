@@ -809,7 +809,7 @@ Status SnapshotLoader::_get_existing_files_from_remote_without_broker(const std:
             return false;
         }
         file_num++;
-        if (!entry.is_dir.value()) {
+        if (entry.is_dir.value()) {
             return true;
         }
         if (UNLIKELY(!entry.size.has_value())) {
