@@ -56,7 +56,6 @@ namespace starrocks {
     M(phase1_null_timestamp)         \
     M(phase1_null_string)            \
     M(phase1_slice_two_level)        \
-    M(phase1_int32_two_level)        \
     M(phase2_uint8)                  \
     M(phase2_int8)                   \
     M(phase2_int16)                  \
@@ -83,7 +82,6 @@ namespace starrocks {
     M(phase2_null_timestamp)         \
     M(phase2_null_string)            \
     M(phase2_slice_two_level)        \
-    M(phase2_int32_two_level)        \
     M(phase1_slice_fx4)              \
     M(phase1_slice_fx8)              \
     M(phase1_slice_fx16)             \
@@ -154,8 +152,6 @@ template <PhmapSeed seed>
 using SerializedKeyAggHashMap = AggHashMapWithSerializedKey<SliceAggHashMap<seed>>;
 template <PhmapSeed seed>
 using SerializedKeyTwoLevelAggHashMap = AggHashMapWithSerializedKey<SliceAggTwoLevelHashMap<seed>>;
-template <PhmapSeed seed>
-using Int32TwoLevelAggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_INT, Int32AggTwoLevelHashMap<seed>>;
 
 // fixed slice key type.
 template <PhmapSeed seed>
@@ -226,8 +222,6 @@ template <PhmapSeed seed>
 using SerializedKeyAggHashSet = AggHashSetOfSerializedKey<SliceAggHashSet<seed>>;
 template <PhmapSeed seed>
 using SerializedTwoLevelKeyAggHashSet = AggHashSetOfSerializedKey<SliceAggTwoLevelHashSet<seed>>;
-template <PhmapSeed seed>
-using Int32TwoLevelAggHashSetOfOneNumberKey = AggHashSetOfOneNumberKey<TYPE_INT, Int32AggTwoLevelHashSet<seed>>;
 
 // For fixed slice type.
 template <PhmapSeed seed>
@@ -259,9 +253,7 @@ template <typename HashMapOrSetWithKey>
 inline constexpr bool is_combined_fixed_size_key = CombinedFixedSizeKey<HashMapOrSetWithKey>::value;
 
 static_assert(is_combined_fixed_size_key<SerializedKeyFixedSize4AggHashMap<PhmapSeed1>>);
-static_assert(!is_combined_fixed_size_key<Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed1>>);
 static_assert(is_combined_fixed_size_key<SerializedKeyAggHashSetFixedSize4<PhmapSeed1>>);
-static_assert(!is_combined_fixed_size_key<Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>>);
 
 // 1) For different group by columns type, size, cardinality, volume, we should choose different
 // hash functions and different hashmaps.
@@ -302,7 +294,6 @@ using AggHashMapWithKeyPtr = std::variant<
         std::unique_ptr<NullTimeStampAggHashMapWithOneNumberKey<PhmapSeed1>>,
         std::unique_ptr<NullOneStringAggHashMap<PhmapSeed1>>, std::unique_ptr<SerializedKeyAggHashMap<PhmapSeed1>>,
         std::unique_ptr<SerializedKeyTwoLevelAggHashMap<PhmapSeed1>>,
-        std::unique_ptr<Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>>,
         std::unique_ptr<SerializedKeyFixedSize4AggHashMap<PhmapSeed1>>,
         std::unique_ptr<SerializedKeyFixedSize8AggHashMap<PhmapSeed1>>,
         std::unique_ptr<SerializedKeyFixedSize16AggHashMap<PhmapSeed1>>,
@@ -331,7 +322,6 @@ using AggHashMapWithKeyPtr = std::variant<
         std::unique_ptr<NullTimeStampAggHashMapWithOneNumberKey<PhmapSeed2>>,
         std::unique_ptr<NullOneStringAggHashMap<PhmapSeed2>>, std::unique_ptr<SerializedKeyAggHashMap<PhmapSeed2>>,
         std::unique_ptr<SerializedKeyTwoLevelAggHashMap<PhmapSeed2>>,
-        std::unique_ptr<Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed2>>,
         std::unique_ptr<SerializedKeyFixedSize4AggHashMap<PhmapSeed2>>,
         std::unique_ptr<SerializedKeyFixedSize8AggHashMap<PhmapSeed2>>,
         std::unique_ptr<SerializedKeyFixedSize16AggHashMap<PhmapSeed2>>>;
@@ -362,7 +352,6 @@ using AggHashSetWithKeyPtr = std::variant<
         std::unique_ptr<NullTimeStampAggHashSetOfOneNumberKey<PhmapSeed1>>,
         std::unique_ptr<NullOneStringAggHashSet<PhmapSeed1>>, std::unique_ptr<SerializedKeyAggHashSet<PhmapSeed1>>,
         std::unique_ptr<SerializedTwoLevelKeyAggHashSet<PhmapSeed1>>,
-        std::unique_ptr<Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed1>>,
         std::unique_ptr<UInt8AggHashSetOfOneNumberKey<PhmapSeed2>>,
         std::unique_ptr<Int8AggHashSetOfOneNumberKey<PhmapSeed2>>,
         std::unique_ptr<Int16AggHashSetOfOneNumberKey<PhmapSeed2>>,
@@ -388,7 +377,6 @@ using AggHashSetWithKeyPtr = std::variant<
         std::unique_ptr<NullTimeStampAggHashSetOfOneNumberKey<PhmapSeed2>>,
         std::unique_ptr<NullOneStringAggHashSet<PhmapSeed2>>, std::unique_ptr<SerializedKeyAggHashSet<PhmapSeed2>>,
         std::unique_ptr<SerializedTwoLevelKeyAggHashSet<PhmapSeed2>>,
-        std::unique_ptr<Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed2>>,
         std::unique_ptr<SerializedKeyAggHashSetFixedSize4<PhmapSeed1>>,
         std::unique_ptr<SerializedKeyAggHashSetFixedSize8<PhmapSeed1>>,
         std::unique_ptr<SerializedKeyAggHashSetFixedSize16<PhmapSeed1>>,
@@ -424,7 +412,6 @@ struct AggHashMapVariant {
         phase1_null_string,
         phase1_slice,
         phase1_slice_two_level,
-        phase1_int32_two_level,
 
         phase1_slice_fx4,
         phase1_slice_fx8,
@@ -456,7 +443,6 @@ struct AggHashMapVariant {
         phase2_null_string,
         phase2_slice,
         phase2_slice_two_level,
-        phase2_int32_two_level,
 
         phase2_slice_fx4,
         phase2_slice_fx8,
@@ -527,7 +513,6 @@ struct AggHashSetVariant {
         phase1_null_string,
         phase1_slice,
         phase1_slice_two_level,
-        phase1_int32_two_level,
         phase2_uint8,
         phase2_int8,
         phase2_int16,
@@ -554,7 +539,6 @@ struct AggHashSetVariant {
         phase2_null_string,
         phase2_slice,
         phase2_slice_two_level,
-        phase2_int32_two_level,
 
         phase1_slice_fx4,
         phase1_slice_fx8,

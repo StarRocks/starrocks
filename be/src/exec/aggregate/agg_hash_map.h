@@ -69,11 +69,6 @@ template <PhmapSeed seed>
 using FixedSize16SliceAggHashMap =
         phmap::flat_hash_map<SliceKey16, AggDataPtr, FixedSizeSliceKeyHash<SliceKey16, seed>>;
 
-// =====================
-// two level agg hash map
-template <PhmapSeed seed>
-using Int32AggTwoLevelHashMap = phmap::parallel_flat_hash_map<int32_t, AggDataPtr, StdHashWithSeed<int32_t, seed>>;
-
 // The SliceAggTwoLevelHashMap will have 2 ^ 4 = 16 sub map,
 // The 16 is same as PartitionedAggregationNode::PARTITION_FANOUT
 static constexpr uint8_t PHMAPN = 4;
