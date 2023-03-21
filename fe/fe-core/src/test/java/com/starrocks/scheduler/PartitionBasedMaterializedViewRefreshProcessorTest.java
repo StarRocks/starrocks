@@ -1547,7 +1547,6 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
     @Test
     public void testFilterPartitionByRefreshNumber() throws Exception {
-        PartitionBasedMaterializedViewRefreshProcessor processor = new PartitionBasedMaterializedViewRefreshProcessor();
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_with_test_refresh"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -1555,6 +1554,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
         materializedView.getTableProperty().setPartitionRefreshNumber(3);
+        PartitionBasedMaterializedViewRefreshProcessor processor = new PartitionBasedMaterializedViewRefreshProcessor();
 
         MvTaskRunContext mvContext = new MvTaskRunContext(new TaskRunContext());
 
