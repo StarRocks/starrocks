@@ -12,18 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
-
-public interface ScalarOperatorRewriteRule {
-    boolean isBottomUp();
-
-    boolean isTopDown();
-
-    boolean isOnlyOnce();
-
-    ScalarOperator apply(ScalarOperator root, ScalarOperatorRewriteContext context);
+// OnlyOnceScalarOperatorRewriteRule is not equivalence-transform Rule. non-equivalence transform Rule
+// is used to escalate or degrade predicates to make the predicates simple and applicable to index.
+// it visit the expression tree in top-down style, it finishes as soon as it can not go downwards.
+public class OnlyOnceScalarOperatorRewriteRule extends BaseScalarOperatorRewriteRule {
+    @Override
+    public boolean isOnlyOnce() {
+        return true;
+    }
 }
