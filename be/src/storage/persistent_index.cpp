@@ -2643,7 +2643,8 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         const auto l0_kv_pairs_usage = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
                                                        std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
                                                        0LL, [](size_t s, const auto& e) { return s + e->usage(); });
-        if (auto [_, inserted] = _usage_and_size_by_key_length.insert({key_size, {l0_kv_pairs_usage, l0_kv_pairs_size}});
+        if (auto [_, inserted] =
+                    _usage_and_size_by_key_length.insert({key_size, {l0_kv_pairs_usage, l0_kv_pairs_size}});
             !inserted) {
             std::string msg = strings::Substitute(
                     "load persistent index from tablet failed, insert usage and size by key size failed, key_size: $0",
