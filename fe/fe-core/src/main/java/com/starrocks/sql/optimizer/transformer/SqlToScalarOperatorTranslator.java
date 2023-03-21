@@ -351,10 +351,6 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitLambdaFunctionExpr(LambdaFunctionExpr node,
                                                       Context context) {
-            // To avoid the ids of lambda arguments are different after each visit()
-            if (node.getTransformed() != null) {
-                return node.getTransformed();
-            }
             Preconditions.checkArgument(node.getChildren().size() >= 2);
             List<ColumnRefOperator> refs = Lists.newArrayList();
             List<LambdaArgument> args = Lists.newArrayList();
@@ -367,13 +363,16 @@ public final class SqlToScalarOperatorTranslator {
             expressionMapping = new ExpressionMapping(scope, refs, expressionMapping);
             ScalarOperator lambda = visit(node.getChild(0), context.clone(node));
             expressionMapping = old; // recover it
-            node.setTransformed(new LambdaFunctionOperator(refs, lambda, Type.FUNCTION));
-            return node.getTransformed();
+            return new LambdaFunctionOperator(refs, lambda, Type.FUNCTION);
         }
 
         @Override
         public ScalarOperator visitLambdaArguments(LambdaArgument node, Context context) {
-            return columnRefFactory.create(node.getName(), node.getType(), node.isNullable(), true);
+            // To avoid the ids of lambda arguments are different after each visit()
+            if (node.getTransformed() == null) {
+                node.setTransformed(columnRefFactory.create(node.getName(), node.getType(), node.isNullable(), true));
+            }
+            return node.getTransformed();
         }
 
         @Override
