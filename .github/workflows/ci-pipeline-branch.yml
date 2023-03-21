@@ -96,6 +96,12 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          
+      - name: Checkout PR
+        uses: dawidd6/action-checkout-pr@v1
+        with:
+          pr: ${{ github.event.number }}
+          
       - name: Run Clang-Format
         run: |
           export PATH=/var/lib/llvm/bin:$PATH
