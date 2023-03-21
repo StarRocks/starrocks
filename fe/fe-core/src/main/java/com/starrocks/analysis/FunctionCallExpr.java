@@ -414,7 +414,7 @@ public class FunctionCallExpr extends Expr {
 
     public void readFields(DataInput in) throws IOException {
         fnName = FunctionName.read(in);
-        fnParams = FunctionParams.read(in, fnName);
+        fnParams = FunctionParams.read(in);
         if (fnParams.exprs() != null) {
             children.addAll(fnParams.exprs());
         }

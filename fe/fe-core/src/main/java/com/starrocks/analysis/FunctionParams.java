@@ -148,24 +148,6 @@ public class FunctionParams implements Writable {
         } else {
             out.writeBoolean(false);
         }
-        // in order to reduce effecting upgrading or downgrading versions, write it only when the function support
-        // order-by elements, no effects on functions without order-by elements. However, if new versions write
-        // order-by elements, older versions not recognize them as expected, as older versions did not support the
-        // corresponding functions, like array_agg(a order by b).
-        if (orderByElements != null) {
-            out.writeBoolean(true);
-            out.writeInt(orderByElements.size());
-            for (OrderByElement elem : orderByElements) {
-                Expr.writeTo(elem.getExpr(), out);
-                out.writeBoolean(elem.getIsAsc());
-                out.writeBoolean(elem.getNullsFirstParam());
-            }
-        }
-        // disable it as upgrading issue that the older version does not recognize this field,
-        // enable this in later new versions when the older version un-supporting order-by elements is obsolete.
-        // else {
-        //     out.writeBoolean(false);
-        // }
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -180,24 +162,9 @@ public class FunctionParams implements Writable {
         }
     }
 
-    // older serialized data doesn't have orderByElements, where array_agg only has one child. so if array_agg has
-    // more than one children, need read orderByElements.
-    public void readOrderByElements(DataInput in) throws IOException {
-        if (in.readBoolean()) {
-            orderByElements = Lists.newArrayList();
-            int size = in.readInt();
-            for (int i = 0; i < size; ++i) {
-                orderByElements.add(new OrderByElement(Expr.readIn(in), in.readBoolean(), in.readBoolean()));
-            }
-        }
-    }
-
-    public static FunctionParams read(DataInput in, FunctionName fnName) throws IOException {
+    public static FunctionParams read(DataInput in) throws IOException {
         FunctionParams params = new FunctionParams();
         params.readFields(in);
-        if (fnName.getFunction().equals(FunctionSet.ARRAY_AGG) && params.exprs().size() > 1) {
-            params.readOrderByElements(in);
-        }
         return params;
     }
 
