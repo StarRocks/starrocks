@@ -624,7 +624,7 @@ private:
     // we ignore the overlap kvs between l0 and l1. The general accuracy can already be used as a
     // reference to estimate nshard and npages We don't persist the overlap kvs info to reduce the
     // write cost of PersistentIndexMeta
-    std::map<uint32_t, std::pair<int64_t, int64_t>> _usage_and_size_by_key_size;
+    std::map<uint32_t, std::pair<int64_t, int64_t>> _usage_and_size_by_key_length;
     std::vector<int> _l1_merged_num;
     bool _has_l1 = false;
     std::shared_ptr<FileSystem> _fs;
