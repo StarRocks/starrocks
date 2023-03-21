@@ -56,7 +56,9 @@ Status MetaReader::open() {
 Status MetaReader::_read(Chunk* chunk, size_t n) {
     if (_collect_context.seg_collecters.size() == 0) {
         // no segment, fill chunk with an empty result
-        _fill_empty_result(chunk);
+        if (_has_count_agg) {
+            _fill_empty_result(chunk);
+        }
         _has_more = false;
         return Status::OK();
     }
@@ -113,7 +115,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, true);
+            ColumnPtr column = ColumnHelper::create_column(desc, _has_count_agg ? true : false);
             chunk->append_column(std::move(column), slot->id());
         } else if (field == "count") {
             TypeDescriptor item_desc;
@@ -124,7 +126,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             ColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
         } else {
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+            ColumnPtr column = ColumnHelper::create_column(slot->type(), _has_count_agg ? true : false);
             chunk->append_column(std::move(column), slot->id());
         }
     }
@@ -209,9 +211,15 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
         return Status::GlobalDictError("global dict greater than DICT_DECODE_MAX_SIZE");
     }
 
-    NullableColumn* nullable_column = down_cast<NullableColumn*>(column);
+    [[maybe_unused]] NullableColumn* nullable_column = nullptr;
+    ArrayColumn* array_column = nullptr;
 
-    ArrayColumn* array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
+    if (column->is_nullable()) {
+        nullable_column = down_cast<NullableColumn*>(column);
+        array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
+    } else {
+        array_column = down_cast<ArrayColumn*>(column);
+    }
 
     auto* offsets = array_column->offsets_column().get();
     auto& data = offsets->get_data();
@@ -223,7 +231,9 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
     auto dst = array_column->elements_column().get();
     CHECK(dst->append_strings(words));
 
-    nullable_column->null_column_data().emplace_back(0);
+    if (column->is_nullable()) {
+        nullable_column->null_column_data().emplace_back(0);
+    }
 
     return Status::OK();
 }

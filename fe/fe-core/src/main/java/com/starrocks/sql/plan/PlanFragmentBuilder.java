@@ -763,8 +763,7 @@ public class PlanFragmentBuilder {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
-                // for empty table, meta scan may return NULL result, so we force set usedColumn to nullable.
-                slotDescriptor.setIsNullable(true);
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
                 slotDescriptor.setIsMaterialized(true);
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().getName(), slotDescriptor));
             }

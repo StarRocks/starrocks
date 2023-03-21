@@ -92,6 +92,7 @@ Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_p
         } else {
             _collect_context.seg_collecter_params.read_page.emplace_back(false);
         }
+        _has_count_agg |= (collect_field == "count");
     }
     return Status::OK();
 }

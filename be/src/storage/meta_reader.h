@@ -87,6 +87,9 @@ protected:
     CollectContext _collect_context;
     bool _is_init;
     bool _has_more;
+    // this variable is introduced to solve compatibility issues,
+    // see more details in the description of https://github.com/StarRocks/starrocks/pull/17619
+    bool _has_count_agg = false;
 
     MetaReaderParams _params;
 
