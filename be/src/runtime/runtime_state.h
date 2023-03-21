@@ -77,7 +77,7 @@ namespace pipeline {
 class QueryContext;
 }
 
-constexpr int64_t kRpcHttpMinSize = ((1L << 31) - (1L << 20));
+constexpr int64_t kRpcHttpMinSize = ((1L << 31) - (1L << 10));
 
 // A collection of items that are part of the global state of a
 // query and shared across all execution nodes of that query.

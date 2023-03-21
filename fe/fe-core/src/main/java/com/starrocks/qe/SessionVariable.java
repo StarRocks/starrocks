@@ -759,7 +759,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // the setting size is a bit smaller than 2GB, as the pre-computed serialization size of packets may not accurate.
     // no need to change it in general.
     @VariableMgr.VarAttr(name = RPC_HTTP_MIN_SIZE, flag = VariableMgr.INVISIBLE)
-    private long rpcHttpMinSize = ((1L << 31) - (1L << 20));
+    private long rpcHttpMinSize = ((1L << 31) - (1L << 10));
 
     @VariableMgr.VarAttr(name = TRANSMISSION_ENCODE_LEVEL)
     private int transmissionEncodeLevel = 7;
