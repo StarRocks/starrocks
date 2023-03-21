@@ -490,8 +490,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
 void AgentServer::Impl::make_snapshot(TAgentResult& t_agent_result, const TSnapshotRequest& snapshot_request) {
     std::string snapshot_path;
     auto st = SnapshotManager::instance()->make_snapshot(snapshot_request, &snapshot_path);
-    if (!st.ok()) {
-        LOG(WARNING) << "fail to make_snapshot. tablet_id:" << snapshot_request.tablet_id << " msg:" << st.to_string();
+    if (!st.ok()) {LOG(WARNING) << "fail to make_snapshot. tablet_id:" << snapshot_request.tablet_id << " msg:" << st.to_string();
     } else {
         LOG(INFO) << "success to make_snapshot. tablet_id:" << snapshot_request.tablet_id << " path:" << snapshot_path;
         t_agent_result.__set_snapshot_path(snapshot_path);
