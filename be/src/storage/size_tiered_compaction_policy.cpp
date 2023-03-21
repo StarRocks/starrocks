@@ -131,6 +131,11 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
         force_base_compaction = true;
     }
 
+    // too many delete version will incur read overhead
+    if (_tablet->delete_predicates().size() >= config::tablet_max_versions / 10) {
+        force_base_compaction = true;
+    }
+
     struct SizeTieredLevel {
         SizeTieredLevel(std::vector<RowsetSharedPtr> r, int64_t s, int64_t l, int64_t t, double sc)
                 : rowsets(std::move(r)), segment_num(s), level_size(l), total_size(t), score(sc) {}
@@ -156,6 +161,13 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
     size_t segment_num = 0;
     int64_t level_multiple = config::size_tiered_level_multiple;
     auto keys_type = _tablet->keys_type();
+    auto min_compaction_segment_num = std::max(
+            static_cast<int64_t>(2),
+            std::min(config::min_cumulative_compaction_num_singleton_deltas, config::size_tiered_level_multiple));
+    // make sure compact to one nonoverlapping segment
+    if (force_base_compaction) {
+        min_compaction_segment_num = 2;
+    }
 
     bool reached_max_version = false;
     if (candidate_rowsets.size() > config::tablet_max_versions / 10 * 9) {
@@ -192,26 +204,25 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
             // base compaction can handle delete condition
             if (!transient_rowsets.empty() && transient_rowsets[0]->start_version() == 0) {
             } else {
-                // if upper level only has one rowset, we can merge into one level
-                int64_t i = order_levels.size() - 1;
-                while (i >= 0) {
-                    if (order_levels[i]->rowsets.size() == 1 &&
-                        transient_rowsets[0]->start_version() == order_levels[i]->rowsets[0]->end_version() + 1 &&
-                        !_tablet->version_for_delete_predicate(order_levels[i]->rowsets[0]->version())) {
-                        transient_rowsets.insert(transient_rowsets.begin(), order_levels[i]->rowsets[0]);
-                        auto rs = order_levels[i]->rowsets[0]->data_disk_size() > 0
-                                          ? order_levels[i]->rowsets[0]->data_disk_size()
-                                          : 1;
-                        level_size = rs < _max_level_size ? rs : _max_level_size;
-                        segment_num += order_levels[i]->segment_num;
-                        total_size += level_size;
-                        priority_levels.erase(order_levels[i].get());
-                        i--;
+                // while upper level segment num less min_compaction_segment_num, we can merge into one level
+                int64_t upper_level = order_levels.size() - 1;
+                while (upper_level >= 0) {
+                    if ((order_levels[upper_level]->segment_num < min_compaction_segment_num ||
+                         order_levels[upper_level]->rowsets.front()->start_version() == 0) &&
+                        transient_rowsets.front()->start_version() ==
+                                order_levels[upper_level]->rowsets.back()->end_version() + 1) {
+                        transient_rowsets.insert(transient_rowsets.begin(), order_levels[upper_level]->rowsets.begin(),
+                                                 order_levels[upper_level]->rowsets.end());
+                        level_size = std::max(order_levels[upper_level]->level_size, level_size);
+                        segment_num += order_levels[upper_level]->segment_num;
+                        total_size += order_levels[upper_level]->total_size;
+                        priority_levels.erase(order_levels[upper_level].get());
+                        upper_level--;
                     } else {
                         break;
                     }
                 }
-                order_levels.resize(i + 1);
+                order_levels.resize(upper_level + 1);
 
                 // after merge, check if we match base compaction condition
                 if (!transient_rowsets.empty() && transient_rowsets[0]->start_version() != 0) {
@@ -229,8 +240,10 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
                     continue;
                 }
             }
-        } else if (!force_base_compaction && level_size > config::size_tiered_min_level_size &&
-                   rowset_size < level_size && level_size / rowset_size > (level_multiple - 1)) {
+        } else if ((!force_base_compaction ||
+                    (!transient_rowsets.empty() && transient_rowsets[0]->start_version() != 0)) &&
+                   level_size > config::size_tiered_min_level_size && rowset_size < level_size &&
+                   level_size / rowset_size > (level_multiple - 1)) {
             if (!transient_rowsets.empty()) {
                 auto level = std::make_unique<SizeTieredLevel>(
                         transient_rowsets, segment_num, level_size, total_size,
@@ -268,9 +281,6 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
         // avoid triggering compaction too frequently compared to the old version
         // But in the old version of compaction, the user may set a large min_cumulative_compaction_num_singleton_deltas
         // to avoid TOO_MANY_VERSION errors, it is unnecessary in size tiered compaction
-        auto min_compaction_segment_num = std::max(
-                static_cast<int64_t>(2),
-                std::min(config::min_cumulative_compaction_num_singleton_deltas, config::size_tiered_level_multiple));
         selected_level = *priority_levels.begin();
         if (selected_level->segment_num >= min_compaction_segment_num) {
             *input_rowsets = selected_level->rowsets;
