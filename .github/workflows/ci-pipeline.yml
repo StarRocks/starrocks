@@ -6,16 +6,6 @@ on:
       - opened
       - synchronize
 
-    paths:
-      - 'docs/**'
-      - 'be/**'
-      - 'fe/**.java'
-      - 'fe/**.xml'
-      - 'gensrc/**'
-      - 'run-be-ut.sh'
-      - 'run-fe-ut.sh'
-      - 'build.sh'
-
     branches:
       - main
 
@@ -154,6 +144,7 @@ jobs:
               - 'fe/**'
               - 'gensrc/**'
               - 'run-fe-ut.sh'
+              - 'java-extensions/**'
               - 'build.sh'
 
       - run: echo ${{ steps.changes.outputs.fe }}
