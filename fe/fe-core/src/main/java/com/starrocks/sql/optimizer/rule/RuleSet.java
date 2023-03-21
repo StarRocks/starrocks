@@ -274,8 +274,8 @@ public class RuleSet {
         ));
 
         rewriteRules.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
-                new RewriteMultiDistinctRule(),
-                new RewriteMultiDistinctByCTERule()
+                new RewriteMultiDistinctByCTERule(),
+                new RewriteMultiDistinctRule()
         ));
 
         rewriteRules.put(RuleSetType.PRUNE_SET_OPERATOR, ImmutableList.of(
