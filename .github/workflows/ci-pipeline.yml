@@ -130,6 +130,32 @@ jobs:
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
+  xml-debug:
+    runs-on: self-hosted
+      name: ADMIT TEST
+      needs: deploy
+      timeout-minutes: 60
+      steps:
+        - name: Clean Workspace
+          uses: AutoModality/action-clean@v1.1.0
+
+        - name: Run Case
+          run: |
+            set -x
+            cd ${{ github.workspace }}
+            mkdir test && cd test
+            cp /var/local/env/test_window_funnel_py_TestWindowFunnel_test_window_funnel_date.xml .
+
+        - name: Publish Test Results
+          uses: mikepenz/action-junit-report@v3
+          if: success() || failure()
+          with:
+            check_name: 'XML Test'
+            detailed_summary: true
+            token: ${{ secrets.GITHUB_TOKEN }}
+            #          github_token: ${{ secrets.PAT }}
+            report_paths: 'StarRocksTest/result/*.xml'
+
   fe-checker:
     runs-on: ubuntu-latest
     name: FE FILTER
@@ -157,7 +183,7 @@ jobs:
   fe-codestyle-check:
     runs-on: ubuntu-latest
     needs: fe-checker
-    if: needs.fe-checker.outputs.output1 == 'true'
+    if: needs.fe-checker.outputs.output1 != 'true'
     name: FE Code Style Check
     steps:
       - uses: dorny/paths-filter@v2
