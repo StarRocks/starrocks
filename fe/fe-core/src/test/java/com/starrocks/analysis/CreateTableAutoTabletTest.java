@@ -2,9 +2,11 @@
 package com.starrocks.analysis;
 
 import com.starrocks.alter.AlterJobV2Test;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
@@ -130,7 +132,8 @@ public class CreateTableAutoTabletTest {
                      "   'dynamic_partition.start' = '-3'," +
                      "   'dynamic_partition.end' = '3'," +
                      "   'dynamic_partition.prefix' = 'p');");
-        Thread.sleep(1000); // wait for the dynamic partition created
+        DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler();
+        dynamicPartitionScheduler.runOnceForTest();
         Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
         if (db == null) {
             return;
@@ -144,7 +147,7 @@ public class CreateTableAutoTabletTest {
         int bucketNum = 0;
         db.readLock();
         try {
-            List<Partition> partitions = (List<Partition>) table.getRecentPartitions(3);
+            List<Partition> partitions = (List<Partition>) table.getRecentPartitions(2);
             bucketNum = partitions.get(0).getDistributionInfo().getBucketNum();
         } finally {
             db.readUnlock();
