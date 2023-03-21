@@ -7,7 +7,11 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+=======
+import com.starrocks.sql.parser.NodePosition;
+>>>>>>> 863c40ca1 ([BugFix] support SqlToScalarOperatorTranslator visit lambda functions more than one times (#19843))
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
@@ -15,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 
 public class LambdaFunctionExpr extends Expr {
-    private LambdaFunctionOperator transformedOp = null;
     private int commonSubOperatorNum = 0;
 
     public LambdaFunctionExpr(List<Expr> arguments) {
@@ -35,14 +38,6 @@ public class LambdaFunctionExpr extends Expr {
 
     public LambdaFunctionExpr(LambdaFunctionExpr rhs) {
         super(rhs);
-    }
-
-    public LambdaFunctionOperator getTransformed() {
-        return transformedOp;
-    }
-
-    public void setTransformed(LambdaFunctionOperator op) {
-        transformedOp = op;
     }
 
     @Override
