@@ -241,7 +241,7 @@ TEST_F(RowsetColumnPartialUpdateTest, partial_update_and_check) {
     }
     // check data
     ASSERT_TRUE(check_tablet(_tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
-        return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v1;
+        return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
     }));
 
     std::vector<int32_t> column_indexes = {0, 1};
@@ -263,7 +263,7 @@ TEST_F(RowsetColumnPartialUpdateTest, partial_update_and_check) {
     ASSERT_TRUE(st.ok()) << st.to_string();
     // check data
     ASSERT_TRUE(check_tablet(_tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
-        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v1;
+        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
     }));
 }
 

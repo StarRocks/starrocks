@@ -228,6 +228,7 @@ public class OlapTableSink extends DataSink {
         tSink.setPartition(createPartition(tSink.getDb_id(), dstTable));
         tSink.setLocation(createLocation(dstTable));
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(clusterId));
+        tSink.setPartial_update_mode(TPartialUpdateMode.COLUMN_MODE);
     }
 
     @Override

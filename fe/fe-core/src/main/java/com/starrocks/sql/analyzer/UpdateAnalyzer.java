@@ -74,6 +74,7 @@ public class UpdateAnalyzer {
             }
         }
         SelectList selectList = new SelectList();
+        List<Column> assignColumnList = Lists.newArrayList();
         for (Column col : table.getBaseSchema()) {
             SelectListItem item;
             ColumnAssignment assign = assignmentByColName.get(col.getName().toLowerCase());
@@ -92,10 +93,13 @@ public class UpdateAnalyzer {
                 }
 
                 item = new SelectListItem(assign.getExpr(), col.getName());
-            } else {
+                selectList.addItem(item);
+                assignColumnList.add(col);
+            } else if (col.isKey()) {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
+                selectList.addItem(item);
+                assignColumnList.add(col);
             }
-            selectList.addItem(item);
         }
 
         Relation relation = new TableRelation(tableName);
@@ -117,11 +121,11 @@ public class UpdateAnalyzer {
         updateStmt.setQueryStatement(queryStatement);
 
         List<Expr> outputExpression = queryStatement.getQueryRelation().getOutputExpression();
-        Preconditions.checkState(outputExpression.size() == table.getBaseSchema().size());
+        Preconditions.checkState(outputExpression.size() == assignColumnList.size());
         List<Expr> castOutputExpressions = Lists.newArrayList();
-        for (int i = 0; i < table.getBaseSchema().size(); ++i) {
+        for (int i = 0; i < assignColumnList.size(); ++i) {
             Expr e = outputExpression.get(i);
-            Column c = table.getBaseSchema().get(i);
+            Column c = assignColumnList.get(i);
             castOutputExpressions.add(TypeManager.addCastExpr(e, c.getType()));
         }
         ((SelectRelation) queryStatement.getQueryRelation()).setOutputExpr(castOutputExpressions);

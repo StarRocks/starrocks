@@ -83,6 +83,9 @@ public class UpdatePlanner {
             long tableId = table.getId();
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
             for (Column column : table.getFullSchema()) {
+                if (!updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
+                    continue;
+                }
                 SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(column.getType());

@@ -14,12 +14,14 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+import java.util.Set;
 
 public class UpdateStmt extends DmlStmt {
     private final TableName tableName;
@@ -27,6 +29,7 @@ public class UpdateStmt extends DmlStmt {
     private final List<Relation> fromRelations;
     private final Expr wherePredicate;
     private final List<CTERelation> commonTableExpressions;
+    private final Set<String> assignmentColumns;
 
     private Table table;
     private QueryStatement queryStatement;
@@ -47,6 +50,14 @@ public class UpdateStmt extends DmlStmt {
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
         this.nullExprInAutoIncrement = true;
+        this.assignmentColumns = Sets.newHashSet();
+        for (ColumnAssignment each : assignments) {
+            this.assignmentColumns.add(each.getColumn());
+        }
+    }
+
+    public boolean isAssignmentColumn(String colName) {
+        return assignmentColumns.contains(colName);
     }
 
     @Override
