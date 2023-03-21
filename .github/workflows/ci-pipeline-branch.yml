@@ -65,7 +65,6 @@ jobs:
   be-checker:
     runs-on: ubuntu-latest
     name: BE FILTER
-    id: be-checker
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
     steps:
@@ -136,7 +135,6 @@ jobs:
   fe-checker:
     runs-on: ubuntu-latest
     name: FE FILTER
-    id: fe-checker
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
     steps:
