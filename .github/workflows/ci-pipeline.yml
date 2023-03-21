@@ -1,7 +1,7 @@
 name: CI PIPELINE
 
 on:
-  pull_request:
+  pull_request_target:
     types:
       - opened
       - synchronize
@@ -15,6 +15,17 @@ concurrency:
 
 permissions:
   checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
 
 jobs:
   doc-checker:
@@ -43,6 +54,7 @@ jobs:
       - name: add document label
         uses: actions-ecosystem/action-add-labels@v1
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: documentation
 
   markdownlint:
@@ -95,6 +107,12 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+      
+      - name: Checkout PR
+        uses: dawidd6/action-checkout-pr@v1
+        with:
+          pr: ${{ github.event.number }}
+          
       - name: Run Clang-Format
         run: |
           export PATH=/var/lib/llvm/bin:$PATH
@@ -109,9 +127,10 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
     steps:
       - name: BRANCH INFO
-        id: extract_branch
+        id: branch
         run: |
-          echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
@@ -205,8 +224,10 @@ jobs:
         uses: AutoModality/action-clean@v1.1.0
 
       - name: BRANCH INFO
-        id: extract_branch
-        run: echo "##[set-output name=branch;]$(echo ${GITHUB_REF#refs/heads/})"
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
@@ -227,16 +248,22 @@ jobs:
 
   build:
     runs-on: self-hosted
-    needs: [be-ut, fe-ut]
+    needs: [be-checker, fe-checker, be-ut, fe-ut]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
-    if: always() && (needs.be-ut.result == 'success' || needs.fe-ut.result == 'success') && (needs.be-ut.result != 'failure' && needs.fe-ut.result != 'failure') && (needs.be-ut.result != 'cancelled' && needs.fe-ut.result != 'cancelled')
+    if: always() && (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success') || (needs.be-checker.outputs.output1 != 'true' && needs.fe-ut.result == 'success') || (needs.fe-checker.outputs.output1 != 'true' && needs.be-ut.result == 'success')
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
       - name: UPDATE ECI & RUN BUILD
         id: run_build
