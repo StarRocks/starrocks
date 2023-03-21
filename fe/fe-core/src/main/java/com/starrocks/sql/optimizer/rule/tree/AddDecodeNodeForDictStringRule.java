@@ -790,6 +790,19 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             visitProjectionBefore(aggExpr, context);
 
             PhysicalHashAggregateOperator aggOperator = (PhysicalHashAggregateOperator) aggExpr.getOp();
+            // Fix issue: https://github.com/StarRocks/starrocks/issues/19901
+            // TODO(by satanson): forbid dict optimization if the Agg is multi-stage Agg and has having-clause.
+            //  it is quite conservative, but actually, if the Agg's having-clause references aggregations,
+            //  then the optimization can not propagate upwards. In the future, this Rule should be refined as
+            //  follows:
+            //   1. Assign each expr a property that describes axiom exprs on whom the expr depends. the axiom
+            //      exprs means ColumnRefOperators represent tablet columns. so from this, we can break through
+            //      project operators and obtain the truth whether a expr depends on dict-encoding column or not.
+            //   2. Rewrite this Rule to make each visitXXX method can discards rewritten child OptExpression
+            //      and resorts to the orignal child OptExpression according to the current OptExpression's state.
+            if (!aggOperator.isOnePhaseAgg() && aggOperator.getPredicate() != null) {
+                return aggExpr;
+            }
             context.needEncode = aggOperator.couldApplyStringDict(context.allStringColumnIds);
             if (context.needEncode) {
                 aggOperator.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns,
