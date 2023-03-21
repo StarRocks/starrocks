@@ -1217,8 +1217,7 @@ static inline std::tuple<NullColumnPtr, Column*, const UInt32Column*> unpack_arr
         array_col = down_cast<ArrayColumn*>(nullable->data_column().get());
         array_null = NullColumn::create(*nullable->null_column());
     } else {
-        array_null = NullColumn::create();
-        array_null->resize(array->size());
+        array_null = NullColumn::create(input->size(), 0);
         array_col = down_cast<ArrayColumn*>(array.get());
     }
 
@@ -1234,6 +1233,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
 
     auto [array_null, elements, offsets] = unpack_array_column(columns[0]);
     auto* offsets_ptr = offsets->get_data().data();
+    auto* row_nulls = array_null->get_data().data();
 
     auto result_elements = elements->clone_empty();
     auto result_offsets = UInt32Column::create();
@@ -1250,7 +1250,9 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
         size_t offset = offsets_ptr[i];
         int64_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
 
-        if (array_size <= 1) {
+        if (row_nulls[i] == 1) {
+            // append offsets directly
+        } else if (array_size <= 1) {
             for (size_t j = 0; j < array_size; j++) {
                 result_elements->append(*elements, offset + j, 1);
             }
@@ -1297,20 +1299,28 @@ StatusOr<ColumnPtr> ArrayFunctions::array_reverse_any_types(FunctionContext* ctx
 
     auto [array_null, elements, offsets] = unpack_array_column(columns[0]);
     auto* offsets_ptr = offsets->get_data().data();
+    auto* row_nulls = array_null->get_data().data();
 
     auto result_elements = elements->clone_empty();
+    auto result_offsets = UInt32Column::create();
+    result_offsets->reserve(offsets->size());
+    result_offsets->append(0);
 
     size_t rows = columns[0]->size();
     for (auto i = 0; i < rows; i++) {
         size_t offset = offsets_ptr[i];
         int64_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
 
-        for (int64_t j = array_size - 1; j >= 0; j--) {
-            result_elements->append(*elements, offset + j, 1);
+        if (row_nulls[i] == 0) {
+            for (int64_t j = array_size - 1; j >= 0; j--) {
+                result_elements->append(*elements, offset + j, 1);
+            }
         }
+
+        result_offsets->append(result_elements->size());
     }
 
-    return NullableColumn::create(ArrayColumn::create(std::move(result_elements), UInt32Column::create(*offsets)),
+    return NullableColumn::create(ArrayColumn::create(std::move(result_elements), std::move(result_offsets)),
                                   array_null);
 }
 
@@ -1359,8 +1369,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_intersect_any_type(FunctionContext* ct
     auto distinct_col = array_distinct_any_type(ctx, {base_col});
     DCHECK(distinct_col.ok());
 
-    auto* dis_array_col =
-            down_cast<ArrayColumn*>(down_cast<NullableColumn*>(distinct_col.value().get())->data_column().get());
+    auto* dis_array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(distinct_col.value().get()));
 
     auto& base_elements = dis_array_col->elements_column();
     auto* base_offsets = &dis_array_col->offsets();

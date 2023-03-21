@@ -34,7 +34,7 @@ struct ArrayAggDispatcher {
     }
 };
 
-void AggregateFuncResolver::register_array() {
+void AggregateFuncResolver::register_array_functions() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, ArrayAggDispatcher(), this);
     }
