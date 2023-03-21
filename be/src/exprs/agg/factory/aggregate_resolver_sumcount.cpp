@@ -53,7 +53,7 @@ struct StorageSumDispatcher {
 struct DistinctDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_aggregate<lt> || lt_is_string<lt>) {
+        if constexpr (lt_is_aggregate<lt>) {
             using DistinctState = DistinctAggregateState<lt, SumResultLT<lt>>;
             using DistinctState2 = DistinctAggregateStateV2<lt, SumResultLT<lt>>;
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DistinctState>(
