@@ -301,10 +301,16 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
 
             TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
-            // Because intersect_count has more two input types.
-            // intersect_count's first argument's type is alwasy Bitmap,
-            // So we get its second arguments type as input.
-            if (fn.name.function_name == "intersect_count" || fn.name.function_name == "max_by") {
+            // Because intersect_count have two input types.
+            // And intersect_count's first argument's type is alwasy Bitmap,
+            // so we use its second arguments type as input.
+            if (fn.name.function_name == "intersect_count") {
+                arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
+            }
+
+            // Because max_by and min_by function have two input types,
+            // so we use its second arguments type as input.
+            if (fn.name.function_name == "max_by" || fn.name.function_name == "min_by") {
                 arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
             }
 
