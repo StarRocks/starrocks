@@ -132,8 +132,7 @@ jobs:
 
   xml-debug:
     runs-on: self-hosted
-    name: ADMIT TEST
-    needs: deploy
+    name: XML TEST
     timeout-minutes: 60
     steps:
       - name: Clean Workspace
