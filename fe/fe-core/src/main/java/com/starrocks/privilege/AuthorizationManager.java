@@ -191,7 +191,7 @@ public class AuthorizationManager {
                     PrivilegeBuiltinConstants.PUBLIC_ROLE_NAME);
             // GRANT SELECT ON ALL TABLES IN information_schema
             List<PEntryObject> object = Collections.singletonList(new TablePEntryObject(
-                    Long.toString(SystemId.INFORMATION_SCHEMA_DB_ID), TablePEntryObject.ALL_TABLES_UUID));
+                    Long.toString(SystemId.INFORMATION_SCHEMA_DB_ID), PrivilegeBuiltinConstants.ALL_TABLES_UUID));
             rolePrivilegeCollection.grant(ObjectType.TABLE, Collections.singletonList(PrivilegeType.SELECT), object,
                     false);
 
@@ -232,7 +232,7 @@ public class AuthorizationManager {
                 break;
             case VIEW:
             case MATERIALIZED_VIEW:
-            case FUNCTION:
+
             case DATABASE:
                 objects.add(provider.generateObject(objectType,
                         Lists.newArrayList("*", "*"), globalStateMgr));
@@ -247,9 +247,24 @@ public class AuthorizationManager {
             case RESOURCE:
             case CATALOG:
             case RESOURCE_GROUP:
-            case GLOBAL_FUNCTION:
                 objects.add(provider.generateObject(objectType,
                         Lists.newArrayList("*"), globalStateMgr));
+                collection.grant(objectType, actionList, objects, false);
+                break;
+
+            case FUNCTION:
+                objects.add(provider.generateFunctionObject(objectType,
+                        PrivilegeBuiltinConstants.ALL_DATABASE_ID,
+                        PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID,
+                        globalStateMgr));
+                collection.grant(objectType, actionList, objects, false);
+                break;
+
+            case GLOBAL_FUNCTION:
+                objects.add(provider.generateFunctionObject(objectType,
+                        PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID,
+                        PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID,
+                        globalStateMgr));
                 collection.grant(objectType, actionList, objects, false);
                 break;
 
@@ -1265,6 +1280,11 @@ public class AuthorizationManager {
 
     public PEntryObject generateUserObject(ObjectType objectType, UserIdentity user) throws PrivilegeException {
         return this.provider.generateUserObject(objectType, user, globalStateMgr);
+    }
+
+    public PEntryObject generateFunctionObject(ObjectType objectType, Long databaseId, Long functionId)
+            throws PrivilegeException {
+        return this.provider.generateFunctionObject(objectType, databaseId, functionId, globalStateMgr);
     }
 
     /**

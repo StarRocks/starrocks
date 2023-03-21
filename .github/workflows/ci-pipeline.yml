@@ -6,16 +6,6 @@ on:
       - opened
       - synchronize
 
-    paths:
-      - 'docs/**'
-      - 'be/**'
-      - 'fe/**.java'
-      - 'fe/**.xml'
-      - 'gensrc/**'
-      - 'run-be-ut.sh'
-      - 'run-fe-ut.sh'
-      - 'build.sh'
-
     branches:
       - main
 
@@ -53,7 +43,6 @@ jobs:
       - name: add document label
         uses: actions-ecosystem/action-add-labels@v1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: documentation
 
   markdownlint:
@@ -136,6 +125,7 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be
 
       - name: clean ECI
+        if: always()
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
@@ -154,6 +144,7 @@ jobs:
               - 'fe/**'
               - 'gensrc/**'
               - 'run-fe-ut.sh'
+              - 'java-extensions/**'
               - 'build.sh'
 
       - run: echo ${{ steps.changes.outputs.fe }}
@@ -203,7 +194,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
-
   fe-ut:
     runs-on: [self-hosted]
     needs: fe-codestyle-check
@@ -230,6 +220,7 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe
 
       - name: clean ECI
+        if: always()
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
@@ -242,7 +233,7 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
-    if: always() && (needs.be-ut.result == 'success' || needs.fe-ut.result == 'success')
+    if: always() && (needs.be-ut.result == 'success' || needs.fe-ut.result == 'success') && (needs.be-ut.result != 'failure' && needs.fe-ut.result != 'failure') && (needs.be-ut.result != 'cancelled' && needs.fe-ut.result != 'cancelled')
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
@@ -262,6 +253,7 @@ jobs:
           echo ${{ steps.run_build.outputs.OUTPUT_TAR }}
 
       - name: clean ECI
+        if: always()
         run: |
           echo ${{ steps.run_build.outputs.ECI_ID }}
           eci rm ${{ steps.run_build.outputs.ECI_ID }}
@@ -343,8 +335,7 @@ jobs:
         uses: mikepenz/action-junit-report@v3
         if: success() || failure()
         with:
-          check_name: 'Test Results'
-          detailed_summary: 'true'
-          fail_on_failure: 'true'
+          check_name: 'Admit Test Results'
+          detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'StarRocksTest/result/*.xml'

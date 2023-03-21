@@ -609,7 +609,7 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select SUM(v2) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -617,7 +617,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: 2: v2\n");
         sql = "select SUM(v2) from (select v2, sum(distinct v2) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -652,7 +652,7 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select SUM(x1) from (select v2 as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -2071,7 +2071,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 12> : 14: cast + rand() + 1.0\n" +
                 "  |  common expressions:\n" +
                 "  |  <slot 14> : CAST(2: t1b AS DOUBLE)");
-        sql = "select cast(id_decimal as decimal(38,2)),cast(id_decimal as decimal(37,2)) from test_all_type group by 1, 2";
+        sql =
+                "select cast(id_decimal as decimal(38,2)),cast(id_decimal as decimal(37,2)) from test_all_type group by 1, 2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
                 "  |  group by: 11: cast, 12: cast\n" +

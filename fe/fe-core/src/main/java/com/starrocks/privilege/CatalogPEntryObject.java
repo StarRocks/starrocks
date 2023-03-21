@@ -35,7 +35,6 @@ import java.util.Optional;
  * don't support create database under external catalog for now.
  */
 public class CatalogPEntryObject implements PEntryObject {
-    public static final long ALL_CATALOGS_ID = -1; // -1 represent all
     @SerializedName(value = "i")
     private long id;
 
@@ -49,7 +48,7 @@ public class CatalogPEntryObject implements PEntryObject {
         }
         String name = tokens.get(0);
         if (name.equals("*")) {
-            return new CatalogPEntryObject(ALL_CATALOGS_ID);
+            return new CatalogPEntryObject(PrivilegeBuiltinConstants.ALL_CATALOGS_ID);
         }
 
         long id;
@@ -82,7 +81,7 @@ public class CatalogPEntryObject implements PEntryObject {
             return false;
         }
         CatalogPEntryObject other = (CatalogPEntryObject) obj;
-        if (other.id == ALL_CATALOGS_ID) {
+        if (other.id == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
             return true;
         }
         return other.id == id;
@@ -90,7 +89,7 @@ public class CatalogPEntryObject implements PEntryObject {
 
     @Override
     public boolean isFuzzyMatching() {
-        return ALL_CATALOGS_ID == id;
+        return PrivilegeBuiltinConstants.ALL_CATALOGS_ID == id;
     }
 
     @Override
@@ -135,7 +134,7 @@ public class CatalogPEntryObject implements PEntryObject {
 
     @Override
     public String toString() {
-        if (id == ALL_CATALOGS_ID) {
+        if (id == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
             return "ALL CATALOGS";
         } else {
             if (id == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {

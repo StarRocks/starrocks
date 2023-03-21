@@ -115,7 +115,7 @@ struct AggFunctionTypes {
     TypeDescriptor serde_type; // for serialize
     std::vector<FunctionContext::TypeDesc> arg_typedescs;
     bool has_nullable_child;
-    bool is_nullable; // agg function result whether is nullable
+    bool is_nullable; // whether result of agg function is nullable
 };
 
 struct ColumnType {
@@ -327,8 +327,8 @@ public:
 
     bool is_full() { return _spiller != nullptr && _spiller->is_full(); }
 
-    const std::shared_ptr<Spiller>& spiller() const { return _spiller; }
-    void set_spiller(std::shared_ptr<Spiller> spiller) { _spiller = std::move(spiller); }
+    const std::shared_ptr<spill::Spiller>& spiller() const { return _spiller; }
+    void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
 
     const SpillProcessChannelPtr spill_channel() const { return _spill_channel; }
     void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
@@ -448,7 +448,7 @@ protected:
 
     AggStatistics* _agg_stat;
 
-    std::shared_ptr<Spiller> _spiller;
+    std::shared_ptr<spill::Spiller> _spiller;
     SpillProcessChannelPtr _spill_channel;
 
 public:
