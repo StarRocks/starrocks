@@ -29,7 +29,7 @@ public class DropFunctionStmt extends DdlStmt {
     private final FunctionArgsDef argsDef;
 
     // set after analyzed
-    private FunctionSearchDesc function;
+    private FunctionSearchDesc functionSearchDesc;
 
     public DropFunctionStmt(FunctionName functionName, FunctionArgsDef argsDef) {
         this.functionName = functionName;
@@ -40,12 +40,12 @@ public class DropFunctionStmt extends DdlStmt {
         return functionName;
     }
 
-    public FunctionSearchDesc getFunction() {
-        return function;
+    public FunctionSearchDesc getFunctionSearchDesc() {
+        return functionSearchDesc;
     }
 
-    public void setFunction(FunctionSearchDesc function) {
-        this.function = function;
+    public void setFunctionSearchDesc(FunctionSearchDesc functionSearchDesc) {
+        this.functionSearchDesc = functionSearchDesc;
     }
 
     @Override
