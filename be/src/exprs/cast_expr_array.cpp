@@ -205,6 +205,10 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
     if (column->is_nullable() || has_null) {
         res = NullableColumn::create(res, null_column);
     }
+    // Wrap constant column if source column is constant.
+    if (column->is_constant()) {
+        res = ConstColumn::create(res, column->size());
+    }
 
     return res;
 }
@@ -281,6 +285,10 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
         res = NullableColumn::create(res, null_column);
     }
 
+    // Wrap constant column if source column is constant.
+    if (column->is_constant()) {
+        res = ConstColumn::create(res, column->size());
+    }
     return res;
 }
 
