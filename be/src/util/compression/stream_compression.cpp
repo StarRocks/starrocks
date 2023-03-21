@@ -471,6 +471,7 @@ Status LzoStreamCompression::decompress(uint8_t* inputAddress, size_t input_len,
 
     uint8_t* inputLimit = inputAddress + input_len + 1;
     uint8_t* outputLimit = outputAddress + output_len + 1;
+
     // nothing compresses to nothing
     if (inputAddress == inputLimit) {
         return Status::OK();
