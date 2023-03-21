@@ -24,7 +24,7 @@ namespace starrocks {
 struct WindowDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_aggregate<lt> || lt_is_string<lt> || is_object_type(lt)) {
+        if constexpr (lt_is_aggregate<lt> || is_object_type(lt)) {
             resolver->add_aggregate_mapping_notnull<lt, lt>(
                     "first_value", true, AggregateFactory::MakeFirstValueWindowFunction<lt, false>());
             // use first_value_in for first_value with ingnore nulls.
