@@ -152,7 +152,7 @@ jobs:
           check_name: 'XML Test'
           detailed_summary: true
           token: ${{ secrets.PAT }}
-          #          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.PAT }}
           report_paths: 'StarRocksTest/result/*.xml'
 
   fe-checker:
