@@ -83,6 +83,7 @@ static void dump_trace_info() {
         // dump query_id and fragment id
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
+        int catched = CurrentThread::current().is_catched();
         char buffer[256] = {};
         int res = sprintf(buffer, "query_id:");
         res = print_unique_id(buffer + res, query_id) + res;
@@ -90,6 +91,8 @@ static void dump_trace_info() {
         res = sprintf(buffer + res, "fragment_instance:") + res;
         res = print_unique_id(buffer + res, fragment_instance_id) + res;
         res = sprintf(buffer + res, "\n") + res;
+         res = sprintf(buffer + res, "catched:") + res;
+        res = sprintf(buffer + res, "%d", catched) + res;
         [[maybe_unused]] auto wt = write(STDERR_FILENO, buffer, res);
         // dump memory usage
         auto trackers = ExecEnv::GetInstance()->mem_trackers();
