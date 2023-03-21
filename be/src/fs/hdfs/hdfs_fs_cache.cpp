@@ -95,6 +95,7 @@ Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<
     }
 
     // Not found cached client, create a new one
+    hdfs_client = std::make_shared<HdfsFsClient>();
     hdfs_client->namenode = namenode;
     RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, hdfs_client, options));
     if (UNLIKELY(_cur_client_idx >= _max_cache_clients)) {
