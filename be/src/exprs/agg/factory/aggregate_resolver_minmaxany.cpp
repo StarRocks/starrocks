@@ -43,7 +43,7 @@ void AggregateFuncResolver::register_bitmap() {
 struct MinMaxAnyDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_aggregate<lt> || lt_is_string<lt> || lt_is_json<lt>) {
+        if constexpr (lt_is_aggregate<lt> || lt_is_json<lt>) {
             resolver->add_aggregate_mapping<lt, lt, MinAggregateData<lt>>(
                     "min", true, AggregateFactory::MakeMinAggregateFunction<lt>());
             resolver->add_aggregate_mapping<lt, lt, MaxAggregateData<lt>>(
@@ -58,10 +58,22 @@ template <LogicalType ret_type>
 struct MaxByDispatcherInner {
     template <LogicalType arg_type>
     void operator()(AggregateFuncResolver* resolver) {
+<<<<<<< HEAD
         if constexpr ((lt_is_aggregate<arg_type> || lt_is_string<arg_type> || lt_is_json<arg_type>)&&(
                               lt_is_aggregate<ret_type> || lt_is_string<ret_type> || lt_is_json<ret_type>)) {
             resolver->add_aggregate_mapping_variadic<arg_type, ret_type, MaxByAggregateData<arg_type>>(
                     "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type>());
+=======
+        if constexpr ((lt_is_aggregate<arg_type> || lt_is_json<arg_type>)&&(lt_is_aggregate<ret_type> ||
+                                                                            lt_is_json<ret_type>)) {
+            if constexpr (is_max_by) {
+                resolver->add_aggregate_mapping_variadic<arg_type, ret_type, MaxByAggregateData<arg_type>>(
+                        "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type>());
+            } else {
+                resolver->add_aggregate_mapping_variadic<arg_type, ret_type, MinByAggregateData<arg_type>>(
+                        "min_by", true, AggregateFactory::MakeMinByAggregateFunction<arg_type>());
+            }
+>>>>>>> 0113ec0c3 ([BugFix] fix histogram for string type (#19850))
         }
     }
 };
