@@ -2291,6 +2291,10 @@ public class LocalMetastore implements ConnectorMetadata {
             // do not create partition for external table
             if (olapTable.isOlapOrLakeTable()) {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                    if (properties != null && !properties.isEmpty()) {
+                        // here, all properties should be checked
+                        throw new DdlException("Unknown properties: " + properties);
+                    }
                     // this is a 1-level partitioned table, use table name as partition name
                     long partitionId = partitionNameToId.get(tableName);
                     Partition partition = createPartition(db, olapTable, partitionId, tableName, version, tabletIdSet);
