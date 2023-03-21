@@ -129,6 +129,7 @@ public class RangeSimplifier {
                         List<ScalarOperator> columnScalars = srcPredicates.stream().filter(
                                 predicate -> isScalarForColumns(predicate, columnId)
                         ).collect(Collectors.toList());
+                        columnScalars = filterScalarOperators(columnScalars, columnRange);
                         columnScalars.forEach(
                                 predicate -> result.set(Utils.compoundAnd(result.get(), predicate))
                         );
@@ -139,6 +140,43 @@ public class RangeSimplifier {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private List<ScalarOperator> filterScalarOperators(
+            List<ScalarOperator> columnScalars, Range<ConstantOperator> validRange) {
+        List<ScalarOperator> results = Lists.newArrayList();;
+        for (ScalarOperator candidate : columnScalars) {
+            if (isRedundantPredicate(candidate, validRange)) {
+                continue;
+            }
+            results.add(candidate);
+        }
+        return results;
+    }
+
+    private boolean isRedundantPredicate(ScalarOperator scalarOperator, Range<ConstantOperator> validRange) {
+        Preconditions.checkState(scalarOperator instanceof BinaryPredicateOperator);
+        Preconditions.checkState(scalarOperator.getChild(0) instanceof ColumnRefOperator);
+        Preconditions.checkState(scalarOperator.getChild(1) instanceof ConstantOperator);
+        BinaryPredicateOperator binary = scalarOperator.cast();
+        ConstantOperator right = binary.getChild(1).cast();
+        Range predicateRange = range(binary.getBinaryType(), right);
+        // only range border's predicate is non redundant
+        if (predicateRange.hasLowerBound()
+                && validRange.hasLowerBound()
+                && predicateRange.lowerBoundType() == validRange.lowerBoundType()
+                && predicateRange.lowerEndpoint().equals(validRange.lowerEndpoint())) {
+            // predicate is lower border
+            return false;
+        }
+        if (predicateRange.hasUpperBound()
+                && validRange.hasUpperBound()
+                && predicateRange.upperBoundType() == validRange.upperBoundType()
+                && predicateRange.upperEndpoint().equals(validRange.upperEndpoint())) {
+            // predicate is upper border
+            return false;
+        }
+        return true;
     }
 
     private boolean isScalarForColumns(ScalarOperator predicate, int columnId) {

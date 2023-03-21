@@ -221,20 +221,22 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
 
     std::set<std::string> datafiles;
 
-    bool need_check_modify_time = true;
+    bool need_check_modify_time = false;
     int64_t total_files = 0;
     // List segment
-    auto iter_st = fs->iterate_dir2(segment_root_location, [&](std::string_view name, const FileMeta& meta) {
+    auto iter_st = fs->iterate_dir2(segment_root_location, [&](DirEntry entry) {
         total_files++;
-        if (!is_segment(name) && !is_del(name) && !is_delvec(name)) {
-            LOG_EVERY_N(WARNING, 100) << "Unrecognized data file " << name;
+        if (!is_segment(entry.name) && !is_del(entry.name) && !is_delvec(entry.name)) {
+            LOG_EVERY_N(WARNING, 100) << "Unrecognized data file " << entry.name;
             return true;
         }
-        if (meta.has_modify_time() && now < meta.modify_time() + expire_seconds) {
-            need_check_modify_time = false;
-            return true;
+        if (!entry.mtime.has_value()) {
+            // Need to check modify time again as long as there is a entry that does not have modify time.
+            need_check_modify_time = true;
         }
-        datafiles.emplace(name);
+        if (!(entry.mtime.has_value() && now < entry.mtime.value() + expire_seconds)) {
+            datafiles.emplace(entry.name);
+        }
         return true;
     });
     if (!iter_st.ok() && !iter_st.is_not_found()) {

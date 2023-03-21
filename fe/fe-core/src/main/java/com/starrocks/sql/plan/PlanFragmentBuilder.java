@@ -376,7 +376,8 @@ public class PlanFragmentBuilder {
             // Key columns and value columns cannot be pruned in the non-skip-aggr scan stage.
             // - All the keys columns must be retained to merge and aggregate rows.
             // - Value columns can only be used after merging and aggregating.
-            MaterializedIndexMeta materializedIndexMeta = referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
+            MaterializedIndexMeta materializedIndexMeta =
+                    referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
             if (materializedIndexMeta.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
                 return;
             }
@@ -1595,7 +1596,8 @@ public class PlanFragmentBuilder {
                 }
 
                 // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
-                if (!withLocalShuffle && !node.isUseStreamingPreAgg() && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && !node.isUseStreamingPreAgg() &&
+                        hasColocateOlapScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isGlobal() || (node.getType().isLocal() && !node.isSplit())) {
@@ -1700,7 +1702,7 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
-                if (optExpr.getLogicalProperty().isExecuteInOneTablet()) {
+                if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
                     clearOlapScanNodePartitions(aggregationNode);
                 }
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
@@ -2355,6 +2357,10 @@ public class PlanFragmentBuilder {
             if (root instanceof SortNode) {
                 SortNode sortNode = (SortNode) root;
                 sortNode.setAnalyticPartitionExprs(analyticEvalNode.getPartitionExprs());
+            }
+
+            if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
+                clearOlapScanNodePartitions(analyticEvalNode);
             }
 
             inputFragment.setPlanRoot(analyticEvalNode);

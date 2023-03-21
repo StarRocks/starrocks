@@ -20,6 +20,7 @@
 #include "runtime/current_thread.h"
 
 namespace starrocks {
+namespace spill {
 Status UnorderedMemTable::append(ChunkPtr chunk) {
     _tracker->consume(chunk->memory_usage());
     _chunks.emplace_back(std::move(chunk));
@@ -75,5 +76,5 @@ StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {
 
     return sorted_chunk;
 }
-
+} // namespace spill
 } // namespace starrocks
