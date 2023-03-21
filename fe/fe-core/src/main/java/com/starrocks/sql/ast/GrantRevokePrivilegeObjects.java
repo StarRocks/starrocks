@@ -29,6 +29,10 @@ public class GrantRevokePrivilegeObjects implements ParseNode {
     //UnResolved AST used in syntax grantImpersonate
     private List<UserIdentity> userPrivilegeObjectList;
 
+    //UnResolved AST used in syntax grantOnAll
+    private boolean isAllDB;
+    private String dbName;
+
     //UnResolved AST used in syntax grantPrivWithFunc
     private List<Pair<FunctionName, FunctionArgsDef>> functions;
 
@@ -57,6 +61,19 @@ public class GrantRevokePrivilegeObjects implements ParseNode {
 
     public void setUserPrivilegeObjectList(List<UserIdentity> userPrivilegeObjectList) {
         this.userPrivilegeObjectList = userPrivilegeObjectList;
+    }
+
+    public boolean isAllDB() {
+        return isAllDB;
+    }
+
+    public String getDbName() {
+        return dbName;
+    }
+
+    public void setAllPrivilegeObject(boolean isAllDB, String dbName) {
+        this.isAllDB = isAllDB;
+        this.dbName = dbName;
     }
 
     public List<Pair<FunctionName, FunctionArgsDef>> getFunctions() {

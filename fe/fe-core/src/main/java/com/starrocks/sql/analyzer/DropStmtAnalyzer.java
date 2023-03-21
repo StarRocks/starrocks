@@ -125,7 +125,7 @@ public class DropStmtAnalyzer {
 
                 FunctionSearchDesc funcDesc = new FunctionSearchDesc(functionName, argsDef.getArgTypes(),
                         argsDef.isVariadic());
-                statement.setFunctionSearchDesc(funcDesc);
+                statement.setFunction(funcDesc);
 
                 // check function existence
                 Function func;
@@ -139,7 +139,7 @@ public class DropStmtAnalyzer {
                     if (db != null) {
                         try {
                             db.readLock();
-                            func = db.getFunction(statement.getFunctionSearchDesc());
+                            func = db.getFunction(statement.getFunction());
                             if (func == null) {
                                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
                             }

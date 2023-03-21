@@ -37,7 +37,15 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
 
     @Override
     public R visitUpdateStatement(UpdateStmt statement, C context) {
-        //Update Statement after analyze, all information will be used to build QueryStatement, so it is enough to traverse Query
+        if (statement.getFromRelations() != null) {
+            statement.getFromRelations().forEach(this::visit);
+        }
+        if (statement.getWherePredicate() != null) {
+            visit(statement.getWherePredicate());
+        }
+        if (statement.getCommonTableExpressions() != null) {
+            statement.getCommonTableExpressions().forEach(this::visit);
+        }
         if (statement.getQueryStatement() != null) {
             visit(statement.getQueryStatement());
         }
@@ -46,7 +54,16 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
 
     @Override
     public R visitDeleteStatement(DeleteStmt statement, C context) {
-        //Delete Statement after analyze, all information will be used to build QueryStatement, so it is enough to traverse Query
+        if (statement.getUsingRelations() != null) {
+            statement.getUsingRelations().forEach(this::visit);
+        }
+
+        if (statement.getWherePredicate() != null) {
+            visit(statement.getWherePredicate());
+        }
+        if (statement.getCommonTableExpressions() != null) {
+            statement.getCommonTableExpressions().forEach(this::visit);
+        }
         if (statement.getQueryStatement() != null) {
             visit(statement.getQueryStatement());
         }

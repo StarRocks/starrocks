@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
@@ -30,7 +31,6 @@ import java.util.List;
 public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected GrantRevokeClause clause;
     protected GrantRevokePrivilegeObjects objectsUnResolved;
-    private boolean isGrantOnAll = false;
 
     protected String role;
     protected String objectTypeUnResolved;
@@ -96,14 +96,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return objectsUnResolved.getFunctions();
     }
 
-    public boolean isGrantOnALL() {
-        return isGrantOnAll;
-    }
-
-    public void setGrantOnAll() {
-        isGrantOnAll = true;
-    }
-
     public void setPrivBitSet(PrivBitSet privBitSet) {
         this.privBitSet = privBitSet;
     }
@@ -162,6 +154,20 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     public void setObjectList(List<PEntryObject> objectList) {
         this.objectList = objectList;
+    }
+
+    public boolean hasPrivilegeObject() {
+        return this.objectsUnResolved != null;
+    }
+
+    public List<String> getTokens() {
+        if (!objectsUnResolved.isAllDB() && objectsUnResolved.getDbName() == null) {
+            return Lists.newArrayList("*");
+        } else if (objectsUnResolved.getDbName() != null) {
+            return Lists.newArrayList(objectsUnResolved.getDbName(), "*");
+        } else {
+            return Lists.newArrayList("*", "*");
+        }
     }
 
     @Override

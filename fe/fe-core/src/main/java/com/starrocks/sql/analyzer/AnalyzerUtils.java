@@ -157,7 +157,8 @@ public class AnalyzerUtils {
             Function search = new Function(fnName, argTypes, Type.INVALID, false);
             Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (fn != null && !PrivilegeActions.checkFunctionAction(context, db, fn, PrivilegeType.USAGE)) {
+                if (fn != null && !PrivilegeActions.checkFunctionAction(context, fn.dbName(),
+                        fn.signatureString(), PrivilegeType.USAGE)) {
                     throw new StarRocksPlannerException(String.format("Access denied. " +
                             "Found UDF: %s and need the USAGE privilege for FUNCTION", fn.getFunctionName()),
                             ErrorType.USER_ERROR);
@@ -181,7 +182,7 @@ public class AnalyzerUtils {
         Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn != null && !PrivilegeActions.checkGlobalFunctionAction(context,
-                fn, PrivilegeType.USAGE)) {
+                fn.signatureString(), PrivilegeType.USAGE)) {
             throw new StarRocksPlannerException(String.format("Access denied. " +
                     "Found UDF: %s and need the USAGE privilege for GLOBAL FUNCTION", fn.getFunctionName()),
                     ErrorType.USER_ERROR);
