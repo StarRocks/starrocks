@@ -12,18 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
-public interface ScalarOperatorRewriteRule {
-    boolean isBottomUp();
+public class SimplifiedCaseWhenRule extends BottomUpScalarOperatorRewriteRule {
+    private SimplifiedCaseWhenRule() {
+    }
 
-    boolean isTopDown();
+    public static final SimplifiedCaseWhenRule INSTANCE = new SimplifiedCaseWhenRule();
 
-    boolean isOnlyOnce();
-
-    ScalarOperator apply(ScalarOperator root, ScalarOperatorRewriteContext context);
+    @Override
+    public ScalarOperator apply(ScalarOperator root, ScalarOperatorRewriteContext context) {
+        return InvertedCaseWhen.simplify(root);
+    }
 }
