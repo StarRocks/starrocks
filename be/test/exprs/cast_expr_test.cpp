@@ -2096,6 +2096,63 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     EXPECT_EQ(R"([])", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
 }
 
+static ColumnPtr cast_json_to_array_ptr(TExprNode& cast_expr, LogicalType element_type, const ColumnPtr& src) {
+    cast_expr.child_type = to_thrift(TYPE_JSON);
+    cast_expr.type = gen_array_type_desc(to_thrift(element_type));
+
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+    std::unique_ptr<starrocks::Expr> json_col = std::make_unique<MockExpr>(cast_expr, src);
+    expr->_children.push_back(json_col.get());
+
+    return expr->evaluate(nullptr, nullptr);
+}
+
+static ColumnPtr create_json_const_column(const std::string& str, size_t size) {
+    auto json = JsonValue::parse(str);
+    if (!json.ok()) {
+        return nullptr;
+    }
+    return ColumnHelper::create_const_column<TYPE_JSON>(&json.value(), size);
+}
+
+// Test json to array with const input
+TEST_F(VectorizedCastExprTest, json_to_array_with_const_input) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+
+    // const null
+    auto src = ColumnHelper::create_const_null_column(2);
+    auto result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, src);
+    DCHECK_EQ(result->size(), 2);
+    DCHECK(result->is_constant());
+    DCHECK(result->only_null());
+
+    // const json
+    src = create_json_const_column(R"(["a","b"])", 2);
+    result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, src);
+    DCHECK(result->is_constant());
+    DCHECK_EQ(result->size(), 2);
+    EXPECT_EQ("CONST: [\"a\",\"b\"]", result->debug_item(0));
+
+    // const json: multi-dims
+    src = create_json_const_column(R"([{"a": 1}, {"a": 2}])", 2);
+    result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, src);
+    DCHECK(result->is_constant());
+    DCHECK_EQ(result->size(), 2);
+    EXPECT_EQ("CONST: [{\"a\": 1},{\"a\": 2}]", result->debug_item(0));
+
+    src = create_json_const_column(R"( [null, {"a": 2}] )", 2);
+    result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, src);
+    DCHECK(result->is_constant());
+    DCHECK_EQ(result->size(), 2);
+    EXPECT_EQ("CONST: [null,{\"a\": 2}]", result->debug_item(0));
+}
+
 TEST_F(VectorizedCastExprTest, unsupported_test) {
     // can't cast arry<array<int>> to array<bool> rather than crash
     expr_node.child_type = to_thrift(LogicalType::TYPE_ARRAY);
