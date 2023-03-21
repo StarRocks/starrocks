@@ -464,18 +464,28 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         for (List<String> rowSet : rowSets) {
             TMaterializedViewStatus status = new TMaterializedViewStatus();
             status.setId(rowSet.get(0));
-            status.setName(rowSet.get(1));
-            status.setDatabase_name(rowSet.get(2));
+            status.setDatabase_name(rowSet.get(1));
+            status.setName(rowSet.get(2));
             status.setRefresh_type(rowSet.get(3));
             status.setIs_active(rowSet.get(4));
-            status.setLast_refresh_start_time(rowSet.get(5));
-            status.setLast_refresh_finished_time(rowSet.get(6));
-            status.setLast_refresh_duration(rowSet.get(7));
-            status.setLast_refresh_state(rowSet.get(8));
-            status.setInactive_code(rowSet.get(9));
-            status.setInactive_reason(rowSet.get(10));
-            status.setText(rowSet.get(11));
-            status.setRows(rowSet.get(12));
+            status.setPartition_type(rowSet.get(5));
+
+            status.setTask_id(rowSet.get(6));
+            status.setTask_name(rowSet.get(7));
+            status.setLast_refresh_start_time(rowSet.get(8));
+            status.setLast_refresh_finished_time(rowSet.get(9));
+            status.setLast_refresh_duration(rowSet.get(10));
+            status.setLast_refresh_state(rowSet.get(11));
+            status.setLast_refresh_force_refresh(rowSet.get(12));
+            status.setLast_refresh_start_partition(rowSet.get(13));
+            status.setLast_refresh_end_partition(rowSet.get(14));
+            status.setLast_refresh_base_refresh_partitions(rowSet.get(15));
+            status.setLast_refresh_mv_refresh_partitions(rowSet.get(16));
+
+            status.setLast_refresh_error_code(rowSet.get(17));
+            status.setLast_refresh_error_message(rowSet.get(18));
+            status.setText(rowSet.get(19));
+            status.setRows(rowSet.get(20));
             tablesResult.add(status);
         }
         return result;
@@ -613,6 +623,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setError_message(status.getErrorMessage());
             info.setExpire_time(status.getExpireTime() / 1000);
             info.setProgress(status.getProgress() + "%");
+            info.setExtra_message(status.getExtraMessage());
             tasksResult.add(info);
         }
         return result;

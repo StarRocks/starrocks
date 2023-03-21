@@ -57,6 +57,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -1012,19 +1013,18 @@ public class ShowExecutorTest {
                 "AS select col1, col2 from table1;";
 
         Assert.assertTrue(resultSet.next());
+        List<Column> mvSchemaTable = SchemaTable.getSchemaTable("materialized_views").getFullSchema();
         Assert.assertEquals("1000", resultSet.getString(0));
-        Assert.assertEquals("testMv", resultSet.getString(1));
-        Assert.assertEquals("testDb", resultSet.getString(2));
+        Assert.assertEquals("testDb", resultSet.getString(1));
+        Assert.assertEquals("testMv", resultSet.getString(2));
         Assert.assertEquals("ASYNC", resultSet.getString(3));
         Assert.assertEquals("true", resultSet.getString(4));
-        Assert.assertEquals("", resultSet.getString(5));
-        Assert.assertEquals("", resultSet.getString(6));
-        Assert.assertEquals("", resultSet.getString(7));
-        Assert.assertEquals("", resultSet.getString(8));
-        Assert.assertEquals("", resultSet.getString(9));
-        Assert.assertEquals("", resultSet.getString(10));
-        Assert.assertEquals(expectedSqlText, resultSet.getString(11));
-        Assert.assertEquals("10", resultSet.getString(12));
+        Assert.assertEquals("RANGE", resultSet.getString(5));
+        for (int i = 6; i < mvSchemaTable.size() - 2; i++) {
+            Assert.assertEquals("", resultSet.getString(6));
+        }
+        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 2));
+        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 1));
         Assert.assertFalse(resultSet.next());
     }
 

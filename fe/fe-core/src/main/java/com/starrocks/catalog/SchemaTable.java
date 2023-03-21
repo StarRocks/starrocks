@@ -519,6 +519,7 @@ public class SchemaTable extends Table {
                                             .column("ERROR_CODE", ScalarType.createType(PrimitiveType.BIGINT))
                                             .column("ERROR_MESSAGE", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .column("PROGRESS", ScalarType.createVarchar(64))
+                                            .column("EXTRA_MESSAGE", ScalarType.createVarchar(8192))
                                             .build()))
                     .put("materialized_views",
                             new SchemaTable(
@@ -531,12 +532,20 @@ public class SchemaTable extends Table {
                                             .column("TABLE_NAME", ScalarType.createVarchar(50))
                                             .column("REFRESH_TYPE", ScalarType.createVarchar(20))
                                             .column("IS_ACTIVE", ScalarType.createVarchar(10))
+                                            .column("PARTITION_TYPE", ScalarType.createVarchar(16))
+                                            .column("TASK_ID", ScalarType.createVarchar(20))
+                                            .column("TASK_NAME", ScalarType.createVarchar(50))
                                             .column("LAST_REFRESH_START_TIME", ScalarType.createVarchar(20))
                                             .column("LAST_REFRESH_FINISHED_TIME", ScalarType.createVarchar(20))
                                             .column("LAST_REFRESH_DURATION", ScalarType.createVarchar(20))
                                             .column("LAST_REFRESH_STATE", ScalarType.createVarchar(20))
-                                            .column("INACTIVE_CODE", ScalarType.createVarchar(20))
-                                            .column("INACTIVE_REASON", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .column("LAST_REFRESH_FORCE_REFRESH", ScalarType.createVarchar(8))
+                                            .column("LAST_REFRESH_START_PARTITION", ScalarType.createVarchar(1024))
+                                            .column("LAST_REFRESH_END_PARTITION", ScalarType.createVarchar(1024))
+                                            .column("LAST_REFRESH_BASE_REFRESH_PARTITIONS", ScalarType.createVarchar(1024))
+                                            .column("LAST_REFRESH_MV_REFRESH_PARTITIONS", ScalarType.createVarchar(1024))
+                                            .column("LAST_REFRESH_ERROR_CODE", ScalarType.createVarchar(20))
+                                            .column("LAST_REFRESH_ERROR_MESSAGE", ScalarType.createVarchar(1024))
                                             .column("MATERIALIZED_VIEW_DEFINITION",
                                                     ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .column("TABLE_ROWS", ScalarType.createVarchar(50))
@@ -650,6 +659,10 @@ public class SchemaTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    public static Table getSchemaTable(String name) {
+        return TABLE_MAP.get(name);
     }
 
     public enum SchemaTableType {
