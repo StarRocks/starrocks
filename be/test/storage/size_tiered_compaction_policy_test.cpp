@@ -1198,9 +1198,6 @@ TEST_F(SizeTieredCompactionPolicyTest, test_manual_force_base_compaction) {
     config::base_compaction_interval_seconds_since_last_operation = 86400;
 }
 
-<<<<<<< HEAD
-} // namespace starrocks::vectorized
-=======
 TEST_F(SizeTieredCompactionPolicyTest, test_manual_force_base_compaction_less_min) {
     LOG(INFO) << "test_manual_force_base_compaction_less_min";
     create_tablet_schema(DUP_KEYS);
@@ -1363,4 +1360,3 @@ TEST_F(SizeTieredCompactionPolicyTest, test_delete_limit) {
 }
 
 } // namespace starrocks
->>>>>>> 329fa0d88 ([BugFix] Fix delete not compact when every level less than min_compact_segment_num (#19623))
