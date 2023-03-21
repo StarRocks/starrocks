@@ -4,7 +4,7 @@ In addition to the authentication method of "username+password", StarRocks also 
 
 ## LDAP Authentication
 
-To use LDAP authentication, you need to add the LDAP service into the FE node configuration first.
+Tossssss use LDAP authentication, you need to add the LDAP service into the FE node configuration first.
 
 * `authentication_ldap_simple_server_host`: Specify the service IP.
 * `authentication_ldap_simple_server_port`: Specify the service port, with a default value of 389.
