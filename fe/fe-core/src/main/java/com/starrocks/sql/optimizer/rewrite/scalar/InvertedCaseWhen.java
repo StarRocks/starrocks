@@ -304,15 +304,15 @@ public class InvertedCaseWhen {
             if (!inSet.stream().allMatch(ScalarOperator::isConstantRef)) {
                 return Optional.empty();
             }
+            Optional<InvertedCaseWhen> maybeInvertedCaseWhen = from(predicate.getChild(0));
+            if (!maybeInvertedCaseWhen.isPresent()) {
+                return Optional.empty();
+            }
             // case when ... in (NULL, NULL) is equivalent to NULL
             // case when ... in (NULL, c1) is equivalent to case when ... in (c1)
             inSet.removeIf(ScalarOperator::isConstantNull);
             if (inSet.isEmpty()) {
                 return Optional.of(ConstantOperator.NULL);
-            }
-            Optional<InvertedCaseWhen> maybeInvertedCaseWhen = from(predicate.getChild(0));
-            if (!maybeInvertedCaseWhen.isPresent()) {
-                return Optional.empty();
             }
             InvertedCaseWhen invertedCaseWhen = maybeInvertedCaseWhen.get();
             boolean isNotIn = predicate.isNotIn();
