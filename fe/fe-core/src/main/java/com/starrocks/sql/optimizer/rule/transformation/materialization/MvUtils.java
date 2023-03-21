@@ -688,7 +688,7 @@ public class MvUtils {
                                     .equals(slotRefs.get(0).getColumnName()))
                             .findFirst();
             if (!partitionColumn.isPresent()) {
-                return partitionPredicates;
+                return null;
             }
             ExpressionMapping mapping =
                     new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()));
@@ -708,7 +708,7 @@ public class MvUtils {
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
             if (partitionColumns.size() != 1) {
                 // now do not support more than one partition columns
-                return partitionPredicates;
+                return null;
             }
             List<Range<PartitionKey>> selectedRanges = Lists.newArrayList();
             for (long pid : olapScanOperator.getSelectedPartitionId()) {
@@ -722,7 +722,7 @@ public class MvUtils {
                 partitionPredicates.add(partitionPredicate);
             }
         } else {
-            return partitionPredicates;
+            return null;
         }
 
         return partitionPredicates;
@@ -791,13 +791,18 @@ public class MvUtils {
 
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
         for (LogicalScanOperator scanOperator : scanOperators) {
+            List<ScalarOperator> partitionPredicate = null;
             if (scanOperator instanceof LogicalOlapScanOperator) {
-                partitionPredicates = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
+                partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
                         columnRefFactory);
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
-                partitionPredicates = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator,
+                partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator,
                         columnRefFactory);
             }
+            if (partitionPredicate == null) {
+                return null;
+            }
+            partitionPredicates.addAll(partitionPredicate);
         }
         return partitionPredicates.isEmpty() ? ConstantOperator.createBoolean(true) :
                 Utils.compoundAnd(partitionPredicates);
