@@ -151,7 +151,7 @@ jobs:
         with:
           check_name: 'XML Test'
           detailed_summary: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT }}
           #          github_token: ${{ secrets.PAT }}
           report_paths: 'StarRocksTest/result/*.xml'
 
