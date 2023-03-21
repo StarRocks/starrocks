@@ -164,6 +164,7 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                 setMaxValue(maxValue).
                 setDistinctValuesCount(statisticData.countDistinct).
                 setAverageRowSize(statisticData.dataSize / Math.max(statisticData.rowCount, 1)).
-                setNullsFraction(statisticData.nullCount * 1.0 / Math.max(statisticData.rowCount, 1)).build();
+                setNullsFraction(statisticData.nullCount * 1.0 / Math.max(statisticData.rowCount, 1)).
+                setRowCount(Math.max(statisticData.rowCount, 1)).build();
     }
 }
