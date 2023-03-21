@@ -233,7 +233,7 @@ void JsonFunctions::parse_json_paths(const std::string& path_string, std::vector
 }
 
 std::string JsonFunctions::jsonpaths_to_string(const std::vector<SimpleJsonPath>& paths) {
-    std::string output;
+    std::string output{"$"};
     for (auto const& path : paths) {
         output.append(".").append(path.to_string());
     }
