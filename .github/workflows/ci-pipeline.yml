@@ -301,7 +301,7 @@ jobs:
 
   admit:
     runs-on: self-hosted
-    name: RUN ADMIT TEST
+    name: ADMIT TEST
     needs: deploy
     if: always() && needs.deploy.result == 'success'
     timeout-minutes: 60
