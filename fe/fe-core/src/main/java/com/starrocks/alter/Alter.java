@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -80,6 +81,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -98,7 +100,10 @@ import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
+import com.starrocks.sql.ast.SetListItem;
+import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SwapTableClause;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
@@ -302,22 +307,38 @@ public class Alter {
         int partitionTTL = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             partitionTTL = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
+            properties.remove(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER);
         }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
             partitionRefreshNumber = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
+            properties.remove(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER);
         }
         int autoRefreshPartitionsLimit = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
             autoRefreshPartitionsLimit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
+            properties.remove(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT);
         }
         List<TableName> excludedTriggerTables = Lists.newArrayList();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
             excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
+            properties.remove(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES);
         }
 
         if (!properties.isEmpty()) {
-            throw new AnalysisException("Modify failed because unknown properties: " + properties);
+            // analyze properties
+            List<SetListItem> setListItems = Lists.newArrayList();
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                    throw new AnalysisException("Modify failed because unknown properties: " + properties +
+                            ", please add `session.` prefix if you want add session variables for mv(" +
+                            "eg, \"session.query_timeout\"=\"30000000\").");
+                }
+                String varKey = entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
+                setListItems.add(variable);
+            }
+            SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
         }
 
         boolean isChanged = false;
@@ -345,12 +366,20 @@ public class Alter {
             isChanged = true;
         }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
+        if (!properties.isEmpty()) {
+            // set properties if there are no exceptions
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                materializedView.getTableProperty().modifyTableProperties(entry.getKey(), entry.getValue());
+            }
+            isChanged = true;
+        }
+
         if (isChanged) {
             ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(materializedView.getDbId(),
                     materializedView.getId(), propClone);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMaterializedViewProperties(log);
         }
-        LOG.info("alter materialized view properties {}, id: {}", properties, materializedView.getId());
+        LOG.info("alter materialized view properties {}, id: {}", propClone, materializedView.getId());
     }
 
     private void processChangeRefreshScheme(RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView,
