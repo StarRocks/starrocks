@@ -144,6 +144,7 @@ jobs:
         run: |
           set -x
           echo ${t}
+          echo ${{secrets.GITHUB_TOKEN}}
           cd ${{ github.workspace }}
           mkdir test && cd test
           cp /var/local/env/test_window_funnel_py_TestWindowFunnel_test_window_funnel_date.xml .
