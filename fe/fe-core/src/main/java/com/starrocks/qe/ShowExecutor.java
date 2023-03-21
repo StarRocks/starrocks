@@ -122,6 +122,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -511,8 +512,8 @@ public class ShowExecutor {
             TaskRunStatus taskStatus = mvNameTaskMap.get(TaskBuilder.getMvTaskName(mvId));
             ArrayList<String> resultRow = new ArrayList<>();
             resultRow.add(String.valueOf(mvId));
-            resultRow.add(mvTable.getName());
             resultRow.add(dbName);
+            resultRow.add(mvTable.getName());
             // refresh_type
             MaterializedView.MvRefreshScheme refreshScheme = mvTable.getRefreshScheme();
             if (refreshScheme == null) {
@@ -522,6 +523,12 @@ public class ShowExecutor {
             }
             // is_active
             resultRow.add(String.valueOf(mvTable.isActive()));
+            // partition info
+            if (mvTable.getPartitionInfo() != null && mvTable.getPartitionInfo().getType() != null) {
+                resultRow.add(mvTable.getPartitionInfo().getType().toString());
+            } else {
+                resultRow.add("");
+            }
             // task run status
             setTaskRunStatus(resultRow, taskStatus);
             resultRow.add(mvTable.getMaterializedViewDdlStmt(true));
@@ -536,12 +543,19 @@ public class ShowExecutor {
             ArrayList<String> resultRow = new ArrayList<>();
             MaterializedIndexMeta mvMeta = olapTable.getVisibleIndexIdToMeta().get(mvIdx.getId());
             resultRow.add(String.valueOf(mvIdx.getId()));
-            resultRow.add(olapTable.getIndexNameById(mvIdx.getId()));
             resultRow.add(dbName);
+            resultRow.add(olapTable.getIndexNameById(mvIdx.getId()));
             // refresh_type
             resultRow.add("ROLLUP");
             // is_active
             resultRow.add(String.valueOf(true));
+            // partition type
+            if (olapTable.getPartitionInfo() != null && olapTable.getPartitionInfo().getType() != null) {
+                resultRow.add(olapTable.getPartitionInfo().getType().toString());
+            } else {
+                resultRow.add("");
+            }
+            // task run status
             setTaskRunStatus(resultRow, null);
             if (mvMeta.getOriginStmt() == null) {
                 StringBuilder originStmtBuilder = new StringBuilder(
@@ -577,31 +591,40 @@ public class ShowExecutor {
 
     private static void setTaskRunStatus(List<String> resultRow, TaskRunStatus taskStatus) {
         if (taskStatus != null) {
+            // task_id
+            resultRow.add(String.valueOf(taskStatus.getTaskId()));
+            // task_name
+            resultRow.add(taskStatus.getTaskName());
             // last_refresh_start_time
             resultRow.add(String.valueOf(TimeUtils.longToTimeString(taskStatus.getCreateTime())));
             // last_refresh_finished_time
             resultRow.add(String.valueOf(TimeUtils.longToTimeString(taskStatus.getFinishTime())));
             // last_refresh_duration(s)
-            resultRow.add(String.valueOf((taskStatus.getFinishTime() - taskStatus.getCreateTime()) / 1000));
+            resultRow.add(DebugUtil.DECIMAL_FORMAT_SCALE_3
+                    .format((taskStatus.getFinishTime() - taskStatus.getCreateTime()) / 1000D));
             // last_refresh_state
             resultRow.add(String.valueOf(taskStatus.getState()));
-            // inactive_code
+
+            MVTaskRunExtraMessage extraMessage = taskStatus.getMvTaskRunExtraMessage();
+            // force refresh
+            resultRow.add(extraMessage.isForceRefresh() ? "true" : "false");
+            // last_refresh partition start
+            resultRow.add(extraMessage.getPartitionStart());
+            // last_refresh partition end
+            resultRow.add(extraMessage.getPartitionEnd());
+            // last_refresh base table refresh map
+            resultRow.add(extraMessage.getBasePartitionsToRefreshMapString());
+            // last_refresh mv partitions
+            resultRow.add(extraMessage.getMvPartitionsToRefreshString());
+
+            // last_refresh_code
             resultRow.add(String.valueOf(taskStatus.getErrorCode()));
-            // inactive_reason
+            // last_refresh_reason
             resultRow.add(taskStatus.getErrorMessage());
         } else {
-            // last_refresh_start_time
-            resultRow.add("");
-            // last_refresh_finished_time
-            resultRow.add("");
-            // last_refresh_duration
-            resultRow.add("");
-            // last_refresh_state
-            resultRow.add("");
-            // inactive_code
-            resultRow.add("");
-            // inactive_reason
-            resultRow.add("");
+            for (int i = 0; i < 13; i++) {
+                resultRow.add("");
+            }
         }
     }
 

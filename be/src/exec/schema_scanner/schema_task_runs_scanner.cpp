@@ -35,7 +35,8 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true},
         {"ERROR_CODE", TYPE_BIGINT, sizeof(StringValue), true},
         {"ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true}};
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -206,6 +207,21 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
                 if (task_run_info.__isset.progress) {
                     const std::string* str = &task_run_info.progress;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                    nullable_column->append_nulls(1);
+                }
+            }
+            break;
+        }
+        case 12: {
+            // extra_message
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
+                if (task_run_info.__isset.extra_message) {
+                    const std::string* str = &task_run_info.extra_message;
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {
