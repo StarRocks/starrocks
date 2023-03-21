@@ -115,7 +115,7 @@ struct AggFunctionTypes {
     TypeDescriptor serde_type; // for serialize
     std::vector<FunctionContext::TypeDesc> arg_typedescs;
     bool has_nullable_child;
-    bool is_nullable; // agg function result whether is nullable
+    bool is_nullable; // whether result of agg function is nullable
 };
 
 struct ColumnType {
