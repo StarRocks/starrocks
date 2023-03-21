@@ -239,6 +239,10 @@ ColumnPtr CastStringToArray::evaluate(ExprContext* context, vectorized::Chunk* i
     if (column->is_nullable() || has_null) {
         res = NullableColumn::create(res, null_column);
     }
+    // Wrap constant column if source column is constant.
+    if (column->is_constant()) {
+        res = ConstColumn::create(res, column->size());
+    }
 
     return res;
 }
@@ -314,6 +318,10 @@ ColumnPtr CastJsonToArray::evaluate(ExprContext* context, vectorized::Chunk* inp
         res = NullableColumn::create(res, null_column);
     }
 
+    // Wrap constant column if source column is constant.
+    if (column->is_constant()) {
+        res = ConstColumn::create(res, column->size());
+    }
     return res;
 }
 
