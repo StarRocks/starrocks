@@ -374,13 +374,13 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         Status st;
         if (bthread_self()) {
-            TRY_CATCH_ALL(st, _send_rpc(closure, request));
+            st = _send_rpc(closure, request);
         } else {
             // When the driver worker thread sends request and creates the protobuf request,
             // also use process_mem_tracker to record the memory of the protobuf request.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
             // must in the same scope following the above
-            TRY_CATCH_ALL(st, _send_rpc(closure, request));
+            st = _send_rpc(closure, request);
         }
         return st;
     }

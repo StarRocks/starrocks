@@ -187,7 +187,7 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
         }
     }
 
-    TRY_CATCH_ALL(st, _exec_env->stream_mgr()->transmit_chunk(*request, &done));
+    st = _exec_env->stream_mgr()->transmit_chunk(*request, &done);
 }
 
 template <typename T>
@@ -216,9 +216,8 @@ void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcC
             }
             return Status::OK();
         };
-        Status st;
-        // catch the exceptions, like the std::bad_alloc caused by deserialization.
-        TRY_CATCH_ALL(st, get_params());
+        // may throw std::bad_alloc exception.
+        Status st = get_params();
         if (!st.ok()) {
             st.to_protobuf(response->mutable_status());
             done->Run();
