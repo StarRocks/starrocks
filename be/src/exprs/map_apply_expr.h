@@ -37,6 +37,7 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MapApplyExpr(*this)); }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+
 private:
     bool _maybe_duplicated_keys;
     std::vector<SlotId> _arguments_ids;
