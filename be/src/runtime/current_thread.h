@@ -81,13 +81,16 @@ public:
 
     static void set_exceed_mem_tracker(starrocks::MemTracker* mem_tracker) { tls_exceed_mem_tracker = mem_tracker; }
 
-    bool set_is_catched(bool is_catched) {
+    bool set_is_catched(bool is_catched, const char* name) {
         bool old = _is_catched;
         _is_catched = is_catched;
+        _catched_name = name;
         return old;
     }
 
     bool is_catched() const { return _is_catched; }
+
+    const char* catched_name() { return _catched_name; }
 
     void mem_consume(int64_t size) {
         MemTracker* cur_tracker = mem_tracker();
@@ -174,6 +177,7 @@ private:
     TUniqueId _fragment_instance_id;
     int32_t _driver_id = 0;
     bool _is_catched = false;
+    const char* _catched_name = nullptr;
     bool _check = true;
 };
 
@@ -215,9 +219,11 @@ private:
 
 class CurrentThreadCatchSetter {
 public:
-    explicit CurrentThreadCatchSetter(bool catched) { _prev_catched = tls_thread_status.set_is_catched(catched); }
+    explicit CurrentThreadCatchSetter(bool catched, const char* name) { 
+        _prev_catched_name = tls_thread_status.catched_name();
+        _prev_catched = tls_thread_status.set_is_catched(catched, name); }
 
-    ~CurrentThreadCatchSetter() { (void)tls_thread_status.set_is_catched(_prev_catched); }
+    ~CurrentThreadCatchSetter() { (void)tls_thread_status.set_is_catched(_prev_catched, _prev_catched_name); }
 
     CurrentThreadCatchSetter(const CurrentThreadCatchSetter&) = delete;
     void operator=(const CurrentThreadCatchSetter&) = delete;
@@ -226,9 +232,10 @@ public:
 
 private:
     bool _prev_catched;
+    const char* _prev_catched_name;
 };
 
-#define SCOPED_SET_CATCHED(catched) auto VARNAME_LINENUM(catched_setter) = CurrentThreadCatchSetter(catched)
+#define SCOPED_SET_CATCHED(catched) auto VARNAME_LINENUM(catched_setter) = CurrentThreadCatchSetter(catched, __PRETTY_FUNCTION__)
 
 #define SCOPED_SET_TRACE_INFO(driver_id, query_id, fragment_instance_id)     \
     CurrentThread::current().set_pipeline_driver_id(driver_id);              \
@@ -249,7 +256,7 @@ private:
     catch (std::bad_alloc const&) {                                                                                    \
         MemTracker* exceed_tracker = tls_exceed_mem_tracker;                                                           \
         tls_exceed_mem_tracker = nullptr;                                                                              \
-        tls_thread_status.set_is_catched(false);                                                                       \
+        tls_thread_status.set_is_catched(false, __PRETTY_FUNCTION__);                                                                       \
         if (LIKELY(exceed_tracker != nullptr)) {                                                                       \
             return Status::MemoryLimitExceeded(                                                                        \
                     exceed_tracker->err_msg(fmt::format("try consume:{}", tls_thread_status.try_consume_mem_size()))); \
