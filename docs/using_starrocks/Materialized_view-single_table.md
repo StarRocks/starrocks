@@ -2,11 +2,11 @@
 
 This topic describes how to create, use, and manage a **synchronized materialized view** (Rollup).
 
-Synchronized materialized views in StarRocks can be created only on a single base table from [the default catalog](../data_source/catalog/default_catalog.md). All changes in the base table are simultaneously updated to the corresponding synchronized materialized views. This made synchronized materialized views suitable for the transparent acceleration of the real-time, single-table aggregation queries.
+Synchronized materialized views in StarRocks can be created only on a single base table from [the default catalog](../data_source/catalog/default_catalog.md). All changes in the base table are simultaneously updated to the corresponding synchronized materialized views. This makes synchronized materialized views suitable for transparent acceleration of real-time, single-table aggregate queries.
 
 Synchronized materialized views are essentially a special index for query acceleration. You cannot query synchronized materialized views directly. However, they are significantly inexpensive to maintain and update.
 
-From v2.4 onwards, StarRocks provides asynchronous materialized views, which supports creation on multiple tables and more aggregation operators For the usage of **asynchronous materialized views**, see [Asynchronous materialized view](../using_starrocks/Materialized_view.md).
+From v2.4 onwards, StarRocks provides asynchronous materialized views, which supports creation on multiple tables and more aggregation operators. For the usage of **asynchronous materialized views**, see [Asynchronous materialized view](../using_starrocks/Materialized_view.md).
 
 ## Preparation
 
@@ -120,12 +120,12 @@ GROUP BY store_id;
 
 > **CAUTION**
 >
-> - When using aggregate functions in synchronized materialized views, you must use the GROUP BY clause and specify the GROUP BY column in your SELECT list.
+> - When using aggregate functions in synchronized materialized views, you must use the GROUP BY clause and specify at least one GROUP BY column in your SELECT list.
 > - Synchronized materialized views do not support using one aggregate function on multiple columns. Query statements in the form of `sum(a+b)` are not supported.
 > - Synchronized materialized views do not support using multiple aggregate functions on one column. Query statements in the form of `select sum(a), min(a) from table` are not supported.
 > - JOIN and WHERE clauses are not supported when creating a synchronized materialized view.
 > - When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you need to ensure that all synchronized materialized views of the base table do not contain the dropped column, otherwise the drop operation cannot be performed. To drop a column that used in synchronized materialized views, you need to first drop all synchronized materialized views that contain the column, and then drop the column.
-> - Creating too many synchronized materialized views for a table will affect the data load efficiency. When data is being loaded to the base table, the data in synchronized materialized views and base table are updated synchronously. If the base table contains `n` synchronized materialized views, the efficiency of loading data into the base table is about the same as that of loading data into `n` tables.
+> - Creating too many synchronized materialized views for a table will affect the data loading efficiency. When data is being loaded to the base table, the data in synchronized materialized views and base table are updated synchronously. If the base table contains `n` synchronized materialized views, the efficiency of loading data into the base table is about the same as that of loading data into `n` tables.
 > - Currently, StarRocks does not support creating multiple synchronized materialized views at the same time. A new synchronized materialized view can only be created when the previous one is completed.
 
 ## Check the building status of a synchronized materialized view
