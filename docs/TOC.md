@@ -12,7 +12,7 @@
     + [Deploy StarRocks in Linux](./quick_start/Deploy.md)
     + [Deploy StarRocks in Docker](./quick_start/deploy_in_docker.md)
   + [Create a table](./quick_start/Create_table.md)
-  + [Import and query](./quick_start/Import_and_query.md)
+  + [Load and query data](./quick_start/Import_and_query.md)
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
   + [Data models](./table_design/Data_model.md)
@@ -60,7 +60,7 @@
   + [Query Cache](./using_starrocks/query_cache.md)
   + Index
     + [Bitmap indexing](./using_starrocks/Bitmap_index.md)
-    + [Bloomfilter indexing](./using_starrocks/Bloomfilter_index.md)
+    + [Bloom filter indexing](./using_starrocks/Bloomfilter_index.md)
   + Computing the Number of Distinct Values
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)

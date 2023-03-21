@@ -42,6 +42,9 @@ public interface AuthorizationProvider {
 
     PEntryObject generateUserObject(ObjectType objectType, UserIdentity user, GlobalStateMgr mgr) throws PrivilegeException;
 
+    PEntryObject generateFunctionObject(ObjectType objectType, Long databaseId, Long functionId, GlobalStateMgr globalStateMgr)
+            throws PrivilegeException;
+
     /**
      * validate if grant is allowed
      * e.g. To forbid `NODE` privilege being granted, we should put some code here.

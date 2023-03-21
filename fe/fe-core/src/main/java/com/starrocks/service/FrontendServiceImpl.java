@@ -34,6 +34,7 @@
 
 package com.starrocks.service;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -221,7 +222,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1717,8 +1717,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
         for (AddPartitionClause addPartitionClause : addPartitionClauseMap.values()) {
             try {
+                if (olapTable.getNumberOfPartitions() > Config.max_automatic_partition_number) {
+                    throw new AnalysisException(" Automatically created partitions exceeded the maximum limit: " +
+                            Config.max_automatic_partition_number + ". You can modify this restriction on by setting" +
+                            " max_automatic_partition_number larger.");
+                }
                 state.addPartitions(db, olapTable.getName(), addPartitionClause);
-            } catch (DdlException | AnalysisException e) {
+            } catch (Exception e) {
                 LOG.warn(e);
                 errorStatus.setError_msgs(Lists.newArrayList(
                         String.format("automatic create partition failed. error:%s", e.getMessage())));
@@ -1767,11 +1772,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     Multimap<Replica, Long> bePathsMap =
                             localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
                     if (bePathsMap.keySet().size() < quorum) {
-                        LOG.warn("auto go quorum exception");
+                        errorStatus.setError_msgs(Lists.newArrayList(
+                                "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
+                                + tablet.getId() + ", backends: " +
+                                Joiner.on(",").join(localTablet.getBackends())));
+                        result.setStatus(errorStatus);
+                        return result;
                     }
                     // replicas[0] will be the primary replica
+                    // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable 
                     List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
-                    Collections.shuffle(replicas);
                     tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
                             .collect(Collectors.toList())));
                 }

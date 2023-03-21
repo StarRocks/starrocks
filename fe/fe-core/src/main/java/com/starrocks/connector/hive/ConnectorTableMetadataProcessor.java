@@ -16,6 +16,7 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -32,6 +33,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 public class ConnectorTableMetadataProcessor extends LeaderDaemon {
@@ -40,6 +43,8 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
     private final Set<BaseTableInfo> registeredTableInfos = Sets.newConcurrentHashSet();
 
     private final Map<String, CacheUpdateProcessor> cacheUpdateProcessors = new ConcurrentHashMap<>();
+
+    private final ExecutorService refreshRemoteFileExecutor;
 
     public void registerTableInfo(BaseTableInfo tableInfo) {
         registeredTableInfos.add(tableInfo);
@@ -57,11 +62,13 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
 
     public ConnectorTableMetadataProcessor() {
         super(ConnectorTableMetadataProcessor.class.getName(), Config.background_refresh_metadata_interval_millis);
+        refreshRemoteFileExecutor = Executors.newFixedThreadPool(Config.background_refresh_file_metadata_concurrency,
+                new ThreadFactoryBuilder().setNameFormat("background-refresh-remote-files-%d").build());
     }
 
     @Override
     protected void runAfterCatalogReady() {
-        if (!Config.enable_hms_events_incremental_sync && Config.enable_background_refresh_hive_metadata) {
+        if (!Config.enable_hms_events_incremental_sync) {
             refreshResourceHiveTable();
         }
 
@@ -94,7 +101,7 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
                     continue;
                 }
                 try {
-                    updateProcessor.refreshTableMetaStoreInfo(dbName, table, true);
+                    updateProcessor.refreshTableWithExecutor(table, true, refreshRemoteFileExecutor);
                 } catch (Exception e) {
                     LOG.warn("refresh {}.{}.{} meta store info failed, msg : {}", catalogName, dbName,
                             tableName, e);
