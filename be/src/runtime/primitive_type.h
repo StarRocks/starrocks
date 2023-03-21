@@ -180,7 +180,7 @@ UNION_VALUE_GUARD(PrimitiveType, NumericPTGuard, pt_is_numeric, pt_is_number_str
 UNION_VALUE_GUARD(PrimitiveType, FixedLengthPTGuard, pt_is_fixedlength, pt_is_arithmetic_struct, pt_is_decimalv2_struct,
                   pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct, pt_is_time_struct)
 UNION_VALUE_GUARD(PrimitiveType, AggregatePTGuard, pt_is_aggregate, pt_is_arithmetic_struct, pt_is_decimalv2_struct,
-                  pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct)
+                  pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct, pt_is_string_struct)
 
 TExprOpcode::type to_in_opcode(PrimitiveType t);
 PrimitiveType thrift_to_type(TPrimitiveType::type ttype);
