@@ -21,6 +21,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/sorting/sorting.h"
 #include "exec/spill/spiller.h"
+#include "exec/spill/spiller.hpp"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
