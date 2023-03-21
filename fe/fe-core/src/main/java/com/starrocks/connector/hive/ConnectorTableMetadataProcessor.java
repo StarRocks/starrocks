@@ -68,12 +68,15 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        if (!Config.enable_hms_events_incremental_sync) {
+        if (!Config.enable_hms_events_incremental_sync && Config.enable_background_refresh_resource_table_metadata) {
             refreshResourceHiveTable();
         }
 
         refreshRegisteredTable();
-        refreshCatalogTable();
+
+        if (Config.enable_background_refresh_connector_metadata) {
+            refreshCatalogTable();
+        }
     }
 
     private void refreshCatalogTable() {
