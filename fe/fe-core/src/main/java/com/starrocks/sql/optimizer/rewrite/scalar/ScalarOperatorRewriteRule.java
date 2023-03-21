@@ -10,5 +10,7 @@ public interface ScalarOperatorRewriteRule {
 
     boolean isTopDown();
 
+    boolean isOnlyOnce();
+
     ScalarOperator apply(ScalarOperator root, ScalarOperatorRewriteContext context);
 }
