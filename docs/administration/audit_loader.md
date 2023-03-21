@@ -1,6 +1,6 @@
 # Manage audit logs within StarRocks via Audit Loader
 
-This topic describes how to manage StarRocks audit logs within a table via the plugin - Audit Loader.
+Thiis topic describes how to manage StarRocks audit logs within a table via the plugin - Audit Loader.
 
 StarRocks stores its audit logs in the local file **fe/log/fe.audit.log** rather than an internal database. The plugin Audit Loader allows you to manage audit logs directly within your cluster. Audit Loader reads logs from the file, and loads them into StarRocks via HTTP PUT.
 
