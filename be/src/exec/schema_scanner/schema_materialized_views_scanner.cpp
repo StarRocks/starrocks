@@ -278,7 +278,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
         case 20: {
             // table_rows
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(20);
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(21);
                 const std::string* str = &tbl_status.rows;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -288,7 +288,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
         case 21: {
             // view_definition
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(21);
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(20);
                 const std::string* str = &tbl_status.text;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
