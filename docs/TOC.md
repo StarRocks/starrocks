@@ -10,7 +10,7 @@
 + Quick Start
   + [Deploy StarRocks](./quick_start/Deploy.md)
   + [Create a table](./quick_start/Create_table.md)
-  + [Import and query](./quick_start/Import_and_query.md)
+  + [Load and query data](./quick_start/Import_and_query.md)
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
   + [Data models](./table_design/Data_model.md)
@@ -19,6 +19,8 @@
     + [Dynamic partitioning](./table_design/dynamic_partitioning.md)
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
+  + Concepts
+    + [Strict mode](./loading/load_concept/strict_mode.md)
   + [Overview of data loading](./loading/Loading_intro.md)
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
@@ -50,7 +52,7 @@
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + Index
     + [Bitmap indexing](./using_starrocks/Bitmap_index.md)
-    + [Bloomfilter indexing](./using_starrocks/Bloomfilter_index.md)
+    + [Bloom filter indexing](./using_starrocks/Bloomfilter_index.md)
   + Computing the Number of Distinct Values
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
