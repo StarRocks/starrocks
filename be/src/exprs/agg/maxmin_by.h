@@ -34,11 +34,26 @@ template <LogicalType LT>
 struct MaxByAggregateData<LT, AggregateComplexLTGuard<LT>> {
     using T = AggDataValueType<LT>;
     raw::RawVector<uint8_t> buffer_result;
-    T max = RunTimeTypeLimits<LT>::min_value();
+    T value = RunTimeTypeLimits<LT>::min_value();
 
     void reset() {
         buffer_result.clear();
-        max = RunTimeTypeLimits<LT>::min_value();
+        value = RunTimeTypeLimits<LT>::min_value();
+    }
+};
+
+template <LogicalType LT, typename = guard::Guard>
+struct MinByAggregateData {};
+
+template <LogicalType LT>
+struct MinByAggregateData<LT, AggregateComplexLTGuard<LT>> {
+    using T = AggDataValueType<LT>;
+    raw::RawVector<uint8_t> buffer_result;
+    T value = RunTimeTypeLimits<LT>::max_value();
+
+    void reset() {
+        buffer_result.clear();
+        value = RunTimeTypeLimits<LT>::max_value();
     }
 };
 
@@ -46,15 +61,15 @@ template <LogicalType LT, typename State, typename = guard::Guard>
 struct MaxByElement {
     using T = RunTimeCppType<LT>;
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
-        if (right > state.max) {
-            state.max = right;
+        if (right > state.value) {
+            state.value = right;
             state.buffer_result.resize(col->serialize_size(row_num));
             col->serialize(row_num, state.buffer_result.data());
         }
     }
     void operator()(State& state, const char* buffer, size_t size, const T& right) const {
-        if (right > state.max) {
-            state.max = right;
+        if (right > state.value) {
+            state.value = right;
             state.buffer_result.resize(size);
             memcpy(state.buffer_result.data(), buffer, size);
         }
@@ -66,15 +81,54 @@ struct MaxByElement<LT, State, JsonGuard<LT>> {
     using T = RunTimeCppType<LT>;
 
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
-        if (*right > state.max) {
-            AggDataTypeTraits<LT>::assign_value(state.max, right);
+        if (*right > state.value) {
+            AggDataTypeTraits<LT>::assign_value(state.value, right);
             state.buffer_result.resize(col->serialize_size(row_num));
             col->serialize(row_num, state.buffer_result.data());
         }
     }
     void operator()(State& state, const char* buffer, size_t size, const T& right) const {
-        if (*right > state.max) {
-            AggDataTypeTraits<LT>::assign_value(state.max, right);
+        if (*right > state.value) {
+            AggDataTypeTraits<LT>::assign_value(state.value, right);
+            state.buffer_result.resize(size);
+            memcpy(state.buffer_result.data(), buffer, size);
+        }
+    }
+};
+
+template <LogicalType LT, typename State, typename = guard::Guard>
+struct MinByElement {
+    using T = RunTimeCppType<LT>;
+    void operator()(State& state, Column* col, size_t row_num, const T& right) const {
+        if (right < state.value) {
+            state.value = right;
+            state.buffer_result.resize(col->serialize_size(row_num));
+            col->serialize(row_num, state.buffer_result.data());
+        }
+    }
+    void operator()(State& state, const char* buffer, size_t size, const T& right) const {
+        if (right < state.value) {
+            state.value = right;
+            state.buffer_result.resize(size);
+            memcpy(state.buffer_result.data(), buffer, size);
+        }
+    }
+};
+
+template <LogicalType LT, typename State>
+struct MinByElement<LT, State, JsonGuard<LT>> {
+    using T = RunTimeCppType<LT>;
+
+    void operator()(State& state, Column* col, size_t row_num, const T& right) const {
+        if (*right < state.value) {
+            AggDataTypeTraits<LT>::assign_value(state.value, right);
+            state.buffer_result.resize(col->serialize_size(row_num));
+            col->serialize(row_num, state.buffer_result.data());
+        }
+    }
+    void operator()(State& state, const char* buffer, size_t size, const T& right) const {
+        if (*right < state.value) {
+            AggDataTypeTraits<LT>::assign_value(state.value, right);
             state.buffer_result.resize(size);
             memcpy(state.buffer_result.data(), buffer, size);
         }
@@ -84,13 +138,27 @@ struct MaxByElement<LT, State, JsonGuard<LT>> {
 template <LogicalType LT>
 struct MaxByAggregateData<LT, StringLTGuard<LT>> {
     raw::RawVector<uint8_t> buffer_result;
-    raw::RawVector<uint8_t> buffer_max;
+    raw::RawVector<uint8_t> buffer;
     int32_t size = -1;
     bool has_value() const { return size > -1; }
-    Slice slice_max() const { return {buffer_max.data(), buffer_max.size()}; }
+    Slice slice_max() const { return {buffer.data(), buffer.size()}; }
     void reset() {
         buffer_result.clear();
-        buffer_max.clear();
+        buffer.clear();
+        size = -1;
+    }
+};
+
+template <LogicalType LT>
+struct MinByAggregateData<LT, StringLTGuard<LT>> {
+    raw::RawVector<uint8_t> buffer_result;
+    raw::RawVector<uint8_t> buffer;
+    int32_t size = -1;
+    bool has_value() const { return size > -1; }
+    Slice slice_min() const { return {buffer.data(), buffer.size()}; }
+    void reset() {
+        buffer_result.clear();
+        buffer.clear();
         size = -1;
     }
 };
@@ -101,8 +169,8 @@ struct MaxByElement<LT, State, StringLTGuard<LT>> {
         if (!state.has_value() || state.slice_max().compare(right) < 0) {
             state.buffer_result.resize(col->serialize_size(row_num));
             col->serialize(row_num, state.buffer_result.data());
-            state.buffer_max.resize(right.size);
-            memcpy(state.buffer_max.data(), right.data, right.size);
+            state.buffer.resize(right.size);
+            memcpy(state.buffer.data(), right.data, right.size);
             state.size = right.size;
         }
     }
@@ -111,16 +179,39 @@ struct MaxByElement<LT, State, StringLTGuard<LT>> {
         if (!state.has_value() || state.slice_max().compare(right) < 0) {
             state.buffer_result.resize(size);
             memcpy(state.buffer_result.data(), buffer, size);
-            state.buffer_max.resize(right.size);
-            memcpy(state.buffer_max.data(), right.data, right.size);
+            state.buffer.resize(right.size);
+            memcpy(state.buffer.data(), right.data, right.size);
+            state.size = right.size;
+        }
+    }
+};
+
+template <LogicalType LT, typename State>
+struct MinByElement<LT, State, StringLTGuard<LT>> {
+    void operator()(State& state, Column* col, size_t row_num, const Slice& right) const {
+        if (!state.has_value() || state.slice_min().compare(right) > 0) {
+            state.buffer_result.resize(col->serialize_size(row_num));
+            col->serialize(row_num, state.buffer_result.data());
+            state.buffer.resize(right.size);
+            memcpy(state.buffer.data(), right.data, right.size);
+            state.size = right.size;
+        }
+    }
+
+    void operator()(State& state, const char* buffer, size_t size, const Slice& right) const {
+        if (!state.has_value() || state.slice_min().compare(right) > 0) {
+            state.buffer_result.resize(size);
+            memcpy(state.buffer_result.data(), buffer, size);
+            state.buffer.resize(right.size);
+            memcpy(state.buffer.data(), right.data, right.size);
             state.size = right.size;
         }
     }
 };
 
 template <LogicalType LT, typename State, class OP, typename T = RunTimeCppType<LT>, typename = guard::Guard>
-class MaxByAggregateFunction final
-        : public AggregateFunctionBatchHelper<State, MaxByAggregateFunction<LT, State, OP, T>> {
+class MaxMinByAggregateFunction final
+        : public AggregateFunctionBatchHelper<State, MaxMinByAggregateFunction<LT, State, OP, T>> {
 public:
     using InputColumnType = RunTimeColumnType<LT>;
 
@@ -164,13 +255,13 @@ public:
         }
 
         if constexpr (LT != TYPE_JSON) {
-            T max;
-            memcpy(&max, src.data, sizeof(T));
-            OP()(this->data(state), src.data + sizeof(T), src.size - sizeof(T), max);
+            T value;
+            memcpy(&value, src.data, sizeof(T));
+            OP()(this->data(state), src.data + sizeof(T), src.size - sizeof(T), value);
         } else {
-            JsonValue max(src);
-            size_t value_size = max.serialize_size();
-            OP()(this->data(state), src.data + value_size, src.size - value_size, &max);
+            JsonValue value(src);
+            size_t value_size = value.serialize_size();
+            OP()(this->data(state), src.data + value_size, src.size - value_size, &value);
         }
     }
 
@@ -179,13 +270,13 @@ public:
         if constexpr (LT != TYPE_JSON) {
             size_t value_size = sizeof(T);
             buffer.resize(this->data(state).buffer_result.size() + value_size);
-            memcpy(buffer.data(), &(this->data(state).max), value_size);
+            memcpy(buffer.data(), &(this->data(state).value), value_size);
             memcpy(buffer.data() + value_size, this->data(state).buffer_result.data(),
                    this->data(state).buffer_result.size());
         } else {
-            size_t value_size = this->data(state).max.serialize_size();
+            size_t value_size = this->data(state).value.serialize_size();
             buffer.resize(this->data(state).buffer_result.size() + value_size);
-            this->data(state).max.serialize(buffer.data());
+            this->data(state).value.serialize(buffer.data());
             memcpy(buffer.data() + value_size, this->data(state).buffer_result.data(),
                    this->data(state).buffer_result.size());
         }
@@ -205,12 +296,12 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        const InputColumnType* col_max = nullptr;
+        const InputColumnType* col_maxmin = nullptr;
         if (src[1]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[1].get());
-            col_max = down_cast<const InputColumnType*>(nullable_column->data_column().get());
+            col_maxmin = down_cast<const InputColumnType*>(nullable_column->data_column().get());
         } else {
-            col_max = down_cast<const InputColumnType*>(src[1].get());
+            col_maxmin = down_cast<const InputColumnType*>(src[1].get());
         }
 
         BinaryColumn* result = nullptr;
@@ -239,7 +330,7 @@ public:
                 result->get_offset()[i + 1] = old_size;
             } else {
                 size_t serde_size = src[0]->serialize_size(i);
-                T value = col_max->get_data()[i];
+                T value = col_maxmin->get_data()[i];
                 size_t new_size;
                 if constexpr (LT != TYPE_JSON) {
                     new_size = old_size + sizeof(T) + serde_size;
@@ -266,12 +357,12 @@ public:
             to->deserialize_and_append(this->data(state).buffer_result.data());
     }
 
-    std::string get_name() const override { return "max_by"; }
+    std::string get_name() const override { return "maxmin_by"; }
 };
 
 template <LogicalType LT, typename State, class OP>
-class MaxByAggregateFunction<LT, State, OP, RunTimeCppType<LT>, StringLTGuard<LT>> final
-        : public AggregateFunctionBatchHelper<State, MaxByAggregateFunction<LT, State, OP, RunTimeCppType<LT>>> {
+class MaxMinByAggregateFunction<LT, State, OP, RunTimeCppType<LT>, StringLTGuard<LT>> final
+        : public AggregateFunctionBatchHelper<State, MaxMinByAggregateFunction<LT, State, OP, RunTimeCppType<LT>>> {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).reset();
@@ -317,29 +408,29 @@ public:
         memcpy(&size, c, sizeof(size_t));
         if (size == -1) return;
         c += sizeof(size_t);
-        Slice max(c, size);
+        Slice value(c, size);
         c += size;
         memcpy(&size, c, sizeof(size_t));
         c += sizeof(size_t);
-        OP()(this->data(state), c, size, max);
+        OP()(this->data(state), c, size, value);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         raw::RawVector<uint8_t> buffer;
         size_t result_size = this->data(state).buffer_result.size();
-        size_t max_size = this->data(state).buffer_max.size();
+        size_t value_size = this->data(state).buffer.size();
 
         if (!this->data(state).has_value()) {
             size_t temp = -1;
             buffer.resize(sizeof(size_t));
             memcpy(buffer.data(), &temp, sizeof(size_t));
         } else {
-            buffer.resize(result_size + max_size + 2 * sizeof(size_t));
+            buffer.resize(result_size + value_size + 2 * sizeof(size_t));
             unsigned char* c = buffer.data();
-            memcpy(c, &max_size, sizeof(size_t));
+            memcpy(c, &value_size, sizeof(size_t));
             c += sizeof(size_t);
-            memcpy(c, this->data(state).buffer_max.data(), max_size);
-            c += max_size;
+            memcpy(c, this->data(state).buffer.data(), value_size);
+            c += value_size;
             memcpy(c, &result_size, sizeof(size_t));
             c += sizeof(size_t);
             memcpy(c, this->data(state).buffer_result.data(), result_size);
@@ -361,12 +452,12 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        const BinaryColumn* col_max = nullptr;
+        const BinaryColumn* col_maxmin = nullptr;
         if (src[1]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[1].get());
-            col_max = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
+            col_maxmin = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
         } else {
-            col_max = down_cast<const BinaryColumn*>(src[1].get());
+            col_maxmin = down_cast<const BinaryColumn*>(src[1].get());
         }
 
         BinaryColumn* result = nullptr;
@@ -394,16 +485,16 @@ public:
                 dst_nullable_column->set_has_null(true);
                 result->get_offset()[i + 1] = old_size;
             } else {
-                Slice value = col_max->get(i).get_slice();
-                size_t max_size = value.size;
+                Slice value = col_maxmin->get(i).get_slice();
+                size_t value_size = value.size;
                 size_t serde_size = src[0]->serialize_size(i);
-                size_t new_size = old_size + 2 * sizeof(size_t) + max_size + serde_size;
+                size_t new_size = old_size + 2 * sizeof(size_t) + value_size + serde_size;
                 bytes.resize(new_size);
                 unsigned char* c = bytes.data() + old_size;
-                memcpy(c, &max_size, sizeof(size_t));
+                memcpy(c, &value_size, sizeof(size_t));
                 c += sizeof(size_t);
-                memcpy(c, value.data, max_size);
-                c += max_size;
+                memcpy(c, value.data, value_size);
+                c += value_size;
                 memcpy(c, &serde_size, sizeof(size_t));
                 c += sizeof(size_t);
                 src[0]->serialize(i, c);
@@ -420,7 +511,7 @@ public:
             to->deserialize_and_append(this->data(state).buffer_result.data());
     }
 
-    std::string get_name() const override { return "max_by"; }
+    std::string get_name() const override { return "maxmin_by"; }
 };
 
 } // namespace starrocks

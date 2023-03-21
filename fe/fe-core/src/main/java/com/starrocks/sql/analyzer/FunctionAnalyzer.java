@@ -234,14 +234,16 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.MAX_BY)) {
+        if (fnName.getFunction().equals(FunctionSet.MAX_BY) || fnName.getFunction().equals(FunctionSet.MIN_BY)) {
             if (functionCallExpr.getChildren().size() != 2 || functionCallExpr.getChildren().isEmpty()) {
                 throw new SemanticException(
-                        "max_by requires two parameters: " + functionCallExpr.toSql(), functionCallExpr.getPos());
+                        fnName.getFunction() + " requires two parameters: " + functionCallExpr.toSql(),
+                        functionCallExpr.getPos());
             }
 
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
-                throw new SemanticException("max_by function args must be column", functionCallExpr.getPos());
+                throw new SemanticException(
+                        fnName.getFunction() + " function args must be column", functionCallExpr.getPos());
             }
 
             fnParams.setIsDistinct(false);  // DISTINCT is meaningless here
