@@ -6,16 +6,6 @@ on:
       - opened
       - synchronize
 
-    paths:
-      - 'docs/**'
-      - 'be/**'
-      - 'fe/**.java'
-      - 'fe/**.xml'
-      - 'gensrc/**'
-      - 'run-be-ut.sh'
-      - 'run-fe-ut.sh'
-      - 'build.sh'
-
     branches:
       - main
 
@@ -154,6 +144,7 @@ jobs:
               - 'fe/**'
               - 'gensrc/**'
               - 'run-fe-ut.sh'
+              - 'java-extensions/**'
               - 'build.sh'
 
       - run: echo ${{ steps.changes.outputs.fe }}
@@ -344,8 +335,7 @@ jobs:
         uses: mikepenz/action-junit-report@v3
         if: success() || failure()
         with:
-          check_name: 'Test Results'
-          detailed_summary: 'true'
-          fail_on_failure: 'true'
-          token: ${{ secrets.PAT }}
+          check_name: 'Admit Test Results'
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'StarRocksTest/result/*.xml'
