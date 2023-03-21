@@ -37,6 +37,8 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hudi.common.model.HoodieLogFile;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.hadoop.realtime.HoodieRealtimeFileSplit;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -52,6 +54,8 @@ import static com.starrocks.hudi.reader.HudiScannerUtils.HIVE_TYPE_MAPPING;
 import static java.util.stream.Collectors.toList;
 
 public class HudiSliceScanner extends ConnectorScanner {
+
+    private static final Logger LOG = LogManager.getLogger(HudiSliceScanner.class);
 
     private final String basePath;
     private final String hiveColumnNames;
@@ -95,7 +99,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.structFields = new StructField[requiredFields.length];
         this.classLoader = this.getClass().getClassLoader();
         for (Map.Entry<String, String> kv : params.entrySet()) {
-            System.out.println("key = " + kv.getKey() + ", value = " + kv.getValue());
+            LOG.debug("key = " + kv.getKey() + ", value = " + kv.getValue());
         }
     }
 
@@ -201,7 +205,7 @@ public class HudiSliceScanner extends ConnectorScanner {
             initReader(jobConf, properties);
         } catch (Exception e) {
             close();
-            e.printStackTrace();
+            LOG.error("Failed to open the hudi MOR slice reader.", e);
             throw new IOException("Failed to open the hudi MOR slice reader.", e);
         }
     }
@@ -213,7 +217,7 @@ public class HudiSliceScanner extends ConnectorScanner {
                 reader.close();
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            LOG.error("Failed to close the hudi MOR slice reader.", e);
             throw new IOException("Failed to close the hudi MOR slice reader.", e);
         }
     }
@@ -242,7 +246,7 @@ public class HudiSliceScanner extends ConnectorScanner {
             return numRows;
         } catch (Exception e) {
             close();
-            e.printStackTrace();
+            LOG.error("Failed to get the next off-heap table chunk of hudi.", e);
             throw new IOException("Failed to get the next off-heap table chunk of hudi.", e);
         }
     }
