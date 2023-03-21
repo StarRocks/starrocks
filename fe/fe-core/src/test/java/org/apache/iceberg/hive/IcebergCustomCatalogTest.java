@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-package com.starrocks.connector.iceberg;
+package org.apache.iceberg.hive;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -21,8 +21,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.hive.CachedClientPool;
-import com.starrocks.connector.iceberg.hive.HiveTableOperations;
+import com.starrocks.connector.iceberg.CatalogLoader;
+import com.starrocks.connector.iceberg.IcebergCatalog;
+import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import mockit.Expectations;
 import mockit.Mock;
@@ -43,6 +44,8 @@ import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hadoop.HadoopFileIO;
+import org.apache.iceberg.hive.CachedClientPool;
+import org.apache.iceberg.hive.HiveTableOperations;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.relocated.com.google.common.base.MoreObjects;
 import org.apache.thrift.TException;

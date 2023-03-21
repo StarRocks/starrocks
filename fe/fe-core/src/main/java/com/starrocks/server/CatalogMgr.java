@@ -39,6 +39,7 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import org.apache.logging.log4j.LogManager;
@@ -161,6 +162,18 @@ public class CatalogMgr {
 
     public static boolean isExternalCatalog(String name) {
         return !Strings.isNullOrEmpty(name) && !isInternalCatalog(name) && !isResourceMappingCatalog(name);
+    }
+
+    public boolean isIcebergCatalog(String name) {
+        if (isInternalCatalog(name)) {
+            return false;
+        }
+
+        if (catalogs.containsKey(name)) {
+            return catalogs.get(name).getType().equalsIgnoreCase("iceberg");
+        } else {
+            throw new SemanticException("Catalog " + name + " doesn't exist");
+        }
     }
 
     public void replayCreateCatalog(Catalog catalog) throws DdlException {

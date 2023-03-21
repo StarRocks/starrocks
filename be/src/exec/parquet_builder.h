@@ -62,6 +62,7 @@ public:
 
     static std::shared_ptr<::parquet::WriterProperties> get_properties(const ParquetBuilderOptions& options);
     static std::shared_ptr<::parquet::schema::GroupNode> get_schema(const std::vector<std::string>& file_column_names,
+                                                                    const std::vector<int32_t> field_ids,
                                                                     const std::vector<ExprContext*>& output_expr_ctxs);
 
 private:

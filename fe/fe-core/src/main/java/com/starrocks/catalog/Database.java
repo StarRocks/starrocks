@@ -117,6 +117,8 @@ public class Database extends MetaObject implements Writable {
 
     private long lastSlowLockLogTime = 0;
 
+    private String location;
+
     // This param is used to make sure db not dropped when leader node writes wal,
     // so this param dose not need to be persistent,
     // and this param maybe not right when the db is dropped and the catalog has done a checkpoint,
@@ -128,6 +130,10 @@ public class Database extends MetaObject implements Writable {
     }
 
     public Database(long id, String name) {
+        this(id, name, "");
+    }
+
+    public Database(long id, String name, String location) {
         this.id = id;
         this.fullQualifiedName = name;
         if (this.fullQualifiedName == null) {
@@ -138,6 +144,7 @@ public class Database extends MetaObject implements Writable {
         this.nameToTable = new ConcurrentHashMap<>();
         this.dataQuotaBytes = FeConstants.DEFAULT_DB_DATA_QUOTA_BYTES;
         this.replicaQuotaSize = FeConstants.DEFAULT_DB_REPLICA_QUOTA_SIZE;
+        this.location = location;
     }
 
     private String getOwnerInfo(Thread owner) {
@@ -914,5 +921,14 @@ public class Database extends MetaObject implements Writable {
 
     public List<Table> getHiveTables() {
         return idToTable.values().stream().filter(Table::isHiveTable).collect(Collectors.toList());
+    }
+
+    public String getLocation() {
+        return location;
+    }
+
+    public Database setLocation(String location) {
+        this.location = location;
+        return this;
     }
 }

@@ -501,8 +501,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
-        String dbName = ((Identifier) visit(context.identifier())).getValue();
-        return new CreateDbStmt(context.IF() != null, dbName, createPos(context));
+        String catalogName = "";
+        if (context.catalog != null) {
+            catalogName = getIdentifierName(context.catalog);
+        }
+
+        String dbName = getIdentifierName(context.database);
+
+        Map<String, String> properties = null;
+        if (context.properties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateDbStmt(context.IF() != null, catalogName, dbName, properties, createPos(context));
     }
 
     @Override
@@ -634,6 +648,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 final PartitionDesc listPartitionDesc = (PartitionDesc) visit(listPartitionDescContext);
                 partitionDescList.add(listPartitionDesc);
             }
+            partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
+        } else {
             partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
         }
         return partitionDesc;
@@ -900,7 +916,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         PartitionDesc partitionDesc = null;
         if (context.partitionDesc() != null) {
-            partitionDesc = (PartitionDesc) visit(context.partitionDesc());
+            StarRocksParser.PartitionDescContext partitionDescContext = context.partitionDesc();
+            if (partitionDescContext.RANGE() != null || partitionDescContext.LIST() != null) {
+                partitionDesc = (PartitionDesc) visit(context.partitionDesc());
+            } else {
+                List<Identifier> identifierList = visit(partitionDescContext.identifierList().identifier(), Identifier.class);
+                List<String> columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
+                partitionDesc = new ListPartitionDesc(columnList, new ArrayList<>());
+            }
         }
 
         if (partitionDesc instanceof ExpressionPartitionDesc) {
@@ -4040,10 +4063,29 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitPartitionNames(StarRocksParser.PartitionNamesContext context) {
+        if (context.lakePartition() != null) {
+            return visit(context.lakePartition());
+        }
+
         List<Identifier> identifierList = visit(context.identifier(), Identifier.class);
         return new PartitionNames(context.TEMPORARY() != null,
                 identifierList.stream().map(Identifier::getValue).collect(toList()),
+                new ArrayList<>(),
                 createPos(context));
+    }
+
+    @Override
+    public ParseNode visitLakePartitions(StarRocksParser.LakePartitionsContext context) {
+        List<String> partitionNames = Lists.newArrayList();
+        List<Expr> partitionValues = Lists.newArrayList();
+        for (StarRocksParser.PartitionValuePairContext pair : context.partitionValuePair()) {
+            Identifier partitionName = (Identifier) visit(pair.name);
+            Expr partitionValue = (Expr) visit(pair.value);
+            partitionNames.add(partitionName.getValue());
+            partitionValues.add(partitionValue);
+        }
+
+        return new PartitionNames(false, partitionNames, partitionValues);
     }
 
     @Override

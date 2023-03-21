@@ -25,6 +25,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -46,8 +47,11 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TSinkCommitInfo;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public interface ConnectorMetadata {
@@ -139,10 +143,19 @@ public interface ConnectorMetadata {
     default void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
     }
 
+    default void createDb(String dbName, Map<String, String> properties) throws DdlException, AlreadyExistsException {
+        throw new StarRocksConnectorException("This connector doesn't support creating databases");
+    }
+
     default void createDb(String dbName) throws DdlException, AlreadyExistsException {
+        createDb(dbName, new HashMap<>());
     }
 
     default void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
+    }
+
+    default boolean dbExists(String dbName) {
+        return listDbNames().contains(dbName.toLowerCase(Locale.ROOT));
     }
 
     default List<Long> getDbIds() {
@@ -157,6 +170,8 @@ public interface ConnectorMetadata {
         return null;
     }
 
+    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {}
+
     default void dropTable(DropTableStmt stmt) throws DdlException {
     }
 
@@ -164,7 +179,7 @@ public interface ConnectorMetadata {
     }
 
     default boolean createTable(CreateTableStmt stmt) throws DdlException {
-        return true;
+        return false;
     }
 
     default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {

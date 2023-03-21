@@ -621,4 +621,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     public boolean supportsUpdate() {
         return false;
     }
+
+    public boolean shouldSkipSinkTxn() {
+        return type == TableType.SCHEMA || type == TableType.ICEBERG;
+    }
 }

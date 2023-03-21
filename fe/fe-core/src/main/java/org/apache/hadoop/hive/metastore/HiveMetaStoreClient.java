@@ -32,16 +32,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.connector.hive;
+package org.apache.hadoop.hive.metastore;
 
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.common.ValidWriteIdList;
-import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
-import org.apache.hadoop.hive.metastore.IMetaStoreClient;
-import org.apache.hadoop.hive.metastore.PartitionDropOptions;
-import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.api.AggrStats;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.Catalog;
@@ -133,6 +129,7 @@ import org.apache.hadoop.hive.metastore.api.UniqueConstraintsRequest;
 import org.apache.hadoop.hive.metastore.api.UnknownDBException;
 import org.apache.hadoop.hive.metastore.api.UnknownPartitionException;
 import org.apache.hadoop.hive.metastore.api.UnknownTableException;
+import org.apache.hadoop.hive.metastore.api.UnlockRequest;
 import org.apache.hadoop.hive.metastore.api.WMFullResourcePlan;
 import org.apache.hadoop.hive.metastore.api.WMMapping;
 import org.apache.hadoop.hive.metastore.api.WMNullablePool;
@@ -164,7 +161,6 @@ import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
 
-import javax.security.auth.login.LoginException;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -179,8 +175,10 @@ import java.util.Map.Entry;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.security.auth.login.LoginException;
 
 import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCatalog;
+import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.prependCatalogToDbName;
 
 /**
  * Modified from apache hive  org.apache.hadoop.hive.metastore.HiveMetaStoreClient.java
@@ -188,8 +186,8 @@ import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCa
  * ,getTableColumnStatistics, getPartitionColumnStatistics.
  * Newly added method should cover hive0/1/2/3 metastore server.
  */
-public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseable {
-    private static final Logger LOG = LogManager.getLogger(HiveMetaStoreThriftClient.class);
+public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
+    private static final Logger LOG = LogManager.getLogger(HiveMetaStoreClient.class);
 
     ThriftHiveMetastore.Iface client = null;
     private TTransport transport = null;
@@ -224,15 +222,15 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
 
     private final ClientCapabilities version;
 
-    public HiveMetaStoreThriftClient(Configuration conf) throws MetaException {
+    public HiveMetaStoreClient(Configuration conf) throws MetaException {
         this(conf, null, true);
     }
 
-    public HiveMetaStoreThriftClient(Configuration conf, HiveMetaHookLoader hookLoader) throws MetaException {
+    public HiveMetaStoreClient(Configuration conf, HiveMetaHookLoader hookLoader) throws MetaException {
         this(conf, hookLoader, true);
     }
 
-    public HiveMetaStoreThriftClient(Configuration conf, HiveMetaHookLoader hookLoader, Boolean allowEmbedded)
+    public HiveMetaStoreClient(Configuration conf, HiveMetaHookLoader hookLoader, Boolean allowEmbedded)
             throws MetaException {
 
         if (conf == null) {
@@ -611,6 +609,10 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
         }
     }
 
+    private HiveMetaHook getHook(Table tbl) {
+        return null;
+    }
+
     @Override
     public Table getTable(String dbName, String tableName) throws MetaException, TException, NoSuchObjectException {
         return getTable(null, dbName, tableName);
@@ -881,45 +883,94 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     }
 
     @Override
-    public void dropTable(String dbname, String tableName, boolean deleteData, boolean ignoreUnknownTab)
-            throws MetaException, TException, NoSuchObjectException {
-        throw new TException("method not implemented");
-
+    public void dropTable(String dbname, String name, boolean deleteData,
+                          boolean ignoreUnknownTab) throws MetaException, TException,
+            NoSuchObjectException, UnsupportedOperationException {
+        dropTable(getDefaultCatalog(conf), dbname, name, deleteData, ignoreUnknownTab, null);
     }
 
     @Override
-    public void dropTable(String dbname, String tableName, boolean deleteData, boolean ignoreUnknownTab,
-                          boolean ifPurge) throws MetaException, TException, NoSuchObjectException {
-        throw new TException("method not implemented");
-
+    public void dropTable(String dbname, String name, boolean deleteData,
+                          boolean ignoreUnknownTab, boolean ifPurge) throws TException {
+        dropTable(getDefaultCatalog(conf), dbname, name, deleteData, ignoreUnknownTab, ifPurge);
     }
 
     @Override
-    public void dropTable(String dbname, String tableName) throws MetaException, TException, NoSuchObjectException {
-        throw new TException("method not implemented");
-
-    }
-
-    @Override
-    public void dropTable(String catName, String dbName, String tableName, boolean deleteData,
-                          boolean ignoreUnknownTable, boolean ifPurge)
-            throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
-
+    public void dropTable(String dbname, String name) throws TException {
+        dropTable(getDefaultCatalog(conf), dbname, name, true, true, null);
     }
 
     @Override
     public void dropTable(String catName, String dbName, String tableName, boolean deleteData,
-                          boolean ignoreUnknownTable) throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+                          boolean ignoreUnknownTable, boolean ifPurge) throws TException {
+        //build new environmentContext with ifPurge;
+        EnvironmentContext envContext = null;
+        if(ifPurge){
+            Map<String, String> warehouseOptions;
+            warehouseOptions = new HashMap<>();
+            warehouseOptions.put("ifPurge", "TRUE");
+            envContext = new EnvironmentContext(warehouseOptions);
+        }
+        dropTable(catName, dbName, tableName, deleteData, ignoreUnknownTable, envContext);
 
     }
 
-    @Override
-    public void dropTable(String catName, String dbName, String tableName)
-            throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
-
+    /**
+     * Drop the table and choose whether to: delete the underlying table data;
+     * throw if the table doesn't exist; save the data in the trash.
+     *
+     * @param catName catalog name
+     * @param dbname database name
+     * @param name table name
+     * @param deleteData
+     *          delete the underlying data or just delete the table in metadata
+     * @param ignoreUnknownTab
+     *          don't throw if the requested table doesn't exist
+     * @param envContext
+     *          for communicating with thrift
+     * @throws MetaException
+     *           could not drop table properly
+     * @throws NoSuchObjectException
+     *           the table wasn't found
+     * @throws TException
+     *           a thrift communication error occurred
+     * @throws UnsupportedOperationException
+     *           dropping an index table is not allowed
+     * @see org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore.Iface#drop_table(java.lang.String,
+     *      java.lang.String, boolean)
+     */
+    public void dropTable(String catName, String dbname, String name, boolean deleteData,
+                          boolean ignoreUnknownTab, EnvironmentContext envContext) throws MetaException, TException,
+            NoSuchObjectException, UnsupportedOperationException {
+        Table tbl;
+        try {
+            tbl = getTable(catName, dbname, name);
+        } catch (NoSuchObjectException e) {
+            if (!ignoreUnknownTab) {
+                throw e;
+            }
+            return;
+        }
+        HiveMetaHook hook = getHook(tbl);
+        if (hook != null) {
+            hook.preDropTable(tbl);
+        }
+        boolean success = false;
+        try {
+            drop_table_with_environment_context(catName, dbname, name, deleteData, envContext);
+            if (hook != null) {
+                hook.commitDropTable(tbl, deleteData || (envContext != null && "TRUE".equals(envContext.getProperties().get("ifPurge"))));
+            }
+            success=true;
+        } catch (NoSuchObjectException e) {
+            if (!ignoreUnknownTab) {
+                throw e;
+            }
+        } finally {
+            if (!success && (hook != null)) {
+                hook.rollbackDropTable(tbl);
+            }
+        }
     }
 
     @Override
@@ -961,7 +1012,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     @Override
     public Database getDatabase(String catalogName, String databaseName)
             throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_database(databaseName);
     }
 
     @Override
@@ -1247,10 +1298,49 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     }
 
     @Override
-    public void createTable(Table tbl)
-            throws AlreadyExistsException, InvalidObjectException, MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+    public void createTable(Table tbl) throws TException {
+        createTable(tbl, null);
+    }
 
+    public void createTable(Table tbl, EnvironmentContext envContext) throws AlreadyExistsException,
+            InvalidObjectException, MetaException, NoSuchObjectException, TException {
+        if (!tbl.isSetCatName()) {
+            tbl.setCatName(getDefaultCatalog(conf));
+        }
+        HiveMetaHook hook = getHook(tbl);
+        if (hook != null) {
+            hook.preCreateTable(tbl);
+        }
+        boolean success = false;
+        try {
+            // Subclasses can override this step (for example, for temporary tables)
+            create_table_with_environment_context(tbl, envContext);
+            if (hook != null) {
+                hook.commitCreateTable(tbl);
+            }
+            success = true;
+        }
+        finally {
+            if (!success && (hook != null)) {
+                try {
+                    hook.rollbackCreateTable(tbl);
+                } catch (Exception e){
+                    LOG.error("Create rollback failed with", e);
+                }
+            }
+        }
+    }
+
+    protected void create_table_with_environment_context(Table tbl, EnvironmentContext envContext)
+            throws AlreadyExistsException, InvalidObjectException,
+            MetaException, NoSuchObjectException, TException {
+        client.create_table_with_environment_context(tbl, envContext);
+    }
+
+    protected void drop_table_with_environment_context(String catName, String dbname, String name,
+                                                       boolean deleteData, EnvironmentContext envContext) throws TException {
+        client.drop_table_with_environment_context(prependCatalogToDbName(catName, dbname, conf),
+                name, deleteData, envContext);
     }
 
     @Override
@@ -1282,58 +1372,84 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     @Override
     public void alter_table_with_environmentContext(String databaseName, String tblName, Table table,
                                                     EnvironmentContext environmentContext)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
+            throws TException {
+        HiveMetaHook hook = getHook(table);
+        if (hook != null) {
+            hook.preAlterTable(table, environmentContext);
+        }
+
+        client.alter_table_with_environment_context(prependCatalogToDbName(databaseName, conf),
+                tblName, table, environmentContext);
     }
 
     @Override
-    public void createDatabase(Database db)
-            throws InvalidObjectException, AlreadyExistsException, MetaException, TException {
-        throw new TException("method not implemented");
-
+    public void createDatabase(Database db) throws TException {
+        if (!db.isSetCatalogName()) {
+            db.setCatalogName(getDefaultCatalog(conf));
+        }
+        client.create_database(db);
     }
 
+    /**
+     * @param name
+     * @throws NoSuchObjectException
+     * @throws InvalidOperationException
+     * @throws MetaException
+     * @throws TException
+     * @see org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore.Iface#drop_database(java.lang.String, boolean, boolean)
+     */
     @Override
     public void dropDatabase(String name)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        dropDatabase(getDefaultCatalog(conf), name, true, false, false);
     }
 
     @Override
     public void dropDatabase(String name, boolean deleteData, boolean ignoreUnknownDb)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        dropDatabase(getDefaultCatalog(conf), name, deleteData, ignoreUnknownDb, false);
     }
 
     @Override
     public void dropDatabase(String name, boolean deleteData, boolean ignoreUnknownDb, boolean cascade)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        dropDatabase(getDefaultCatalog(conf), name, deleteData, ignoreUnknownDb, cascade);
     }
 
     @Override
-    public void dropDatabase(String catName, String dbName, boolean deleteData, boolean ignoreUnknownDb,
-                             boolean cascade)
+    public void dropDatabase(String catalogName, String dbName, boolean deleteData,
+                             boolean ignoreUnknownDb, boolean cascade)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
+        try {
+            getDatabase(catalogName, dbName);
+        } catch (NoSuchObjectException e) {
+            if (!ignoreUnknownDb) {
+                throw e;
+            }
+            return;
+        }
 
-    }
-
-    @Override
-    public void dropDatabase(String catName, String dbName, boolean deleteData, boolean ignoreUnknownDb)
-            throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
-    }
-
-    @Override
-    public void dropDatabase(String catName, String dbName)
-            throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        if (cascade) {
+            // Note that this logic may drop some of the tables of the database
+            // even if the drop database fail for any reason
+            // TODO: Fix this
+            List<String> materializedViews = getTables(dbName, ".*", TableType.MATERIALIZED_VIEW);
+            for (String table : materializedViews) {
+                // First we delete the materialized views
+                dropTable(dbName, table, deleteData, true);
+            }
+            List<String> tableList = getAllTables(dbName);
+            for (String table : tableList) {
+                // Now we delete the rest of tables
+                try {
+                    // Subclasses can override this step (for example, for temporary tables)
+                    dropTable(dbName, table, deleteData, true);
+                } catch (UnsupportedOperationException e) {
+                    // Ignore Index tables, those will be dropped with parent tables
+                }
+            }
+        }
+        client.drop_database(prependCatalogToDbName(catalogName, dbName, conf), deleteData, cascade);
     }
 
     @Override
@@ -1850,7 +1966,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
 
     @Override
     public LockResponse lock(LockRequest request) throws NoSuchTxnException, TxnAbortedException, TException {
-        throw new TException("method not implemented");
+        return client.lock(request);
     }
 
     @Override
@@ -1861,8 +1977,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
 
     @Override
     public void unlock(long lockid) throws NoSuchLockException, TxnOpenException, TException {
-        throw new TException("method not implemented");
-
+        client.unlock(new UnlockRequest(lockid));
     }
 
     @Override
@@ -2048,14 +2163,52 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     }
 
     @Override
-    public void createTableWithConstraints(Table tTbl, List<SQLPrimaryKey> primaryKeys, List<SQLForeignKey> foreignKeys,
+    public void createTableWithConstraints(Table tbl, List<SQLPrimaryKey> primaryKeys, List<SQLForeignKey> foreignKeys,
                                            List<SQLUniqueConstraint> uniqueConstraints,
                                            List<SQLNotNullConstraint> notNullConstraints,
                                            List<SQLDefaultConstraint> defaultConstraints,
                                            List<SQLCheckConstraint> checkConstraints)
             throws AlreadyExistsException, InvalidObjectException, MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
-
+        if (!tbl.isSetCatName()) {
+            String defaultCat = getDefaultCatalog(conf);
+            tbl.setCatName(defaultCat);
+            if (primaryKeys != null) {
+                primaryKeys.forEach(pk -> pk.setCatName(defaultCat));
+            }
+            if (foreignKeys != null) {
+                foreignKeys.forEach(fk -> fk.setCatName(defaultCat));
+            }
+            if (uniqueConstraints != null) {
+                uniqueConstraints.forEach(uc -> uc.setCatName(defaultCat));
+            }
+            if (notNullConstraints != null) {
+                notNullConstraints.forEach(nn -> nn.setCatName(defaultCat));
+            }
+            if (defaultConstraints != null) {
+                defaultConstraints.forEach(def -> def.setCatName(defaultCat));
+            }
+            if (checkConstraints != null) {
+                checkConstraints.forEach(cc -> cc.setCatName(defaultCat));
+            }
+        }
+        HiveMetaHook hook = getHook(tbl);
+        if (hook != null) {
+            hook.preCreateTable(tbl);
+        }
+        boolean success = false;
+        try {
+            // Subclasses can override this step (for example, for temporary tables)
+            client.create_table_with_constraints(tbl, primaryKeys, foreignKeys,
+                    uniqueConstraints, notNullConstraints, defaultConstraints, checkConstraints);
+            if (hook != null) {
+                hook.commitCreateTable(tbl);
+            }
+            success = true;
+        } finally {
+            if (!success && (hook != null)) {
+                hook.rollbackCreateTable(tbl);
+            }
+        }
     }
 
     @Override

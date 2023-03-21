@@ -29,11 +29,13 @@ import com.google.gson.JsonParser;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.io.Text;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
@@ -368,7 +370,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
         if (isResourceMappingCatalog(getCatalogName())) {
-            GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), db.getFullName(), name);
+            TableName tableName = new TableName(getCatalogName(), db.getFullName(), name);
+            GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(new DropTableStmt(false, tableName, false));
         }
     }
 

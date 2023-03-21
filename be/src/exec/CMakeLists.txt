@@ -174,6 +174,7 @@ set(EXEC_FILES
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
     pipeline/sink/export_sink_operator.cpp
+    pipeline/sink/iceberg_table_sink_operator.cpp
     pipeline/sink/mysql_table_sink_operator.cpp
     pipeline/sink/memory_scratch_sink_operator.cpp
     pipeline/select_operator.cpp

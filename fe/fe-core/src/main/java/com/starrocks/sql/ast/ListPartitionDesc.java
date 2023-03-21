@@ -70,6 +70,10 @@ public class ListPartitionDesc extends PartitionDesc {
         }
     }
 
+    public List<String> getPartitionColNames() {
+        return partitionColNames;
+    }
+
     public List<String> findAllPartitionNames() {
         List<String> partitionNames = new ArrayList<>();
         this.singleListPartitionDescs.forEach(desc -> partitionNames.add(desc.getPartitionName()));
@@ -93,7 +97,7 @@ public class ListPartitionDesc extends PartitionDesc {
         this.analyzeMultiListPartition(tableProperties, columnDefList);
     }
 
-    private List<ColumnDef> analyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException {
+    public List<ColumnDef> analyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException {
         if (this.partitionColNames == null || this.partitionColNames.isEmpty()) {
             throw new AnalysisException("No partition columns.");
         }

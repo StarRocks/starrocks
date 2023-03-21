@@ -160,7 +160,7 @@ Status HiveDataSource::_init_partition_values() {
         for (int i = 0; i < _partition_slots.size(); i++) {
             SlotId slot_id = _partition_slots[i]->id();
             int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
-            ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
+            ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr))
             assert(partition_value_col->is_constant());
             auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value_col);
             const ColumnPtr& data_column = const_column->data_column();

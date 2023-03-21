@@ -23,6 +23,7 @@ import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -36,10 +37,13 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
@@ -140,6 +144,12 @@ public class CreateTableAnalyzer {
             }
         }
         PartitionDesc partitionDesc = statement.getPartitionDesc();
+        String catalogName = tableNameObject.getCatalog();
+        Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            statement.setEngineName(catalog.getType());
+        }
+
         // analyze key desc
         if (statement.isOlapEngine()) {
             // olap table or lake table
@@ -310,6 +320,18 @@ public class CreateTableAnalyzer {
         } else {
             if (engineName.equalsIgnoreCase(ELASTICSEARCH)) {
                 EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
+            } else if (GlobalStateMgr.getCurrentState().getCatalogMgr().isIcebergCatalog(catalogName)) {
+                try {
+                    String dbName = tableNameObject.getDb();
+                    if (GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName) == null) {
+                        throw new SemanticException("Database " + dbName + "doesn't exist");
+                    }
+                    if (partitionDesc != null) {
+                        ((ListPartitionDesc) partitionDesc).analyzePartitionColumns(columnDefs);
+                    }
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
+                }
             } else {
                 if (partitionDesc != null || distributionDesc != null) {
                     NodePosition pos = NodePosition.ZERO;

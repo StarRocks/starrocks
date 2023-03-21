@@ -541,6 +541,8 @@ struct TReportExecStatusParams {
   20: optional InternalService.TLoadJobType load_type
 
   21: optional list<Types.TTabletFailInfo> failInfos
+
+  22: optional list<Types.TSinkCommitInfo> sink_commit_infos
 }
 
 struct TFeResult {

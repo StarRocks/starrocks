@@ -53,7 +53,8 @@ public class CreateTableAsSelectStmt extends StatementBase {
 
     public boolean createTable(ConnectContext session) throws AnalysisException {
         try {
-            return session.getGlobalStateMgr().createTable(createTableStmt);
+            String catalogName = createTableStmt.getCatalogName();
+            return session.getGlobalStateMgr().getMetadataMgr().createTable(catalogName, createTableStmt);
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
         }

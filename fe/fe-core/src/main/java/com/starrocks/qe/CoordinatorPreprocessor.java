@@ -1500,7 +1500,8 @@ public class CoordinatorPreprocessor {
                                              TNetworkAddress destHost, TDescriptorTable descTable,
                                              boolean isEnablePipelineEngine, int tabletSinkTotalDop,
                                              boolean isEnableStreamPipeline) {
-            boolean enablePipelineTableSinkDop = isEnablePipelineEngine && fragment.hasOlapTableSink();
+            boolean enablePipelineTableSinkDop = isEnablePipelineEngine &&
+                    (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
             commonParams.setProtocol_version(InternalServiceVersion.V1);
             commonParams.setFragment(fragment.toThrift());
             commonParams.setDesc_tbl(descTable);
@@ -1578,7 +1579,8 @@ public class CoordinatorPreprocessor {
                 throws Exception {
             // if pipeline is enable and current fragment contain olap table sink, in fe we will
             // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-            boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+            boolean enablePipelineTableSinkDop = enablePipelineEngine &&
+                    (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
 
             uniqueParams.setProtocol_version(InternalServiceVersion.V1);
             uniqueParams.setBackend_num(instanceExecParam.backendNum);
@@ -1642,7 +1644,7 @@ public class CoordinatorPreprocessor {
             }
         }
 
-        /**
+        /**¶
          * Fill required fields of thrift params with meaningless values.
          *
          * @param params The thrift params need to be filled required fields.

@@ -88,6 +88,7 @@ import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TRuntimeFilterDestination;
 import com.starrocks.thrift.TRuntimeFilterProberParams;
+import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
@@ -167,6 +168,9 @@ public class Coordinator {
     private List<String> exportFiles;
     private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
     private final List<TTabletFailInfo> failInfos = Lists.newArrayList();
+
+    private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newArrayList();
+
     // Input parameter
     private long jobId = -1; // job which this task belongs to
     private TUniqueId queryId;
@@ -390,6 +394,10 @@ public class Coordinator {
         return failInfos;
     }
 
+    public List<TSinkCommitInfo> getSinkCommitInfos() {
+        return sinkCommitInfos;
+    }
+
     public boolean isUsingBackend(Long backendID) {
         return coordinatorPreprocessor.getUsedBackendIDs().contains(backendID);
     }
@@ -604,7 +612,8 @@ public class Coordinator {
 
                 // if pipeline is enable and current fragment contain olap table sink, in fe we will 
                 // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-                boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+                boolean enablePipelineTableSinkDop = enablePipelineEngine &&
+                        (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
                 boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
                 int tabletSinkTotalDop = 0;
                 int accTabletSinkDop = 0;
@@ -884,7 +893,8 @@ public class Coordinator {
                                             Collectors.mapping(Function.identity(), Collectors.toList())));
                     // if pipeline is enable and current fragment contain olap table sink, in fe we will 
                     // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-                    boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+                    boolean enablePipelineTableSinkDop = enablePipelineEngine &&
+                            (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
                     boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
                     int tabletSinkTotalDop = 0;
                     int accTabletSinkDop = 0;
@@ -1452,6 +1462,9 @@ public class Coordinator {
             }
             if (params.isSetFailInfos()) {
                 updateFailInfos(params.getFailInfos());
+            }
+            if (params.isSetSink_commit_infos()) {
+                sinkCommitInfos.addAll(params.sink_commit_infos);
             }
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }

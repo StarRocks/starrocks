@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -91,6 +92,8 @@ public abstract class DataSink {
         if (table instanceof OlapTable) {
             return Config.enable_pipeline_load;
         } else if (table instanceof MysqlTable) {
+            return true;
+        } else if (table instanceof IcebergTable) {
             return true;
         }
         return false;

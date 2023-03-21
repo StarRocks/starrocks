@@ -106,7 +106,8 @@ Status FileResultWriter::_create_file_writer() {
         break;
     case TFileFormatType::FORMAT_PARQUET: {
         auto properties = ParquetBuilder::get_properties(_file_opts->parquet_options);
-        auto schema = ParquetBuilder::get_schema(_file_opts->file_column_names, _output_expr_ctxs);
+        auto schema =
+                ParquetBuilder::get_schema(_file_opts->file_column_names, std::vector<int32_t>(), _output_expr_ctxs);
         _file_builder =
                 std::make_unique<ParquetBuilder>(std::move(writable_file), std::move(properties), std::move(schema),
                                                  _output_expr_ctxs, _file_opts->parquet_options.row_group_max_size);

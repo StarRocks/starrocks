@@ -179,6 +179,10 @@ public class CreateTableStmt extends DdlStmt {
         return tableName;
     }
 
+    public String getCatalogName() {
+        return tableName.getCatalog();
+    }
+
     public String getTableName() {
         return tableName.getTbl();
     }

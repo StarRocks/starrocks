@@ -15,6 +15,8 @@
 
 #include "formats/parquet/file_writer.h"
 
+#include <utility>
+
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
@@ -238,21 +240,16 @@ Status FileWriterBase::write(Chunk* chunk) {
     }
 
     Columns result_columns;
-    // Step 1: compute expr
     int num_columns = _output_expr_ctxs.size();
     result_columns.reserve(num_columns);
 
     for (int i = 0; i < num_columns; ++i) {
         ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
-        //column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
-        //         ? vectorized::ColumnHelper::convert_time_column_from_double_to_str(column)
-        //         : column;
         result_columns.emplace_back(std::move(column));
     }
 
     size_t num_rows = chunk->num_rows();
     for (size_t i = 0; i < result_columns.size(); i++) {
-        // auto &col = chunk->get_column_by_index(i);
         auto& col = result_columns[i];
         bool nullable = col->is_nullable();
         auto null_column = nullable && down_cast<starrocks::NullableColumn*>(col.get())->has_null()
@@ -293,7 +290,7 @@ Status FileWriterBase::write(Chunk* chunk) {
         }
         case TYPE_CHAR:
         case TYPE_VARCHAR: {
-            DISPATCH_PARQUET_STRING_WRITER()
+            //            DISPATCH_PARQUET_STRING_WRITER()
             break;
         }
         default: {
@@ -330,6 +327,9 @@ std::size_t FileWriterBase::file_size() const {
     return _outstream->Tell().MoveValueUnsafe() + _get_current_rg_written_bytes();
 }
 
+// TODO(stephen): we should use `RowGroupMetaData::file_offset()` to get file split_offset.
+// However, the current arrow version 5.0.0 have bug in this interface and requires an upgrade.
+// So we rewrite the correct logic for this.
 Status FileWriterBase::split_offsets(std::vector<int64_t>& splitOffsets) const {
     if (_file_metadata == nullptr) {
         LOG(WARNING) << "file metadata null";
@@ -369,14 +369,15 @@ Status SyncFileWriter::close() {
     return Status::OK();
 }
 
-AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::string file_name,
-                                 std::string& file_dir, std::shared_ptr<::parquet::WriterProperties> properties,
+AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::string file_location,
+                                 std::string partition_location,
+                                 std::shared_ptr<::parquet::WriterProperties> properties,
                                  std::shared_ptr<::parquet::schema::GroupNode> schema,
                                  const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
                                  RuntimeProfile* parent_profile)
         : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs),
-          _file_name(file_name),
-          _file_dir(file_dir),
+          _file_location(std::move(file_location)),
+          _partition_location(std::move(partition_location)),
           _executor_pool(executor_pool),
           _parent_profile(parent_profile) {
     _io_timer = ADD_TIMER(_parent_profile, "FileWriterIoTimer");

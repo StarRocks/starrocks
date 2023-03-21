@@ -20,17 +20,21 @@ import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
+import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -57,7 +61,10 @@ import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.OrderSpec;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -76,6 +83,10 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
+import org.apache.iceberg.NullOrder;
+import org.apache.iceberg.SortDirection;
+import org.apache.iceberg.SortField;
+import org.apache.iceberg.SortOrder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -118,14 +129,19 @@ public class InsertPlanner {
         //3. Fill in the default value and NULL
         OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertStmt, outputColumns);
 
-        //4. Fill in the shadow column
+        //4. Fill partition column constant value
+        if (insertStmt.isStaticPartitionInsert()) {
+            optExprBuilder = fillLakePartitionValues(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
+        }
+
+        //5. Fill in the shadow column
         optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
 
-        //5. Cast output columns type to target type
+        //6. Cast output columns type to target type
         optExprBuilder =
                 castOutputColumnsTypeToTargetColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
 
-        //6. Optimize logical plan and build physical plan
+        //7. Optimize logical plan and build physical plan
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
@@ -154,7 +170,7 @@ public class InsertPlanner {
                         columnRefFactory);
             }
 
-            //7. Build fragment exec plan
+            //8. Build fragment exec plan
             boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
                     || insertStmt.getTargetTable() instanceof MysqlTable);
             ExecPlan execPlan;
@@ -165,12 +181,12 @@ public class InsertPlanner {
             }
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
-            TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
+            TupleDescriptor tupleDesc = descriptorTable.createTupleDescriptor();
 
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
             long tableId = insertStmt.getTargetTable().getId();
             for (Column column : insertStmt.getTargetTable().getFullSchema()) {
-                SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+                SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(tupleDesc);
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(column.getType());
                 slotDescriptor.setColumn(column);
@@ -182,22 +198,25 @@ public class InsertPlanner {
                             columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
                 }
             }
-            olapTuple.computeMemLayout();
+            tupleDesc.computeMemLayout();
 
             DataSink dataSink;
-            if (insertStmt.getTargetTable() instanceof OlapTable) {
-                OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
-
-                dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
-                        insertStmt.getTargetPartitionIds(), canUsePipeline, olapTable.writeQuorum(),
-                        olapTable.enableReplicatedStorage(), nullExprInAutoIncrement);
-            } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
-                dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
+            Table targetTable = insertStmt.getTargetTable();
+            Table.TableType tableType = targetTable.getType();
+            if (tableType == Table.TableType.OLAP) {
+                OlapTable olapTable = (OlapTable) targetTable;
+                dataSink = new OlapTableSink(olapTable, tupleDesc, insertStmt.getTargetPartitionIds(), canUsePipeline,
+                        olapTable.writeQuorum(), olapTable.enableReplicatedStorage(), nullExprInAutoIncrement);
+            } else if (tableType == Table.TableType.MYSQL) {
+                dataSink = new MysqlTableSink((MysqlTable) targetTable);
+            } else if (tableType == Table.TableType.ICEBERG) {
+                descriptorTable.addReferencedTable(targetTable);
+                dataSink = new IcebergTableSink((IcebergTable) targetTable, tupleDesc, insertStmt.isStaticPartitionInsert());
             } else {
-                throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
+                throw new SemanticException("Unknown table type " + targetTable.getType());
             }
 
-            if (canUsePipeline && insertStmt.getTargetTable() instanceof OlapTable) {
+            if (canUsePipeline && tableType == Table.TableType.OLAP || tableType == Table.TableType.ICEBERG) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (shuffleServiceEnable) {
                     // For shuffle insert into, we only support tablet sink dop = 1
@@ -213,11 +232,22 @@ public class InsertPlanner {
                                 .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
                     }
                 }
-                sinkFragment.setHasOlapTableSink();
-                sinkFragment.setForceSetTableSinkDop();
-                sinkFragment.setForceAssignScanRangesPerDriverSeq();
-                sinkFragment.disableRuntimeAdaptiveDop();
+
+                if (tableType == Table.TableType.OLAP) {
+                    sinkFragment.setHasOlapTableSink();
+                    sinkFragment.setForceSetTableSinkDop();
+                    sinkFragment.setForceAssignScanRangesPerDriverSeq();
+                    sinkFragment.disableRuntimeAdaptiveDop();
+                }
+
+                if (tableType == Table.TableType.ICEBERG) {
+                    sinkFragment.setHasIcebergTableSink();
+                    sinkFragment.setForceAssignScanRangesPerDriverSeq();
+                    sinkFragment.setForceSetTableSinkDop();
+                    sinkFragment.disableRuntimeAdaptiveDop();
+                }
             }
+
             execPlan.getFragments().get(0).setSink(dataSink);
             execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             return execPlan;
@@ -229,6 +259,29 @@ public class InsertPlanner {
         }
     }
 
+    private OptExprBuilder fillLakePartitionValues(ColumnRefFactory columnRefFactory,
+                                                   InsertStmt insertStatement, List<ColumnRefOperator> outputColumns,
+                                                   OptExprBuilder root) {
+        Table targetTable = insertStatement.getTargetTable();
+        LogicalProjectOperator projectOperator = (LogicalProjectOperator) root.getRoot().getOp();
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOperator.getColumnRefMap();
+        List<Expr> lakePartitionValues = insertStatement.getTargetPartitionNames().getLakePartitionValues();
+        List<String> partitionColNames = insertStatement.getTargetTable().getPartitionColumnNames();
+        List<Column> partitionColumns = partitionColNames.stream()
+                .map(targetTable::getColumn).collect(Collectors.toList());
+
+        for (int i = 0; i < partitionColumns.size(); i++) {
+            Column column = partitionColumns.get(i);
+            LiteralExpr expr = (LiteralExpr) lakePartitionValues.get(i);
+            ScalarOperator scalarOperator = ConstantOperator.createObject(expr.getRealObjectValue(), column.getType());
+            ColumnRefOperator col = columnRefFactory
+                    .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+            outputColumns.add(col);
+            columnRefMap.put(col, scalarOperator);
+        }
+        return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
     private void castLiteralToTargetColumnsType(InsertStmt insertStatement) {
         Preconditions.checkState(insertStatement.getQueryStatement().getQueryRelation() instanceof ValuesRelation,
                 "must values");
@@ -236,6 +289,9 @@ public class InsertPlanner {
         ValuesRelation values = (ValuesRelation) insertStatement.getQueryStatement().getQueryRelation();
         RelationFields fields = insertStatement.getQueryStatement().getQueryRelation().getRelationFields();
         for (int columnIdx = 0; columnIdx < insertStatement.getTargetTable().getBaseSchema().size(); ++columnIdx) {
+            if (needToSkip(insertStatement, columnIdx)) {
+                continue;
+            }
             Column targetColumn = fullSchema.get(columnIdx);
             boolean isAutoIncrement = targetColumn.isAutoIncrement();
             if (insertStatement.getTargetColumnNames() == null) {
@@ -279,8 +335,13 @@ public class InsertPlanner {
                                             InsertStmt insertStatement, List<ColumnRefOperator> outputColumns) {
         List<Column> baseSchema = insertStatement.getTargetTable().getBaseSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+        int schemaSize = baseSchema.size();
+        if (insertStatement.getTargetTable() instanceof IcebergTable && insertStatement.isStaticPartitionInsert()) {
+            IcebergTable icebergTable = (IcebergTable) insertStatement.getTargetTable();
+            schemaSize -= icebergTable.getPartitionColumnNames().size();
+        }
 
-        for (int columnIdx = 0; columnIdx < baseSchema.size(); ++columnIdx) {
+        for (int columnIdx = 0; columnIdx < schemaSize; ++columnIdx) {
             Column targetColumn = baseSchema.get(columnIdx);
             if (insertStatement.getTargetColumnNames() == null) {
                 outputColumns.add(logicalPlan.getOutputColumn().get(columnIdx));
@@ -324,8 +385,9 @@ public class InsertPlanner {
     private OptExprBuilder fillShadowColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStatement,
                                              List<ColumnRefOperator> outputColumns, OptExprBuilder root,
                                              ConnectContext session) {
-        Set<Column> baseSchema = Sets.newHashSet(insertStatement.getTargetTable().getBaseSchema());
-        List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
+        Table targetTable = insertStatement.getTargetTable();
+        Set<Column> baseSchema = Sets.newHashSet(targetTable.getBaseSchema());
+        List<Column> fullSchema = targetTable.getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
@@ -404,6 +466,12 @@ public class InsertPlanner {
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
 
+    private boolean needToSkip(InsertStmt stmt, int columnIdx) {
+        Table targetTable = stmt.getTargetTable();
+        return targetTable instanceof IcebergTable && stmt.isStaticPartitionInsert() &&
+                ((IcebergTable) targetTable).partitionColIndexes().contains(columnIdx);
+    }
+
     private OptExprBuilder castOutputColumnsTypeToTargetColumns(ColumnRefFactory columnRefFactory,
                                                                 InsertStmt insertStatement,
                                                                 List<ColumnRefOperator> outputColumns,
@@ -440,6 +508,29 @@ public class InsertPlanner {
             DistributionProperty distributionProperty =
                     new DistributionProperty(new GatherDistributionSpec(queryRelation.getLimit().getLimit()));
             return new PhysicalPropertySet(distributionProperty);
+        }
+
+        if (insertStmt.getTargetTable() instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) insertStmt.getTargetTable();
+            SortOrder sortOrder = icebergTable.getNativeTable().sortOrder();
+
+            if (sortOrder.isUnsorted()) {
+                return new PhysicalPropertySet();
+            } else {
+                List<SortField> sortFields = sortOrder.fields();
+                List<Ordering> orderings = new ArrayList<>();
+                List<Integer> sortKeyIndexes = icebergTable.getSortKeyIndexes();
+                for (int index : sortKeyIndexes) {
+                    ColumnRefOperator columnRef = outputColumns.get(index);
+                    SortField sortField = sortFields.get(sortKeyIndexes.indexOf(index));
+                    boolean isAsc = sortField.direction() == SortDirection.ASC;
+                    boolean isNullFirst = sortField.nullOrder() == NullOrder.NULLS_FIRST;
+                    Ordering ordering = new Ordering(columnRef, isAsc, isNullFirst);
+                    orderings.add(ordering);
+                }
+                SortProperty sortProperty = new SortProperty(new OrderSpec(orderings));
+                return new PhysicalPropertySet(sortProperty);
+            }
         }
 
         if (!(insertStmt.getTargetTable() instanceof OlapTable)) {

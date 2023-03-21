@@ -20,6 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
@@ -30,6 +31,7 @@ import com.starrocks.sql.parser.NodePosition;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /*
@@ -49,26 +51,42 @@ public class PartitionNames implements ParseNode, Writable {
     @SerializedName(value = "isTemp")
     private final boolean isTemp;
 
+    private final List<Expr> lakePartitionValues;
+
     private final NodePosition pos;
 
-    public PartitionNames(boolean isTemp, List<String> partitionNames) {
-        this(isTemp, partitionNames, NodePosition.ZERO);
+    public PartitionNames(boolean isTemp, List<String> partitionNames, List<Expr> lakePartitionValues) {
+        this(false, partitionNames, lakePartitionValues, NodePosition.ZERO);
     }
 
-    public PartitionNames(boolean isTemp, List<String> partitionNames, NodePosition pos) {
+    public PartitionNames(boolean isTemp, List<String> partitionNames) {
+        this(isTemp, partitionNames, new ArrayList<>(), NodePosition.ZERO);
+    }
+
+    public PartitionNames(boolean isTemp, List<String> partitionNames, List<Expr> lakePartitionValues, NodePosition pos) {
         this.pos = pos;
         this.partitionNames = partitionNames;
         this.isTemp = isTemp;
+        this.lakePartitionValues = lakePartitionValues;
     }
 
     public PartitionNames(PartitionNames other) {
         this.pos = other.pos;
         this.partitionNames = Lists.newArrayList(other.partitionNames);
         this.isTemp = other.isTemp;
+        this.lakePartitionValues = other.lakePartitionValues;
     }
 
     public List<String> getPartitionNames() {
         return partitionNames;
+    }
+
+    public List<Expr> getLakePartitionValues() {
+        return lakePartitionValues;
+    }
+
+    public boolean isStaticPartitionInsert() {
+        return !lakePartitionValues.isEmpty();
     }
 
     public boolean isTemp() {

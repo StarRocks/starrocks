@@ -50,6 +50,7 @@ import com.google.gson.JsonParser;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
@@ -58,6 +59,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
@@ -207,7 +209,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         ImmutableList.Builder<Column> fullSchemaTemp = ImmutableList.builder();
         ImmutableMap.Builder<String, Column> nameToColumnTemp = ImmutableMap.builder();
         ImmutableList.Builder<String> dataColumnNamesTemp = ImmutableList.builder();
-
 
         updatedTable.nameToColumn.forEach((colName, column) -> {
             Column baseColumn = nameToColumn.get(colName);
@@ -419,7 +420,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
 
         if (isResourceMappingCatalog(getCatalogName())) {
-            GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), db.getFullName(), name);
+            TableName tableName = new TableName(getCatalogName(), db.getFullName(), name);
+            GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(new DropTableStmt(false, tableName, false));
         }
     }
 

@@ -281,7 +281,7 @@ alterDbQuotaStatement
     ;
 
 createDbStatement
-    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier charsetDesc? collateDesc?
+    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? (catalog=identifier '.')? database=identifier charsetDesc? collateDesc? properties?
     ;
 
 dropDbStatement
@@ -1692,6 +1692,11 @@ columnAliases
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
     | TEMPORARY? (PARTITION | PARTITIONS) identifier
+    | lakePartition
+    ;
+
+lakePartition
+    : PARTITION '(' partitionValuePair (',' partitionValuePair)* ')'                    #lakePartitions
     ;
 
 tabletList
@@ -1960,7 +1965,7 @@ optimizerTrace
 
 partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
-    | PARTITION BY LIST identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
+    | PARTITION BY LIST? identifierList ('(' (listPartitionDesc (',' listPartitionDesc)*)? ')')?
     | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY functionCall
     ;
@@ -2011,6 +2016,10 @@ partitionValueList
 
 partitionValue
     : MAXVALUE | string
+    ;
+
+partitionValuePair
+    : name=identifier '=' value=literalExpression
     ;
 
 distributionClause

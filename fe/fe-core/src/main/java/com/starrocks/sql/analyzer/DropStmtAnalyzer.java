@@ -55,9 +55,14 @@ public class DropStmtAnalyzer {
         @Override
         public Void visitDropTableStatement(DropTableStmt statement, ConnectContext context) {
             MetaUtils.normalizationTableName(context, statement.getTableNameObject());
+            String catalogName = statement.getCatalogName();
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            }
+
             String dbName = statement.getDbName();
             // check database
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
@@ -65,7 +70,7 @@ public class DropStmtAnalyzer {
             Table table;
             String tableName = statement.getTableName();
             try {
-                table = db.getTable(statement.getTableName());
+                table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
                 if (table == null) {
                     if (statement.isSetIfExists()) {
                         LOG.info("drop table[{}] which does not exist", tableName);

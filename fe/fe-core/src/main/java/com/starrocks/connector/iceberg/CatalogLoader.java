@@ -15,14 +15,14 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
-import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.hadoop.SerializableConfiguration;
+import org.apache.iceberg.hive.IcebergGlueCatalog;
+import org.apache.iceberg.hive.IcebergHiveCatalog;
 import org.apache.iceberg.relocated.com.google.common.base.MoreObjects;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;

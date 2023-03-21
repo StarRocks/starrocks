@@ -188,5 +188,24 @@ private:
     std::atomic<size_t> _next_accept_source = 0;
 };
 
+// Exchange the local data for lake partition exchange
+class LakePartitionExchanger final : public LocalExchanger {
+    using RowIndexPtr = std::shared_ptr<std::vector<uint32_t>>;
+    using Partition2RowIndexes = std::map<LakePartitionKeyPtr, RowIndexPtr, LakePartitionKeyComparator>;
+
+public:
+    LakePartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
+                           LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
+                           const std::vector<ExprContext*>& _partition_expr_ctxs, size_t num_sinks);
+
+    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+
+private:
+    LocalExchangeSourceOperatorFactory* _source;
+    const TPartitionType::type _part_type;
+    const std::vector<ExprContext*> _partition_expr_ctxs;
+    std::vector<Columns> _channel_partitions_columns;
+};
+
 } // namespace pipeline
 } // namespace starrocks

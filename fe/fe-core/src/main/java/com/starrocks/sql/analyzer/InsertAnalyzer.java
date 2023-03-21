@@ -14,18 +14,23 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -50,8 +55,11 @@ public class InsertAnalyzer {
          *  Target table
          */
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());
-        Database database = MetaUtils.getDatabase(session, insertStmt.getTableName());
-        Table table = MetaUtils.getTable(session, insertStmt.getTableName());
+        String catalogName = insertStmt.getTableName().getCatalog();
+        String dbName = insertStmt.getTableName().getDb();
+        String tableName = insertStmt.getTableName().getTbl();
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(
@@ -61,23 +69,23 @@ public class InsertAnalyzer {
         }
 
         if (insertStmt.isOverwrite()) {
-            if (!(table instanceof OlapTable)) {
-                throw unsupportedException("Only support insert overwrite olap table");
+            if (!(table instanceof OlapTable || table instanceof IcebergTable)) {
+                throw unsupportedException("Only support insert overwrite olap and iceberg table");
             }
-            if (((OlapTable) table).getState() != NORMAL) {
+            if ((table instanceof OlapTable) && ((OlapTable) table).getState() != NORMAL) {
                 String msg =
                         String.format("table state is %s, please wait to insert overwrite util table state is normal",
                                 ((OlapTable) table).getState());
                 throw unsupportedException(msg);
             }
-        } else if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
-            throw unsupportedException("Only support insert into olap table or mysql table");
+        } else if (!(table instanceof OlapTable) && !(table instanceof MysqlTable) && !(table instanceof IcebergTable)) {
+            throw unsupportedException("Only support insert into olap table or mysql or iceberg table");
         }
 
         List<Long> targetPartitionIds = Lists.newArrayList();
+        PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
         if (table instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) table;
-            PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
 
             if (targetPartitionNames != null) {
                 if (targetPartitionNames.getPartitionNames().isEmpty()) {
@@ -105,6 +113,41 @@ public class InsertAnalyzer {
                     throw new SemanticException("data cannot be inserted into table with empty partition." +
                             "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. ",
                             olapTable.getName());
+                }
+            }
+        }
+
+        if (table instanceof IcebergTable && insertStmt.isStaticPartitionInsert()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            List<String> partitionNames = targetPartitionNames.getPartitionNames();
+            List<Expr> partitionValues = targetPartitionNames.getLakePartitionValues();
+            List<String> tablePartitionColumnNames = icebergTable.getPartitionColumnNames();
+
+            Preconditions.checkState(partitionNames.size() == partitionValues.size(),
+                    "Partition names size must be equal to the partition values size");
+
+            if (tablePartitionColumnNames.size() != partitionNames.size()) {
+                throw new SemanticException("Must include all partition column names");
+            }
+
+            for (int i = 0; i < partitionNames.size(); i++) {
+                String actualName = partitionNames.get(i);
+                String expectedName = tablePartitionColumnNames.get(i);
+                Expr partitionValue = partitionValues.get(i);
+                if (!actualName.equalsIgnoreCase(expectedName)) {
+                    throw new SemanticException("Expected: %s, but actual: %s", expectedName, actualName);
+                }
+
+                if (!partitionValue.isLiteral()) {
+                    throw new SemanticException("partition value should be literal expression");
+                }
+
+                LiteralExpr literalExpr = (LiteralExpr) partitionValue;
+                Column column = icebergTable.getColumn(actualName);
+                try {
+                    literalExpr.castTo(column.getType());
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
                 }
             }
         }
@@ -139,7 +182,12 @@ public class InsertAnalyzer {
             }
         }
 
-        if (query.getRelationFields().size() != mentionedColumns.size()) {
+        int mentionedColumnSize = mentionedColumns.size();
+
+        if (table instanceof IcebergTable && insertStmt.isStaticPartitionInsert()) {
+            mentionedColumnSize -= table.getPartitionColumnNames().size();
+        }
+        if (query.getRelationFields().size() != mentionedColumnSize) {
             throw new SemanticException("Column count doesn't match value count");
         }
         // check default value expr

@@ -50,6 +50,8 @@ public class EsMetaStateTracker {
     public void run() throws StarRocksESException {
         for (SearchPhase searchPhase : builtinSearchPhase) {
             searchPhase.preProcess(searchContext);
+
+
             searchPhase.execute(searchContext);
             searchPhase.postProcess(searchContext);
         }

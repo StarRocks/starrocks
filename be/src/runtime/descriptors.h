@@ -210,9 +210,14 @@ public:
     ~IcebergTableDescriptor() override = default;
     bool has_partition() const override { return false; }
     const TIcebergSchema* get_iceberg_schema() const { return &_t_iceberg_schema; }
+    bool is_unpartitioned_table() { return _partition_column_names.empty(); }
+    const std::vector<std::string> partition_column_names() { return _partition_column_names; }
+    const std::vector<std::string> full_column_names();
+    std::vector<int32_t> partition_index_in_schema();
 
 private:
     TIcebergSchema _t_iceberg_schema;
+    std::vector<std::string> _partition_column_names;
 };
 
 class FileTableDescriptor : public HiveTableDescriptor {

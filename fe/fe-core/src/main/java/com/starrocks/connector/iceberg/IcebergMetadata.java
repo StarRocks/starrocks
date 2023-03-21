@@ -22,21 +22,40 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TIcebergDataFile;
+import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.CombinedScanTask;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.Metrics;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.ReplacePartitions;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
+import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
@@ -47,12 +66,17 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
+import static com.starrocks.connector.iceberg.IcebergApiConverter.getIcebergRelativePartitionPath;
+import static com.starrocks.connector.iceberg.IcebergApiConverter.getTableLocation;
+import static com.starrocks.connector.iceberg.IcebergApiConverter.parsePartitionFields;
+import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSchema;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
@@ -91,9 +115,62 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
+        if (dbExists(dbName)) {
+            throw new AlreadyExistsException("Database Already Exists");
+        }
+
+        icebergCatalog.createDb(dbName, properties);
+    }
+
+    @Override
+    public void dropDb(String dbName, boolean isForceDrop) throws MetaNotFoundException {
+        if (listTableNames(dbName).size() != 0) {
+            throw new StarRocksConnectorException("Database %s not empty", dbName);
+        }
+
+        icebergCatalog.dropDb(dbName);
+    }
+
+    @Override
     public List<String> listTableNames(String dbName) {
         List<TableIdentifier> tableIdentifiers = icebergCatalog.listTables(Namespace.of(dbName));
         return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    @Override
+    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTableName();
+
+        if (listTableNames(dbName).contains(tableName)) {
+            if (stmt.isSetIfNotExists()) {
+                LOG.info("create table[{}] which already exists", tableName);
+            } else {
+                ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+            }
+        }
+
+        Schema schema = toIcebergApiSchema(stmt.getColumns());
+        PartitionDesc partitionDesc = stmt.getPartitionDesc();
+        List<String> partitionColNames = partitionDesc == null ? Lists.newArrayList() :
+                ((ListPartitionDesc) partitionDesc).getPartitionColNames();
+        PartitionSpec partitionSpec = parsePartitionFields(schema, partitionColNames);
+        Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() : stmt.getProperties();
+        String tableLocation = getTableLocation(properties)
+                .orElseGet(() -> icebergCatalog.defaultTableLocation(dbName, tableName));
+
+        Transaction transaction = icebergCatalog.newCreateTableTransaction(
+                dbName, tableName, schema, partitionSpec, tableLocation, properties);
+
+        transaction.commitTransaction();
+        return true;
+    }
+
+    @Override
+    public void dropTable(DropTableStmt stmt) {
+        TableIdentifier identifier = TableIdentifier.of(stmt.getDbName(), stmt.getTableName());
+        icebergCatalog.dropTable(identifier, true);
     }
 
     @Override
@@ -224,8 +301,90 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos) {
+        boolean isOverwrite = false;
+        if (!commitInfos.isEmpty()) {
+            isOverwrite = commitInfos.get(0).is_overwrite;
+        }
+
+        List<TIcebergDataFile> dataFiles = commitInfos.stream()
+                .map(TSinkCommitInfo::getIceberg_data_file).collect(Collectors.toList());
+
+        IcebergTable table = (IcebergTable) getTable(dbName, tableName);
+        org.apache.iceberg.Table nativeTbl = table.getNativeTable();
+        BatchWrite batchWrite = isOverwrite ? new DynamicOverwrite(nativeTbl) : new Append(nativeTbl);
+
+        PartitionSpec partitionSpec = nativeTbl.spec();
+        for (TIcebergDataFile dataFile : dataFiles) {
+            Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile);
+            DataFiles.Builder builder =
+                    DataFiles.builder(partitionSpec)
+                            .withMetrics(metrics)
+                            .withPath(dataFile.path)
+                            .withFormat(dataFile.format)
+                            .withRecordCount(dataFile.record_count)
+                            .withFileSizeInBytes(dataFile.file_size_in_bytes)
+                            .withSplitOffsets(dataFile.split_offsets);
+
+            if (partitionSpec.isPartitioned()) {
+                String relativePartitionLocation = getIcebergRelativePartitionPath(
+                        nativeTbl.location(), dataFile.partition_path);
+
+                IcebergApiConverter.PartitionData partitionData = IcebergApiConverter.partitionDataFromPath(
+                        relativePartitionLocation, partitionSpec);
+                builder.withPartition(partitionData);
+            }
+            batchWrite.addFile(builder.build());
+        }
+        batchWrite.commit();
+    }
+
+    @Override
     public void clear() {
         tasks.clear();
         tables.clear();
+    }
+
+    /**
+     * An auxiliary interface for the Append and Overwrite operations.
+     */
+    private static interface BatchWrite {
+        void addFile(DataFile file);
+        void commit();
+    }
+
+    private static class Append implements BatchWrite {
+        private final AppendFiles append;
+
+        public Append(org.apache.iceberg.Table table) {
+            append = table.newAppend();
+        }
+
+        @Override
+        public void addFile(DataFile file) {
+            append.appendFile(file);
+        }
+
+        @Override
+        public void commit() {
+            append.commit();
+        }
+    }
+
+    private static class DynamicOverwrite implements BatchWrite {
+        private final ReplacePartitions replace;
+        public DynamicOverwrite(org.apache.iceberg.Table table) {
+            replace = table.newReplacePartitions();
+        }
+
+        @Override
+        public void addFile(DataFile file) {
+            replace.addFile(file);
+        }
+
+        @Override
+        public void commit() {
+            replace.commit();
+        }
     }
 }

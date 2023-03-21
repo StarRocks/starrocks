@@ -49,17 +49,24 @@ std::shared_ptr<::parquet::WriterProperties> ParquetBuilder::get_properties(cons
 }
 
 std::shared_ptr<::parquet::schema::GroupNode> ParquetBuilder::get_schema(
-        const std::vector<std::string>& file_column_names, const std::vector<ExprContext*>& output_expr_ctxs) {
+        const std::vector<std::string>& file_column_names, const std::vector<int32_t> field_ids,
+        const std::vector<ExprContext*>& output_expr_ctxs) {
     ::parquet::schema::NodeVector fields;
     for (int i = 0; i < output_expr_ctxs.size(); i++) {
         ::parquet::Repetition::type parquet_repetition_type;
         ::parquet::Type::type parquet_data_type;
+        int32_t field_id = -1;
+        if (!field_ids.empty()) {
+            field_id = field_ids[i];
+        }
+
         auto column_expr = output_expr_ctxs[i]->root();
         starrocks::parquet::ParquetBuildHelper::build_file_data_type(parquet_data_type, column_expr->type().type);
         starrocks::parquet::ParquetBuildHelper::build_parquet_repetition_type(parquet_repetition_type,
                                                                               column_expr->is_nullable());
-        ::parquet::schema::NodePtr nodePtr = ::parquet::schema::PrimitiveNode::Make(
-                file_column_names[i], parquet_repetition_type, parquet_data_type);
+        ::parquet::schema::NodePtr nodePtr =
+                ::parquet::schema::PrimitiveNode::Make(file_column_names[i], parquet_repetition_type, parquet_data_type,
+                                                       ::parquet::ConvertedType::NONE, -1, -1, -1, field_id);
         fields.push_back(nodePtr);
     }
 
