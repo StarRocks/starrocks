@@ -134,6 +134,8 @@ jobs:
     runs-on: self-hosted
     name: XML TEST
     timeout-minutes: 60
+    env:
+      t: ${{ secrets.PAT }}
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
@@ -151,8 +153,8 @@ jobs:
         with:
           check_name: 'XML Test'
           detailed_summary: true
-          token: ${{ secrets.PAT }}
-          github_token: ${{ secrets.PAT }}
+          token: ${t}
+#          github_token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'StarRocksTest/result/*.xml'
 
   fe-checker:
