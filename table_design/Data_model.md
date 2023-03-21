@@ -372,7 +372,7 @@ PROPERTIES("replication_num" = "3",
 
 - 创建表时，支持为指标列创建 BITMAP、Bloom Filter 等索引。
 
-- 自 2.4.0 版本起，主键模型支持单表和多表物化视图。
+- 自 2.4.0 版本起，主键模型支持单表和多表异步刷新物化视图。
 
 - 使用 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) 时暂不支持修改主键的列类型，不支持调整指标列的顺序。
 
