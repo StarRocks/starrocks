@@ -16,6 +16,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -72,6 +73,7 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PartitionDiff;
@@ -180,6 +182,17 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 // create ExecPlan
                 insertStmt = generateInsertStmt(partitionsToRefresh, sourceTablePartitions);
                 execPlan = generateRefreshPlan(mvContext.getCtx(), insertStmt);
+                if (mvContext.getCtx().getSessionVariable().isEnableOptimizerTraceLog()) {
+                    StringBuffer sb = new StringBuffer();
+                    sb.append(String.format("[TRACE QUERY] MV: %s\n", materializedView.getName()));
+                    sb.append(String.format("MV PartitionsToRefresh: %s \n", Joiner.on(",").join(partitionsToRefresh)));
+                    if (sourceTablePartitions != null) {
+                        sb.append(String.format("Base PartitionsToScan:%s\n", sourceTablePartitions));
+                    }
+                    sb.append("Insert Plan:\n");
+                    sb.append(execPlan.getExplainString(StatementBase.ExplainLevel.VERBOSE));
+                    LOG.info(sb.toString());
+                }
                 mvContext.setExecPlan(execPlan);
             } finally {
                 database.readUnlock();
