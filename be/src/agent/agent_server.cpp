@@ -54,6 +54,7 @@
 #include "util/phmap/phmap.h"
 #include "util/threadpool.h"
 
+
 namespace starrocks {
 
 namespace {
@@ -352,8 +353,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             }
             break;
         default:
-            ret_st = Status::InvalidArgument(
-                    strings::Substitute("task(signature=$0, type=$1) has wrong task type", signature, task_type));
+            ret_st = Status::InvalidArgument(strings::Substitute("task(signature=$0, type=$1) has wrong task type", signature, task_type));
             break;
         }
 #undef HANDLE_TYPE
