@@ -109,7 +109,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @VisibleForTesting
-    public String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
+    private String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
         Table table = MetaUtils.getTable(dbId, tableId);
 
         long hitRows = 1;

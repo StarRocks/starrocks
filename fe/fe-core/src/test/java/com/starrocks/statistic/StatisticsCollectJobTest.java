@@ -28,6 +28,7 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -167,6 +168,11 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         OlapTable tcount = (OlapTable) globalStateMgr.getDb("stats").getTable("tcount");
         new ArrayList<>(tcount.getPartitions()).get(0).updateVisibleVersion(2);
         setTableStatistics(tcount, 20000000);
+    }
+
+    @Before
+    public void setUp() {
+        GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
     }
 
     @Test

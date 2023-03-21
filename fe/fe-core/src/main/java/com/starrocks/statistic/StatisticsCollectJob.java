@@ -110,7 +110,7 @@ public abstract class StatisticsCollectJob {
                 LOG.warn("Statistics collect fail | Error Message [" + context.getState().getErrorMessage() + "] | " +
                         "SQL [" + sql + "]");
                 if (StringUtils.contains(context.getState().getErrorMessage(), "Too many versions")) {
-                    Thread.sleep(60000);
+                    Thread.sleep(300000); // 5min
                     count++;
                 } else {
                     throw new DdlException(context.getState().getErrorMessage());
