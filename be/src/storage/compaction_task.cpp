@@ -143,4 +143,25 @@ void CompactionTask::_failure_callback() {
     LOG(WARNING) << "compaction task:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id << " failed.";
 }
 
+void CompactionTask::_commit_compaction() {
+    std::unique_lock wrlock(_tablet->get_header_lock());
+    std::stringstream input_stream_info;
+    for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
+        input_stream_info << _input_rowsets[i]->version() << ";";
+    }
+    if (_input_rowsets.size() > 5) {
+        input_stream_info << ".." << (*_input_rowsets.rbegin())->version();
+    }
+    std::vector<RowsetSharedPtr> to_replace;
+    _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
+    _tablet->save_meta();
+    Rowset::close_rowsets(_input_rowsets);
+    for (auto& rs : to_replace) {
+        StorageEngine::instance()->add_unused_rowset(rs);
+    }
+    LOG(INFO) << "commit compaction. output version:" << _task_info.output_version
+              << ", output rowset version:" << _output_rowset->version()
+              << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size();
+}
+
 } // namespace starrocks
