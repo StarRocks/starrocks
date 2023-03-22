@@ -2,7 +2,9 @@
 
 ## Description
 
-Drops a materialized view. You cannot drop a materialized view that is being created in process with this command. To drop a materialized view that is being created in process, see [Materialized View](../using_starrocks/Materialized_view.md#drop-an-unfinished-materialized-view) for further instructions.
+Drops a materialized view. 
+
+You cannot drop a synchronous materialized view that is being created in process with this command. To drop a synchronous materialized view that is being created in process, see [Synchronous materialized View - Drop an unfinished materialized view](../using_starrocks/Materialized_view.md#drop-an-unfinished-materialized-view) for further instructions.
 
 > **CAUTION**
 >

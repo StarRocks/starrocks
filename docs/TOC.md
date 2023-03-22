@@ -53,8 +53,8 @@
   + [Local Cache](./data_source/Block_cache.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
-  + [Materialized view](./using_starrocks/Materialized_view.md)
-  + [Single-table materialized view](./using_starrocks/Materialized_view-single_table.md)
+  + [Synchronous materialized view](./using_starrocks/Materialized_view-single_table.md)
+  + [Asynchronous materialized view](./using_starrocks/Materialized_view.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Query Cache](./using_starrocks/query_cache.md)
