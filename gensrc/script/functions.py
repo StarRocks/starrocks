@@ -428,6 +428,7 @@ vectorized_functions = [
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
     [60010, 'LIKE', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'LikePredicate::like', 'LikePredicate::like_prepare',
      'LikePredicate::like_close'],
+    [60011, 'ILIKE', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'nullptr'],
     [60020, 'REGEXP', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'LikePredicate::regex', 'LikePredicate::regex_prepare',
      'LikePredicate::regex_close'],
 

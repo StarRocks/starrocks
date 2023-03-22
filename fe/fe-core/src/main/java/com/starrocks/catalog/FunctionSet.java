@@ -46,6 +46,7 @@ import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -207,6 +208,7 @@ public class FunctionSet {
     public static final String GET_JSON_STRING = "get_json_string";
 
     // Matching functions:
+    public static final String ILIKE = "ilike";
     public static final String LIKE = "like";
     public static final String REGEXP = "regexp";
 

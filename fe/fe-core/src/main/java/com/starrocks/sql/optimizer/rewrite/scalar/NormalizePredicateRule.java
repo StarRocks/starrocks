@@ -17,9 +17,14 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -29,6 +34,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 
 public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
 
@@ -186,5 +193,25 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
         });
 
         return isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
+    }
+
+    @Override
+    public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
+        if (FunctionSet.ILIKE.equals(call.getFnName())) {
+            return ilikeCall(call);
+        }
+
+        return call;
+    }
+
+    private static ScalarOperator ilikeCall(CallOperator call) {
+        List<ScalarOperator> newArguments = new ArrayList<>();
+        for (ScalarOperator arg : call.getChildren()) {
+            Function func = Expr.getBuiltinFunction(FunctionSet.LOWER, new Type[] {arg.getType()}, IS_IDENTICAL);
+            CallOperator newArg = new CallOperator(FunctionSet.LOWER, Type.VARCHAR, Lists.newArrayList(arg), func);
+            newArguments.add(newArg);
+        }
+        Function likeFunc = Expr.getBuiltinFunction(FunctionSet.LIKE, new Type[] {Type.VARCHAR, Type.VARCHAR}, IS_IDENTICAL);
+        return new CallOperator(FunctionSet.LIKE, call.getType(), newArguments, likeFunc, call.isDistinct());
     }
 }
