@@ -142,6 +142,9 @@ public class LoadStmtAnalyzer {
                         db.writeLock();
                         try {
                             Table table = db.getTable(tableName);
+                            if (table == null) {
+                                continue;
+                            }
                             if (table.isOlapOrLakeTable()) {
                                 OlapTable olapTable = (OlapTable) table;
                                 if (olapTable.getPartitionInfo().getType() == PartitionType.EXPR_RANGE) {
