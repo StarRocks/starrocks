@@ -1,12 +1,38 @@
 # Synchronous materialized view
 
-This topic describes how to create, use, and manage a **synchronous materialized view** (Rollup).
+This topic describes how to create, use, and manage a **synchronous materialized view (Rollup)**.
 
-Synchronous materialized views in StarRocks can be created only on a single base table from [the default catalog](../data_source/catalog/default_catalog.md). All changes in the base table are simultaneously updated to the corresponding synchronous materialized views. This makes synchronous materialized views suitable for transparent acceleration of real-time, single-table aggregate queries.
+For a synchronous materialized view, all changes in the base table are simultaneously updated to the corresponding synchronous materialized views. The refresh of a synchronous materialized view is triggered automatically. Synchronous materialized views are significantly inexpensive to maintain and update, making them suitable for transparent acceleration of real-time, single-table aggregate queries.
 
-Synchronous materialized views are essentially a special index for query acceleration. You cannot query synchronous materialized views directly. However, they are significantly inexpensive to maintain and update.
+Synchronous materialized views in StarRocks can be created only on a single base table from [the default catalog](../data_source/catalog/default_catalog.md). They are essentially a special index for query acceleration. You cannot query synchronous materialized views directly.
 
 From v2.4 onwards, StarRocks provides asynchronous materialized views, which supports creation on multiple tables and more aggregation operators. For the usage of **asynchronous materialized views**, see [Asynchronous materialized view](../using_starrocks/Materialized_view.md).
+
+The following table compares the asynchronous materialized views (ASYNC MVs) in StarRocks v2.5, v2.4, and the synchronized materialized view (SYNC MV) in the perspective of features that they support:
+
+|                       | **Single-table aggregation** | **Multi-table join** | **Query rewrite** | **Refresh strategy** | **Base table** |
+| --------------------- | ---------------------------- | -------------------- | ----------------- | -------------------- | -------------- |
+| **ASYNC MVs in v2.5** | Yes | Yes | Yes | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from:<ul><li>Default catalog</li><li>External catalogs</li><li>Existing materialized views</li></ul> |
+| **ASYNC MVs in v2.4** | Yes | Yes | No | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from the default catalog |
+| **SYNC MV (Rollup)**  | Limited choices of operators | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
+
+### Basic concepts
+
+- **Base table**
+
+  Base tables are the driving tables of a materialized view.
+
+  For StarRocks' synchronous materialized views, base tables must be a single native table from the [default catalog](../data_source/catalog/default_catalog.md). StarRocks supports creating synchronous materialized views on Duplicate Key type, Aggregate Key type, and Unique Key type of tables.
+
+- **Refresh**
+
+  A synchronous materialized view updates itself every time the data in the base table changes. You do not need to trigger the refresh manually.
+
+- **Query rewrite**
+
+  Query rewrite means that when executing a query on base tables with materialized views built on, the system automatically judges whether the pre-computed results in the materialized view can be reused for the query. If they can be reused, the system will load the data directly from the relevant materialized view to avoid the time- and resource-consuming computations or joins.
+
+  Synchronous materialized views support query rewrite based on some of the aggregate functions. For more information, see [Correspondence of aggregate functions](#correspondence-of-aggregate-functions).
 
 ## Preparation
 
