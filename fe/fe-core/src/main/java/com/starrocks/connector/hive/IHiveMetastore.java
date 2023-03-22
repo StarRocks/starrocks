@@ -15,6 +15,8 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 
@@ -33,6 +35,14 @@ public interface IHiveMetastore {
 
     List<String> getPartitionKeys(String dbName, String tableName);
 
+    default Map<HivePartitionName, Partition> getCachedPartitions(List<HivePartitionName> hivePartitionNames) {
+        return Maps.newHashMap();
+    }
+
+    default Map<HivePartitionName, Partition> getAllCachedPartitions() {
+        return Maps.newHashMap();
+    }
+
     Partition getPartition(String dbName, String tableName, List<String> partitionValues);
 
     Map<String, Partition> getPartitionsByNames(String dbName, String tableName, List<String> partitionNames);
@@ -41,7 +51,12 @@ public interface IHiveMetastore {
 
     Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitions);
 
-    default void refreshTable(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {
+    default List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {
+        return Lists.newArrayList();
+    }
+
+    default List<HivePartitionName> refreshTableBackground(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {
+        return Lists.newArrayList();
     }
 
     default void refreshPartition(List<HivePartitionName> partitionNames) {

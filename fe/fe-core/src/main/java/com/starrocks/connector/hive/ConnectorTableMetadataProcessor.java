@@ -104,7 +104,7 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
                     continue;
                 }
                 try {
-                    updateProcessor.refreshTableWithExecutor(table, true, refreshRemoteFileExecutor);
+                    updateProcessor.refreshTableBackground(table, true, refreshRemoteFileExecutor);
                 } catch (Exception e) {
                     LOG.warn("refresh {}.{}.{} meta store info failed, msg : {}", catalogName, dbName,
                             tableName, e);
