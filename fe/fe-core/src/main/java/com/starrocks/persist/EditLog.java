@@ -1088,7 +1088,7 @@ public class EditLog {
     /**
      * wait for JournalWriter commit all logs
      */
-    public void waitInfinity(long startTime, Future<Boolean> task) {
+    public static void waitInfinity(long startTime, Future<Boolean> task) {
         boolean result;
         int cnt = 0;
         while (true) {
