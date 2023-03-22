@@ -56,6 +56,11 @@ public:
 
     StatusOr<std::string_view> peek(int64_t count) override;
 
+    Status skip(int64_t count) override {
+        _offset += count;
+        return _stream->skip(count);
+    }
+
 private:
     void _populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count);
 

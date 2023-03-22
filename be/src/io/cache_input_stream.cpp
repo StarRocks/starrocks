@@ -169,7 +169,6 @@ StatusOr<std::string_view> CacheInputStream::peek(int64_t count) {
     if (_enable_populate_cache) {
         _populate_cache_from_zero_copy_buffer(s.data(), _offset, count);
     }
-    _offset += count;
     return s;
 }
 
