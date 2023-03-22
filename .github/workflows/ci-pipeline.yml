@@ -247,6 +247,7 @@ jobs:
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
       - name: UT Report
+        if: always()
         uses: mikepenz/action-junit-report@v3
         with:
           check_name: 'FE UT Report'
@@ -255,6 +256,7 @@ jobs:
           report_paths: ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/*.xml
 
       - name: Clean Report
+        if: always()
         run: rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
 
   build:
