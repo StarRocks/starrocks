@@ -621,4 +621,36 @@ Status MapColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
     return Status::OK();
 }
 
+// keep the last identical key
+void MapColumn::remove_duplicated_keys() {
+    Filter filter(_keys->size(), 1);
+
+    bool has_duplicated_keys = false;
+    UInt32Column::Ptr new_offsets = UInt32Column::create();
+    auto& offsets_vec = new_offsets->get_data();
+    offsets_vec.push_back(0);
+
+    uint32_t new_offset = 0;
+    size_t size = this->size();
+    for (auto i = 0; i < size; ++i) {
+        for (auto j = _offsets->get_data()[i]; j < _offsets->get_data()[i + 1]; ++j) {
+            for (auto k = j + 1; k < _offsets->get_data()[i + 1]; ++k) {
+                if (_keys->equals(j, *_keys, k)) {
+                    filter[j] = 0;
+                    has_duplicated_keys = true;
+                    break;
+                }
+            }
+            new_offset += filter[j];
+        }
+        offsets_vec.push_back(new_offset);
+    }
+    if (has_duplicated_keys) {
+        auto new_keys_size = _keys->filter(filter);
+        auto new_values_size = _values->filter(filter);
+        DCHECK(new_keys_size == new_values_size);
+        _offsets.swap(new_offsets);
+    }
+}
+
 } // namespace starrocks
