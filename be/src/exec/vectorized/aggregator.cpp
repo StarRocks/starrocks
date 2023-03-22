@@ -54,7 +54,7 @@ Status Aggregator::open(RuntimeState* state) {
         RETURN_IF_UNLIKELY_NULL(_single_agg_state, Status::MemoryAllocFailed("alloc single agg state failed"));
         auto call_agg_create = [this]() {
             for (int i = 0; i < _agg_functions.size(); i++) {
-                _agg_functions[i]->create(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
+                _agg_functions[i]->create(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
             }
             return Status::OK();
         };
@@ -285,7 +285,7 @@ void Aggregator::close(RuntimeState* state) {
             // Note: we must free agg_states object before _mem_pool free_all;
             if (_single_agg_state != nullptr) {
                 for (int i = 0; i < _agg_functions.size(); i++) {
-                    _agg_functions[i]->destroy(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
+                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
                 }
             } else if (!_is_only_group_by_columns) {
                 if (false) {
