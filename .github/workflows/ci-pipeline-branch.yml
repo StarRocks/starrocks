@@ -248,6 +248,7 @@ jobs:
 
       - name: UT Report
         uses: mikepenz/action-junit-report@v3
+        if: always()
         with:
           check_name: 'FE UT Report'
           detailed_summary: true
@@ -255,4 +256,5 @@ jobs:
           report_paths: ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/*.xml
 
       - name: Clean Report
+        if: always()
         run: rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
