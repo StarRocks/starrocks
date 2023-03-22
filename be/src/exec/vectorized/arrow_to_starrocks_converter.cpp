@@ -73,7 +73,6 @@ size_t fill_null_column(const arrow::Array* array, size_t array_start_idx, size_
 }
 
 void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column::Filter* filter,
-                 size_t column_start_idx) {
                  size_t column_start_idx, ArrowConvertContext* ctx) {
     DCHECK_EQ(filter->size(), column_start_idx + num_elements);
     auto* filter_data = (&filter->front()) + column_start_idx;
