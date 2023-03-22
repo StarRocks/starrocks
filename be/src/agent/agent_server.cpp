@@ -42,7 +42,7 @@
 
 #include "agent/agent_task.h"
 #include "agent/master_info.h"
-#include "agent/task_singatures_manager.h"
+#include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
