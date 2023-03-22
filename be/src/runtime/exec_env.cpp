@@ -53,6 +53,7 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
+#include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
@@ -323,6 +324,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
         _lake_update_manager = new lake::UpdateManager(_lake_location_provider, update_mem_tracker());
         _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, _lake_update_manager,
                                                        config::lake_metadata_cache_limit);
+        if (config::starlet_cache_dir.empty()) {
+            std::vector<std::string> starlet_cache_paths;
+            std::for_each(store_paths.begin(), store_paths.end(), [&](StorePath root_path) {
+                std::string starlet_cache_path = root_path.path + "/starlet_cache";
+                starlet_cache_paths.emplace_back(starlet_cache_path);
+            });
+            config::starlet_cache_dir = JoinStrings(starlet_cache_paths, ":");
+        }
 #elif defined(BE_TEST)
         _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
         _lake_update_manager = new lake::UpdateManager(_lake_location_provider, update_mem_tracker());
