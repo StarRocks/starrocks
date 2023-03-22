@@ -240,8 +240,19 @@ jobs:
           cd elastic-service && git pull
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}}
 
-      - name: clean ECI
+      - name: Clean ECI
         if: always()
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+
+      - name: UT Report
+        uses: mikepenz/action-junit-report@v3
+        with:
+          check_name: 'FE UT Report'
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/*.xml
+
+      - name: Clean Report
+        run: rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
