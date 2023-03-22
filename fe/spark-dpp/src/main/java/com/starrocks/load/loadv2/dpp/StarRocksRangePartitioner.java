@@ -17,6 +17,7 @@
 
 package com.starrocks.load.loadv2.dpp;
 
+import com.starrocks.common.PartitionType;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import org.apache.spark.Partitioner;
 
@@ -41,15 +42,22 @@ public class StarRocksRangePartitioner extends Partitioner {
         if (partitionInfo == null) {
             return 0;
         }
-        if (partitionInfo.partitionType.equalsIgnoreCase(UNPARTITIONED_TYPE)) {
+        PartitionType partitionType = PartitionType.getByType(partitionInfo.partitionType);
+        if (partitionType == PartitionType.UNPARTITIONED) {
             return 1;
+        }
+        if (partitionType == PartitionType.LIST) {
+            return 0;
         }
         return partitionInfo.partitions.size();
     }
 
     public int getPartition(Object var1) {
-        if (partitionInfo.partitionType != null
-                && partitionInfo.partitionType.equalsIgnoreCase(UNPARTITIONED_TYPE)) {
+        PartitionType partitionType = PartitionType.getByType(partitionInfo.partitionType);
+        if (partitionType == PartitionType.UNPARTITIONED) {
+            return 0;
+        }
+        if (partitionType == PartitionType.LIST) {
             return 0;
         }
         DppColumns key = (DppColumns) var1;
