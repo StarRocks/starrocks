@@ -50,6 +50,9 @@ struct SchemaScannerParam {
     // and no longer call get_db_names() and get_table_names().
     bool without_db_table{false};
 
+    const std::string* label = nullptr;
+    int64_t job_id = -1;
+
     int64_t table_id{-1};
     int64_t partition_id{-1};
     int64_t tablet_id{-1};
