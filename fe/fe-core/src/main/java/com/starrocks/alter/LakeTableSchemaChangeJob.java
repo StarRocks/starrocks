@@ -451,6 +451,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             return;
         }
 
+        // Must write the edit log before `visualiseShadowIndex()`.
+        // https://github.com/StarRocks/starrocks/issues/20021
+        this.jobState = JobState.FINISHED;
+        this.finishedTimeMs = System.currentTimeMillis();
+
+        writeEditLog(this);
+
         // Replace the current index with shadow index.
         Set<String> modifiedColumns;
         List<MaterializedIndex> droppedIndexes;
@@ -493,11 +500,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 LOG.info("database or table has been dropped while trying to update colocation info for job {}.", jobId);
             }
         }
-
-        this.jobState = JobState.FINISHED;
-        this.finishedTimeMs = System.currentTimeMillis();
-
-        writeEditLog(this);
 
         if (span != null) {
             span.end();

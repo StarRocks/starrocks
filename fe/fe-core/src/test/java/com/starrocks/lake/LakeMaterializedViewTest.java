@@ -20,7 +20,6 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
-import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -65,7 +64,6 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
 
 public class LakeMaterializedViewTest {
     private static final String DB = "db_for_lake_mv";
@@ -318,16 +316,10 @@ public class LakeMaterializedViewTest {
         Assert.assertNull(db.getTable("mv3"));
     }
 
-    private void waitForSchemaChangeAlterJobFinish() throws Exception {
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
-        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            while (!alterJobV2.getJobState().isFinalState()) {
-                System.out.println(
-                        "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
-                ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
-            }
-            System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+    private void waitForMaterializedViewInactive(MaterializedView mv) {
+        while (mv.isActive()) {
+            System.out.println("materialized view " + mv.getName() + " is still active");
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
         }
     }
 
@@ -356,7 +348,7 @@ public class LakeMaterializedViewTest {
                     alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
             GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
 
-            waitForSchemaChangeAlterJobFinish();
+            waitForMaterializedViewInactive(mv);
 
             // check mv is not active
             Assert.assertFalse(mv.isActive());
