@@ -83,7 +83,8 @@ public class UpdatePlanner {
             long tableId = table.getId();
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
             for (Column column : table.getFullSchema()) {
-                if (!updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
+                if (updateStmt.usePartialUpdate() && !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
+                    // When using partial update, skip columns which aren't key column and not be assign
                     continue;
                 }
                 SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);

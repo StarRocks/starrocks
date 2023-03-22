@@ -295,7 +295,7 @@ public class StreamLoadInfo {
             loadParallelRequestNum = context.loadDop;
         }
         if (context.partialUpdateMode != null) {
-            if (context.partialUpdateMode == "column") {
+            if (context.partialUpdateMode.equals("column")) {
                 partialUpdateMode = TPartialUpdateMode.COLUMN_MODE;
             } else {
                 partialUpdateMode = TPartialUpdateMode.ROW_MODE;
@@ -436,7 +436,7 @@ public class StreamLoadInfo {
         }
         stripOuterArray = routineLoadJob.isStripOuterArray();
         partialUpdate = routineLoadJob.isPartialUpdate();
-        if (routineLoadJob.getPartialUpdateMode() == "column") {
+        if (routineLoadJob.getPartialUpdateMode().equals("column")) {
             partialUpdateMode = TPartialUpdateMode.COLUMN_MODE;
         } else {
             partialUpdateMode = TPartialUpdateMode.ROW_MODE;

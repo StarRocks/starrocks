@@ -36,6 +36,8 @@ public class UpdateStmt extends DmlStmt {
 
     private boolean nullExprInAutoIncrement;
 
+    private boolean usePartialUpdate;
+
     public UpdateStmt(TableName tableName, List<ColumnAssignment> assignments, List<Relation> fromRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions) {
         this(tableName, assignments, fromRelations, wherePredicate, commonTableExpressions, NodePosition.ZERO);
@@ -54,6 +56,7 @@ public class UpdateStmt extends DmlStmt {
         for (ColumnAssignment each : assignments) {
             this.assignmentColumns.add(each.getColumn());
         }
+        this.usePartialUpdate = false;
     }
 
     public boolean isAssignmentColumn(String colName) {
@@ -103,6 +106,14 @@ public class UpdateStmt extends DmlStmt {
 
     public QueryStatement getQueryStatement() {
         return queryStatement;
+    }
+
+    public void setUsePartialUpdate() {
+        this.usePartialUpdate = true;
+    }
+
+    public boolean usePartialUpdate() {
+        return this.usePartialUpdate;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

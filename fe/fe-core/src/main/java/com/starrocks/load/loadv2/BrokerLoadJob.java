@@ -241,7 +241,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 }
 
                 String mergeCondition = (brokerDesc == null) ? "" : brokerDesc.getMergeConditionStr();
-                TPartialUpdateMode mode = partialUpdateMode == "column" 
+                TPartialUpdateMode mode = partialUpdateMode.equals("column")
                         ? TPartialUpdateMode.COLUMN_MODE : TPartialUpdateMode.ROW_MODE;
                 // Generate loading task and init the plan of task
                 LoadLoadingTask task = new LoadLoadingTask(db, table, brokerDesc,
