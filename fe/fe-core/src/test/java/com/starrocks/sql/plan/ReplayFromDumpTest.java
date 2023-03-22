@@ -739,4 +739,13 @@ public class ReplayFromDumpTest {
                 "  |  group by: [2: trans_date, DATE, false], [1: country, VARCHAR, true]\n" +
                 "  |  cardinality: 49070\n"));
     }
+
+    @Test
+    public void testSSBRightOuterJoinCase() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/right_outer_join_case"), null,
+                        TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second.contains("4:NESTLOOP JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN"));
+    }
 }
