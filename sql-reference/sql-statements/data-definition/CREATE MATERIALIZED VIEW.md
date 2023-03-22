@@ -8,14 +8,14 @@
 >
 > 只有拥有基表所在数据库 `CREATE_PRIV` 权限的用户才可以创建物化视图。
 
-StarRocks 自 v2.4 起支持多表物化视图。多表物化视图与先前版本中的单表物化视图区别主要体现在以下方面：
+StarRocks 自 v2.4 起支持异步物化视图。异步物化视图与先前版本中的同步物化视图区别主要体现在以下方面：
 
 |                  | **支持异步及手动刷新** | **支持聚合列** | **支持修改分区分片** | **JOIN、WHERE、GROUP BY 子句** |
 | ---------------- | ------------------- | ------------ | ------------------ | ------------------------------ |
-| **单表物化视图** | 否（v2.3 及之前版本物化视图仅支持同步刷新方式） | 否  | 否 | 否 |
-| **多表物化视图** | 是 | 是  | 是 | 是   |
+| **同步物化视图** | 否（v2.3 及之前版本物化视图仅支持同步刷新方式） | 否  | 否 | 否 |
+| **异步物化视图** | 是 | 是  | 是 | 是   |
 
-StarRocks 2.5 版本中，多表异步刷新物化视图支持查询改写、嵌套物化视图以及基于 Hive catalog、Hudi catalog 以及 Iceberg catalog 构建物化视图。
+StarRocks 2.5 版本中，异步物化视图支持查询改写、嵌套物化视图以及基于 Hive catalog、Hudi catalog 以及 Iceberg catalog 构建物化视图。
 
 ## 语法
 
@@ -56,7 +56,7 @@ SELECT select_expr[, select_expr ...]
 
   查询语句中所有的列，也即物化视图的 schema 中所有的列。该参数支持如下值：
 
-  - 单列或聚合列：形如 `SELECT a, b, c FROM table_a` （适用于创建单表物化视图）或 `SELECT table_a.a, table_a.b, table_b.d,`（仅适用于 2.4 版本以上创建多表物化视图），其中 `a`、`b`、`c` 和 `d` 为基表的列名。如果您没有为物化视图指定列名，那么物化视图的列名也为 `a`、`b`、`c` 和 `d`。
+  - 单列或聚合列：形如 `SELECT a, b, c FROM table_a` （适用于创建同步物化视图）或 `SELECT table_a.a, table_a.b, table_b.d,`（仅适用于 2.4 版本以上创建异步物化视图），其中 `a`、`b`、`c` 和 `d` 为基表的列名。如果您没有为物化视图指定列名，那么物化视图的列名也为 `a`、`b`、`c` 和 `d`。
   - 表达式：形如 `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`，其中 `a+1`、`b+2` 和 `c*c` 为包含基表的列名的表达式，`x`、`y` 和 `z` 为物化视图的列名。
 
   > **注意**
@@ -76,7 +76,7 @@ SELECT select_expr[, select_expr ...]
   - 如果不指定排序列，则系统根据规则自动补充排序列。 如果物化视图是聚合类型，则所有的分组列自动补充为排序列。 如果物化视图是非聚合类型，则前 36 个字节自动补充为排序列。如果自动补充的排序个数小于 3 个，则前三个作为排序列。
   - 如果查询语句中包含分组列，则排序列必须和分组列一致。
 
-**distribution_desc**（建立异步多表物化视图时为**必填**）
+**distribution_desc**（建立异步物化视图时为**必填**）
 
 物化视图的分桶方式，形如 `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`。
 
@@ -333,7 +333,7 @@ from orders
 group by dt, order_id, user_id;
 ```
 
-示例三：创建多表物化视图
+示例三：创建异步物化视图
 
 ```SQL
 CREATE MATERIALIZED VIEW flat_lineorder
@@ -384,7 +384,7 @@ INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
 
-示例四：创建单表物化视图
+示例四：创建同步物化视图
 
 基表结构为：
 

@@ -26,7 +26,7 @@ EXPLAIN <query>
 | cardinality    | 扫描表的数据总行数。   |
 | colocate       | 是否为 Colocate 表。   |
 | numNodes       | 待扫描的节点数。       |
-| rollup         | 使用的单表物化视图。   |
+| rollup         | 使用的同步物化视图。   |
 | preaggregation | 预聚合的状态。         |
 | predicates     | 查询中使用的谓词。     |
 

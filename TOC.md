@@ -54,8 +54,8 @@
   + [Local Cache](/data_source/Block_cache.md)
 + 查询加速
   + [CBO 统计信息](/using_starrocks/Cost_based_optimizer.md)
-  + [多表异步刷新物化视图](/using_starrocks/Materialized_view.md)
-  + [单表物化视图](/using_starrocks/Materialized_view-single_table.md)
+  + [同步物化视图](/using_starrocks/Materialized_view-single_table.md)
+  + [异步物化视图](/using_starrocks/Materialized_view.md)
   + [Colocate Join](/using_starrocks/Colocate_join.md)
   + 索引
     + [Bitmap 索引](/using_starrocks/Bitmap_index.md)
