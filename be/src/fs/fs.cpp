@@ -16,10 +16,10 @@
 
 #include <fmt/format.h>
 
-#include "fs/fs_hdfs.h"
 #include "fs/fs_posix.h"
 #include "fs/fs_s3.h"
 #include "fs/fs_util.h"
+#include "fs/hdfs/fs_hdfs.h"
 #include "runtime/file_result_writer.h"
 #ifdef USE_STAROS
 #include "fs/fs_starlet.h"
