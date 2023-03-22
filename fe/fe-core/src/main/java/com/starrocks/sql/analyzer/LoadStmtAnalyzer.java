@@ -139,7 +139,7 @@ public class LoadStmtAnalyzer {
                         if (db == null) {
                             continue;
                         }
-                        db.writeLock();
+                        db.readLock();
                         try {
                             Table table = db.getTable(tableName);
                             if (table == null) {
@@ -153,7 +153,7 @@ public class LoadStmtAnalyzer {
                                 }
                             }
                         } finally {
-                            db.writeUnlock();
+                            db.readUnlock();
                         }
                     }
                 }
