@@ -19,6 +19,8 @@ import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -26,6 +28,8 @@ import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class DataNode implements Writable {
+    private static final Logger LOG = LogManager.getLogger(DataNode.class);
+
 
     @SerializedName("id")
     private long id;
@@ -101,6 +105,18 @@ public class DataNode implements Writable {
 
     public long getId() {
         return id;
+    }
+
+    public boolean isDecommissioned() {
+        return this.isDecommissioned.get();
+    }
+
+    public boolean setDecommissioned(boolean isDecommissioned) {
+        if (this.isDecommissioned.compareAndSet(!isDecommissioned, isDecommissioned)) {
+            LOG.warn("{} set decommission: {}", this.toString(), isDecommissioned);
+            return true;
+        }
+        return false;
     }
 
     @Override
