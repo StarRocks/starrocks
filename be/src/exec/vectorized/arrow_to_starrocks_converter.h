@@ -39,13 +39,8 @@ size_t fill_null_column(const arrow::Array* array, size_t array_start_idx, size_
 
 // fill filter's range [column_start_idx, column_start_idx + num_elements) with
 // array's range [array_start, array_start_idx + num_elements).
-<<<<<<< HEAD:be/src/exec/vectorized/arrow_to_starrocks_converter.h
 void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column::Filter* filter,
-                 size_t column_start_idx);
-=======
-void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Filter* filter,
                  size_t column_start_idx, ArrowConvertContext* ctx);
->>>>>>> 801969f56 ([BugFix] Fix invalid parquent data load into not null column not set error message (#19885)):be/src/exec/arrow_to_starrocks_converter.h
 
 // ConvertFunc is used to fill column's range [column_start_idx, column_start_idx + num_elements)
 // with array's range [array_start_idx, array_start_idx + num_elements). A slot is null if
