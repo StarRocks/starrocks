@@ -70,7 +70,7 @@ public class FunctionParams implements Writable {
         this.exprs = exprs;
         this.orderByElements = orderByElements;
         // add order-by exprs in exprs, so that treating them as function's children
-        if(orderByElements != null && orderByElements.isEmpty()) {
+        if(orderByElements != null && !orderByElements.isEmpty()) {
             this.exprs.addAll(orderByElements.stream().map(OrderByElement::getExpr)
                     .collect(Collectors.toList()));
         }
