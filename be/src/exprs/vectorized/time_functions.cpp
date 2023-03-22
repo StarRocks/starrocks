@@ -8,6 +8,7 @@
 #include "column/column_viewer.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
+#include "gen_cpp/InternalService_constants.h"
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
@@ -940,13 +941,14 @@ DEFINE_TIME_BINARY_FN(seconds_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 /*
  * definition for to_unix operators(SQL TYPE: DATETIME)
  */
-ColumnPtr TimeFunctions::to_unix_from_datetime(FunctionContext* context, const Columns& columns) {
+template <PrimitiveType TIMESTAMP_TYPE>
+ColumnPtr TimeFunctions::_t_to_unix_from_datetime(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
     auto date_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_INT> result(size);
+    ColumnBuilder<TIMESTAMP_TYPE> result(size);
     for (int row = 0; row < size; ++row) {
         if (date_viewer.is_null(row)) {
             result.append_null();
@@ -964,7 +966,7 @@ ColumnPtr TimeFunctions::to_unix_from_datetime(FunctionContext* context, const C
             result.append_null();
         } else {
             timestamp = timestamp < 0 ? 0 : timestamp;
-            timestamp = timestamp > INT_MAX ? 0 : timestamp;
+            timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
             result.append(timestamp);
         }
     }
@@ -972,16 +974,26 @@ ColumnPtr TimeFunctions::to_unix_from_datetime(FunctionContext* context, const C
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+ColumnPtr TimeFunctions::to_unix_from_datetime(FunctionContext* context, const Columns& columns) {
+    int func_version = context->impl()->state()->func_version();
+    if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+        return _t_to_unix_from_datetime<TYPE_BIGINT>(context, columns);
+    } else {
+        return _t_to_unix_from_datetime<TYPE_INT>(context, columns);
+    }
+}
+
 /*
  * definition for to_unix operators(SQL TYPE: DATE)
  */
-ColumnPtr TimeFunctions::to_unix_from_date(FunctionContext* context, const Columns& columns) {
+template <PrimitiveType TIMESTAMP_TYPE>
+ColumnPtr TimeFunctions::_t_to_unix_from_date(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
     auto date_viewer = ColumnViewer<TYPE_DATE>(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_INT> result(size);
+    ColumnBuilder<TIMESTAMP_TYPE> result(size);
     for (int row = 0; row < size; ++row) {
         if (date_viewer.is_null(row)) {
             result.append_null();
@@ -999,7 +1011,7 @@ ColumnPtr TimeFunctions::to_unix_from_date(FunctionContext* context, const Colum
             result.append_null();
         } else {
             timestamp = timestamp < 0 ? 0 : timestamp;
-            timestamp = timestamp > INT_MAX ? 0 : timestamp;
+            timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
             result.append(timestamp);
         }
     }
@@ -1007,7 +1019,17 @@ ColumnPtr TimeFunctions::to_unix_from_date(FunctionContext* context, const Colum
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr TimeFunctions::to_unix_from_datetime_with_format(FunctionContext* context, const Columns& columns) {
+ColumnPtr TimeFunctions::to_unix_from_date(FunctionContext* context, const Columns& columns) {
+    int func_version = context->impl()->state()->func_version();
+    if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+        return _t_to_unix_from_date<TYPE_BIGINT>(context, columns);
+    } else {
+        return _t_to_unix_from_date<TYPE_INT>(context, columns);
+    }
+}
+
+template <PrimitiveType TIMESTAMP_TYPE>
+ColumnPtr TimeFunctions::_t_to_unix_from_datetime_with_format(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
@@ -1015,7 +1037,7 @@ ColumnPtr TimeFunctions::to_unix_from_datetime_with_format(FunctionContext* cont
     auto formatViewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_INT> result(size);
+    ColumnBuilder<TIMESTAMP_TYPE> result(size);
     for (int row = 0; row < size; ++row) {
         if (date_viewer.is_null(row) || formatViewer.is_null(row)) {
             result.append_null();
@@ -1040,19 +1062,37 @@ ColumnPtr TimeFunctions::to_unix_from_datetime_with_format(FunctionContext* cont
         }
 
         timestamp = timestamp < 0 ? 0 : timestamp;
-        timestamp = timestamp > INT_MAX ? 0 : timestamp;
+        timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
         result.append(timestamp);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr TimeFunctions::to_unix_for_now(FunctionContext* context, const Columns& columns) {
-    DCHECK_EQ(columns.size(), 0);
-    auto result = Int32Column::create();
-    result->append(context->impl()->state()->timestamp_ms() / 1000);
-    return ConstColumn::create(result, 1);
+ColumnPtr TimeFunctions::to_unix_from_datetime_with_format(FunctionContext* context, const Columns& columns) {
+    int func_version = context->impl()->state()->func_version();
+    if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+        return _t_to_unix_from_datetime_with_format<TYPE_BIGINT>(context, columns);
+    } else {
+        return _t_to_unix_from_datetime_with_format<TYPE_INT>(context, columns);
+    }
 }
+
+ColumnPtr TimeFunctions::to_unix_for_now(FunctionContext* context, const Columns& columns) {
+    int func_version = context->impl()->state()->func_version();
+    DCHECK_EQ(columns.size(), 0);
+    int64_t value = context->impl()->state()->timestamp_ms() / 1000;
+    if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+        auto result = Int64Column::create();
+        result->append(value);
+        return ConstColumn::create(result, 1);
+    } else {
+        auto result = Int32Column::create();
+        result->append(value);
+        return ConstColumn::create(result, 1);
+    }
+}
+
 /*
  * end definition for to_unix operators
  */
@@ -1060,12 +1100,13 @@ ColumnPtr TimeFunctions::to_unix_for_now(FunctionContext* context, const Columns
 /*
  * definition for from_unix operators
  */
-ColumnPtr TimeFunctions::from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
+template <PrimitiveType TIMESTAMP_TYPE>
+ColumnPtr TimeFunctions::_t_from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnViewer<TYPE_INT> data_column(columns[0]);
+    ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
@@ -1076,7 +1117,7 @@ ColumnPtr TimeFunctions::from_unix_to_datetime(FunctionContext* context, const C
         }
 
         auto date = data_column.value(row);
-        if (date < 0 || date > INT_MAX) {
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
             result.append_null();
             continue;
         }
@@ -1092,6 +1133,15 @@ ColumnPtr TimeFunctions::from_unix_to_datetime(FunctionContext* context, const C
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr TimeFunctions::from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
+    int func_version = context->impl()->state()->func_version();
+    if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+        return _t_from_unix_to_datetime<TYPE_BIGINT>(context, columns);
+    } else {
+        return _t_from_unix_to_datetime<TYPE_INT>(context, columns);
+    }
 }
 
 std::string TimeFunctions::convert_format(const Slice& format) {
@@ -1155,12 +1205,13 @@ Status TimeFunctions::from_unix_close(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-ColumnPtr TimeFunctions::from_unix_with_format_general(FunctionContext* context, const Columns& columns) {
+template <PrimitiveType TIMESTAMP_TYPE>
+ColumnPtr TimeFunctions::_t_from_unix_with_format_general(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnViewer<TYPE_INT> data_column(columns[0]);
+    ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
     ColumnViewer<TYPE_VARCHAR> format_column(columns[1]);
 
     auto size = columns[0]->size();
@@ -1173,7 +1224,7 @@ ColumnPtr TimeFunctions::from_unix_with_format_general(FunctionContext* context,
 
         auto date = data_column.value(row);
         auto format = format_column.value(row);
-        if (date < 0 || date > INT_MAX || format.empty()) {
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP || format.empty()) {
             result.append_null();
             continue;
         }
@@ -1202,13 +1253,14 @@ ColumnPtr TimeFunctions::from_unix_with_format_general(FunctionContext* context,
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr TimeFunctions::from_unix_with_format_const(std::string& format_content, FunctionContext* context,
-                                                     const Columns& columns) {
+template <PrimitiveType TIMESTAMP_TYPE>
+ColumnPtr TimeFunctions::_t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
+                                                        const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnViewer<TYPE_INT> data_column(columns[0]);
+    ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
@@ -1219,7 +1271,7 @@ ColumnPtr TimeFunctions::from_unix_with_format_const(std::string& format_content
         }
 
         auto date = data_column.value(row);
-        if (date < 0 || date > INT_MAX) {
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
             result.append_null();
             continue;
         }
@@ -1244,14 +1296,23 @@ ColumnPtr TimeFunctions::from_unix_with_format_const(std::string& format_content
 ColumnPtr TimeFunctions::from_unix_to_datetime_with_format(FunctionContext* context,
                                                            const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
+    int func_version = context->impl()->state()->func_version();
     auto* state = reinterpret_cast<FromUnixState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
     if (state->const_format) {
         std::string format_content = state->format_content;
-        return from_unix_with_format_const(format_content, context, columns);
+        if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+            return _t_from_unix_with_format_const<TYPE_BIGINT>(format_content, context, columns);
+        } else {
+            return _t_from_unix_with_format_const<TYPE_INT>(format_content, context, columns);
+        }
     }
 
-    return from_unix_with_format_general(context, columns);
+    if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
+        return _t_from_unix_with_format_general<TYPE_BIGINT>(context, columns);
+    } else {
+        return _t_from_unix_with_format_general<TYPE_INT>(context, columns);
+    }
 }
 
 /*

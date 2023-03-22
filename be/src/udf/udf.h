@@ -35,7 +35,8 @@
 // object serves as the interface object between the UDF/UDA and the starrocks process.
 namespace starrocks {
 class FunctionContextImpl;
-}
+class RuntimeState;
+} // namespace starrocks
 
 namespace starrocks {
 namespace vectorized {
