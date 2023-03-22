@@ -2,7 +2,7 @@
 
 ## Description
 
-Manually refresh a specific materialized view or partitions within.
+Manually refresh a specific asynchronous materialized view or partitions within.
 
 > **CAUTION**
 >
