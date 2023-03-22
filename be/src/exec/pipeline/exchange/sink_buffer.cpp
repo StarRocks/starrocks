@@ -412,8 +412,11 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         }
         closure->cntl.http_request().set_content_type("application/proto");
         // create http_stub as needed
-        auto http_stub = BrpcStubCache::create_http_stub(request.brpc_addr);
-        http_stub->transmit_chunk_via_http(&closure->cntl, NULL, &closure->result, closure);
+        auto res = BrpcStubCache::create_http_stub(request.brpc_addr);
+        if (!res.ok()) {
+            return res.status();
+        }
+        res.value()->transmit_chunk_via_http(&closure->cntl, NULL, &closure->result, closure);
     } else {
         closure->cntl.request_attachment().append(request.attachment);
         request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
