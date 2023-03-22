@@ -650,7 +650,8 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
                                      ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes)
                                      : (keep_order ? get_chunks_from_request<true>(request, total_chunk_bytes)
                                                    : get_chunks_from_request<false>(request, total_chunk_bytes)));
-    COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
+    COUNTER_UPDATE(use_pass_through ? _recvr->_bytes_pass_through_counter : _recvr->_bytes_received_counter,
+                   total_chunk_bytes);
 
     if (_is_cancelled) {
         return Status::OK();
