@@ -1204,4 +1204,71 @@ PARALLEL_TEST(MapColumnTest, test_reference_memory_usage) {
 
     ASSERT_EQ(0, column->Column::reference_memory_usage());
 }
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(MapColumnTest, test_remove_duplicated_keys) {
+    {
+        auto offsets = UInt32Column::create();
+        auto keys_data = Int32Column::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(keys_data, keys_null);
+        auto values_data = Int32Column::create();
+        auto values_null = NullColumn::create();
+        auto values = NullableColumn::create(values_data, values_null);
+        auto column = MapColumn::create(keys, values, offsets);
+
+        DatumMap map;
+        map[(int32_t)1] = (int32_t)11;
+        map[(int32_t)22] = (int32_t)22;
+        map[(int32_t)22] = (int32_t)33;
+        column->append_datum(map);
+
+        DatumMap map1;
+        map1[(int32_t)4] = (int32_t)44;
+        map1[(int32_t)4] = (int32_t)55;
+        map1[(int32_t)4] = (int32_t)66;
+        column->append_datum(map1);
+
+        DatumMap map3;
+        map3[(int32_t)3] = Datum();
+        column->append_datum(map3);
+
+        // {} empty
+        column->append_datum(DatumMap());
+
+        column->remove_duplicated_keys();
+
+        ASSERT_EQ("{1:11,22:33}", column->debug_item(0));
+        ASSERT_EQ("{4:66}", column->debug_item(1));
+        ASSERT_EQ("{3:NULL}", column->debug_item(2));
+        ASSERT_EQ("{}", column->debug_item(3));
+    }
+    {
+        auto offsets = UInt32Column::create();
+        auto keys_data = BinaryColumn::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(keys_data, keys_null);
+        auto values_data = BinaryColumn::create();
+        auto null_column = NullColumn::create();
+        auto values = NullableColumn::create(values_data, null_column);
+        auto column = MapColumn::create(keys, values, offsets);
+
+        DatumMap map;
+        map[(Slice) "a"] = (Slice) "hello";
+        map[(Slice) "b"] = (Slice) " ";
+        map[(Slice) "a"] = (Slice) "world";
+        column->append_datum(map);
+
+        DatumMap map1;
+        map1[(Slice) "def"] = (Slice) "haha";
+        map1[(Slice) "g h"] = (Slice) "let's dance";
+        column->append_datum(map1);
+
+        column->remove_duplicated_keys();
+
+        ASSERT_EQ("{'a':'world','b':' '}", column->debug_item(0));
+        ASSERT_EQ("{'def':'haha','g h':'let's dance'}", column->debug_item(1));
+    }
+}
+
 } // namespace starrocks
