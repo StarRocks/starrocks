@@ -106,8 +106,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
         with:
-          persist-credentials: false
-          submodules: recursive
+          fetch-depth: 0
+      
+      - name: Checkout PR
+        uses: dawidd6/action-checkout-pr@v1
+        with:
+          pr: ${{ github.event.number }}
           
       - name: Run Clang-Format
         run: |
