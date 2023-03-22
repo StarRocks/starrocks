@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.LabelName;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
@@ -134,7 +135,11 @@ public class LoadStmtAnalyzer {
                 if (etlJobType == EtlJobType.SPARK && database != null) {
                     for (DataDescription dataDescription : dataDescriptions) {
                         String tableName = dataDescription.getTableName();
-                        Table table = GlobalStateMgr.getCurrentState().getDb(database).getTable(tableName);
+                        Database db = GlobalStateMgr.getCurrentState().getDb(database);
+                        if (db == null) {
+                            continue;
+                        }
+                        Table table = db.getTable(tableName);
                         if (table instanceof OlapTable) {
                             OlapTable olapTable = (OlapTable) table;
                             if (olapTable.getPartitionInfo().getType() == PartitionType.EXPR_RANGE) {
