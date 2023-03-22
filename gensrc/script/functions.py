@@ -395,15 +395,6 @@ vectorized_functions = [
     [50243, 'str2date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str2date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
     [50250, 'time_to_sec', 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
 
-    # unix timestamp extended version to int64
-    # be sure to put before int32 version, so fe will find signature in order.
-    [50284, 'unix_timestamp', 'BIGINT', [], 'TimeFunctions::to_unix_for_now'],
-    [50285, 'unix_timestamp', 'BIGINT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime'],
-    [50286, 'unix_timestamp', 'BIGINT', ['DATE'], 'TimeFunctions::to_unix_from_date'],
-    [50287, 'unix_timestamp', 'BIGINT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format'],
-    [50288, 'from_unixtime', 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime'],
-    [50289, 'from_unixtime', 'VARCHAR', ['BIGINT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
-
     [50300, 'unix_timestamp', 'INT', [], 'TimeFunctions::to_unix_for_now'],
     [50301, 'unix_timestamp', 'INT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime'],
     [50302, 'unix_timestamp', 'INT', ['DATE'], 'TimeFunctions::to_unix_from_date'],
@@ -909,4 +900,12 @@ vectorized_functions = [
 
     # struct functions
     [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
+
+    # unix timestamp extended version to int64
+    # [170700, 'unix_timestamp', 'BIGINT', [], 'TimeFunctions::to_unix_for_now_64'],
+    # [170701, 'unix_timestamp', 'BIGINT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime_64'],
+    # [170702, 'unix_timestamp', 'BIGINT', ['DATE'], 'TimeFunctions::to_unix_from_date_64'],
+    # [170701, 'unix_timestamp', 'BIGINT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format_64'],
+    [170704, 'from_unixtime', 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_64'],
+    # [170705, 'from_unixtime', 'VARCHAR', ['BIGINT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format_64', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
 ]
