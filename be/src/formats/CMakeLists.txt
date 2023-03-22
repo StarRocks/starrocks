@@ -51,6 +51,7 @@ add_library(Formats STATIC
         parquet/meta_helper.cpp
         parquet/group_reader.cpp
         parquet/file_reader.cpp
+        parquet/file_writer.cpp
         )
 
 add_subdirectory(orc/apache-orc)

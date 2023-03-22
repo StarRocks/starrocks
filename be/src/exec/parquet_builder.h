@@ -29,6 +29,7 @@
 
 #include "common/status.h"
 #include "exec/file_builder.h"
+#include "formats/parquet/file_writer.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
@@ -40,42 +41,16 @@ class ExprContext;
 class FileWriter;
 
 struct ParquetBuilderOptions {
-    TCompressionType::type compression_type{TCompressionType::SNAPPY};
-    bool use_dict{true};
-    int64_t row_group_max_size{128 * 1024 * 1024};
-};
-
-class ParquetOutputStream : public arrow::io::OutputStream {
-public:
-    ParquetOutputStream(std::unique_ptr<WritableFile> _writable_file);
-    ~ParquetOutputStream() override;
-    arrow::Status Write(const void* data, int64_t nbytes) override;
-    arrow::Status Write(const std::shared_ptr<arrow::Buffer>& data) override;
-    arrow::Result<int64_t> Tell() const override;
-    arrow::Status Close() override;
-
-    bool closed() const override { return _is_closed; }
-
-private:
-    std::unique_ptr<WritableFile> _writable_file;
-    bool _is_closed = false;
-};
-
-class ParquetBuildHelper {
-public:
-    static void build_file_data_type(parquet::Type::type& parquet_data_type, const LogicalType& column_data_type);
-
-    static void build_parquet_repetition_type(parquet::Repetition::type& parquet_repetition_type,
-                                              const bool is_nullable);
-
-    static void build_compression_type(parquet::WriterProperties::Builder& builder,
-                                       const TCompressionType::type& compression_type);
+    TCompressionType::type compression_type = TCompressionType::SNAPPY;
+    bool use_dict = true;
+    int64_t row_group_max_size = 128 * 1024 * 1024;
 };
 
 class ParquetBuilder : public FileBuilder {
 public:
-    ParquetBuilder(std::unique_ptr<WritableFile> writable_file, const std::vector<ExprContext*>& output_expr_ctxs,
-                   const ParquetBuilderOptions& options, const std::vector<std::string>& file_column_names);
+    ParquetBuilder(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
+                   std::shared_ptr<::parquet::schema::GroupNode> schema,
+                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t row_group_max_size);
 
     ~ParquetBuilder() override = default;
 
@@ -85,26 +60,12 @@ public:
 
     Status finish() override;
 
-private:
-    Status _init(const ParquetBuilderOptions& options, const std::vector<std::string>& file_column_names);
-    void _init_properties(const ParquetBuilderOptions& options);
-    Status _init_schema(const std::vector<std::string>& file_column_names);
-    void _generate_rg_writer();
-    void _flush_row_group();
-    size_t _get_rg_written_bytes();
-    void _check_size();
+    static std::shared_ptr<::parquet::WriterProperties> get_properties(const ParquetBuilderOptions& options);
+    static std::shared_ptr<::parquet::schema::GroupNode> get_schema(const std::vector<std::string>& file_column_names,
+                                                                    const std::vector<ExprContext*>& output_expr_ctxs);
 
-    std::unique_ptr<WritableFile> _writable_file;
-    std::shared_ptr<ParquetOutputStream> _output_stream;
-    const std::vector<ExprContext*>& _output_expr_ctxs;
-    std::shared_ptr<::parquet::schema::GroupNode> _schema;
-    std::shared_ptr<::parquet::WriterProperties> _properties;
-    std::unique_ptr<::parquet::ParquetFileWriter> _file_writer;
-    ::parquet::RowGroupWriter* _rg_writer = nullptr;
-    std::vector<int64_t> _buffered_values_estimate;
-    const int64_t _row_group_max_size;
-    bool _closed = false;
-    int64_t _total_row_group_writen_bytes{0};
+private:
+    std::unique_ptr<starrocks::parquet::SyncFileWriter> _writer;
 };
 
 } // namespace starrocks
