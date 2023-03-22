@@ -531,8 +531,8 @@ public class ShowExecutor {
             }
             // task run status
             setTaskRunStatus(resultRow, taskStatus);
-            resultRow.add(mvTable.getMaterializedViewDdlStmt(true));
             resultRow.add(String.valueOf(mvTable.getRowCount()));
+            resultRow.add(mvTable.getMaterializedViewDdlStmt(true));
             rowSets.add(resultRow);
         }
 
@@ -557,6 +557,8 @@ public class ShowExecutor {
             }
             // task run status
             setTaskRunStatus(resultRow, null);
+            // rows
+            resultRow.add(String.valueOf(mvIdx.getRowCount()));
             if (mvMeta.getOriginStmt() == null) {
                 StringBuilder originStmtBuilder = new StringBuilder(
                         "create materialized view " + olapTable.getIndexNameById(mvIdx.getId()) +
@@ -583,7 +585,6 @@ public class ShowExecutor {
                 resultRow.add(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
                         .replaceAll("[ ]+", " "));
             }
-            resultRow.add(String.valueOf(mvIdx.getRowCount()));
             rowSets.add(resultRow);
         }
         return rowSets;
