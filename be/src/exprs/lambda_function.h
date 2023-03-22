@@ -57,6 +57,8 @@ public:
         return _arguments_ids.size();
     }
 
+    Expr* get_lambda_expr() const { return _children[0]; }
+
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
 
 private:
