@@ -34,13 +34,10 @@ import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 
 public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     private static final EliminateNegationsRewriter ELIMINATE_NEGATIONS_REWRITER = new EliminateNegationsRewriter();
@@ -317,8 +314,6 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return ifNull(call);
         } else if (FunctionSet.ARRAY_MAP.equals(call.getFnName())) {
             return arrayMap(call);
-        } else if (FunctionSet.ILIKE.equals(call.getFnName())) {
-            return ilikeCall(call);
         }
         return call;
     }
@@ -347,16 +342,5 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         return ((ConstantOperator) call.getChild(0)).getBoolean() ? call.getChild(1) : call.getChild(2);
-    }
-
-    private static ScalarOperator ilikeCall(CallOperator call) {
-        List<ScalarOperator> newArguments = new ArrayList<>();
-        for (ScalarOperator arg : call.getChildren()) {
-            Function func = Expr.getBuiltinFunction(FunctionSet.LOWER, new Type[] {arg.getType()}, IS_IDENTICAL);
-            CallOperator newArg = new CallOperator(FunctionSet.LOWER, Type.VARCHAR, Lists.newArrayList(arg), func);
-            newArguments.add(newArg);
-        }
-        Function likeFunc = Expr.getBuiltinFunction(FunctionSet.LIKE, new Type[] {Type.VARCHAR, Type.VARCHAR}, IS_IDENTICAL);
-        return new CallOperator(FunctionSet.LIKE, call.getType(), newArguments, likeFunc, call.isDistinct());
     }
 }
