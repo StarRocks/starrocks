@@ -46,7 +46,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map) {
     {
         // [1,2,3]
         {
-            DatumArray datum{1, 2, 3};
+            DatumArray datum{1, 2, 2};
             input_keys->append_datum(datum);
         }
         // NULL
@@ -101,7 +101,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map) {
     auto result = std::move(ret.value());
     EXPECT_EQ(6, result->size());
 
-    EXPECT_STREQ("{1:'a',2:'b',3:'c'}", result->debug_item(0).c_str());
+    EXPECT_STREQ("{1:'a',2:'c'}", result->debug_item(0).c_str());
     EXPECT_TRUE(result->is_null(1));
     EXPECT_TRUE(result->is_null(2));
     EXPECT_STREQ("{6:'f',7:'g'}", result->debug_item(3).c_str());
