@@ -2,7 +2,7 @@
 
 This topic describes how to understand, create, use, and manage an asynchronous materialized view. Asynchronous materialized views are supported from StarRocks v2.4 onwards.
 
-For the scenario and usage of the synchronized materialized views (Rollup), see [Synchronized materialized view (Rollup)](../using_starrocks/Materialized_view-single_table.md).
+For the scenario and usage of the synchronized materialized views (Rollup), see [Synchronous materialized view (Rollup)](../using_starrocks/Materialized_view-single_table.md).
 
 ## Overview
 
