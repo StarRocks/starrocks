@@ -123,9 +123,3 @@ TEST_F(RoutineLoadTaskExecutorTest, exec_task) {
 }
 
 } // namespace starrocks
-
-int main(int argc, char* argv[]) {
-    starrocks::CpuInfo::init();
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

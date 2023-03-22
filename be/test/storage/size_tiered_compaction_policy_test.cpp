@@ -239,6 +239,7 @@ public:
         config::base_compaction_interval_seconds_since_last_operation = 86400;
         Compaction::init(config::max_compaction_concurrency);
 
+        _default_storage_root_path = config::storage_root_path;
         config::storage_root_path = std::filesystem::current_path().string() + "/data_test_cumulative_compaction";
         fs::remove_all(config::storage_root_path);
         ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
@@ -272,6 +273,7 @@ public:
         if (fs::path_exist(config::storage_root_path)) {
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
+        config::storage_root_path = _default_storage_root_path;
     }
 
 protected:
@@ -281,6 +283,7 @@ protected:
     std::unique_ptr<MemTracker> _metadata_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
+    std::string _default_storage_root_path;
 
     int64_t _rowset_id;
     int64_t _version;

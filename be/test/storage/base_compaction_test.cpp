@@ -197,6 +197,7 @@ public:
         Compaction::init(config::max_compaction_concurrency);
         config::enable_event_based_compaction_framework = false;
 
+        _default_storage_root_path = config::storage_root_path;
         config::storage_root_path = std::filesystem::current_path().string() + "/data_test_base_compaction";
         fs::remove_all(config::storage_root_path);
         ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
@@ -224,6 +225,7 @@ public:
         if (fs::path_exist(config::storage_root_path)) {
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
+        config::storage_root_path = _default_storage_root_path;
     }
 
 protected:
@@ -234,6 +236,7 @@ protected:
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
     std::unique_ptr<MemTracker> _metadata_mem_tracker;
+    std::string _default_storage_root_path;
 };
 
 TEST_F(BaseCompactionTest, test_init_succeeded) {
