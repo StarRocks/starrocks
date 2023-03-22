@@ -70,12 +70,22 @@ size_t fill_null_column(const arrow::Array* array, size_t array_start_idx, size_
     return null_count;
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/arrow_to_starrocks_converter.cpp
 void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column::Filter* filter,
                  size_t column_start_idx) {
+=======
+void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Filter* filter,
+                 size_t column_start_idx, ArrowConvertContext* ctx) {
+>>>>>>> 801969f56 ([BugFix] Fix invalid parquent data load into not null column not set error message (#19885)):be/src/exec/arrow_to_starrocks_converter.cpp
     DCHECK_EQ(filter->size(), column_start_idx + num_elements);
     auto* filter_data = (&filter->front()) + column_start_idx;
+    bool all_invalid = true;
     for (size_t i = 0; i < num_elements; ++i) {
         filter_data[i] = array->IsValid(array_start_idx + i);
+        all_invalid &= filter_data[i];
+    }
+    if (UNLIKELY(!all_invalid)) {
+        ctx->report_error_message("column type is not null but data is null", "");
     }
 }
 // A general arrow converter for fixed length type
@@ -768,6 +778,7 @@ struct ArrowListConverter {
     static Status layer_depth_exceeds_limit_error(const std::string& name, const size_t depth_limit) {
         return Status::InternalError(strings::Substitute("Layer depth of $0 exceeds limit($1)", name, depth_limit));
     }
+<<<<<<< HEAD:be/src/exec/vectorized/arrow_to_starrocks_converter.cpp
     static Status flatten_and_verify_list(const arrow::Array* array, size_t array_start_idx, size_t num_elements,
                                           const size_t depth_limit, std::vector<const arrow::Array*>* layers,
                                           std::vector<std::pair<size_t, size_t>>* ranges) {
@@ -781,6 +792,161 @@ struct ArrowListConverter {
             auto id = last_layer->type_id();
             if (id == ArrowTypeId::LIST) {
                 unfold<ArrowTypeId::LIST>(layers, ranges, &last_layer, &last_range);
+=======
+
+    template <typename T>
+    static arrow::Array* get_list_array_child(const arrow::Array* array, size_t array_start_idx = 0,
+                                              size_t num_elements = 0, size_t* child_array_start_idx = nullptr,
+                                              size_t* child_array_num_elements = nullptr) {
+        using ArrowArrayType = typename arrow::TypeTraits<T>::ArrayType;
+        using OffsetsType = typename T::offset_type;
+        if (child_array_start_idx && child_array_num_elements) {
+            auto child_array = down_cast<const ArrowArrayType*>(array);
+            *child_array_start_idx = child_array->value_offset(array_start_idx),
+            *child_array_num_elements =
+                    child_array->value_offset(array_start_idx + num_elements) - *child_array_start_idx;
+            return child_array->values().get();
+        }
+        return down_cast<const ArrowArrayType*>(array)->values().get();
+    }
+
+    static arrow::Array* unnest_list_array(const arrow::Array* array) {
+        auto type_id = array->type_id();
+        if (is_list(type_id)) {
+            return get_list_array_child<arrow::ListType>(array);
+        } else if (is_large_list(type_id)) {
+            return get_list_array_child<arrow::LargeListType>(array);
+        } else if (is_fixed_size_list(type_id)) {
+            return get_list_array_child<arrow::FixedSizeListType>(array);
+        } else {
+            return nullptr;
+        }
+    }
+
+    static arrow::Array* get_child_array_position(const arrow::Array* array, size_t array_start_idx,
+                                                  size_t num_elements, size_t* child_array_start_idx,
+                                                  size_t* child_array_num_elements) {
+        auto type_id = array->type_id();
+        if (is_list(type_id)) {
+            return get_list_array_child<arrow::ListType>(array, array_start_idx, num_elements, child_array_start_idx,
+                                                         child_array_num_elements);
+        } else if (is_large_list(type_id)) {
+            return get_list_array_child<arrow::LargeListType>(array, array_start_idx, num_elements,
+                                                              child_array_start_idx, child_array_num_elements);
+        } else if (is_fixed_size_list(type_id)) {
+            return get_list_array_child<arrow::FixedSizeListType>(array, array_start_idx, num_elements,
+                                                                  child_array_start_idx, child_array_num_elements);
+        } else {
+            return nullptr;
+        }
+    }
+
+    static Status convert_list(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                               size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* column_filter,
+                               ArrowConvertContext* ctx, const TypeDescriptor* type_desc) {
+        auto* col_array = down_cast<ArrayColumn*>(column);
+        UInt32Column* col_offsets = col_array->offsets_column().get();
+
+        auto type_id = array->type_id();
+        if (is_list(type_id)) {
+            list_offsets_copy<arrow::ListType>(array, array_start_idx, num_elements, col_offsets);
+        } else if (is_large_list(type_id)) {
+            list_offsets_copy<arrow::LargeListType>(array, array_start_idx, num_elements, col_offsets);
+        } else if (is_fixed_size_list(type_id)) {
+            fixed_size_list_offsets_copy(array, array_start_idx, num_elements, col_offsets);
+        } else {
+            return Status::InternalError(strings::Substitute("Invalid arrow list type($0)", array->type()->name()));
+        }
+
+        Column* col_elements = col_array->elements_column().get();
+        const TypeDescriptor& child_type = type_desc->children[0];
+        size_t child_array_start_idx;
+        size_t child_array_num_elements;
+        const auto* child_array = get_child_array_position(array, array_start_idx, num_elements, &child_array_start_idx,
+                                                           &child_array_num_elements);
+        if (!child_array) {
+            return Status::InternalError(strings::Substitute("Unnest arrow list type($0) fail", array->type()->name()));
+        }
+        if (child_type.type == TYPE_ARRAY) {
+            return ArrowListConverter::apply(child_array, child_array_start_idx, child_array_num_elements, col_elements,
+                                             column_start_idx, null_data, column_filter, ctx, &child_type);
+        } else {
+            auto conv_func = get_arrow_converter(child_array->type()->id(), child_type.type, true, false);
+            if (!conv_func) {
+                return illegal_converting_error(child_array->type()->name(), child_type.debug_string());
+            }
+            if (child_array->type_id() == ArrowTypeId::TIMESTAMP) {
+                auto* timestamp_type = down_cast<arrow::TimestampType*>(child_array->type().get());
+                auto& mutable_timezone = (std::string&)timestamp_type->timezone();
+                mutable_timezone = ctx->state->timezone();
+            }
+            uint8_t* null_data;
+            Column* data_column;
+            column_start_idx = col_elements->size();
+            if (col_elements->is_nullable()) {
+                auto nullable_column = down_cast<NullableColumn*>(col_elements);
+                auto null_column = nullable_column->mutable_null_column();
+                size_t null_count = fill_null_column(child_array, child_array_start_idx, child_array_num_elements,
+                                                     null_column, column_start_idx);
+                nullable_column->set_has_null(null_count != 0);
+                null_data = &null_column->get_data().front() + column_start_idx;
+                data_column = nullable_column->data_column().get();
+            } else {
+                null_data = nullptr;
+                // Fill nullable array into not-nullable column, positions of NULLs is marked as 1
+                fill_filter(child_array, child_array_start_idx, child_array_num_elements, column_filter,
+                            column_start_idx, ctx);
+                data_column = col_elements;
+            }
+            auto* filter_data = (&column_filter->front()) + column_start_idx;
+            auto st = conv_func(child_array, child_array_start_idx, child_array_num_elements, data_column,
+                                column_start_idx, null_data, filter_data, ctx);
+            if (st.ok()) {
+                // in some scene such as string length exceeds limit, the column will be set NULL, so we need reset has_null
+                if (col_elements->is_nullable()) {
+                    down_cast<NullableColumn*>(col_elements)->update_has_null();
+                }
+            }
+            return st;
+        }
+    }
+
+    static Status convert_list_with_null(const arrow::Array* array, size_t array_start_idx, size_t num_elements,
+                                         Column* column, size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
+                                         Filter* column_filter, ArrowConvertContext* ctx,
+                                         const TypeDescriptor* type_desc) {
+        auto nullable_column = down_cast<NullableColumn*>(column);
+        auto null_column = nullable_column->mutable_null_column();
+        size_t null_count = fill_null_column(array, array_start_idx, num_elements, null_column, column_start_idx);
+        nullable_column->set_has_null(null_count != 0);
+        return convert_list(array, array_start_idx, num_elements, nullable_column->data_column().get(),
+                            column_start_idx, null_data, column_filter, ctx, type_desc);
+    }
+
+    static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* column_filter,
+                        ArrowConvertContext* ctx, const TypeDescriptor* type_desc) {
+        if (column->is_nullable()) {
+            return convert_list_with_null(array, array_start_idx, num_elements, column, column_start_idx, null_data,
+                                          column_filter, ctx, type_desc);
+        } else {
+            return convert_list(array, array_start_idx, num_elements, column, column_start_idx, null_data,
+                                column_filter, ctx, type_desc);
+        }
+    }
+
+    static Status check_arrow_list_depth(const arrow::Array* array, size_t expected_depth) {
+        size_t array_list_depth = 1;
+        while (true) {
+            auto type_id = array->type_id();
+            if (is_list(type_id) || is_large_list(type_id)) {
+                array = unnest_list_array(array);
+                if (!array) {
+                    return Status::InternalError(
+                            strings::Substitute("Unnest arrow list type($0) fail", array->type()->name()));
+                }
+                array_list_depth++;
+>>>>>>> 801969f56 ([BugFix] Fix invalid parquent data load into not null column not set error message (#19885)):be/src/exec/arrow_to_starrocks_converter.cpp
                 continue;
             }
             if (id == ArrowTypeId::LARGE_LIST) {
