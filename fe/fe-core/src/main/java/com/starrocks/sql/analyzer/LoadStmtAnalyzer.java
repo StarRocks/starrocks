@@ -139,13 +139,18 @@ public class LoadStmtAnalyzer {
                         if (db == null) {
                             continue;
                         }
-                        Table table = db.getTable(tableName);
-                        if (table instanceof OlapTable) {
-                            OlapTable olapTable = (OlapTable) table;
-                            if (olapTable.getPartitionInfo().getType() == PartitionType.EXPR_RANGE) {
-                                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                                        "Currently spark load does not support automatic partition tables");
+                        db.writeLock();
+                        try {
+                            Table table = db.getTable(tableName);
+                            if (table.isOlapOrLakeTable()) {
+                                OlapTable olapTable = (OlapTable) table;
+                                if (olapTable.getPartitionInfo().getType() == PartitionType.EXPR_RANGE) {
+                                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                            "Currently spark load does not support automatic partition tables");
+                                }
                             }
+                        } finally {
+                            db.writeUnlock();
                         }
                     }
                 }
