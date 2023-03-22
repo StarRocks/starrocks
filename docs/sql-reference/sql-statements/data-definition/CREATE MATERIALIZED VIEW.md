@@ -2,20 +2,20 @@
 
 ## Description
 
-Creates a materialized view. Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of Sync Refresh single-table materialized views in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) command. For usage information about materialized views, see [materialized view](../../../using_starrocks/Materialized_view.md).
+Creates a materialized view. Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of Sync Refresh synchronous materialized views in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) command. For usage information about materialized views, see [materialized view](../../../using_starrocks/Materialized_view.md).
 
 > **CAUTION**
 >
 > Only users with the `CREATE_PRIV` privilege in the database where the base table resides can create a materialized view.
 
-StarRocks supports multi-table materialized views from v2.4. The major differences between multi-table materialized views and single-table materialized views in previous versions are as follows:
+StarRocks supports asynchronous materialized views from v2.4. The major differences between asynchronous materialized views and synchronous materialized views in previous versions are as follows:
 
 |                              | **ASYNC and MANUAL Refresh** | **Aggregated Column** | **Partitioning and Bucketing Changes** | **JOIN, WHERE, and GROUP BY clause** |
 | ---------------------------- | ---------------------------- | ------------ | -------------------- | ------------------------------ |
-| **Single-table materialized view** | No (Materialized view in v2.3 and earlier only supports SYNC refresh)| No | No  | No |
-| **Multi-table materialized view** | Yes | Yes | Yes  | Yes  |
+| **Synchronous materialized view** | No (Materialized view in v2.3 and earlier only supports SYNC refresh)| No | No  | No |
+| **Asynchronous materialized view** | Yes | Yes | Yes  | Yes  |
 
-In StarRocks v2.5, multi-table async refresh materialized views support query rewrite, nested materialized views, and creating materialized views based on Hive catalog, Hudi catalog, and Iceberg catalog.
+In StarRocks v2.5, asynchronous async refresh materialized views support query rewrite, nested materialized views, and creating materialized views based on Hive catalog, Hudi catalog, and Iceberg catalog.
 
 ## Syntax
 
@@ -58,7 +58,7 @@ SELECT select_expr[, select_expr ...]
 
   All columns in the query statement, that is, all columns in the materialized view schema. This parameter supports the following values:
 
-  - Single column or aggregated column: a statement in the form of `SELECT a, b, c FROM table_a` (applicable to creating a single table materialized view) or `SELECT table_a.a, table_a.b, table_b.d,` (applicable to creating a multi-table materialized view in StarRocks 2.4 or above only), where `a`, `b`, `c`, and `d` are the column names of the base tables. If you do not specify column names for the materialized view in the statement, the column names in the materialized view are also `a`, `b`, `c`, and `d`.
+  - Single column or aggregated column: a statement in the form of `SELECT a, b, c FROM table_a` (applicable to creating a single table materialized view) or `SELECT table_a.a, table_a.b, table_b.d,` (applicable to creating an asynchronous materialized view in StarRocks 2.4 or above only), where `a`, `b`, `c`, and `d` are the column names of the base tables. If you do not specify column names for the materialized view in the statement, the column names in the materialized view are also `a`, `b`, `c`, and `d`.
   - Expression: an expression in the form of `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`, where `a+1`, `b+2` and `c*c` are expressions that contain the column names of the base tables, and `x`, `y` and `z` are the new column names of the materialized view.
 
   > **CAUTION**
@@ -332,7 +332,7 @@ from orders
 group by dt, order_id, user_id;
 ```
 
-Example 3: Create a multi-table materialized view.
+Example 3: Create an asynchronous materialized view.
 
 ```SQL
 CREATE MATERIALIZED VIEW flat_lineorder
@@ -383,7 +383,7 @@ INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
 
-Example 5: Create a single-table sync materialized views.
+Example 5: Create a synchronous sync materialized views.
 
 Base table schema is as follows:
 

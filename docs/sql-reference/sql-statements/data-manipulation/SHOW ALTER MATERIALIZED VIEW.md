@@ -2,7 +2,7 @@
 
 ## Description
 
-Shows the building status of single-table sync refresh materialized views.
+Shows the building status of synchronous materialized views.
 
 ## Syntax
 
@@ -37,7 +37,7 @@ Parameters in brackets [] is optional.
 
 ## Examples
 
-Example 1: building status of single-table sync refresh materialized views
+Example 1: building status of synchronous materialized views
 
 ```Plain
 MySQL > SHOW ALTER MATERIALIZED VIEW\G

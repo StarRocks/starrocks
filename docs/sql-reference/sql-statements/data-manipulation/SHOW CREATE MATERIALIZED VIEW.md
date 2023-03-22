@@ -2,7 +2,7 @@
 
 ## Description
 
-Shows the definition of a specific materialized view.
+Shows the definition of a specific asynchronous materialized view.
 
 ## Syntax
 
