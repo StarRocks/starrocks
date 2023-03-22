@@ -24,10 +24,13 @@
 # --job param for *make*
 # support macos
 if [[ $(uname) == "Darwin" ]]; then
-    PARALLEL=$[$(sysctl -n hw.physicalcpu)/4+1]
+    default_parallel=$[$(sysctl -n hw.physicalcpu)/4+1]
 else
-    PARALLEL=$[$(nproc)/4+1]
+    default_parallel=$[$(nproc)/4+1]
 fi
+
+# use the value if $PARALEL is already set, otherwise use $default_parallel
+PARALLEL=${PARALLEL:-$default_parallel}
 
 ###################################################
 # DO NOT change variables bellow unless you known
