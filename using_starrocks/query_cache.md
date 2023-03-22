@@ -1,14 +1,16 @@
 # Query Cache
 
-Query Cache 可以保存查询的中间计算结果。后续发起的语义等价的查询，能够复用先前缓存的结果，加速计算，从而提升高并发场景下简单聚合查询的 QPS 并降低平均时延。该特性从 2.5 版本开始支持。
+Query Cache 可以保存查询的中间计算结果。后续发起的语义等价的查询，能够复用先前缓存的结果，加速计算，从而提升高并发场景下简单聚合查询的 QPS 并降低平均时延。
 
 您可以通过 FE 会话变量 `enable_query_cache` 开启 Query Cache。参见本文“[FE 会话变量](../using_starrocks/query_cache.md#fe-会话变量)”小节。
+
+该特性从 2.5 版本开始支持。
 
 ## 应用场景
 
 Query Cache 可以生效的典型应用场景有如下特点：
 
-- 查询多为宽表模型下的单表聚合查询、或星型模型下简单多表 JOIN 的聚合查询。
+- 查询多为宽表模型下的单表聚合查询。
 - 聚合查询以非 GROUP BY 聚合和低基数 GROUP BY 聚合为主。
 - 查询的数据以按时间分区追加的形式导入，并且在不同时间分区上的访问表现出冷热性。
 
@@ -34,7 +36,7 @@ Query Cache 支持全部数据分区策略，包括 Unpartitioned、Multi-Column
 
 ## 产品边界
 
-- Query Cache 依赖于 Pipeline 执行引擎的 Per-Tablet 计算。Per-Tablet 计算是指一个 Pipeline Driver 能够以 Tablet 为单位对整 Tablet 进行处理，而不是每次只处理一个 Tablet 的一部分、或者通过交叉并发的方式同时处理多个 Tablet。如果所访问的 Tablet 的数量大于等于实际调用的 Pipeline Driver 的数量（即，实际并发度）时，则启用 Query Cache。如果所访问的 Tablet 的数量小于 Pipeline Driver 的数量，则每个 Pipeline Driver 只会处理某个 Tablet 的一部分数据，无法形成 Per-Tablet 的计算结果，这种情况下不启用 Query Cache。
+- Query Cache 依赖于 Pipeline 执行引擎的 Per-Tablet 计算。Per-Tablet 计算是指一个 Pipeline Driver 能够以 Tablet 为单位对整 Tablet 进行处理，而不是每次只处理一个 Tablet 的一部分、或者通过交叉并发的方式同时处理多个 Tablet。如果单个 BE 所访问的 Tablet 的数量大于等于实际调用的 Pipeline Driver 的数量（即，实际并发度）时，则启用 Query Cache。如果单个 BE 所访问的 Tablet 的数量小于 Pipeline Driver 的数量，则每个 Pipeline Driver 只会处理某个 Tablet 的一部分数据，无法形成 Per-Tablet 的计算结果，这种情况下不启用 Query Cache。
 - 在 StarRocks 中，一个聚合查询至少包含四个阶段的聚合。在一阶段聚合中，只有当 OlapScanNode 和 AggregateNode 位于同一个 Fragment 时，AggregateNode 产生的 Per-Tablet 计算结果才会缓存。在其他阶段聚合中，AggregateNode 产生的Per-Tablet 计算结果不会缓存。部分 DISTINCT 聚合查询，受会话变量 `cbo_cte_reuse` 为 `true` 影响，当执行计划中生产数据的 OlapScanNode 和消费数据的一阶段 AggregateNode 位于不同的 Fragment、并且中间通过 ExchangeNode 传输数据时，也不启用 Query Cache。比如如下两个场景里，采用 CTE 优化，不启用 Query Cache：
   - 查询的输出列包含聚合函数 `avg(distinct)`。
   - 查询的输出列含多个 DISTINCT 聚合函数。
@@ -499,9 +501,9 @@ Query Cache 的存储占用 BE 的少量内存，默认缓存大小为 512 MB，
 
 ## 注意事项
 
-- 当 `pipeline_dop` 为 1 时，部分查询首次发起，因为要填充 Query Cache，可能有轻微的性能惩罚，导致延迟加大。`pipeline_dop` 用于设置您所期望的并发度（即，Pipeline Driver 的数量）。
-- 当 Query Cache 配置较大的内存容量时，会占用 BE 的进程内存容量。建议配置 Query Cache 的内存容量不超过进程内存容量的 1/6。
-- 当 Pipeline 处理的 Tablet 数量少于 `pipeline_dop` 取值时，Query Cache 不开启。此时您可以将 `pipeline_dop` 设置为 `1`。
+- 部分查询首次发起，因为要填充 Query Cache，可能有轻微的性能惩罚，导致延迟加大。
+- 当 Query Cache 配置较大的内存容量时，会占用 BE 上可用于查询评估的内存容量。建议配置 Query Cache 的内存容量不超过可用于查询评估的内存容量的 1/6。
+- 当 Pipeline 处理的 Tablet 数量少于 `pipeline_dop` 取值时，Query Cache 不开启。此时您可以将 `pipeline_dop` 设置为较小的值，例如设置为 `1`。
 
 ## 示例
 
