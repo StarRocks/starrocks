@@ -37,10 +37,10 @@
 #include <memory>
 #include <mutex>
 
+#include "common/statusor.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "common/statusor.h"
 #include "service/brpc.h"
 #include "util/network_util.h"
 #include "util/spinlock.h"
