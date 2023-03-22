@@ -3,6 +3,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -36,7 +37,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class IcebergTable extends Table {
@@ -129,7 +129,7 @@ public class IcebergTable extends Table {
     }
 
     public List<String> getPartitionColumnNames() {
-        return getPartitionColumns().stream().filter(Objects::nonNull).map(Column::getName)
+        return getPartitionColumns().stream().filter(java.util.Objects::nonNull).map(Column::getName)
                 .collect(Collectors.toList());
     }
 
@@ -430,5 +430,24 @@ public class IcebergTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    @Override
+    public int hashCode() {
+        return com.google.common.base.Objects.hashCode(getCatalog(), db, getTableIdentifier());
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (!(other instanceof IcebergTable)) {
+            return false;
+        }
+
+        IcebergTable otherTable = (IcebergTable) other;
+        String catalogName = getCatalog();
+        String tableIdentifier = getTableIdentifier();
+        return Objects.equal(catalogName, otherTable.getCatalog()) &&
+                Objects.equal(db, otherTable.db) &&
+                Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
     }
 }
