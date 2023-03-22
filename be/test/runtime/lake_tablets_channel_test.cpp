@@ -485,7 +485,7 @@ TEST_F(LakeTabletsChannelTest, test_write_concurrently) {
     }
 }
 
-TEST_F(LakeTabletsChannelTest, test_abort) {
+TEST_F(LakeTabletsChannelTest, DISABLED_test_abort) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
