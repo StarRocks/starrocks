@@ -179,7 +179,11 @@ public class ResourceMgr implements Writable {
             String name = stmt.getResourceName();
             Resource resource = nameToResource.remove(name);
             if (resource == null) {
-                throw new DdlException("Resource(" + name + ") does not exist");
+                if (!stmt.isSetIfExists()) {
+                    throw new DdlException("Resource(" + name + ") does not exist");
+                }
+                LOG.info("Resource(" + name + ") does not exist");
+                return;
             }
 
             if (resource.needMappingCatalog()) {
