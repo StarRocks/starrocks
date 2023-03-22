@@ -62,6 +62,9 @@ public:
     static Status get_tasks(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,
                             TGetTaskInfoResult* var_result);
 
+    static Status get_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
+                            TGetLoadsResult* var_result, int timeout_ms);
+
     static Status get_task_runs(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,
                                 TGetTaskRunInfoResult* var_result);
 

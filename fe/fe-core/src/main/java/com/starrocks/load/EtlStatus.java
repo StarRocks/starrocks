@@ -42,7 +42,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
@@ -63,7 +62,7 @@ import java.util.TreeMap;
 import java.util.function.Consumer;
 
 public class EtlStatus implements Writable {
-    public static final String DEFAULT_TRACKING_URL = FeConstants.NULL_STRING;
+    public static final String DEFAULT_TRACKING_URL = "";
 
     private TEtlState state;
     private String trackingUrl;

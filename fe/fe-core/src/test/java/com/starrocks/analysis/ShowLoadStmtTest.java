@@ -75,7 +75,7 @@ public class ShowLoadStmtTest {
         Assert.assertEquals("EtlFinishTime", metaData.getColumn(11).getName());
         Assert.assertEquals("LoadStartTime", metaData.getColumn(12).getName());
         Assert.assertEquals("LoadFinishTime", metaData.getColumn(13).getName());
-        Assert.assertEquals("URL", metaData.getColumn(14).getName());
+        Assert.assertEquals("TrackingSQL", metaData.getColumn(14).getName());
         Assert.assertEquals("JobDetails", metaData.getColumn(15).getName());
     }
 

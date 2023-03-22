@@ -515,6 +515,23 @@ public class LoadManager implements Writable {
         return loadJobInfos;
     }
 
+    public List<LoadJob> getLoadJobs(String labelValue) {
+        List<LoadJob> loadJobList = Lists.newArrayList();
+        readLock();
+        try {
+            if (Strings.isNullOrEmpty(labelValue)) {
+                loadJobList.addAll(dbIdToLabelToLoadJobs.values().stream().flatMap(it -> it.values().stream())
+                        .flatMap(Collection::stream).collect(Collectors.toList()));
+            } else {
+                loadJobList.addAll(dbIdToLabelToLoadJobs.values().stream().flatMap(it -> it.values().stream())
+                        .flatMap(Collection::stream).filter(it -> it.getLabel().equals(labelValue)).collect(Collectors.toList()));
+            }
+            return loadJobList;
+        } finally {
+            readUnlock();
+        }
+    }
+
     public List<LoadJob> getLoadJobsByDb(long dbId, String labelValue, boolean accurateMatch) {
 
         List<LoadJob> loadJobList = Lists.newArrayList();

@@ -80,4 +80,7 @@ public class SystemId {
 
     public static final long COLUMN_PRIVILEGES_ID = 31L;
 
+    public static final long LOADS_ID = 32L;
+
+    public static final long LOAD_TRACKING_LOGS_ID = 33L;
 }
