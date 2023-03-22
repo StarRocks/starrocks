@@ -140,7 +140,9 @@ enum TSchemaTableType {
     SCH_BE_TABLETS,
     SCH_BE_METRICS,
     SCH_BE_TXNS,
-    SCH_BE_CONFIGS
+    SCH_BE_CONFIGS,
+    SCH_LOADS,
+    SCH_LOAD_TRACKING_LOGS
 }
 
 enum THdfsCompression {

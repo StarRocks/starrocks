@@ -457,7 +457,7 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains(
                 "signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), "
-                + "id:0, fid:50287, could_apply_dict_optimize:false, ignore_nulls:false), has_nullable_child:false, "
+                + "id:0, fid:50303, could_apply_dict_optimize:false, ignore_nulls:false), has_nullable_child:false, "
                 + "is_nullable:true"));
     }
 
@@ -1429,6 +1429,17 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select bitnot(cast(power(-2,127) as largeint)+1);";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "~ CAST(power(-2.0, 127.0) AS LARGEINT) + 1");
+    }
+
+    @Test
+    public void testConstantFoldInLikeFunction() throws Exception {
+        String sql1 = "select like('AA', concat('a', 'A'))";
+        String plan1 = getFragmentPlan(sql1);
+        assertContains(plan1, "<slot 2> : like('AA', 'aA')");
+
+        String sql2 = "select ilike('AA', concat('a', 'A'))";
+        String plan2 = getFragmentPlan(sql2);
+        assertContains(plan2, "<slot 2> : like(lower('AA'), lower('aA'))");
     }
 
 }

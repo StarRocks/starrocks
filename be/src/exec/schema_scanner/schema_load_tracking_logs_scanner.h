@@ -12,23 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-# where to put generated libraries
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/block_cache")
+#pragma once
 
-# where to put generated binaries
-set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/block_cache")
+#include "exec/schema_scanner.h"
+#include "gen_cpp/FrontendService_types.h"
 
-set(CACHE_FILES
-  block_cache.cpp
-  fb_cachelib.cpp
-)
+namespace starrocks {
 
-add_library(BlockCache STATIC
-    ${CACHE_FILES}
-)
+class SchemaLoadTrackingLogsScanner : public SchemaScanner {
+public:
+    SchemaLoadTrackingLogsScanner();
+    ~SchemaLoadTrackingLogsScanner() override;
 
-set(CACHELIB_DIR ${THIRDPARTY_DIR}/cachelib)
-link_directories(${CACHELIB_DIR}/deps/lib64)
+    Status start(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
 
-include_directories(AFTER ${CACHELIB_DIR}/include)
-include_directories(AFTER ${CACHELIB_DIR}/deps/include)
+private:
+    Status fill_chunk(ChunkPtr* chunk);
+
+    int64_t _start_ts;
+    RuntimeState* _state;
+    int _cur_idx = 0;
+    TGetLoadsResult _result;
+    static SchemaScanner::ColumnDesc _s_tbls_columns[];
+};
+
+} // namespace starrocks
