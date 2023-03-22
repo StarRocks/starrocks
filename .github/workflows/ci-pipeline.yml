@@ -7,7 +7,7 @@ on:
       - synchronize
 
     branches:
-      - master
+      - main
 
 concurrency:
   group: ${{ github.event.number }}
