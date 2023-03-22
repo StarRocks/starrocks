@@ -649,4 +649,34 @@ public class TempPartitionTest {
         Assert.assertEquals(1, partitions.size());
         Assert.assertEquals(2, partitions.get(0).getMaterializedIndices(IndexExtState.VISIBLE).size());
     }
+
+    @Test
+    public void testForMultiListPartitionTable() throws Exception {
+        String sql = "create table db2.tb2 (k1 int, k2 int, dt string not null, code string not null)\n" +
+                "partition by list(dt, code)\n" +
+                "(\n" +
+                "partition p20230101_us values in (('20230101', 'us')),\n" +
+                "partition p20230101_cn values in (('20230101', 'cn')),\n" +
+                "partition p20230101_en values in (('20230101', 'en'))\n" +
+                ")\n" +
+                "distributed by hash(k2) buckets 1\n" +
+                "properties('replication_num' = '1');";
+        starRocksAssert.withDatabase("db2").useDatabase("db2").withTable(sql);
+
+        checkShowPartitionsResultNum("db2.tb2", false, 3);
+
+        String stmtStr = "alter table db2.tb2 add temporary partition temp_p20230101_us VALUES IN (('2023-01-01', 'us'));";
+        alterTableWithNewAnalyzer(stmtStr, false);
+
+        stmtStr = "alter table db2.tb2 replace partition(p20230101_us) with temporary partition(temp_p20230101_us);";
+        alterTableWithNewAnalyzer(stmtStr, true);
+
+        stmtStr = "alter table db2.tb2 add temporary partition temp_p20230101_us_new VALUES IN (('20230101', 'us'));";
+        alterTableWithNewAnalyzer(stmtStr, false);
+
+        stmtStr = "alter table db2.tb2 replace partition(p20230101_us) with temporary partition(temp_p20230101_us_new);";
+        alterTableWithNewAnalyzer(stmtStr, false);
+        checkShowPartitionsResultNum("db2.tb2", false, 3);
+    }
+
 }
