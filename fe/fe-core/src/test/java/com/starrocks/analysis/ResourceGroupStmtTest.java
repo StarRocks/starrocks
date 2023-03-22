@@ -224,6 +224,12 @@ public class ResourceGroupStmtTest {
     }
 
     @Test
+    public void testDropResourceGroupIfExists() throws Exception {
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP IF EXISTS rg1");
+        assertResourceGroupNotExist("rg1");
+    }
+
+    @Test
     public void testCreateDuplicateResourceGroup() throws Exception {
         starRocksAssert.executeResourceGroupDdlSql(createRg1Sql);
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");

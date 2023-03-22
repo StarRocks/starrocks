@@ -94,7 +94,7 @@ public class ResourceMgrTest {
         addSparkResource(mgr, brokerMgr, editLog, globalStateMgr, auth);
 
         // drop
-        DropResourceStmt dropStmt = new DropResourceStmt(name);
+        DropResourceStmt dropStmt = new DropResourceStmt(false, name);
         mgr.dropResource(dropStmt);
         Assert.assertEquals(0, mgr.getResourceNum());
     }
@@ -117,7 +117,16 @@ public class ResourceMgrTest {
         // drop
         ResourceMgr mgr = new ResourceMgr();
         Assert.assertEquals(0, mgr.getResourceNum());
-        DropResourceStmt stmt = new DropResourceStmt(name);
+        DropResourceStmt stmt = new DropResourceStmt(false, name);
+        mgr.dropResource(stmt);
+    }
+
+    @Test
+    public void testDropResourceExist() throws UserException {
+        // drop
+        ResourceMgr mgr = new ResourceMgr();
+        Assert.assertEquals(0, mgr.getResourceNum());
+        DropResourceStmt stmt = new DropResourceStmt(true, name);
         mgr.dropResource(stmt);
     }
 

@@ -28,6 +28,7 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -164,7 +165,7 @@ public class CatalogUtils {
                     }
                 }
                 if (!partitionValueExists) {
-                    throw new DdlException("partition values " + "(" + tempPartitionValues + ") not exist ");
+                    throw new DdlException("partition values (" + tempPartitionValues + ") not exist ");
                 }
             }
         } catch (AnalysisException e) {
