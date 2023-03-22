@@ -163,18 +163,9 @@ public class SystemInfoService {
         copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
 
-        setComputeNodeOwner(newComputeNode);
-
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
         LOG.info("finished to add {} ", newComputeNode);
-    }
-
-    private void setComputeNodeOwner(ComputeNode computeNode) {
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
-        Preconditions.checkState(cluster != null);
-        cluster.addComputeNode(computeNode.getId());
-        computeNode.setBackendState(BackendState.using);
     }
 
     public boolean isSingleBackendAndComputeNode() {
@@ -296,7 +287,7 @@ public class SystemInfoService {
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
             if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) == null) {
-                throw new DdlException("compute node does not exists[" + pair.first + ":" + pair.second + "]");
+                throw new DdlException("Does not exists[" + pair.first + ":" + pair.second + "]");
             }
         }
 
@@ -317,13 +308,16 @@ public class SystemInfoService {
         copiedComputeNodes.remove(dropComputeNode.getId());
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
 
-        // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
-        if (null != cluster) {
-            cluster.removeComputeNode(dropComputeNode.getId());
-        } else {
-            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
+        // remove worker
+        if (RunMode.allowCreateLakeTable()) {
+            long starletPort = dropComputeNode.getStarletPort();
+            // only need to remove worker after be reported its starletPort
+            if (starletPort != 0) {
+                String workerAddr = dropComputeNode.getHost() + ":" + starletPort;
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
+            }
         }
+
         // log
         GlobalStateMgr.getCurrentState().getEditLog()
                 .logDropComputeNode(new DropComputeNodeLog(dropComputeNode.getId()));
@@ -426,7 +420,7 @@ public class SystemInfoService {
             // remove worker
             if (RunMode.allowCreateLakeTable()) {
                 long starletPort = droppedBackend.getStarletPort();
-                // only need to remove worker after be reported its staretPort
+                // only need to remove worker after be reported its starletPort
                 if (starletPort != 0) {
                     String workerAddr = droppedBackend.getHost() + ":" + starletPort;
                     GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
@@ -1193,5 +1187,94 @@ public class SystemInfoService {
         // TODO: change be -> cn
         MetricRepo.generateBackendsTabletMetrics();
     }
+
+    public void dropDataNodes(List<Pair<String, Integer>> hostPortPairs, boolean needCheckUnforce)
+            throws DdlException {
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            // check is already exist
+            if (getDataNodeWithHeartbeatPort(pair.first, pair.second) == null) {
+                throw new DdlException("data node does not exists[" + pair.first + ":" + pair.second + "]");
+            }
+        }
+
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            dropDataNode(pair.first, pair.second, needCheckUnforce);
+        }
+    }
+
+    // final entry of dropping dataNode
+    public void dropDataNode(String host, int heartbeatPort, boolean needCheckUnforce)
+            throws DdlException {
+        if (getDataNodeWithHeartbeatPort(host, heartbeatPort) == null) {
+            throw new DdlException("data node does not exists[" + host + ":" + heartbeatPort + "]");
+        }
+
+        DataNode droppedDataNode = getDataNodeWithHeartbeatPort(host, heartbeatPort);
+        if (needCheckUnforce) {
+            try {
+                checkUnforce(droppedDataNode);
+            } catch (RuntimeException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
+
+        // update idToDataNode
+        Map<Long, DataNode> copiedDataNodes = Maps.newHashMap(idToDataNodeRef);
+        copiedDataNodes.remove(droppedDataNode.getId());
+        idToDataNodeRef = ImmutableMap.copyOf(copiedDataNodes);
+
+        // update idToReportVersion
+        Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
+        copiedReportVerions.remove(droppedDataNode.getId());
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
+
+        // log
+        GlobalStateMgr.getCurrentState().getEditLog().logDropDataNode(droppedDataNode);
+        LOG.info("finished to drop {}", droppedDataNode);
+
+        // backends is changed, regenerated tablet number metrics
+        // TODO: change be -> cn
+        MetricRepo.generateBackendsTabletMetrics();
+    }
+
+    private void checkUnforce(DataNode droppedDataNode) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByDataNodeId(droppedDataNode.getId());
+        List<Long> dbs = globalStateMgr.getDbIds();
+
+        dbs.stream().map(globalStateMgr::getDb).forEach(db -> {
+            db.readLock();
+            try {
+                db.getTables().stream()
+                        .filter(table -> table.isLocalTable())
+                        .map(table -> (OlapTable) table)
+                        .filter(table -> table.getTableProperty().getReplicationNum() == 1)
+                        .forEach(table -> {
+                            table.getAllPartitions().forEach(partition -> {
+                                String errMsg = String.format("Tables such as [%s.%s] on the backend[%s:%d]" +
+                                                " have only one replica. To avoid data loss," +
+                                                " please change the replication_num of [%s.%s] to three." +
+                                                " ALTER SYSTEM DROP BACKEND <backends> FORCE" +
+                                                " can be used to forcibly drop the backend. ",
+                                        db.getOriginName(), table.getName(), droppedDataNode.getHost(),
+                                        droppedDataNode.getHeartbeatPort(), db.getOriginName(), table.getName());
+
+                                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
+                                        .forEach(rollupIdx -> {
+                                            boolean existIntersection = rollupIdx.getTablets().stream()
+                                                    .map(Tablet::getId).anyMatch(tabletIds::contains);
+
+                                            if (existIntersection) {
+                                                throw new RuntimeException(errMsg);
+                                            }
+                                        });
+                            });
+                        });
+            } finally {
+                db.readUnlock();
+            }
+        });
+    }
+
 }
 

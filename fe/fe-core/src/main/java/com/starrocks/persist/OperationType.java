@@ -323,5 +323,6 @@ public class OperationType {
 
     // data node
     public static final short OP_ADD_DATANODE = 11140;
+    public static final short OP_DROP_DATANODE = 11141;
 
 }

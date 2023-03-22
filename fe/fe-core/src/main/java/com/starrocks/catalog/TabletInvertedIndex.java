@@ -570,6 +570,21 @@ public class TabletInvertedIndex {
         return tabletIds;
     }
 
+    // for dataNode
+    public List<Long> getTabletIdsByDataNodeId(long dataNodeId) {
+        List<Long> tabletIds = Lists.newArrayList();
+        readLock();
+        try {
+            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(dataNodeId);
+            if (replicaMetaWithBackend != null) {
+                tabletIds.addAll(replicaMetaWithBackend.keySet());
+            }
+        } finally {
+            readUnlock();
+        }
+        return tabletIds;
+    }
+
     public List<Long> getTabletIdsByBackendIdAndStorageMedium(long backendId, TStorageMedium storageMedium) {
         List<Long> tabletIds = Lists.newArrayList();
         readLock();

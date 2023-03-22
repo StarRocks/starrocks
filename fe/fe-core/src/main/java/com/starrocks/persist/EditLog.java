@@ -1282,6 +1282,10 @@ public class EditLog {
         logEdit(OperationType.OP_ADD_DATANODE, dn);
     }
 
+    public void logDropDataNode(DataNode dn) {
+        logEdit(OperationType.OP_DROP_DATANODE, dn);
+    }
+
     public void logDropComputeNode(DropComputeNodeLog log) {
         logEdit(OperationType.OP_DROP_COMPUTE_NODE, log);
     }

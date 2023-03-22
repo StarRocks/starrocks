@@ -46,6 +46,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AddFollowerClause;
@@ -134,10 +135,12 @@ public class SystemHandler extends AlterHandler {
         if (alterClause instanceof AddBackendClause) {
             // add backend
             AddBackendClause addBackendClause = (AddBackendClause) alterClause;
-            // step1: add a compute node
+            // step1: add compute node
             GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addBackendClause.getHostPortPairs());
-            // step2: add a data node
-            GlobalStateMgr.getCurrentSystemInfo().addDataNodes(addBackendClause.getHostPortPairs());
+            // step2: add data node
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+                GlobalStateMgr.getCurrentSystemInfo().addDataNodes(addBackendClause.getHostPortPairs());
+            }
         } else if (alterClause instanceof ModifyBackendAddressClause) {
             // update Backend Address
             ModifyBackendAddressClause modifyBackendAddressClause = (ModifyBackendAddressClause) alterClause;
@@ -145,7 +148,15 @@ public class SystemHandler extends AlterHandler {
         } else if (alterClause instanceof DropBackendClause) {
             // drop backend
             DropBackendClause dropBackendClause = (DropBackendClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().dropBackends(dropBackendClause);
+            List<Pair<String, Integer>> hostPortPairs = dropBackendClause.getHostPortPairs();
+            boolean needCheckUnforce = !dropBackendClause.isForce();
+            // step1: drop data node
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+                GlobalStateMgr.getCurrentSystemInfo().dropDataNodes(hostPortPairs, needCheckUnforce);
+            }
+            // step2 : drop compute node
+            GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(hostPortPairs);
+
         } else if (alterClause instanceof DecommissionBackendClause) {
             // decommission
             DecommissionBackendClause decommissionBackendClause = (DecommissionBackendClause) alterClause;
