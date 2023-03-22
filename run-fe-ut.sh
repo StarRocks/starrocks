@@ -30,23 +30,31 @@ usage() {
   echo "
 Usage: $0 <options>
   Optional options:
-     --clean    clean and build ut
-     --run    build and run ut
+     --test [TEST_NAME]         run specific test
+     --dry-run                  dry-run unit tests
+     --coverage                 run coverage statistic tasks
+     --dumpcase [PATH]          run dump case and save to path
 
   Eg.
-    $0                      build and run ut
-    $0 --coverage           build and run coverage statistic
-    $0 --run xxx            build and run the specified class
+    $0                                          run all unit tests
+    $0 --test com.starrocks.utframe.Demo        run demo test
+    $0 --dry-run                                dry-run unit tests
+    $0 --coverage                               run coverage statistic tasks
+    $0 --dumpcase /home/disk1/                  run dump case and save to path
   "
   exit 1
 }
 
+# -l run only used for compatibility
 OPTS=$(getopt \
   -n $0 \
   -o '' \
+  -l 'test:' \
+  -l 'dry-run' \
   -l 'coverage' \
-  -l 'run' \
+  -l 'dumpcase' \
   -l 'help' \
+  -l 'run' \
   -- "$@")
 
 if [ $? != 0 ] ; then
@@ -56,15 +64,20 @@ fi
 eval set -- "$OPTS"
 
 HELP=0
-RUN=0
+DRY_RUN=0
+RUN_SPECIFIED_TEST=0
+TEST_NAME=*
 COVERAGE=0
 while true; do 
     case "$1" in
         --coverage) COVERAGE=1 ; shift ;;
-        --run) RUN=1 ; shift ;;
+        --test) RUN_SPECIFIED_TEST=1; TEST_NAME=$2; shift 2;;
+        --run) shift ;; # only used for compatibility
+        --dumpcase) DUMPCASE=1; shift ;;
+        --dry-run) DRY_RUN=1 ; shift ;;
         --help) HELP=1 ; shift ;; 
         --) shift ;  break ;;
-        *) ehco "Internal error" ; exit 1 ;;
+        *) echo "Internal error" ; exit 1 ;;
     esac
 done
 
@@ -73,11 +86,9 @@ if [ ${HELP} -eq 1 ]; then
     exit 0
 fi
 
-echo "Build Frontend UT"
-
-echo "******************************"
-echo "    Runing StarRocksFE Unittest    "
-echo "******************************"
+echo "*********************************"
+echo "  Starting to Run FE Unit Tests  "
+echo "*********************************"
 
 cd ${STARROCKS_HOME}/fe/
 mkdir -p build/compile
@@ -99,9 +110,10 @@ fi
 mkdir ut_ports
 
 if [ ${COVERAGE} -eq 1 ]; then
-    echo "Run coverage statistic"
+    echo "Run coverage statistic tasks"
     ant cover-test
 else
+<<<<<<< HEAD
     if [ ${RUN} -eq 1 ]; then
         echo "Run the specified class: $1"
         # eg:
@@ -111,5 +123,20 @@ else
     else    
         echo "Run Frontend UT"
         ${MVN_CMD} test -DfailIfNoTests=false 
+=======
+    if [ ${RUN_SPECIFIED_TEST} -eq 1 ]; then
+        echo "Run test: $TEST_NAME"
+        if [ $DRY_RUN -eq 0 ]; then
+            # ./run-fe-ut.sh --test com.starrocks.utframe.Demo
+            # ./run-fe-ut.sh --test com.starrocks.utframe.Demo#testCreateDbAndTable+test2
+            # set trimStackTrace to false to show full stack when debugging specified class or case
+            ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test=$TEST_NAME
+        fi
+    else    
+        echo "Run All Frontend Unittests"
+        if [ $DRY_RUN -eq 0 ]; then
+            ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false
+        fi
+>>>>>>> b606bb9c7 ([Refactor] Unify the unit tests related names for BE and FE (#15667) (#16448) (#20041))
     fi 
 fi
