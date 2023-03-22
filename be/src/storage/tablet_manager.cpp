@@ -1212,8 +1212,10 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
         next_unique_id = base_tablet->next_unique_id();
         size_t old_num_columns = base_tablet->num_columns();
         const auto& new_columns = request.tablet_schema.columns;
+        LOG(INFO) << "new columns size: " << new_columns.size();
         for (uint32_t new_col_idx = 0; new_col_idx < new_columns.size(); ++new_col_idx) {
             const TColumn& column = new_columns[new_col_idx];
+            LOG(INFO) << "col[" << new_col_idx << "] name is " << column.column_name;
             // For schema change, compare old_tablet and new_tablet:
             // 1. if column exist in both new_tablet and old_tablet, choose the column's
             //    unique_id in old_tablet to be the column's ordinal number in new_tablet
