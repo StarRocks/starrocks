@@ -78,14 +78,11 @@ class HdfsParquetProfile;
 struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
     RuntimeProfile::Counter* rows_read_counter = nullptr;
-    RuntimeProfile::Counter* bytes_read_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
+
     RuntimeProfile::Counter* reader_init_timer = nullptr;
     RuntimeProfile::Counter* open_file_timer = nullptr;
     RuntimeProfile::Counter* expr_filter_timer = nullptr;
-
-    RuntimeProfile::Counter* io_timer = nullptr;
-    RuntimeProfile::Counter* io_counter = nullptr;
     RuntimeProfile::Counter* column_read_timer = nullptr;
     RuntimeProfile::Counter* column_convert_timer = nullptr;
 
@@ -104,6 +101,13 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* shared_buffered_direct_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_direct_io_bytes = nullptr;
     RuntimeProfile::Counter* shared_buffered_direct_io_timer = nullptr;
+
+    RuntimeProfile::Counter* app_io_bytes_read_counter = nullptr;
+    RuntimeProfile::Counter* app_io_timer = nullptr;
+    RuntimeProfile::Counter* app_io_counter = nullptr;
+    RuntimeProfile::Counter* fs_bytes_read_counter = nullptr;
+    RuntimeProfile::Counter* fs_io_timer = nullptr;
+    RuntimeProfile::Counter* fs_io_counter = nullptr;
 };
 
 struct HdfsScannerParams {
@@ -312,6 +316,7 @@ protected:
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanStats _stats;
+    HdfsScanStats _fs_stats;
     std::unique_ptr<RandomAccessFile> _raw_file;
     std::unique_ptr<RandomAccessFile> _file;
     // by default it's no compression.

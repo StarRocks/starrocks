@@ -206,6 +206,9 @@ Status HdfsScanner::open_random_access_file() {
     const std::string& filename = _raw_file->filename();
 
     std::shared_ptr<io::SeekableInputStream> input_stream = _raw_file->stream();
+
+    input_stream = std::make_shared<CountedSeekableInputStream>(input_stream, &_fs_stats);
+
     // if compression
     // input_stream = DecompressInputStream(input_stream)
     if (_compression_type != CompressionTypePB::NO_COMPRESSION) {
@@ -234,7 +237,7 @@ Status HdfsScanner::open_random_access_file() {
     // NOTE: make sure `CountedInputStream` is last applied, so io time can be accurately timed.
     input_stream = std::make_shared<CountedSeekableInputStream>(input_stream, &_stats);
 
-    // so wrap function is f(x) = (CountedInputStream (CacheInputStream (DecompressInputStream x)))
+    // so wrap function is f(x) = (CountedInputStream (CacheInputStream (DecompressInputStream (CountedInputStream x))))
     _file = std::make_unique<RandomAccessFile>(input_stream, filename);
     _file->set_size(_scanner_params.file_size);
     return Status::OK();
@@ -269,10 +272,7 @@ void HdfsScanner::update_counter() {
 
     COUNTER_UPDATE(profile->reader_init_timer, _stats.reader_init_ns);
     COUNTER_UPDATE(profile->rows_read_counter, _stats.raw_rows_read);
-    COUNTER_UPDATE(profile->bytes_read_counter, _stats.bytes_read);
     COUNTER_UPDATE(profile->expr_filter_timer, _stats.expr_filter_ns);
-    COUNTER_UPDATE(profile->io_timer, _stats.io_ns);
-    COUNTER_UPDATE(profile->io_counter, _stats.io_count);
     COUNTER_UPDATE(profile->column_read_timer, _stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _stats.column_convert_ns);
 
@@ -294,6 +294,15 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->shared_buffered_direct_io_count, _shared_buffered_input_stream->direct_io_count());
         COUNTER_UPDATE(profile->shared_buffered_direct_io_bytes, _shared_buffered_input_stream->direct_io_bytes());
         COUNTER_UPDATE(profile->shared_buffered_direct_io_timer, _shared_buffered_input_stream->direct_io_timer());
+    }
+
+    {
+        COUNTER_UPDATE(profile->app_io_timer, _stats.io_ns);
+        COUNTER_UPDATE(profile->app_io_counter, _stats.io_count);
+        COUNTER_UPDATE(profile->app_io_bytes_read_counter, _stats.bytes_read);
+        COUNTER_UPDATE(profile->fs_bytes_read_counter, _fs_stats.bytes_read);
+        COUNTER_UPDATE(profile->fs_io_timer, _fs_stats.io_ns);
+        COUNTER_UPDATE(profile->fs_io_counter, _fs_stats.io_count);
     }
 
     // update scanner private profile.
