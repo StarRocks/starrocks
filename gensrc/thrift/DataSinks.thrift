@@ -214,3 +214,22 @@ struct TDataSink {
   9: optional TMultiCastDataStreamSink multi_cast_stream_sink
   10: optional TSchemaTableSink schema_table_sink
 }
+
+struct TIcebergColumnStats {
+    1: optional map<i32, i64> columnSizes
+    2: optional map<i32, i64> valueCounts
+    3: optional map<i32, i64> nullValueCounts
+    4: optional map<i32, i64> nanValueCounts
+    5: optional map<i32, binary> lowerBounds;
+    6: optional map<i32, binary> upperBounds;
+}
+
+struct TIcebergDataFile {
+    1: optional string path
+    2: optional string format
+    3: optional i64 record_count
+    4: optional i64 file_size_in_bytes
+    5: optional string partition_path;
+    6: optional list<i64> split_offsets;
+    7: optional TIcebergColumnStats column_stats;
+}
