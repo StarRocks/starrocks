@@ -869,7 +869,7 @@ CONF_Bool(block_cache_checksum_enable, "true");
 CONF_Int64(block_cache_max_concurrent_inserts, "1000000");
 // Total memory limit for in-flight parcels.
 // Once this is reached, requests will be rejected until the parcel memory usage gets under the limit.
-CONF_Int64(block_cache_max_parcel_memory_mb, "256");
+CONF_Int64(block_cache_max_parcel_memory_mb, "512");
 CONF_Bool(block_cache_report_stats, "false");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
