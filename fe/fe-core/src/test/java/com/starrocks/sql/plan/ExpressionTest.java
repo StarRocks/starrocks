@@ -302,7 +302,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testCaseWhen() throws Exception {
         String sql = "SELECT v1 FROM t0 WHERE CASE WHEN (v1 IS NOT NULL) THEN NULL END";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PREDICATES: if(1: v1 IS NOT NULL, NULL, NULL)"));
+        Assert.assertTrue(plan.contains("0:EMPTYSET"));
     }
 
     @Test
@@ -457,7 +457,7 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains(
                 "signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), "
-                + "id:0, fid:50303, could_apply_dict_optimize:false, ignore_nulls:false), has_nullable_child:false, "
+                + "id:0, fid:50287, could_apply_dict_optimize:false, ignore_nulls:false), has_nullable_child:false, "
                 + "is_nullable:true"));
     }
 
@@ -683,10 +683,10 @@ public class ExpressionTest extends PlanTestBase {
         // window functions
         sql = "select count(c1) over (partition by array_sum(array_map(x->x+1, [1]))) from test_array12";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  4:ANALYTIC\n" +
+        Assert.assertTrue(plan.contains("  3:ANALYTIC\n" +
                 "  |  functions: [, count(6: c1), ]\n" +
                 "  |  partition by: 8: array_sum"));
-        Assert.assertTrue(plan.contains("  3:SORT\n" +
+        Assert.assertTrue(plan.contains("  2:SORT\n" +
                 "  |  order by: <slot 8> 8: array_sum ASC\n" +
                 "  |  offset:"));
         Assert.assertTrue(plan.contains("  1:Project\n" +

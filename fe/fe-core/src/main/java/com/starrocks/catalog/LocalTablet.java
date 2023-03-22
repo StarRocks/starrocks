@@ -34,7 +34,7 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.HashMultimap;
+import com.google.common.collect.LinkedHashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
@@ -224,7 +224,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     // return map of (BE id -> path hash) of normal replicas
     public Multimap<Replica, Long> getNormalReplicaBackendPathMap(int clusterId) {
-        Multimap<Replica, Long> map = HashMultimap.create();
+        Multimap<Replica, Long> map = LinkedHashMultimap.create();
         SystemInfoService infoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
         for (Replica replica : replicas) {
             if (replica.isBad()) {

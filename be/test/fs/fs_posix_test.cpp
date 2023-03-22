@@ -207,19 +207,20 @@ TEST_F(PosixFileSystemTest, iterate_dir2) {
     ASSERT_OK(f->append("test"));
     ASSERT_OK(f->close());
 
-    ASSERT_OK(fs->iterate_dir2("./ut_dir/fs_posix/", [&](std::string_view name, const FileMeta& meta) -> bool {
+    ASSERT_OK(fs->iterate_dir2("./ut_dir/fs_posix/", [&](DirEntry entry) -> bool {
+        auto name = entry.name;
         if (name == "iterate_dir2.d") {
-            CHECK(meta.has_is_dir());
-            CHECK(meta.is_dir());
-            CHECK(meta.has_modify_time());
-            CHECK_GE(meta.modify_time(), now);
+            CHECK(entry.is_dir.has_value());
+            CHECK(entry.is_dir.value());
+            CHECK(entry.mtime.has_value());
+            CHECK_GE(entry.mtime.value(), now);
         } else if (name == "iterate_dir2") {
-            CHECK(meta.has_is_dir());
-            CHECK(!meta.is_dir());
-            CHECK(meta.has_size());
-            CHECK_EQ(4, meta.size());
-            CHECK(meta.has_modify_time());
-            CHECK_GE(meta.modify_time(), now);
+            CHECK(entry.is_dir.has_value());
+            CHECK(!entry.is_dir.value());
+            CHECK(entry.size.has_value());
+            CHECK_EQ(4, entry.size.value());
+            CHECK(entry.mtime.has_value());
+            CHECK_GE(entry.mtime.value(), now);
         } else {
             CHECK(false) << "Unexpected file " << name;
         }

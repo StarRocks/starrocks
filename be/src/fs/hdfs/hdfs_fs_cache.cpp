@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/hdfs/hdfs_fs_cache.h"
+#include "fs/hdfs/hdfs_fs_cache.h"
 
 #include <memory>
 
@@ -38,7 +38,8 @@ static const std::vector<TCloudProperty>* get_azure_cloud_properties(const FSOpt
     return nullptr;
 }
 
-static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* handle, const FSOptions& options) {
+static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr<HdfsFsClient> hdfs_client,
+                                    const FSOptions& options) {
     auto hdfs_builder = hdfsNewBuilder();
     hdfsBuilderSetNameNode(hdfs_builder, namenode.c_str());
     const THdfsProperties* properties = options.hdfs_properties();
@@ -59,41 +60,52 @@ static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* h
             hdfsBuilderConfSetStr(hdfs_builder, cloud_property.key.data(), cloud_property.value.data());
         }
     }
-
-    handle->hdfs_fs = hdfsBuilderConnect(hdfs_builder);
-    if (handle->hdfs_fs == nullptr) {
+    hdfs_client->hdfs_fs = hdfsBuilderConnect(hdfs_builder);
+    if (hdfs_client->hdfs_fs == nullptr) {
         return Status::InternalError(strings::Substitute("fail to connect hdfs namenode, namenode=$0, err=$1", namenode,
                                                          get_hdfs_err_msg()));
     }
     return Status::OK();
 }
 
-Status HdfsFsCache::get_connection(const std::string& namenode, HdfsFsHandle* handle, const FSOptions& options) {
-    {
-        std::lock_guard<std::mutex> l(_lock);
-        std::string cache_key = namenode;
-        const THdfsProperties* properties = options.hdfs_properties();
-        if (properties != nullptr && properties->__isset.hdfs_username) {
-            cache_key += properties->hdfs_username;
-        }
+Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<HdfsFsClient>& hdfs_client,
+                                   const FSOptions& options) {
+    std::lock_guard<std::mutex> l(_lock);
+    std::string cache_key = namenode;
+    const THdfsProperties* properties = options.hdfs_properties();
+    if (properties != nullptr && properties->__isset.hdfs_username) {
+        cache_key += properties->hdfs_username;
+    }
 
-        // Insert azure cloud credential into cache key
-        const std::vector<TCloudProperty>* azure_cloud_properties = get_azure_cloud_properties(options);
-        if (azure_cloud_properties != nullptr) {
-            for (const auto& cloud_property : *azure_cloud_properties) {
-                cache_key += cloud_property.key;
-                cache_key += cloud_property.value;
-            }
+    // Insert azure cloud credential into cache key
+    const std::vector<TCloudProperty>* azure_cloud_properties = get_azure_cloud_properties(options);
+    if (azure_cloud_properties != nullptr) {
+        for (const auto& cloud_property : *azure_cloud_properties) {
+            cache_key += cloud_property.key;
+            cache_key += cloud_property.value;
         }
+    }
 
-        auto it = _cache.find(cache_key);
-        if (it != _cache.end()) {
-            *handle = it->second;
-        } else {
-            handle->namenode = namenode;
-            RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, handle, options));
-            _cache[cache_key] = *handle;
+    for (size_t idx = 0; idx < _cur_client_idx; idx++) {
+        if (_cache_key[idx] == cache_key) {
+            hdfs_client = _cache_clients[idx];
+            // Found cache client, return directly
+            return Status::OK();
         }
+    }
+
+    // Not found cached client, create a new one
+    hdfs_client = std::make_shared<HdfsFsClient>();
+    hdfs_client->namenode = namenode;
+    RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, hdfs_client, options));
+    if (UNLIKELY(_cur_client_idx >= _max_cache_clients)) {
+        uint32_t idx = _rand.Uniform(_max_cache_clients);
+        _cache_key[idx] = cache_key;
+        _cache_clients[idx] = hdfs_client;
+    } else {
+        _cache_key[_cur_client_idx] = cache_key;
+        _cache_clients[_cur_client_idx] = hdfs_client;
+        _cur_client_idx++;
     }
     return Status::OK();
 }

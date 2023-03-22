@@ -1,20 +1,10 @@
 name: CI PIPELINE
 
 on:
-  pull_request:
+  pull_request_target:
     types:
       - opened
       - synchronize
-
-    paths:
-      - 'docs/**'
-      - 'be/**'
-      - 'fe/**.java'
-      - 'fe/**.xml'
-      - 'gensrc/**'
-      - 'run-be-ut.sh'
-      - 'run-fe-ut.sh'
-      - 'build.sh'
 
     branches:
       - main
@@ -25,6 +15,17 @@ concurrency:
 
 permissions:
   checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
 
 jobs:
   doc-checker:
@@ -106,6 +107,12 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+      
+      - name: Checkout PR
+        uses: dawidd6/action-checkout-pr@v1
+        with:
+          pr: ${{ github.event.number }}
+          
       - name: Run Clang-Format
         run: |
           export PATH=/var/lib/llvm/bin:$PATH
@@ -120,9 +127,10 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
     steps:
       - name: BRANCH INFO
-        id: extract_branch
+        id: branch
         run: |
-          echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
@@ -136,6 +144,7 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be
 
       - name: clean ECI
+        if: always()
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
@@ -154,6 +163,7 @@ jobs:
               - 'fe/**'
               - 'gensrc/**'
               - 'run-fe-ut.sh'
+              - 'java-extensions/**'
               - 'build.sh'
 
       - run: echo ${{ steps.changes.outputs.fe }}
@@ -203,7 +213,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
-
   fe-ut:
     runs-on: [self-hosted]
     needs: fe-codestyle-check
@@ -215,8 +224,10 @@ jobs:
         uses: AutoModality/action-clean@v1.1.0
 
       - name: BRANCH INFO
-        id: extract_branch
-        run: echo "##[set-output name=branch;]$(echo ${GITHUB_REF#refs/heads/})"
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
@@ -230,22 +241,29 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe
 
       - name: clean ECI
+        if: always()
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
   build:
     runs-on: self-hosted
-    needs: [be-ut, fe-ut]
+    needs: [be-checker, fe-checker, be-ut, fe-ut]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
-    if: always() && (needs.be-ut.result == 'success' || needs.fe-ut.result == 'success')
+    if: always() && (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success') || (needs.be-checker.outputs.output1 != 'true' && needs.fe-ut.result == 'success') || (needs.fe-checker.outputs.output1 != 'true' && needs.be-ut.result == 'success')
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
       - name: UPDATE ECI & RUN BUILD
         id: run_build
@@ -262,6 +280,7 @@ jobs:
           echo ${{ steps.run_build.outputs.OUTPUT_TAR }}
 
       - name: clean ECI
+        if: always()
         run: |
           echo ${{ steps.run_build.outputs.ECI_ID }}
           eci rm ${{ steps.run_build.outputs.ECI_ID }}
@@ -343,8 +362,7 @@ jobs:
         uses: mikepenz/action-junit-report@v3
         if: success() || failure()
         with:
-          check_name: 'Test Results'
-          detailed_summary: 'true'
-          fail_on_failure: 'true'
+          check_name: 'Admit Test Results'
+          detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'StarRocksTest/result/*.xml'

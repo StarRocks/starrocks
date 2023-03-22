@@ -43,7 +43,7 @@
 #include "agent/agent_common.h"
 #include "agent/finish_task.h"
 #include "agent/master_info.h"
-#include "agent/task_singatures_manager.h"
+#include "agent/task_signatures_manager.h"
 #include "common/status.h"
 #include "engine_storage_migration_task.h"
 #include "fs/fs.h"

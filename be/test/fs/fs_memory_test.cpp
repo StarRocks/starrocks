@@ -462,18 +462,19 @@ TEST_F(MemoryFileSystemTest, test_iterate_dir2) {
     ASSERT_OK(f->append("test"));
     ASSERT_OK(f->close());
 
-    ASSERT_OK(_fs->iterate_dir2("/home", [](std::string_view name, const FileMeta& meta) -> bool {
+    ASSERT_OK(_fs->iterate_dir2("/home", [](DirEntry entry) -> bool {
+        auto name = entry.name;
         if (name == "code") {
-            CHECK(meta.has_is_dir());
-            CHECK(meta.is_dir());
-            CHECK(!meta.has_modify_time());
-            CHECK(!meta.has_size());
+            CHECK(entry.is_dir.has_value());
+            CHECK(entry.is_dir.value());
+            CHECK(!entry.mtime.has_value());
+            CHECK(!entry.size.has_value());
         } else if (name == "gcc") {
-            CHECK(meta.has_is_dir());
-            CHECK(!meta.is_dir());
-            CHECK(!meta.has_modify_time());
-            CHECK(meta.has_size());
-            CHECK_EQ(4, meta.size());
+            CHECK(entry.is_dir.has_value());
+            CHECK(!entry.is_dir.value());
+            CHECK(!entry.mtime.has_value());
+            CHECK(entry.size.has_value());
+            CHECK_EQ(4, entry.size.value());
         } else {
             CHECK(false) << "Unexpected file " << name;
         }

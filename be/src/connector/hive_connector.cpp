@@ -256,16 +256,12 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     _profile.runtime_profile = _runtime_profile;
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
-    _profile.bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
-
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
     _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
     _profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
     _profile.expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
 
-    _profile.io_timer = ADD_TIMER(_runtime_profile, "IOTime");
-    _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 
@@ -301,6 +297,18 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailCounter", TUnit::UNIT, prefix);
         _profile.block_cache_write_fail_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailBytes", TUnit::BYTES, prefix);
+    }
+
+    {
+        static const char* prefix = "InputStream";
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        _profile.app_io_bytes_read_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "AppIOBytesRead", TUnit::BYTES, prefix);
+        _profile.app_io_timer = ADD_CHILD_TIMER(_runtime_profile, "AppIOTime", prefix);
+        _profile.app_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "AppIOCounter", TUnit::UNIT, prefix);
+        _profile.fs_bytes_read_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSBytesRead", TUnit::BYTES, prefix);
+        _profile.fs_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSIOCounter", TUnit::UNIT, prefix);
+        _profile.fs_io_timer = ADD_CHILD_TIMER(_runtime_profile, "FSIOTime", prefix);
     }
 
     if (hdfs_scan_node.__isset.table_name) {

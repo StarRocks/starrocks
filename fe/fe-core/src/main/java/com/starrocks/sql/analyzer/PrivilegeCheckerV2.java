@@ -1717,10 +1717,9 @@ public class PrivilegeCheckerV2 {
             FunctionName functionName = statement.getFunctionName();
             // global function.
             if (functionName.isGlobalFunction()) {
-                FunctionSearchDesc desc = statement.getFunction();
-                Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(desc);
-                if (function != null && !PrivilegeActions.checkGlobalFunctionAction(context, function.signatureString(),
-                        PrivilegeType.DROP)) {
+                FunctionSearchDesc functionSearchDesc = statement.getFunctionSearchDesc();
+                Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(functionSearchDesc);
+                if (function != null && !PrivilegeActions.checkGlobalFunctionAction(context, function, PrivilegeType.DROP)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                             "DROP GLOBAL FUNCTION");
                 }
@@ -1732,9 +1731,8 @@ public class PrivilegeCheckerV2 {
             if (db != null) {
                 try {
                     db.readLock();
-                    Function function = db.getFunction(statement.getFunction());
-                    if (null != function && !PrivilegeActions.checkFunctionAction(context, functionName.getDb(),
-                            function.signatureString(), PrivilegeType.DROP)) {
+                    Function function = db.getFunction(statement.getFunctionSearchDesc());
+                    if (null != function && !PrivilegeActions.checkFunctionAction(context, db, function, PrivilegeType.DROP)) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                                 "DROP FUNCTION");
                     }
