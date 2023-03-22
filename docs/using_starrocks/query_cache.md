@@ -22,7 +22,7 @@ The query cache supports queries that meet the following conditions:
   >
   > Other query engines do not support the query cache.
 
-- The queries are on native OLAP tables. The query cache does not support queries on external tables or lake tables. The query cache also supports queries whose plans require access to single-table materialized views. However, the query cache does not support queries whose plans require access to multi-table materialized views.
+- The queries are on native OLAP tables. The query cache does not support queries on external tables or lake tables. The query cache also supports queries whose plans require access to synchronous materialized views. However, the query cache does not support queries whose plans require access to asynchronous materialized views.
 
 - The queries are aggregate queries on a single table.
 
@@ -385,8 +385,8 @@ The support for multi-version caching varies depending on data models and query 
 
 | **Data type**       | **Query** **type**                                           | **Support for multi-version caching**                        |
 | ------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Duplicate Key Model | <ul><li>Queries on base tables</li><li>Queries on single-table materialized views</li></ul> | <ul><li>Queries on base tables: supported in all situations except when incremental tablet versions contain data deletion records.</li><li>Queries on single-table materialized views: supported in all situations except when the GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.</li></ul> |
-| Aggregate Key Model | Queries on base tables or queries on single-table materialized views | Supported in all situations except the following:The schemas of base tables contain the aggregate function `replace`.The GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.Incremental tablet versions contain data deletion records. |
+| Duplicate Key Model | <ul><li>Queries on base tables</li><li>Queries on synchronous materialized views</li></ul> | <ul><li>Queries on base tables: supported in all situations except when incremental tablet versions contain data deletion records.</li><li>Queries on synchronous materialized views: supported in all situations except when the GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.</li></ul> |
+| Aggregate Key Model | Queries on base tables or queries on synchronous materialized views | Supported in all situations except the following:The schemas of base tables contain the aggregate function `replace`.The GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.Incremental tablet versions contain data deletion records. |
 | Unique Key Model    | N/A                                                          | Not supported. However, the query cache is supported.        |
 | Primary Key Model   | N/A                                                          | Not supported. However, the query cache is supported.        |
 
