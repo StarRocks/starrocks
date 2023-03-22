@@ -90,6 +90,9 @@ using PercentileColumn = ObjectColumn<PercentileValue>;
 using JsonColumnBase = ObjectColumn<JsonValue>;
 class JsonColumn;
 
+class MapColumn;
+class StructColumn;
+
 using ChunkPtr = std::shared_ptr<Chunk>;
 using ChunkUniquePtr = std::unique_ptr<Chunk>;
 using Chunks = std::vector<ChunkPtr>;

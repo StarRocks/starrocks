@@ -9,6 +9,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/vectorized/column_ref.h"
+#include "runtime/large_int_value.h"
 #include "runtime/types.h"
 
 namespace starrocks {
@@ -82,6 +83,32 @@ private:
     Expr* _cast_elements_expr;
     TypeDescriptor _cast_to_type_desc;
 };
+
+/**
+ * Cast other type to string without float, double, string
+ */
+struct CastToString {
+    template <typename Type, typename ResultType>
+    static std::string apply(const Type& v) {
+        if constexpr (IsTemporal<Type>() || IsDecimal<Type>) {
+            // DateValue, TimestampValue, DecimalV2
+            return v.to_string();
+        } else if constexpr (IsInt128<Type>) {
+            // int128_t
+            return LargeIntValue::to_string(v);
+        } else {
+            // int8_t ~ int64_t, boolean
+            return SimpleItoa(v);
+        }
+    }
+
+    template <typename Type>
+    static bool constexpr extend_type() {
+        return (IsTemporal<Type>() || IsDecimal<Type> || IsInt128<Type>);
+    }
+};
+
+StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column);
 
 } // namespace vectorized
 } // namespace starrocks

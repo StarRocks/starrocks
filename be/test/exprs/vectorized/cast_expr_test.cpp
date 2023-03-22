@@ -9,6 +9,9 @@
 
 #include "butil/time.h"
 #include "column/fixed_length_column.h"
+#include "column/map_column.h"
+#include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
@@ -1823,6 +1826,12 @@ TEST_F(VectorizedCastExprTest, sqlToJson) {
     {
         JsonValue json = JsonValue::from_int(1);
         EXPECT_EQ(R"(1)", evaluateCastToJson<TYPE_JSON>(cast_expr, &json));
+    }
+    // temporal
+    {
+        EXPECT_EQ(R"("2023-03-14")", evaluateCastToJson<TYPE_DATE>(cast_expr, DateValue::create(2023, 3, 14)));
+        EXPECT_EQ(R"("2023-03-14 01:02:03")",
+                  evaluateCastToJson<TYPE_DATETIME>(cast_expr, TimestampValue::create(2023, 3, 14, 1, 2, 3)));
     }
 }
 

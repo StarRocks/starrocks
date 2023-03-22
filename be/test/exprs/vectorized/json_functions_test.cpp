@@ -10,6 +10,8 @@
 #include <string>
 
 #include "butil/time.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -954,4 +956,4 @@ INSTANTIATE_TEST_SUITE_P(GetJsonXXXTest, GetJsonXXXTestFixture,
                                  // clang-format: on
                                  ));
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

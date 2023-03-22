@@ -237,6 +237,18 @@ struct RunTimeTypeTraits<TYPE_JSON> {
     using ColumnType = JsonColumn;
 };
 
+template <>
+struct RunTimeTypeTraits<TYPE_STRUCT> {
+    using CppType = DatumStruct;
+    using ColumnType = StructColumn;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_MAP> {
+    using CppType = DatumMap;
+    using ColumnType = MapColumn;
+};
+
 template <PrimitiveType Type>
 using RunTimeCppType = typename RunTimeTypeTraits<Type>::CppType;
 

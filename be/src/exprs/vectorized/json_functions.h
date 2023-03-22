@@ -196,6 +196,10 @@ public:
                                            starrocks_udf::FunctionContext::FunctionStateScope scope);
     static Status native_json_path_close(starrocks_udf::FunctionContext* context,
                                          starrocks_udf::FunctionContext::FunctionStateScope scope);
+    /**
+     * Return json built from struct/map
+     */
+    DEFINE_VECTORIZED_FN(to_json);
 
     // extract_from_object extracts value from object according to the json path.
     // Now, we do not support complete functions of json path.
