@@ -46,6 +46,7 @@ import com.starrocks.thrift.TCheckConsistencyReq;
 import com.starrocks.thrift.TClearAlterTaskRequest;
 import com.starrocks.thrift.TClearTransactionTaskRequest;
 import com.starrocks.thrift.TCloneReq;
+import com.starrocks.thrift.TCompactionReq;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TDownloadReq;
 import com.starrocks.thrift.TDropAutoIncrementMapReq;
@@ -369,6 +370,12 @@ public class AgentBatchTask implements Runnable {
                     LOG.debug(request.toString());
                 }
                 tAgentTaskRequest.setAlter_tablet_req_v2(request);
+                return tAgentTaskRequest;
+            }
+            case COMPACTION: {
+                CompactionTask compactionTask = (CompactionTask) task;
+                TCompactionReq req = compactionTask.toThrift();
+                tAgentTaskRequest.setCompaction_req(req);
                 return tAgentTaskRequest;
             }
             default:

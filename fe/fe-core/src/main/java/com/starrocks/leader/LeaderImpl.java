@@ -284,6 +284,9 @@ public class LeaderImpl {
                 case DROP_AUTO_INCREMENT_MAP:
                     finishDropAutoIncrementMapTask(task, request);
                     break;
+                case COMPACTION:
+                    finishCompactionTask(task, request);
+                    break;
                 default:
                     break;
             }
@@ -376,6 +379,10 @@ public class LeaderImpl {
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.UPDATE_TABLET_META_INFO, task.getSignature());
         }
+    }
+
+    private void finishCompactionTask(AgentTask task, TFinishTaskRequest request) {
+        AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
     }
 
     private void finishRealtimePush(AgentTask task, TFinishTaskRequest request) {

@@ -28,6 +28,7 @@
 #include "storage/task/engine_alter_tablet_task.h"
 #include "storage/task/engine_checksum_task.h"
 #include "storage/task/engine_clone_task.h"
+#include "storage/task/engine_manual_compaction_task.h"
 #include "storage/task/engine_storage_migration_task.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
@@ -450,6 +451,31 @@ void run_check_consistency_task(const std::shared_ptr<CheckConsistencyTaskReques
     finish_task_request.__set_task_status(task_status);
     finish_task_request.__set_tablet_checksum(static_cast<int64_t>(checksum));
     finish_task_request.__set_request_version(check_consistency_req.version);
+
+    finish_task(finish_task_request);
+    remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+}
+
+void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    const TCompactionReq& compaction_req = agent_task_req->task_req;
+    TStatusCode::type status_code = TStatusCode::OK;
+    std::vector<std::string> error_msgs;
+    TStatus task_status;
+
+    for (auto tablet_id : compaction_req.tablet_ids) {
+        EngineManualCompactionTask engine_task(ExecEnv::GetInstance()->compaction_mem_tracker(), tablet_id,
+                                               compaction_req.is_base_compaction);
+        StorageEngine::instance()->execute_task(&engine_task);
+    }
+
+    task_status.__set_status_code(status_code);
+    task_status.__set_error_msgs(error_msgs);
+
+    TFinishTaskRequest finish_task_request;
+    finish_task_request.__set_backend(BackendOptions::get_localBackend());
+    finish_task_request.__set_task_type(agent_task_req->task_type);
+    finish_task_request.__set_signature(agent_task_req->signature);
+    finish_task_request.__set_task_status(task_status);
 
     finish_task(finish_task_request);
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
