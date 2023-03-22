@@ -1023,8 +1023,8 @@ public class ShowExecutorTest {
         for (int i = 6; i < mvSchemaTable.size() - 2; i++) {
             Assert.assertEquals("", resultSet.getString(6));
         }
-        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 2));
-        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 1));
+        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 2));
+        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 1));
         Assert.assertFalse(resultSet.next());
     }
 
