@@ -58,6 +58,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.commons.lang3.concurrent.ConcurrentUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -68,6 +69,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
@@ -732,6 +734,11 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public void writeEditLog(LakeTableSchemaChangeJob job) {
                 // nothing to do.
+            }
+
+            @Mock
+            public Future<Boolean> writeEditLogAsync(LakeTableSchemaChangeJob job) {
+                return ConcurrentUtils.constantFuture(true);
             }
 
             @Mock
