@@ -79,10 +79,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
 
-<<<<<<< HEAD
-        starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
-                .useDatabase(MATERIALIZED_DB_NAME)
-=======
         String empsWithBigintTable = "" +
                 "CREATE TABLE emps_bigint\n" +
                 "(\n" +
@@ -99,7 +95,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert
->>>>>>> 60657502e ([BugFix] rewrite query by using mv's binary predicate with no typecasting (#19480))
                 .withTable(deptsTable)
                 .withTable(empsTable)
                 .withTable(locationsTable)
