@@ -49,10 +49,12 @@ int main(int argc, char** argv) {
     std::vector<starrocks::StorePath> paths;
     paths.emplace_back(starrocks::config::storage_root_path);
 
-    std::unique_ptr<starrocks::MemTracker> metadata_mem_tracker = std::make_unique<starrocks::MemTracker>();
-    std::unique_ptr<starrocks::MemTracker> schema_change_mem_tracker = std::make_unique<starrocks::MemTracker>();
-    std::unique_ptr<starrocks::MemTracker> compaction_mem_tracker = std::make_unique<starrocks::MemTracker>();
-    std::unique_ptr<starrocks::MemTracker> update_mem_tracker = std::make_unique<starrocks::MemTracker>();
+    auto metadata_mem_tracker = std::make_unique<starrocks::MemTracker>();
+    auto tablet_schema_mem_tracker =
+            std::make_unique<starrocks::MemTracker>(-1, "tablet_schema", metadata_mem_tracker.get());
+    auto schema_change_mem_tracker = std::make_unique<starrocks::MemTracker>();
+    auto compaction_mem_tracker = std::make_unique<starrocks::MemTracker>();
+    auto update_mem_tracker = std::make_unique<starrocks::MemTracker>();
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
