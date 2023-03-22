@@ -74,7 +74,7 @@ Status RowsetColumnUpdateState::load(Tablet* tablet, Rowset* rowset) {
     return _status;
 }
 
-Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk_column) {
+Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx) {
     RowsetReleaseGuard guard(rowset->shared_from_this());
     DCHECK(_upserts.size() >= idx);
     if (_upserts.size() == 0) {
@@ -98,6 +98,10 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Colu
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
     Schema update_schema = ChunkHelper::convert_schema(schema, update_columns);
+    std::unique_ptr<Column> pk_column;
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+        CHECK(false) << "create column for primary key encoder failed";
+    }
 
     // iterators for each update segments;
     std::vector<ChunkIteratorPtr> itrs;
@@ -155,19 +159,9 @@ Status RowsetColumnUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     auto span = Tracer::Instance().start_trace_txn_tablet("rowset_column_update_state_load", rowset->txn_id(),
                                                           tablet->tablet_id());
     _tablet_id = tablet->tablet_id();
-    auto& schema = rowset->schema();
-    vector<uint32_t> pk_columns;
-    for (size_t i = 0; i < schema.num_key_columns(); i++) {
-        pk_columns.push_back((uint32_t)i);
-    }
-    Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
-    std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
-        CHECK(false) << "create column for primary key encoder failed";
-    }
 
     for (size_t i = 0; i < rowset->num_update_files(); i++) {
-        RETURN_IF_ERROR(_load_upserts(rowset, i, pk_column.get()));
+        RETURN_IF_ERROR(_load_upserts(rowset, i));
     }
 
     return _prepare_partial_update_states(tablet, rowset, 0, true);

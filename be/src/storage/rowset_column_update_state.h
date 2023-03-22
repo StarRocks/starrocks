@@ -118,7 +118,7 @@ public:
     const std::map<uint32_t, DeltaColumnGroupPtr>& delta_column_groups() { return _rssid_to_delta_column_group; }
 
 private:
-    Status _load_upserts(Rowset* rowset, uint32_t upsert_id, Column* pk_column);
+    Status _load_upserts(Rowset* rowset, uint32_t upsert_id);
 
     Status _do_load(Tablet* tablet, Rowset* rowset);
 
