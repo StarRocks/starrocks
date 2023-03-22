@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "agent/task_singatures_manager.h"
+#include "agent/task_signatures_manager.h"
 
 namespace starrocks {
 

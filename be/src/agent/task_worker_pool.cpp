@@ -47,7 +47,7 @@
 #include "agent/master_info.h"
 #include "agent/publish_version.h"
 #include "agent/report_task.h"
-#include "agent/task_singatures_manager.h"
+#include "agent/task_signatures_manager.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
