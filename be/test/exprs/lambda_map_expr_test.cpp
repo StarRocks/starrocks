@@ -250,7 +250,7 @@ TEST_F(MapApplyExprTest, test_map_int_int) {
     // Query:
     //   select map_apply((k,v)->(k is null, v + a), map)
     //
-    // Outputs: "[{0:45,0:56,0:67}, {0:78,0:89}, {0:NULL}, {}, NULL]"
+    // Outputs: "[{0:67}, {0:89}, {0:NULL}, {}, NULL]"
 
     {
         std::unique_ptr<MapApplyExpr> map_apply_expr = create_map_apply_expr(type_map_int_int);
@@ -265,7 +265,7 @@ TEST_F(MapApplyExprTest, test_map_int_int) {
         ColumnPtr result = map_apply_expr->evaluate(&exprContext, &cur_chunk);
 
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_STREQ(result->debug_string().c_str(), "[{0:45,0:56,0:67}, {0:78,0:89}, {0:NULL}, {}, NULL]");
+        EXPECT_STREQ(result->debug_string().c_str(), "[{0:67}, {0:89}, {0:NULL}, {}, NULL]");
 
         Expr::close(expr_ctxs, &_runtime_state);
     }
@@ -352,7 +352,7 @@ TEST_F(MapApplyExprTest, test_map_varchar_int) {
     // Query:
     //   select map_apply((k,v)->(k is null, v + a), map)
     //
-    // Outputs: {0:12,0:23,0:34}, {0:45,0:56,0:67}, {0:78,0:89}, {0:100}, {}
+    // Outputs: {0:34}, {0:67}, {0:89}, {0:100}, {}
     {
         std::unique_ptr<MapApplyExpr> map_apply_expr = create_map_apply_expr(type_map_varchar_int);
 
@@ -366,7 +366,7 @@ TEST_F(MapApplyExprTest, test_map_varchar_int) {
         ColumnPtr result = map_apply_expr->evaluate(&exprContext, &cur_chunk);
 
         EXPECT_FALSE(result->is_nullable());
-        EXPECT_STREQ(result->debug_string().c_str(), "{0:12,0:23,0:34}, {0:45,0:56,0:67}, {0:78,0:89}, {0:100}, {}");
+        EXPECT_STREQ(result->debug_string().c_str(), "{0:34}, {0:67}, {0:89}, {0:100}, {}");
 
         Expr::close(expr_ctxs, &_runtime_state);
     }
