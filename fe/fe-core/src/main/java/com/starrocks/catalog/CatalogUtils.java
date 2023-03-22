@@ -165,7 +165,7 @@ public class CatalogUtils {
                     }
                 }
                 if (!partitionValueExists) {
-                    throw new DdlException("partition values (" + tempPartitionValues + ") not exist ");
+                    throw new DdlException("partition values " + "(" + tempPartitionValues + ") not exist ");
                 }
             }
         } catch (AnalysisException e) {

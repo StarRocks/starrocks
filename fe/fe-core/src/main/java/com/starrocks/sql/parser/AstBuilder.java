@@ -2131,8 +2131,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDropResourceGroupStatement(StarRocksParser.DropResourceGroupStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
+<<<<<<< HEAD
         boolean ifExists = context.IF() != null && context.EXISTS() != null;
         return new DropResourceGroupStmt(ifExists, identifier.getValue(), createPos(context));
+=======
+        return new DropResourceGroupStmt(identifier.getValue(), createPos(context));
+>>>>>>> main
     }
 
     @Override
@@ -2195,8 +2199,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public ParseNode visitDropResourceStatement(StarRocksParser.DropResourceStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
+<<<<<<< HEAD
         boolean ifExists = context.IF() != null && context.EXISTS() != null;
         return new DropResourceStmt(ifExists, identifier.getValue(), createPos(context));
+=======
+        return new DropResourceStmt(identifier.getValue(), createPos(context));
+>>>>>>> main
     }
 
     public ParseNode visitAlterResourceStatement(StarRocksParser.AlterResourceStatementContext context) {
@@ -4392,6 +4400,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 (GrantRevokeClause) visit(context.grantRevokeClause()),
                 parsePrivilegeObjectNameList(context.privObjectNameList()),
                 createPos(context));
+<<<<<<< HEAD
     }
 
     @Override
@@ -4414,6 +4423,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+=======
+    }
+
+    @Override
+    public ParseNode visitGrantOnSystem(StarRocksParser.GrantOnSystemContext context) {
+        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
+                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
+
+        return new GrantPrivilegeStmt(privilegeList, "SYSTEM",
+                (GrantRevokeClause) visit(context.grantRevokeClause()), null, context.WITH() != null,
+                createPos(context));
+    }
+
+    @Override
+    public ParseNode visitRevokeOnSystem(StarRocksParser.RevokeOnSystemContext context) {
+        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
+                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
+
+        return new RevokePrivilegeStmt(privilegeList, "SYSTEM",
+                (GrantRevokeClause) visit(context.grantRevokeClause()), null, createPos(context));
+    }
+
+    @Override
+>>>>>>> main
     public ParseNode visitGrantOnPrimaryObj(StarRocksParser.GrantOnPrimaryObjContext context) {
         List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
                 c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
