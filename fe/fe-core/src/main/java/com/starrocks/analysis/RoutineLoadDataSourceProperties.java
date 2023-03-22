@@ -42,6 +42,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,7 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-public class RoutineLoadDataSourceProperties {
+public class RoutineLoadDataSourceProperties implements ParseNode {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadDataSourceProperties.class);
 
     private static final ImmutableSet<String> CONFIGURABLE_KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -77,11 +78,19 @@ public class RoutineLoadDataSourceProperties {
     @SerializedName(value = "customPulsarProperties")
     private Map<String, String> customPulsarProperties = Maps.newHashMap();
 
+    private final NodePosition pos;
+
     public RoutineLoadDataSourceProperties() {
         // empty
+        pos = NodePosition.ZERO;
     }
 
     public RoutineLoadDataSourceProperties(String type, Map<String, String> properties) {
+        this(type, properties, NodePosition.ZERO);
+    }
+
+    public RoutineLoadDataSourceProperties(String type, Map<String, String> properties, NodePosition pos) {
+        this.pos = pos;
         this.type = type.toUpperCase();
         this.properties = properties;
     }
@@ -225,5 +234,10 @@ public class RoutineLoadDataSourceProperties {
             sb.append(", custom properties: ").append(customPulsarProperties);
         }
         return sb.toString();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

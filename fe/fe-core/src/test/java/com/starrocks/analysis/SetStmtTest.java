@@ -109,7 +109,7 @@ public class SetStmtTest {
     }
 
     @Test
-    public void setResourceGroup() throws UserException {
+    public void setResourceGroup() {
         SystemVariable setEmpty = new SystemVariable(SetType.SESSION, SessionVariable.RESOURCE_GROUP, new StringLiteral(""));
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setEmpty)), ctx);
 
@@ -118,7 +118,8 @@ public class SetStmtTest {
             SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
             Assert.fail("should fail");
         } catch (SemanticException e) {
-            Assert.assertEquals("resource group not exists: not_exists", e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: resource group not exists: not_exists.",
+                    e.getMessage());
         }
     }
 

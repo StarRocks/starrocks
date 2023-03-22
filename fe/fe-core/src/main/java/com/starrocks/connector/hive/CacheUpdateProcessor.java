@@ -33,6 +33,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -82,6 +83,17 @@ public class CacheUpdateProcessor {
         if (isResourceMappingCatalog(catalogName) && table.isHiveTable()) {
             processSchemaChange(dbName, (HiveTable) table);
         }
+    }
+
+    public void refreshTableWithExecutor(Table table, boolean onlyCachedPartitions, ExecutorService executor) {
+        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
+        metastore.refreshTable(hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
+        refreshRemoteFiles(hmsTbl.getTableLocation(), Operator.UPDATE, getExistPaths(hmsTbl), onlyCachedPartitions,
+                executor);
+    }
+
+    public Set<HiveTableName> getCachedTableNames() {
+        return ((CachingHiveMetastore) metastore).getCachedTableNames();
     }
 
     private List<String> getExistPaths(HiveMetaStoreTable table) {
@@ -145,6 +157,12 @@ public class CacheUpdateProcessor {
 
     private void refreshRemoteFiles(String tableLocation, Operator operator, List<String> existPaths,
                                     boolean onlyCachedPartitions) {
+        refreshRemoteFiles(tableLocation, operator, existPaths, onlyCachedPartitions, executor);
+    }
+
+
+    private void refreshRemoteFiles(String tableLocation, Operator operator, List<String> existPaths,
+                                    boolean onlyCachedPartitions, ExecutorService refreshExecutor) {
         if (remoteFileIO.isPresent()) {
             List<RemotePathKey> presentPathKey;
             if (onlyCachedPartitions) {
@@ -158,9 +176,9 @@ public class CacheUpdateProcessor {
             presentPathKey.forEach(pathKey -> {
                 String pathWithSlash = pathKey.getPath().endsWith("/") ? pathKey.getPath() : pathKey.getPath() + "/";
                 if (operator == Operator.UPDATE && existPaths.contains(pathWithSlash)) {
-                    futures.add(executor.submit(() -> remoteFileIO.get().updateRemoteFiles(pathKey)));
+                    futures.add(refreshExecutor.submit(() -> remoteFileIO.get().updateRemoteFiles(pathKey)));
                 } else {
-                    futures.add(executor.submit(() -> remoteFileIO.get().invalidatePartition(pathKey)));
+                    futures.add(refreshExecutor.submit(() -> remoteFileIO.get().invalidatePartition(pathKey)));
                 }
             });
 

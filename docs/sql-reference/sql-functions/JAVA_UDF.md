@@ -606,7 +606,7 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 
 ## Manage UDFs
 
-Execute the SHOW FUNCTIONS statement to query UDFs. For more information, see [SHOW FUNCTIONS](../sql-reference/sql-statements/data-definition/show-functions.md).
+Execute the SHOW FUNCTIONS statement to query UDFs. For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/show-functions.md).
 
 ## Delete UDFs
 

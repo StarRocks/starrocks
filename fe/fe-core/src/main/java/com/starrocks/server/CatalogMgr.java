@@ -159,6 +159,10 @@ public class CatalogMgr {
         return catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
     }
 
+    public static boolean isExternalCatalog(String name) {
+        return !Strings.isNullOrEmpty(name) && !isInternalCatalog(name) && !isResourceMappingCatalog(name);
+    }
+
     public void replayCreateCatalog(Catalog catalog) throws DdlException {
         String type = catalog.getType();
         String catalogName = catalog.getName();

@@ -69,6 +69,7 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TFunctionVersion;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TLoadJobType;
@@ -683,6 +684,10 @@ public class CoordinatorPreprocessor {
                                 int expectedDop = Math.max(1, Math.min(pipelineDop, scanRangeParams.size()));
                                 List<List<TScanRangeParams>> scanRangeParamsPerDriverSeq =
                                         ListUtil.splitBySize(scanRangeParams, expectedDop);
+                                if (fragment.isForceAssignScanRangesPerDriverSeq() && scanRangeParamsPerDriverSeq.size()
+                                        != pipelineDop) {
+                                    fragment.setPipelineDop(scanRangeParamsPerDriverSeq.size());
+                                }
                                 instanceParam.pipelineDop = scanRangeParamsPerDriverSeq.size();
                                 if (fragment.isUseRuntimeAdaptiveDop()) {
                                     instanceParam.pipelineDop = Utils.computeMinGEPower2(instanceParam.pipelineDop);
@@ -868,8 +873,7 @@ public class CoordinatorPreprocessor {
         return bucketShuffleFragmentIds.contains(fragmentId);
     }
 
-    // Returns the id of the leftmost node of any of the gives types in 'plan_root',
-    // or INVALID_PLAN_NODE_ID if no such node present.
+    // Returns the id of the leftmost node of any of the gives types in 'plan_root'.
     private PlanNode findLeftmostNode(PlanNode plan) {
         PlanNode newPlan = plan;
         while (newPlan.getChildren().size() != 0 && !(newPlan instanceof ExchangeNode)) {
@@ -1031,13 +1035,15 @@ public class CoordinatorPreprocessor {
                     queryOptions.
                             setEnable_populate_block_cache(
                                     connectContext.getSessionVariable().getEnablePopulateBlockCache());
-                    queryOptions.setHudi_mor_force_jni_reader(connectContext.getSessionVariable().getHudiMORForceJNIReader());
+                    queryOptions.setHudi_mor_force_jni_reader(
+                            connectContext.getSessionVariable().getHudiMORForceJNIReader());
                 }
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),
                                 hasComputeNode,
-                                forceScheduleLocal);
+                                forceScheduleLocal,
+                                connectContext.getSessionVariable().getHDFSBackendSelectorScanRangeShuffle());
                 selector.computeScanRangeAssignment();
             } else {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
@@ -1500,7 +1506,7 @@ public class CoordinatorPreprocessor {
             commonParams.setProtocol_version(InternalServiceVersion.V1);
             commonParams.setFragment(fragment.toThrift());
             commonParams.setDesc_tbl(descTable);
-            commonParams.setFunc_version(4);
+            commonParams.setFunc_version(TFunctionVersion.FUNC_VERSION_UNIX_TIMESTAMP_INT64.getValue());
             commonParams.setCoord(coordAddress);
 
             commonParams.setParams(new TPlanFragmentExecParams());

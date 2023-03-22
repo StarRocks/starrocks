@@ -117,7 +117,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
     ChunkPtr max_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = min_max_tuple_desc->slots()[i];
-        int32_t column_index = _reader->get_column_id_by_name(slot->col_name());
+        int32_t column_index = _reader->get_column_id_by_slot_name(slot->col_name());
         if (column_index >= 0) {
             auto row_idx_iter = rowIndexes.find(column_index);
             // there is no column stats, skip filter process.
@@ -163,6 +163,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
         auto min = min_col->get(0).get_int8();
         auto max = max_col->get(0).get_int8();
         if (min == 0 && max == 0) {
+            // Means this row group dont stastisfy min-max predicates, we can filter this row group.
             return true;
         }
     }
@@ -190,7 +191,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
             if (!_scanner_ctx.can_use_dict_filter_on_slot(slot)) {
                 continue;
             }
-            int32_t column_index = _reader->get_column_id_by_name(col.col_name);
+            int32_t column_index = _reader->get_column_id_by_slot_name(col.col_name);
             if (column_index < 0) {
                 continue;
             }
@@ -297,7 +298,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
-    auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _scanner_params.scan_ranges[0]->file_length);
+    auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
+                                                            _shared_buffered_input_stream.get());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
     try {
@@ -351,7 +353,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     _orc_reader->set_row_reader_filter(_orc_row_reader_filter);
     _orc_reader->set_read_chunk_size(runtime_state->chunk_size());
     _orc_reader->set_runtime_state(runtime_state);
-    _orc_reader->set_current_file_name(_scanner_params.scan_ranges[0]->relative_path);
+    _orc_reader->set_current_file_name(_file->filename());
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx.timezone));
     if (_use_orc_sargs) {
         std::vector<Expr*> conjuncts;
@@ -465,8 +467,8 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
         {
             SCOPED_RAW_TIMER(&_stats.column_read_ns);
-            _orc_reader->lazy_seek_to(position.row_in_stripe);
-            _orc_reader->lazy_read_next(read_num_values);
+            RETURN_IF_ERROR(_orc_reader->lazy_seek_to(position.row_in_stripe));
+            RETURN_IF_ERROR(_orc_reader->lazy_read_next(read_num_values));
         }
         {
             SCOPED_RAW_TIMER(&_stats.column_convert_ns);

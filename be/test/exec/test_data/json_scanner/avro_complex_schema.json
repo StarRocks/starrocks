@@ -1,0 +1,31 @@
+["null", {
+	"doc": "{\"primaryKeys\":[\"id\"]}",
+	"fields": [{
+		"name": "id",
+		"type": "string"
+	}, {
+		"name": "event_signature",
+		"type": ["null", "string"]
+	}, {
+		"name": "event_params",
+		"type": ["null", {
+			"items": "string",
+			"type": "array"
+		}]
+	}, {
+		"name": "raw_log",
+		"type": ["null", {
+			"fields": [{
+				"name": "id",
+				"type": "string"
+			}, {
+				"name": "data",
+				"type": "string"
+			}],
+			"name": "logs",
+			"type": "record"
+		}]
+	}],
+	"name": "decoded_logs",
+	"type": "record"
+}]

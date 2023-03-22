@@ -43,7 +43,7 @@ public class PostProcessListener extends StarRocksBaseListener {
     public void exitExpressionList(StarRocksParser.ExpressionListContext ctx) {
         long childCount = ctx.children.stream().filter(child -> child instanceof StarRocksParser.ExpressionContext).count();
         if (childCount > maxExprChildCount) {
-            NodePosition pos = new NodePosition(ctx.start, ctx.getStop());
+            NodePosition pos = new NodePosition(ctx.start, ctx.stop);
             throw new ParsingException(PARSER_ERROR_MSG.exprsExceedLimit(childCount, maxExprChildCount), pos);
         }
     }
@@ -52,7 +52,7 @@ public class PostProcessListener extends StarRocksBaseListener {
     public void exitExpressionsWithDefault(StarRocksParser.ExpressionsWithDefaultContext ctx) {
         long childCount = ctx.expressionOrDefault().size();
         if (childCount > maxExprChildCount) {
-            NodePosition pos = new NodePosition(ctx.start, ctx.getStop());
+            NodePosition pos = new NodePosition(ctx.start, ctx.stop);
             throw new ParsingException(PARSER_ERROR_MSG.argsOfExprExceedLimit(childCount, maxExprChildCount), pos);
         }
     }
@@ -61,7 +61,7 @@ public class PostProcessListener extends StarRocksBaseListener {
     public void exitInsertStatement(StarRocksParser.InsertStatementContext ctx) {
         long childCount = ctx.expressionsWithDefault().size();
         if (childCount > maxExprChildCount) {
-            NodePosition pos = new NodePosition(ctx.start, ctx.getStop());
+            NodePosition pos = new NodePosition(ctx.start, ctx.stop);
             throw new ParsingException(PARSER_ERROR_MSG.insertRowsExceedLimit(childCount, maxExprChildCount), pos);
         }
     }

@@ -466,7 +466,7 @@ public class ExportJob implements Writable {
                 TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTime(), Maps.newHashMap());
         newCoord.setExecMemoryLimit(getMemLimit());
         this.coordList.set(taskIndex, newCoord);
-        LOG.info("reset coordinator for export job: {}, taskIdx {}", coordList.size(), taskIndex);
+        LOG.info("reset coordinator for export job: {}, taskIdx: {}", id, taskIndex);
         return newCoord;
     }
 
@@ -991,7 +991,7 @@ public class ExportJob implements Writable {
     }
 
     public boolean exportLakeTable() {
-        return exportTable.isLakeTable();
+        return exportTable.isCloudNativeTable();
     }
 
     public boolean exportOlapTable() {

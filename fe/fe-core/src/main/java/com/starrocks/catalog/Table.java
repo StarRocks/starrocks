@@ -44,10 +44,10 @@ import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
@@ -73,7 +73,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     // 1. Native table:
     //   1.1 Local: OLAP, MATERIALIZED_VIEW
-    //   1.2 Lake: LAKE
+    //   1.2 Cloud native: LAKE, LAKE_MATERIALIZED_VIEW
     // 2. System table: SCHEMA
     // 3. View: INLINE_VIEW, VIEW
     // 4. External table: MYSQL, OLAP_EXTERNAL, BROKER, ELASTICSEARCH, HIVE, ICEBERG, HUDI, ODBC, JDBC
@@ -93,7 +93,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         MATERIALIZED_VIEW,
         LAKE,
         DELTALAKE,
-        FILE
+        FILE,
+        LAKE_MATERIALIZED_VIEW
     }
 
     @SerializedName(value = "id")
@@ -106,20 +107,20 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     protected long createTime;
     /*
      *  fullSchema and nameToColumn should contain all columns, both visible and shadow.
-     *  eg. for OlapTable, when doing schema change, there will be some shadow columns which are not visible
+     *  e.g. for OlapTable, when doing schema change, there will be some shadow columns which are not visible
      *      to query but visible to load process.
      *  If you want to get all visible columns, you should call getBaseSchema() method, which is override in
-     *  sub classes.
+     *  subclasses.
      *
      *  NOTICE: the order of this fullSchema is meaningless to OlapTable
      */
     /**
-     * The fullSchema of OlapTable includes the base columns and the SHADOW_NAME_PRFIX columns.
+     * The fullSchema of OlapTable includes the base columns and the SHADOW_NAME_PREFIX columns.
      * The properties of base columns in fullSchema are same as properties in baseIndex.
      * For example:
      * Table (c1 int, c2 int, c3 int)
      * Schema change (c3 to bigint)
-     * When OlapTable is changing schema, the fullSchema is (c1 int, c2 int, c3 int, SHADOW_NAME_PRFIX_c3 bigint)
+     * When OlapTable is changing schema, the fullSchema is (c1 int, c2 int, c3 int, SHADOW_NAME_PREFIX_c3 bigint)
      * The fullSchema of OlapTable is mainly used by Scanner of Load job.
      * <p>
      * If you want to get the mv columns, you should call getIndexToSchema in Subclass OlapTable.
@@ -128,7 +129,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     protected List<Column> fullSchema;
     // tree map for case-insensitive lookup.
     /**
-     * The nameToColumn of OlapTable includes the base columns and the SHADOW_NAME_PRFIX columns.
+     * The nameToColumn of OlapTable includes the base columns and the SHADOW_NAME_PREFIX columns.
      */
     protected Map<String, Column> nameToColumn;
 
@@ -141,7 +142,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     // not serialized field
     // record all materialized views based on this Table
     @SerializedName(value = "mvs")
-    private Set<MvId> relatedMaterializedViews;
+    protected Set<MvId> relatedMaterializedViews;
 
     public Table(TableType type) {
         this.type = type;
@@ -214,20 +215,36 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.OLAP;
     }
 
-    public boolean isMaterializedView() {
+    public boolean isOlapMaterializedView() {
         return type == TableType.MATERIALIZED_VIEW;
+    }
+
+    public boolean isView() {
+        return type == TableType.VIEW;
+    }
+
+    public boolean isLocalTable() {
+        return isOlapTable() || isOlapMaterializedView();
     }
 
     public boolean isLakeTable() {
         return type == TableType.LAKE;
     }
 
-    public boolean isLocalTable() {
-        return isOlapTable() || isMaterializedView();
+    public boolean isLakeMaterializedView() {
+        return type == TableType.LAKE_MATERIALIZED_VIEW;
+    }
+
+    public boolean isCloudNativeTable() {
+        return isLakeTable() || isLakeMaterializedView();
+    }
+
+    public boolean isMaterializedView() {
+        return isOlapMaterializedView() || isLakeMaterializedView();
     }
 
     public boolean isNativeTable() {
-        return isLocalTable() || isLakeTable();
+        return isLocalTable() || isCloudNativeTable();
     }
 
     public boolean isHiveTable() {
@@ -289,7 +306,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     }
 
     public static Table read(DataInput in) throws IOException {
-        Table table = null;
+        Table table;
         TableType type = TableType.valueOf(Text.readString(in));
         if (type == TableType.OLAP) {
             table = new OlapTable();
@@ -319,6 +336,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return table;
         } else if (type == TableType.LAKE) {
             table = LakeTable.read(in);
+            table.setTypeRead(true);
+            return table;
+        } else if (type == TableType.LAKE_MATERIALIZED_VIEW) {
+            table = LakeMaterializedView.read(in);
             table.setTypeRead(true);
             return table;
         } else {
@@ -435,19 +456,38 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return "MySQL";
         } else if (this instanceof SchemaTable) {
             return "MEMORY";
+        } else if (this instanceof HiveTable) {
+            return "Hive";
+        } else if (this instanceof HudiTable) {
+            return "Hudi";
+        } else if (this instanceof IcebergTable) {
+            return "Iceberg";
+        } else if (this instanceof DeltaLakeTable) {
+            return "DeltaLake";
+        } else if (this instanceof EsTable) {
+            return "Elasticsearch";
+        } else if (this instanceof JDBCTable) {
+            return "JDBC";
+        } else if (this instanceof FileTable) {
+            return "File";
         } else {
             return null;
         }
     }
 
     public String getMysqlType() {
-        if (this instanceof View) {
-            return "VIEW";
+        switch (type) {
+            case INLINE_VIEW:
+            case VIEW:
+            case MATERIALIZED_VIEW:
+            case LAKE_MATERIALIZED_VIEW:
+                return "VIEW";
+            case SCHEMA:
+                return "SYSTEM VIEW";
+            default:
+                // external table also returns "BASE TABLE" for BI compatibility
+                return "BASE TABLE";
         }
-        if (this instanceof MaterializedView) {
-            return "VIEW";
-        }
-        return "BASE TABLE";
     }
 
     public String getComment() {
@@ -459,10 +499,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public void setComment(String comment) {
         this.comment = Strings.nullToEmpty(comment);
-    }
-
-    public CreateTableStmt toCreateTableStmt(String dbName) {
-        throw new NotImplementedException();
     }
 
     @Override
@@ -481,7 +517,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
      *   2.1 If is clone between bes or group is not stable, table can not be scheduled.
      *   2.2 If is local balance and group is stable, table can be scheduled.
      * 3. (deprecated). if table's state is ROLLUP or SCHEMA_CHANGE, but alter job's state is FINISHING, we should also
-     *      schedule the tablet to repair it(only for VERSION_IMCOMPLETE case, this will be checked in
+     *      schedule the tablet to repair it(only for VERSION_INCOMPLETE case, this will be checked in
      *      TabletScheduler).
      * 4. Even if table's state is ROLLUP or SCHEMA_CHANGE, check it. Because we can repair the tablet of base index.
      * 5. PRIMARY_KEYS table does not support local balance.
@@ -496,18 +532,15 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             boolean isGroupUnstable = colocateIndex.isGroupUnstable(colocateIndex.getGroup(getId()));
             if (!isLocalBalance || isGroupUnstable) {
                 LOG.debug(
-                        "table {} is a colocate table, skip tablet checker. is local migration: {}, is group unstable: {}",
+                        "table {} is a colocate table, skip tablet checker. " +
+                                "is local migration: {}, is group unstable: {}",
                         name, isLocalBalance, isGroupUnstable);
                 return false;
             }
         }
 
         OlapTable olapTable = (OlapTable) this;
-        if (isLocalBalance && olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-            return false;
-        }
-
-        return true;
+        return !isLocalBalance || olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
     }
 
     public boolean hasAutoIncrementColumn() {
@@ -583,5 +616,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public List<String> getPartitionColumnNames() {
         return Lists.newArrayList();
+    }
+
+    public boolean supportsUpdate() {
+        return false;
     }
 }

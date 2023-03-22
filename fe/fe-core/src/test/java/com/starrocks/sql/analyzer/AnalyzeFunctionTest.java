@@ -126,7 +126,7 @@ public class AnalyzeFunctionTest {
                 "time_slice requires second parameter must be greater than 0");
 
         analyzeFail("select time_slice(th, interval 1 second, FCEILK) from tall",
-                "time_slice must use FLOOR/CEIL as third parameter");
+                "Incorrect type/value of arguments in expr 'time_slice'");
 
         analyzeFail("select time_slice('2023-12-31 03:12:04',interval -3.2 day)",
                 "time_slice requires second parameter must be a constant interval");
@@ -254,7 +254,8 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("SELECT {fn ucase(`ta`)} FROM tall");
         analyzeSuccess("SELECT {fn UCASE(ucase(`ta`))} FROM tall");
         analyzeSuccess("select { fn extract(year from th)} from tall");
-        analyzeFail("select {fn date_format(th, \"%Y\")} from tall", "invalid odbc scalar function");
+        analyzeFail("select {fn date_format(th, \"%Y\")} from tall",
+                "Invalid odbc scalar function 'date_format(th, '%Y')'");
     }
 
     @Test

@@ -15,7 +15,9 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -28,6 +30,8 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeUtilTest {
     @BeforeClass
@@ -83,5 +87,76 @@ public class AnalyzeUtilTest {
         stringDatabaseMap = AnalyzerUtils.collectAllDatabase(AnalyzeTestUtil.getConnectContext(), statementBase.get(0));
         Assert.assertEquals(stringDatabaseMap.size(), 1);
         Assert.assertEquals("[test]", stringDatabaseMap.keySet().toString());
+    }
+
+    @Test
+    public void testCollectTable() {
+        String sql = "select * from db1.t0, db2.t0";
+        StatementBase statementBase = analyzeSuccess(sql);
+        Map<TableName, Table> m = AnalyzerUtils.collectAllTableAndView(statementBase);
+        Assert.assertEquals("[db2.t0, db1.t0]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(
+                analyzeSuccess("select * from db1.t0 where t0.v1 = (select v1 from db2.t0)"));
+        Assert.assertEquals("[db2.t0, db1.t0]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(analyzeSuccess(
+                "select * from db1.t0 where t0.v1 = (select db2.t0.v1 from db2.t0 where db2.t0.v2 = db1.t0.v1)"));
+        Assert.assertEquals("[db2.t0, db1.t0]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(
+                analyzeSuccess("select * from db1.t0 where t0.v1 in (select v1 from db2.t0)"));
+        Assert.assertEquals("[db2.t0, db1.t0]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(
+                analyzeSuccess("select * from db1.t0 where exists (select v1 from db2.t0)"));
+        Assert.assertEquals("[db2.t0, db1.t0]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(
+                analyzeSuccess("select db1.t0.v1 from db1.t0 group by db1.t0.v1 having db1.t0.v1 = (select v1 from db2.t0)"));
+        Assert.assertEquals("[db2.t0, db1.t0]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(
+                analyzeSuccess("select (select v1 from db2.t0), db1.t0.v1 from db1.t0"));
+        Assert.assertEquals("[db2.t0, db1.t0]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(
+                analyzeSuccess("with cte as (select v1 from db2.t0) select db1.t0.v1 from db1.t0, cte"));
+        Assert.assertEquals("[db2.t0, db1.t0]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(
+                analyzeSuccess("with cte as (select v1 from db2.t0) select db1.t0.v1 from db1.t0 union select * from cte"));
+        Assert.assertEquals("[db2.t0, db1.t0]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(analyzeSuccess("insert into db1.t0 select * from db2.t0"));
+        Assert.assertEquals("[db2.t0, db1.t0]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(analyzeSuccess(
+                "update tprimary set v2 = tp2.v2 from tprimary2 tp2 where tprimary.pk = tp2.pk"));
+        Assert.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(analyzeSuccess(
+                "update tprimary set v2 = tp2.v2 from tprimary2 tp2 join t0 where tprimary.pk = tp2.pk " +
+                        "and tp2.pk = t0.v1 and t0.v2 > 0"));
+        Assert.assertEquals("[test.tprimary2, test.t0, test.tprimary]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(analyzeSuccess(
+                "with tp2cte as (select * from tprimary2 where v2 < 10) update tprimary set v2 = tp2cte.v2 " +
+                        "from tp2cte where tprimary.pk = tp2cte.pk"));
+        Assert.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(
+                analyzeSuccess("delete from tprimary using tprimary2 tp2 where tprimary.pk = tp2.pk"));
+        Assert.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(analyzeSuccess(
+                "delete from tprimary using tprimary2 tp2 join t0 where tprimary.pk = tp2.pk " +
+                        "and tp2.pk = t0.v1 and t0.v2 > 0"));
+        Assert.assertEquals("[test.tprimary2, test.t0, test.tprimary]", m.keySet().toString());
+
+        m = AnalyzerUtils.collectAllTableAndView(analyzeSuccess(
+                "with tp2cte as (select * from tprimary2 where v2 < 10) delete from tprimary using " +
+                        "tp2cte where tprimary.pk = tp2cte.pk"));
+        Assert.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
     }
 }

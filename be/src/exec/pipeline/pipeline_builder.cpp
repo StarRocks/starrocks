@@ -246,7 +246,7 @@ bool PipelineBuilderContext::should_interpolate_cache_operator(OpFactoryPtr& sou
     if (cache_param.plan_node_id != plan_node_id) {
         return false;
     }
-    return dynamic_cast<pipeline::OlapScanOperatorFactory*>(source_op.get()) != nullptr;
+    return dynamic_cast<pipeline::OperatorFactory*>(source_op.get()) != nullptr;
 }
 
 OpFactories PipelineBuilderContext::interpolate_cache_operator(

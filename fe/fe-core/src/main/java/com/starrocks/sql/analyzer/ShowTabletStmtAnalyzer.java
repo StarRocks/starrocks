@@ -115,7 +115,7 @@ public class ShowTabletStmtAnalyzer {
                     SlotRef slotRef = (SlotRef) orderByElement.getExpr();
                     int index = 0;
                     try {
-                        if (table.isLakeTable()) {
+                        if (table.isCloudNativeTable()) {
                             index = LakeTabletsProcNode.analyzeColumn(slotRef.getColumnName());
                         } else {
                             index = LocalTabletsProcDir.analyzeColumn(slotRef.getColumnName());

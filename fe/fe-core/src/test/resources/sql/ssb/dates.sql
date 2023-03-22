@@ -24,5 +24,6 @@ PROPERTIES (
     "replication_num" = "1",
     "in_memory" = "false",
     "colocate_with" = "groupa3",
+    "unique_constraints" = "d_datekey",
     "storage_format" = "DEFAULT"
 )

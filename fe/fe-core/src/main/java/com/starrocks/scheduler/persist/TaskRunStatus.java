@@ -31,6 +31,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("queryId")
     private String queryId;
 
+    @SerializedName("taskId")
+    private long taskId;
+
     @SerializedName("taskName")
     private String taskName;
 
@@ -71,12 +74,28 @@ public class TaskRunStatus implements Writable {
     @SerializedName("mergeRedundant")
     private boolean mergeRedundant = false;
 
+    @SerializedName("source")
+    private Constants.TaskSource source = Constants.TaskSource.CTAS;
+
+    @SerializedName("mvExtraMessage")
+    private MVTaskRunExtraMessage mvTaskRunExtraMessage = new MVTaskRunExtraMessage();
+
+    public TaskRunStatus() {}
+
     public String getQueryId() {
         return queryId;
     }
 
     public void setQueryId(String queryId) {
         this.queryId = queryId;
+    }
+
+    public long getTaskId() {
+        return taskId;
+    }
+
+    public void setTaskId(long taskId) {
+        this.taskId = taskId;
     }
 
     public String getTaskName() {
@@ -182,6 +201,30 @@ public class TaskRunStatus implements Writable {
 
     public void setMergeRedundant(boolean mergeRedundant) {
         this.mergeRedundant = mergeRedundant;
+    }
+
+    public Constants.TaskSource getSource() {
+        return source;
+    }
+
+    public void setSource(Constants.TaskSource source) {
+        this.source = source;
+    }
+
+    public MVTaskRunExtraMessage getMvTaskRunExtraMessage() {
+        return mvTaskRunExtraMessage;
+    }
+
+    public void setMvTaskRunExtraMessage(MVTaskRunExtraMessage mvTaskRunExtraMessage) {
+        this.mvTaskRunExtraMessage = mvTaskRunExtraMessage;
+    }
+
+    public String getExtraMessage() {
+        if (source == Constants.TaskSource.MV) {
+            return GsonUtils.GSON.toJson(mvTaskRunExtraMessage);
+        } else {
+            return "";
+        }
     }
 
     public static TaskRunStatus read(DataInput in) throws IOException {

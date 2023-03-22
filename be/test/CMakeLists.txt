@@ -31,6 +31,7 @@ set(EXEC_FILES
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp
+        ./exec/workgroup/scan_task_queue_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
@@ -59,6 +60,7 @@ set(EXEC_FILES
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
         ./exec/json_scanner_test.cpp
+        ./exec/avro_scanner_test.cpp
         ./exec/parquet_scanner_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
@@ -94,7 +96,8 @@ set(EXEC_FILES
         ./exprs/in_predicate_test.cpp
         ./exprs/is_null_predicate_test.cpp
         ./exprs/json_functions_test.cpp
-        ./exprs/lambda_function_expr_test.cpp
+        ./exprs/lambda_array_expr_test.cpp
+        ./exprs/lambda_map_expr_test.cpp
         ./exprs/like_test.cpp
         ./exprs/map_element_expr_test.cpp
         ./exprs/map_functions_test.cpp
@@ -141,6 +144,7 @@ set(EXEC_FILES
         ./formats/parquet/metadata_test.cpp
         ./formats/parquet/group_reader_test.cpp
         ./formats/parquet/file_reader_test.cpp
+        ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_client_test.cpp
@@ -156,6 +160,7 @@ set(EXEC_FILES
         ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
+        ./io/spill_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/disjunctive_predicates_test.cpp
         ./storage/utils_test.cpp
@@ -218,6 +223,7 @@ set(EXEC_FILES
         ./storage/storage_types_test.cpp
         ./storage/tablet_meta_test.cpp
         ./storage/tablet_meta_manager_test.cpp
+        ./storage/table_reader_remote_test.cpp
         ./storage/table_reader_test.cpp
         ./storage/table_schema_test.cpp
         ./storage/tablet_updates_test.cpp
@@ -251,6 +257,7 @@ set(EXEC_FILES
         ./storage/binlog_file_test.cpp
         ./storage/binlog_builder_test.cpp
         ./storage/binlog_manager_test.cpp
+        ./storage/binlog_reader_test.cpp
         ./storage/tablet_binlog_test.cpp
         ./storage/publish_version_task_test.cpp
         ./runtime/buffer_control_block_test.cpp
@@ -263,6 +270,7 @@ set(EXEC_FILES
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/lake_tablets_channel_test.cpp
         ./runtime/large_int_value_test.cpp
+        ./runtime/load_channel_test.cpp
         ./runtime/memory/mem_chunk_allocator_test.cpp
         ./runtime/memory/system_allocator_test.cpp
         ./runtime/memory/memory_resource_test.cpp
@@ -280,6 +288,7 @@ set(EXEC_FILES
         ./runtime/merge_cascade_test.cpp
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
         ./runtime/memory_scratch_sink_test.cpp
+        ./runtime/command_executor_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./simd/simd_test.cpp
@@ -325,7 +334,6 @@ set(EXEC_FILES
         ./util/trace_test.cpp
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
-        ./util/buffered_stream_test.cpp
         ./util/int96_test.cpp
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp

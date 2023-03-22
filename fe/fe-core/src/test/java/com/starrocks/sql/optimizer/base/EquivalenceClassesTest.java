@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.base;
 
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import org.junit.Assert;
@@ -39,10 +40,9 @@ public class EquivalenceClassesTest {
         Set<ColumnRefOperator> columnSet = ec.getEquivalenceClass(columnRef1);
         Assert.assertEquals(4, columnSet.size());
         List<Set<ColumnRefOperator>> columnSetList = ec.getEquivalenceClasses();
-        Assert.assertEquals(4, columnSetList.size());
-        Assert.assertEquals(columnSetList.get(0), columnSetList.get(1));
-        Assert.assertEquals(columnSetList.get(1), columnSetList.get(2));
-        Assert.assertEquals(columnSetList.get(2), columnSetList.get(3));
+        Assert.assertEquals(1, columnSetList.size());
+        Set<ColumnRefOperator> columnSet2 = Sets.newHashSet(columnSetList.get(0));
+        Assert.assertEquals(columnSet, columnSet2);
 
         ColumnRefOperator columnRef5 = columnRefFactory.create("column5", Type.INT, true);
         ColumnRefOperator columnRef6 = columnRefFactory.create("column6", Type.INT, true);

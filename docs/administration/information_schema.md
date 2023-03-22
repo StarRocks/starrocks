@@ -86,6 +86,6 @@ The following fields are provided in `tables_config`:
 | PARTITION_KEY    | The partitioning columns of the table.                       |
 | DISTRIBUTE_KEY   | The bucketing columns of the table.                          |
 | DISTRIBUTE_TYPE  | The data distribution method of the table.                   |
-| DISTRUBTE_BUCKET | Number of buckets in the table.                              |
+| DISTRIBUTE_BUCKET | Number of buckets in the table.                              |
 | SORT_KEY         | Sort keys of the table.                                      |
 | PROPERTIES       | Properties of the table.                                     |

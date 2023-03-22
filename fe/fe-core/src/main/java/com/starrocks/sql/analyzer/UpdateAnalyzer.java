@@ -14,17 +14,15 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnAssignment;
@@ -60,8 +58,8 @@ public class UpdateAnalyzer {
                     tableName.getTbl(), tableName.getTbl());
         }
 
-        if (!(table instanceof OlapTable && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS)) {
-            throw unsupportedException("only support updating primary key table");
+        if (!table.supportsUpdate()) {
+            throw unsupportedException("table " + table.getName() + " does not support update");
         }
         if (updateStmt.getWherePredicate() == null) {
             throw new SemanticException("must specify where clause to prevent full table update");

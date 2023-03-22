@@ -38,11 +38,11 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.transport.TTransportException;
 
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.connector.ClassUtils.getCompatibleParamClasses;
 import static com.starrocks.connector.hive.HiveConnector.DUMMY_THRIFT_URI;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
@@ -151,7 +151,8 @@ public class HiveMetaClient {
 
         try {
             client = getClient();
-            Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, getCompatibleParamClasses(args));
+            Class<?>[] paramClasses = ClassUtils.getCompatibleParamClasses(args);
+            Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, paramClasses);
             return (T) method.invoke(client.hiveClient, args);
         } catch (Exception e) {
             LOG.error(messageIfError, e);
@@ -210,16 +211,17 @@ public class HiveMetaClient {
     }
 
     /**
-     * Both 'getPartitionByNames' and 'getPartitionColumnStatistics' could throw exception or no response
+     * Both 'getPartitionsByNames' and 'getPartitionColumnStatistics' could throw exception or no response
      * when querying too many partitions at present. Due to statistics don't affect accuracy, user could adjust
      * session variable 'hive_partition_stats_sample_size' to ensure 'getPartitionColumnStat' normal return.
-     * But "getPartitionByNames" interface must return the full contents due to the need to get partition file information.
-     * So we resend request "getPartitionByNames" when an exception occurs.
+     * But "getPartitionsByNames" interface must return the full contents due to the need to get partition file information.
+     * So we resend request "getPartitionsByNames" when an exception occurs.
      */
     public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
         int size = partitionNames.size();
         List<Partition> partitions;
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames", String.format("%s partitions", size));
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames." + tblName,
+                String.format("%s partitions", size));
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionsByNames")) {
             RecyclableClient client = null;
@@ -266,7 +268,8 @@ public class HiveMetaClient {
                                                                           List<String> partitionNames,
                                                                           List<String> columnNames) {
         int size = partitionNames.size();
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics", String.format("%s partitions", size));
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics." + tableName,
+                String.format("%s partitions", size));
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionColumnStatistics")) {
             return callRPC("getPartitionColumnStatistics",
@@ -339,6 +342,46 @@ public class HiveMetaClient {
                     lastEventId, maxEvents, filter);
         } catch (Exception e) {
             throw new MetastoreNotificationFetchException(e.getMessage());
+        }
+    }
+
+    static class ClassUtils {
+        private static final HashMap WRAPPER_TO_PRIMITIVE = new HashMap();
+        static {
+            WRAPPER_TO_PRIMITIVE.put(Boolean.class, Boolean.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Character.class, Character.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Byte.class, Byte.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Short.class, Short.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Integer.class, Integer.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Float.class, Float.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Long.class, Long.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Double.class, Double.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(String.class, String.class);
+        }
+
+        public static Class<?>[] getCompatibleParamClasses(Object[] args) {
+            Class<?>[] argTypes = new Class[args.length];
+            for (int i = 0; i < args.length; i++) {
+                argTypes[i] = toPrimitiveClass(args[i].getClass());
+            }
+            return argTypes;
+        }
+
+        public static Class<?> toPrimitiveClass(Class<?> parameterType) {
+            if (List.class.isAssignableFrom(parameterType)) {
+                return List.class;
+            } else if (!parameterType.isPrimitive()) {
+                Class<?> wrapperType = getWrapperType(parameterType);
+
+                assert wrapperType != null;
+                return wrapperType;
+            } else {
+                return parameterType;
+            }
+        }
+
+        public static Class<?> getWrapperType(Class<?> primitiveType) {
+            return (Class) WRAPPER_TO_PRIMITIVE.get(primitiveType);
         }
     }
 }

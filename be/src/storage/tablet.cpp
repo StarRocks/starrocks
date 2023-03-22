@@ -270,7 +270,7 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
             rowsets_to_delete.push_back(it.second);
         }
     }
-    modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete);
+    modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete, nullptr);
 
     if (need_persist) {
         Status res =
@@ -281,7 +281,8 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     return Status::OK();
 }
 
-void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const std::vector<RowsetSharedPtr>& to_delete) {
+void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const std::vector<RowsetSharedPtr>& to_delete,
+                            std::vector<RowsetSharedPtr>* to_replace) {
     CHECK(!_updates) << "updatable tablet should not call modify_rowsets";
     // the compaction process allow to compact the single version, eg: version[4-4].
     // this kind of "single version compaction" has same "input version" and "output version".
@@ -294,6 +295,15 @@ void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const st
         _rs_version_map.erase(rs->version());
 
         // put compaction rowsets in _stale_rs_version_map.
+        // if this version already exist, replace it with new rowset.
+        if (to_replace != nullptr) {
+            auto search = _stale_rs_version_map.find(rs->version());
+            if (search != _stale_rs_version_map.end()) {
+                if (search->second->rowset_id() != rs->rowset_id()) {
+                    to_replace->push_back(search->second);
+                }
+            }
+        }
         _stale_rs_version_map[rs->version()] = rs;
     }
 
@@ -358,6 +368,15 @@ RowsetSharedPtr Tablet::rowset_with_max_version() const {
     auto iter = _rs_version_map.find(max_version);
     DCHECK(iter != _rs_version_map.end()) << "invalid version:" << max_version;
     return iter->second;
+}
+
+Status Tablet::support_binlog() {
+    // TODO support primary key
+    if (keys_type() == DUP_KEYS) {
+        return Status::OK();
+    }
+
+    return Status::InternalError("Not support binlog, keys type: " + KeysType_Name(keys_type()));
 }
 
 bool Tablet::binlog_enable() {
@@ -706,16 +725,6 @@ bool Tablet::check_migrate(const TabletSharedPtr& tablet) {
         }
     }
     return false;
-}
-
-bool Tablet::_check_versions_completeness() {
-    const RowsetSharedPtr lastest_delta = rowset_with_max_version();
-    if (lastest_delta == nullptr) {
-        return false;
-    }
-
-    Version test_version = Version(0, lastest_delta->end_version());
-    return capture_consistent_versions(test_version, nullptr).ok();
 }
 
 const uint32_t Tablet::calc_cumulative_compaction_score() const {

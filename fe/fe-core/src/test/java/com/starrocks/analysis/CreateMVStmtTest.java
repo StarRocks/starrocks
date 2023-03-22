@@ -14,7 +14,7 @@
 
 package com.starrocks.analysis;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
@@ -160,7 +160,7 @@ public class CreateMVStmtTest {
             UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
             fail();
         } catch (AnalysisException e) {
-            Assert.assertEquals("Data type of first column cannot be DOUBLE", e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("Data type of first column cannot be DOUBLE"));
         }
     }
 
@@ -236,8 +236,8 @@ public class CreateMVStmtTest {
                 UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
                 fail();
             } catch (Exception ex) {
-                Assert.assertEquals("Materialized view does not support distinct function count(DISTINCT `test`.`t1`.`c_1_9`)",
-                        ex.getMessage());
+                Assert.assertTrue(ex.getMessage().contains("Materialized view does not support " +
+                        "distinct function count(DISTINCT `test`.`t1`.`c_1_9`)"));
             }
         }
         {
@@ -248,8 +248,9 @@ public class CreateMVStmtTest {
                 UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
                 fail();
             } catch (Exception ex) {
-                Assert.assertEquals("Materialized view does not support distinct function sum(DISTINCT `test`.`t1`.`c_1_9`)",
-                        ex.getMessage());
+
+                Assert.assertTrue(ex.getMessage().contains("Materialized view does not support distinct " +
+                        "function sum(DISTINCT `test`.`t1`.`c_1_9`)"));
             }
         }
     }

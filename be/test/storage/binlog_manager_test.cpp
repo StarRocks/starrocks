@@ -34,6 +34,7 @@ public:
         CHECK_OK(fs::remove_all(_binlog_file_dir));
         CHECK_OK(fs::create_directories(_binlog_file_dir));
         ASSIGN_OR_ABORT(_fs, FileSystem::CreateSharedFromString(_binlog_file_dir));
+        _next_rowset_uid = 0;
         create_tablet_schema();
     }
 

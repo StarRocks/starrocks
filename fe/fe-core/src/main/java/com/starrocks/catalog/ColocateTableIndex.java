@@ -51,6 +51,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -615,7 +616,7 @@ public class ColocateTableIndex implements Writable {
                 GroupId groupId = entry.getValue();
                 info.add(groupId.toString());
                 info.add(entry.getKey());
-                StringBuffer sb = new StringBuffer();
+                StringBuilder sb = new StringBuilder();
                 for (Long tableId : group2Tables.get(groupId)) {
                     if (sb.length() > 0) {
                         sb.append(", ");
@@ -858,7 +859,7 @@ public class ColocateTableIndex implements Writable {
                 // user set a new colocate group,
                 // check if all partitions all this table has same buckets num and same replication number
                 PartitionInfo partitionInfo = table.getPartitionInfo();
-                if (partitionInfo.getType() == PartitionType.RANGE) {
+                if (partitionInfo.isRangePartition()) {
                     int bucketsNum = -1;
                     short replicationNum = -1;
                     for (Partition partition : table.getPartitions()) {
@@ -988,28 +989,34 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    public void updateLakeTableColocationInfo(OlapTable olapTable) throws DdlException {
+    public void updateLakeTableColocationInfo(OlapTable olapTable, boolean isJoin,
+            GroupId expectGroupId) throws DdlException {
         if (olapTable == null || !olapTable.isLakeTable()) { // skip non-lake table
             return;
         }
 
         writeLock();
         try {
-            if (!table2Group.containsKey(olapTable.getId())) { // skip non-colocate table
-                return;
+            GroupId groupId = expectGroupId;
+            if (expectGroupId == null) {
+                if (!table2Group.containsKey(olapTable.getId())) { // skip non-colocate table
+                    return;
+                }
+                groupId = table2Group.get(olapTable.getId());
             }
 
-            GroupId groupId = table2Group.get(olapTable.getId());
             LakeTable ltbl = (LakeTable) olapTable;
             List<Long> shardGroupIds = ltbl.getShardGroupIds();
-            GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, true /* isJoin */);
+            LOG.info("update meta group id {}, table {}, shard groups: {}, join: {}",
+                    groupId.grpId, olapTable.getId(), shardGroupIds, isJoin);
+            GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, isJoin);
         } finally {
             writeUnlock();
         }
     }
 
     private void constructLakeGroups(GlobalStateMgr globalStateMgr) {
-        if (!GlobalStateMgr.getCurrentState().isSharedDataMode()) {
+        if (!RunMode.allowCreateLakeTable()) {
             return;
         }
 

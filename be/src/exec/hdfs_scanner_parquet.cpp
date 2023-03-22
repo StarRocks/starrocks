@@ -27,6 +27,7 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
 
 void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* request_bytes_read = nullptr;
+    RuntimeProfile::Counter* request_bytes_read_uncompressed = nullptr;
     RuntimeProfile::Counter* level_decode_timer = nullptr;
     RuntimeProfile::Counter* value_decode_timer = nullptr;
     RuntimeProfile::Counter* page_read_timer = nullptr;
@@ -43,6 +44,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::UNIT);
     request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
+    request_bytes_read_uncompressed =
+            ADD_CHILD_COUNTER(root, "RequestBytesReadUncompressed", TUnit::BYTES, kParquetProfileSectionPrefix);
 
     level_decode_timer = ADD_CHILD_TIMER(root, "LevelDecodeTime", kParquetProfileSectionPrefix);
     value_decode_timer = ADD_CHILD_TIMER(root, "ValueDecodeTime", kParquetProfileSectionPrefix);
@@ -56,6 +59,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
 
     COUNTER_UPDATE(request_bytes_read, _stats.request_bytes_read);
+    COUNTER_UPDATE(request_bytes_read_uncompressed, _stats.request_bytes_read_uncompressed);
     COUNTER_UPDATE(value_decode_timer, _stats.value_decode_ns);
     COUNTER_UPDATE(level_decode_timer, _stats.level_decode_ns);
     COUNTER_UPDATE(page_read_timer, _stats.page_read_ns);
@@ -69,8 +73,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     // create file reader
-    _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(),
-                                                    _scanner_params.scan_ranges[0]->file_length);
+    _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), _file->get_size().value(),
+                                                    _shared_buffered_input_stream.get());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     RETURN_IF_ERROR(_reader->init(&_scanner_ctx));
     return Status::OK();

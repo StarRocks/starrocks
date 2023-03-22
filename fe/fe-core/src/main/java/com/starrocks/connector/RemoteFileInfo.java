@@ -17,17 +17,21 @@ package com.starrocks.connector;
 
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class RemoteFileInfo {
     private RemoteFileInputFormat format;
-    private List<RemoteFileDesc> files;
-    private final String fullPath;
+    private List<RemoteFileDesc> files = new ArrayList<>();
+    private String fullPath;
 
     public RemoteFileInfo(RemoteFileInputFormat format, List<RemoteFileDesc> files, String fullPath) {
         this.format = format;
         this.files = files;
         this.fullPath = fullPath;
+    }
+
+    public RemoteFileInfo() {
     }
 
     public RemoteFileInputFormat getFormat() {

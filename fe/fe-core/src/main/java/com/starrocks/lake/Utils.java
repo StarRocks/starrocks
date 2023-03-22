@@ -17,6 +17,7 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
@@ -64,7 +65,7 @@ public class Utils {
 
     // Preconditions: Has required the database's reader lock.
     // Returns a map from backend ID to a list of tablet IDs.
-    public static Map<Long, List<Long>> groupTabletID(LakeTable table) throws NoAliveBackendException {
+    public static Map<Long, List<Long>> groupTabletID(OlapTable table) throws NoAliveBackendException {
         return groupTabletID(table.getPartitions(), MaterializedIndex.IndexExtState.ALL);
     }
 

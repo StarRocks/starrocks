@@ -34,10 +34,10 @@
 
 package com.starrocks.common.util;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.DateLiteral;
@@ -61,7 +61,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.Property;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -148,13 +150,17 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
-    public static final String PROPERTIES_ALLOW_ASYNC_WRITE_BACK = "allow_async_write_back";
+    public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER  = "partition_ttl_number";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER  = "partition_live_number";
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT  = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
+
+    public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
+
+    public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";
 
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
@@ -381,12 +387,13 @@ public class PropertyAnalyzer {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0");
         }
-        // Skip the alive nodes checking if running on Shared-data mode, because on this mode, only
-        // compute-storage-separation table will be created and in this case the replication_num will
-        // be ignored, so there is no need to check whether the number of alive nodes is greater than the
-        // replication_num.
-        if (GlobalStateMgr.getCurrentState().isSharedNothingMode()) {
-            List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.defaultReplicationNum() > backendIds.size()) {
+                throw new AnalysisException("Number of available BE nodes is " + backendIds.size()
+                        + ", less than " + RunMode.defaultReplicationNum());
+            }
+        } else {
             if (replicationNum > backendIds.size()) {
                 throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
                         + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
@@ -654,6 +661,14 @@ public class PropertyAnalyzer {
         return type;
     }
 
+    public static String analyzeType(Property property) {
+        String type = null;
+        if (PROPERTIES_TYPE.equals(property.getKey())) {
+            type = property.getValue();
+        }
+        return type;
+    }
+
     public static long analyzeLongProp(Map<String, String> properties, String propKey, long defaultVal)
             throws AnalysisException {
         long val = defaultVal;
@@ -719,14 +734,19 @@ public class PropertyAnalyzer {
                 String sourceColumns = foreignKeyMatcher.group(1);
                 String tablePath = foreignKeyMatcher.group(4);
                 String targetColumns = foreignKeyMatcher.group(6);
-                List<String> baseColumns = Arrays.asList(sourceColumns.split(","))
+                // case insensitive
+                List<String> originalBaseColumns = Arrays.asList(sourceColumns.split(","))
                         .stream().map(String::trim).collect(Collectors.toList());
-                List<String> parentColumns = Arrays.asList(targetColumns.split(","))
-                        .stream().map(String::trim).collect(Collectors.toList());
-                if (baseColumns.size() != parentColumns.size()) {
+                List<String> originalParentColumns = Arrays.asList(targetColumns.split(","))
+                        .stream().map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
+                if (originalBaseColumns.size() != originalParentColumns.size()) {
                     throw new AnalysisException(String.format("invalid foreign key constraint:%s," +
                             " columns' size does not match", foreignKeyConstraintDesc));
                 }
+                List<String> baseColumns =
+                        originalBaseColumns.stream().map(String::toLowerCase).collect(Collectors.toList());
+                List<String> parentColumns =
+                        originalParentColumns.stream().map(String::toLowerCase).collect(Collectors.toList());
 
                 String[] parts = tablePath.split("\\.");
                 String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
@@ -787,7 +807,7 @@ public class PropertyAnalyzer {
                         List<UniqueConstraint> uniqueConstraints = parentOlapTable.getUniqueConstraints();
                         boolean matched = false;
                         for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
-                            if (uniqueConstraint.getUniqueColumns().containsAll(parentColumns)) {
+                            if (uniqueConstraint.isMatch(Sets.newHashSet(parentColumns))) {
                                 matched = true;
                                 break;
                             }
@@ -800,15 +820,13 @@ public class PropertyAnalyzer {
                 } else {
                     // for PRIMARY_KEYS and UNIQUE_KEYS type table
                     // parent columns should be keys
-                    List<String> keyColumnNames =
-                            parentOlapTable.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
-                    if (!keyColumnNames.equals(parentColumns)) {
+                    if (!parentOlapTable.isKeySet(Sets.newHashSet(parentColumns))) {
                         throw new AnalysisException(String.format("columns:%s are not key columns of table:%s",
                                 parentColumns, parentTable.getName()));
                     }
                 }
-                List<Pair<String, String>> columnRefPairs =
-                        Streams.zip(baseColumns.stream(), parentColumns.stream(), Pair::create).collect(Collectors.toList());
+                List<Pair<String, String>> columnRefPairs = Streams.zip(originalBaseColumns.stream(),
+                        originalParentColumns.stream(), Pair::create).collect(Collectors.toList());
                 for (Pair<String, String> pair : columnRefPairs) {
                     Column childColumn = baseOlapTable.getColumn(pair.first);
                     Column parentColumn = parentTable.getColumn(pair.second);

@@ -43,6 +43,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TDecimalLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -64,11 +65,21 @@ public class DecimalLiteral extends LiteralExpr {
     }
 
     public DecimalLiteral(BigDecimal value) {
+        this(value, NodePosition.ZERO);
+    }
+
+    public DecimalLiteral(BigDecimal value, NodePosition pos) {
+        super(pos);
         init(value);
         analysisDone();
     }
 
     public DecimalLiteral(String value) throws AnalysisException {
+        this(value, NodePosition.ZERO);
+    }
+
+    public DecimalLiteral(String value, NodePosition pos) throws AnalysisException {
+        super(pos);
         BigDecimal v = null;
         try {
             v = new BigDecimal(value);

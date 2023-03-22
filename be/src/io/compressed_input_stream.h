@@ -40,9 +40,6 @@ public:
 
     Status skip(int64_t n) override;
 
-    // TODO: support peak
-    bool allows_peek() const override { return false; }
-
     // TODO: add custom statistics
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
         return _source_stream->get_numeric_statistics();
@@ -103,8 +100,6 @@ public:
     StatusOr<int64_t> read(void* data, int64_t size) override { return _source->read(data, size); }
 
     Status skip(int64_t n) override { return _source->skip(n); }
-
-    bool allows_peek() const override { return _source->allows_peek(); }
 
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
         return _source->get_numeric_statistics();

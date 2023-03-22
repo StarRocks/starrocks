@@ -14,10 +14,10 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
@@ -40,7 +40,6 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.io.DeepCopy;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -277,13 +276,7 @@ public class QueryAnalyzer {
                     }
 
                     if (table.isSupported()) {
-                        if (table.isOlapTable()) {
-                            // Copying the olap table meta to avoid the lock when plan query
-                            Table copied = DeepCopy.copyWithGson(table, OlapTable.class);
-                            tableRelation.setTable(copied);
-                        } else {
-                            tableRelation.setTable(table);
-                        }
+                        tableRelation.setTable(table);
                         return tableRelation;
                     } else {
                         throw unsupportedException("unsupported scan table type: " + table.getType());

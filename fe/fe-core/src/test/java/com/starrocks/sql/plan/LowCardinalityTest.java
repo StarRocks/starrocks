@@ -247,6 +247,32 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
+    public void testDecodeNodeRewriteMultiAgg()
+            throws Exception {
+        boolean cboCteReuse = connectContext.getSessionVariable().isCboCteReuse();
+        boolean enableLowCardinalityOptimize = connectContext.getSessionVariable().isEnableLowCardinalityOptimize();
+        int newPlannerAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+
+        try {
+            String sql = "select count(distinct S_ADDRESS), count(distinct S_NATIONKEY) from supplier";
+            String plan = getVerboseExplain(sql);
+            Assert.assertTrue(plan, plan.contains("dict_col=S_ADDRESS"));
+            sql = "select count(distinct S_ADDRESS), count(distinct S_NATIONKEY) from supplier " +
+                    "having count(1) > 0";
+            plan = getVerboseExplain(sql);
+            Assert.assertFalse(plan, plan.contains("dict_col="));
+            Assert.assertFalse(plan, plan.contains("Decode"));
+        } finally {
+            connectContext.getSessionVariable().setCboCteReuse(cboCteReuse);
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(enableLowCardinalityOptimize);
+            connectContext.getSessionVariable().setNewPlanerAggStage(newPlannerAggStage);
+        }
+    }
+
+    @Test
     public void testDecodeNodeRewrite7() throws Exception {
         String sql = "select S_ADDRESS, count(S_ADDRESS) from supplier group by S_ADDRESS";
         String plan = getFragmentPlan(sql);
@@ -409,8 +435,10 @@ public class LowCardinalityTest extends PlanTestBase {
 
         sql = "select count(distinct S_NATIONKEY) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains(
+                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
+                        "query_global_dicts:[TGlobalDict(columnId:11, strings:[6D 6F 63 6B], ids:[1])]"));
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -1091,11 +1119,42 @@ public class LowCardinalityTest extends PlanTestBase {
                 ") t where rm < 10";
         plan = getCostExplain(sql);
 
-        Assert.assertTrue(plan.contains("  3:SORT\n" +
+        Assert.assertTrue(plan.contains("  2:SORT\n" +
                 "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC"));
         Assert.assertTrue(plan.contains("  1:PARTITION-TOP-N\n" +
                 "  |  partition by: [20: L_COMMENT, INT, false] "));
         Assert.assertTrue(plan.contains("  |  order by: [20, INT, false] ASC, [2, INT, false] ASC"));
+
+        // row number
+        sql = "select * from (select L_COMMENT,l_quantity, row_number() over " +
+                "(partition by L_COMMENT order by l_quantity desc) rn from lineitem )t where rn <= 10;";
+        plan = getCostExplain(sql);
+        assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                "  |  partition by: [19: L_COMMENT, INT, false] \n" +
+                "  |  partition limit: 10\n" +
+                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC\n" +
+                "  |  offset: 0");
+
+        // rank
+        sql = "select * from (select L_COMMENT,l_quantity, rank() over " +
+                "(partition by L_COMMENT order by l_quantity desc) rn from lineitem )t where rn <= 10;";
+        plan = getCostExplain(sql);
+        assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                "  |  type: RANK\n" +
+                "  |  partition by: [19: L_COMMENT, INT, false] \n" +
+                "  |  partition limit: 10\n" +
+                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC");
+
+        // mul-column partition by
+        sql = "select * from (select L_COMMENT,l_quantity, rank() over " +
+                "(partition by L_COMMENT, l_shipmode order by l_quantity desc) rn from lineitem )t where rn <= 10;";
+        plan = getCostExplain(sql);
+        assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                "  |  type: RANK\n" +
+                "  |  partition by: [19: L_COMMENT, INT, false] , [15: L_SHIPMODE, CHAR, false] \n" +
+                "  |  partition limit: 10\n" +
+                "  |  order by: [19, INT, false] ASC, [15, VARCHAR, false] ASC, [5, DOUBLE, false] DESC\n" +
+                "  |  offset: 0");
     }
 
     @Test

@@ -209,6 +209,10 @@ public:
     IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~IcebergTableDescriptor() override = default;
     bool has_partition() const override { return false; }
+    const TIcebergSchema* get_iceberg_schema() const { return &_t_iceberg_schema; }
+
+private:
+    TIcebergSchema _t_iceberg_schema;
 };
 
 class FileTableDescriptor : public HiveTableDescriptor {

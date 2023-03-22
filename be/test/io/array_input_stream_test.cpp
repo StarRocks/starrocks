@@ -103,8 +103,6 @@ PARALLEL_TEST(ArrayInputStreamTest, test_seek_and_peek) {
     std::string s("0123456789");
     ArrayInputStream in(s.data(), static_cast<int64_t>(s.size()));
 
-    ASSERT_TRUE(in.allows_peek());
-
     ASSERT_OK(in.seek(5));
     ASSERT_EQ(5, *in.position());
     ASSERT_EQ("56789", *in.peek(10));

@@ -60,7 +60,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.RunMode;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
@@ -75,6 +74,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -283,8 +283,8 @@ public class AlterTest {
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .refreshMaterializedView(refreshMaterializedViewStatement.getMvName().getDb(),
-                            refreshMaterializedViewStatement.getMvName().getTbl(),
-                            Constants.TaskRunPriority.LOWEST.value());
+                            refreshMaterializedViewStatement.getMvName().getTbl(), false, null,
+                            Constants.TaskRunPriority.LOWEST.value(), false, true);
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
@@ -367,6 +367,7 @@ public class AlterTest {
         Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
                 "FROM `test`.`testTable1`", task.getDefinition());
         ConnectContext.get().setCurrentUserIdentity(UserIdentity.ROOT);
+        ConnectContext.get().setCurrentRoleIds(UserIdentity.ROOT);
         dropMaterializedView("drop materialized view test.mv2");
     }
 
@@ -408,6 +409,8 @@ public class AlterTest {
                 ") " +
                 "as select k1, k2 from test.testTable1;";
         createMaterializedView(sql);
+        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(
+                starRocksAssert.getCtx().getCurrentUserIdentity()));
         dropMaterializedView("drop materialized view test.mv1");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("testTable1");
         // this for mock olapTable.getIndexNameById(mvIdx.getId()) == Null
@@ -470,6 +473,7 @@ public class AlterTest {
         alterStmt = "alter materialized view mv1 refresh manual";
         alterMaterializedView(alterStmt, false);
         ConnectContext.get().setCurrentUserIdentity(UserIdentity.ROOT);
+        ConnectContext.get().setCurrentRoleIds(UserIdentity.ROOT);
         dropMaterializedView("drop materialized view test.mv1");
     }
 
@@ -500,6 +504,8 @@ public class AlterTest {
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
         refreshMaterializedView(alterStmt);
+        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(
+                starRocksAssert.getCtx().getCurrentUserIdentity()));
         dropMaterializedView("drop materialized view test.mv1");
     }
 
@@ -527,6 +533,8 @@ public class AlterTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, k2 from test.testTable4;";
+        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(
+                starRocksAssert.getCtx().getCurrentUserIdentity()));
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
         refreshMaterializedView(alterStmt);
@@ -999,8 +1007,14 @@ public class AlterTest {
             }
         };
 
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_lake_partition";
@@ -1013,7 +1027,6 @@ public class AlterTest {
                 "      v1 VARCHAR(2048),\n" +
                 "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
                 ")\n" +
-                "ENGINE=starrocks\n" +
                 "DUPLICATE KEY(k1, k2, k3)\n" +
                 "PARTITION BY RANGE (k1, k2, k3) (\n" +
                 "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
@@ -1044,8 +1057,6 @@ public class AlterTest {
         dropSQL = "drop table test_lake_partition";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
@@ -1086,8 +1097,14 @@ public class AlterTest {
             }
         };
 
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists site_access";
@@ -1100,7 +1117,6 @@ public class AlterTest {
                 "    user_name VARCHAR(32),\n" +
                 "    pv BIGINT DEFAULT '0'\n" +
                 ")\n" +
-                "ENGINE=starrocks\n" +
                 "DUPLICATE KEY(datekey, site_id, city_code, user_name)\n" +
                 "PARTITION BY RANGE (datekey) (\n" +
                 "    START (\"1\") END (\"5\") EVERY (1)\n" +
@@ -1134,8 +1150,6 @@ public class AlterTest {
         dropSQL = "drop table site_access";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test
@@ -1740,6 +1754,8 @@ public class AlterTest {
 
         starRocksAssert.getCtx().setQualifiedUser("testuser");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setCurrentRoleIds(
+                GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(testUser));
         starRocksAssert.getCtx().setRemoteIP("%");
 
         String renameDb = "alter database test rename test0";
@@ -2027,8 +2043,14 @@ public class AlterTest {
             }
         };
 
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.new_table (\n" +
@@ -2038,7 +2060,6 @@ public class AlterTest {
                 "      v1 VARCHAR(2048),\n" +
                 "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
                 ")\n" +
-                "ENGINE=starrocks\n" +
                 "DUPLICATE KEY(k1, k2, k3)\n" +
                 "PARTITION BY RANGE (k1, k2, k3) (\n" +
                 "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
@@ -2098,8 +2119,6 @@ public class AlterTest {
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         file.delete();
-
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 
     @Test(expected = DdlException.class)

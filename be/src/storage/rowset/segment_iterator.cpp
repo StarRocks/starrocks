@@ -351,6 +351,11 @@ Status SegmentIterator::_init() {
     // get file handle from file descriptor of segment
     ASSIGN_OR_RETURN(_rfile, _opts.fs->new_random_access_file(_segment->file_name()));
 
+    // check cache hit for lake tablet
+    if (_rfile->is_cache_hit()) {
+        ++_opts.stats->cache_segments_read_count;
+    }
+
     /// the calling order matters, do not change unless you know why.
 
     // init stage

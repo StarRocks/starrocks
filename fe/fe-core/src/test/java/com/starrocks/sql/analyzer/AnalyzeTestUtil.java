@@ -268,10 +268,13 @@ public class AnalyzeTestUtil {
         return starRocksAssert;
     }
 
+    public static StatementBase parseSql(String originStmt) {
+        return com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable()).get(0);
+    }
+
     public static StatementBase analyzeSuccess(String originStmt) {
         try {
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
-                    connectContext.getSessionVariable()).get(0);
+            StatementBase statementBase = parseSql(originStmt);
             Analyzer.analyze(statementBase, connectContext);
 
             if (statementBase instanceof QueryStatement) {
@@ -313,12 +316,10 @@ public class AnalyzeTestUtil {
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException e) {
-            e.printStackTrace();
             if (!exceptMessage.equals("")) {
-                Assert.assertTrue(e.getMessage().contains(exceptMessage));
+                Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }
         } catch (Exception e) {
-            e.printStackTrace();
             Assert.fail("analyze exception");
         }
     }

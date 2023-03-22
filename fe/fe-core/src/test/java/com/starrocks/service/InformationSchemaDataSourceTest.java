@@ -16,7 +16,6 @@
 package com.starrocks.service;
 
 import com.google.gson.Gson;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
@@ -29,8 +28,6 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -91,32 +88,5 @@ public class InformationSchemaDataSourceTest {
         Assert.assertEquals("1", propsMap.get("replication_num"));
         Assert.assertEquals("HDD", propsMap.get("storage_medium"));
 
-    }
-
-    @Test
-    public void testTransferTableTypeToAdaptMysql() throws NoSuchMethodException,
-            SecurityException,
-            IllegalAccessException,
-            IllegalArgumentException,
-            InvocationTargetException,
-            ClassNotFoundException {
-
-        Class<?> clazz = Class.forName(InformationSchemaDataSource.class.getName());
-        Method m = clazz.getDeclaredMethod("transferTableTypeToAdaptMysql", TableType.class);
-        m.setAccessible(true);
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.MYSQL));
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.HIVE));
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.ICEBERG));
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.HUDI));
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.ELASTICSEARCH));
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.JDBC));
-        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.LAKE));
-        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.OLAP));
-        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.OLAP_EXTERNAL));
-        Assert.assertEquals("VIEW", m.invoke(InformationSchemaDataSource.class, TableType.MATERIALIZED_VIEW));
-        Assert.assertEquals("VIEW", m.invoke(InformationSchemaDataSource.class, TableType.VIEW));
-        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.SCHEMA));
-        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.INLINE_VIEW));
-        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.BROKER));
     }
 }

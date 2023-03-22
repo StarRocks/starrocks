@@ -47,6 +47,16 @@ DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_
 HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.hdfs_scan_range) {}
 
+Status HiveDataSource::_check_all_slots_nullable() {
+    for (const auto* slot : _tuple_desc->slots()) {
+        if (!slot->is_nullable()) {
+            return Status::RuntimeError(fmt::format(
+                    "All columns must be nullable for external table. Column '{}' is not nullable", slot->col_name()));
+        }
+    }
+    return Status::OK();
+}
+
 Status HiveDataSource::open(RuntimeState* state) {
     // right now we don't force user to set JAVA_HOME.
     // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,
@@ -67,6 +77,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (_hive_table == nullptr) {
         return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi/delta lake/file table are supported");
     }
+    RETURN_IF_ERROR(_check_all_slots_nullable());
 
     _use_block_cache = config::block_cache_enable;
     if (state->query_options().__isset.use_scan_block_cache) {
@@ -88,6 +99,17 @@ Status HiveDataSource::open(RuntimeState* state) {
     return Status::OK();
 }
 
+void HiveDataSource::_update_has_any_predicate() {
+    auto f = [&]() {
+        if (_conjunct_ctxs.size() > 0) return true;
+        if (_min_max_conjunct_ctxs.size() > 0) return true;
+        if (_partition_conjunct_ctxs.size() > 0) return true;
+        if (_runtime_filters != nullptr && _runtime_filters->size() > 0) return true;
+        return false;
+    };
+    _has_any_predicate = f();
+}
+
 Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (hdfs_scan_node.__isset.min_max_conjuncts) {
@@ -101,10 +123,15 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
         _has_partition_conjuncts = true;
     }
 
+    if (hdfs_scan_node.__isset.case_sensitive) {
+        _case_sensitive = hdfs_scan_node.case_sensitive;
+    }
+
     RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_min_max_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_partition_conjunct_ctxs, state));
+    _update_has_any_predicate();
 
     RETURN_IF_ERROR(_decompose_conjunct_ctxs(state));
     return Status::OK();
@@ -229,18 +256,29 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     _profile.runtime_profile = _runtime_profile;
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
-    _profile.bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
-
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
     _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
     _profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
     _profile.expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
 
-    _profile.io_timer = ADD_TIMER(_runtime_profile, "IOTime");
-    _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
+
+    {
+        static const char* prefix = "SharedBuffered";
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        _profile.shared_buffered_shared_io_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, prefix);
+        _profile.shared_buffered_shared_io_count =
+                ADD_CHILD_COUNTER(_runtime_profile, "SharedIOCount", TUnit::UNIT, prefix);
+        _profile.shared_buffered_shared_io_timer = ADD_CHILD_TIMER(_runtime_profile, "SharedIOTime", prefix);
+        _profile.shared_buffered_direct_io_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DirectIOBytes", TUnit::BYTES, prefix);
+        _profile.shared_buffered_direct_io_count =
+                ADD_CHILD_COUNTER(_runtime_profile, "DirectIOCount", TUnit::UNIT, prefix);
+        _profile.shared_buffered_direct_io_timer = ADD_CHILD_TIMER(_runtime_profile, "DirectIOTime", prefix);
+    }
 
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
@@ -255,6 +293,22 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
         _profile.block_cache_write_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteBytes", TUnit::BYTES, prefix);
         _profile.block_cache_write_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockCacheWriteTimer", prefix);
+        _profile.block_cache_write_fail_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_write_fail_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailBytes", TUnit::BYTES, prefix);
+    }
+
+    {
+        static const char* prefix = "InputStream";
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        _profile.app_io_bytes_read_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "AppIOBytesRead", TUnit::BYTES, prefix);
+        _profile.app_io_timer = ADD_CHILD_TIMER(_runtime_profile, "AppIOTime", prefix);
+        _profile.app_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "AppIOCounter", TUnit::UNIT, prefix);
+        _profile.fs_bytes_read_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSBytesRead", TUnit::BYTES, prefix);
+        _profile.fs_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSIOCounter", TUnit::UNIT, prefix);
+        _profile.fs_io_timer = ADD_CHILD_TIMER(_runtime_profile, "FSIOTime", prefix);
     }
 
     if (hdfs_scan_node.__isset.table_name) {
@@ -397,6 +451,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.open_limit = nullptr;
     for (const auto& delete_file : scan_range.delete_files) {
         scanner_params.deletes.emplace_back(&delete_file);
+    }
+    if (dynamic_cast<const IcebergTableDescriptor*>(_hive_table)) {
+        auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
+        scanner_params.iceberg_schema = tbl->get_iceberg_schema();
     }
     scanner_params.use_block_cache = _use_block_cache;
     scanner_params.enable_populate_block_cache = _enable_populate_block_cache;

@@ -62,7 +62,6 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -122,8 +121,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
-
-import static java.lang.Math.min;
 
 public class SchemaChangeHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandler.class);
@@ -991,7 +988,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // 3. check partition key
-            if (hasColumnChange && olapTable.getPartitionInfo().getType() == PartitionType.RANGE) {
+            if (hasColumnChange && olapTable.getPartitionInfo().isRangePartition()) {
                 List<Column> partitionColumns = ((RangePartitionInfo) olapTable.getPartitionInfo()).getPartitionColumns();
                 for (Column partitionCol : partitionColumns) {
                     String colName = partitionCol.getName();
@@ -1127,20 +1124,17 @@ public class SchemaChangeHandler extends AlterHandler {
         getAlterJobV2Infos(db, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
     }
 
-    @Nullable
-    public Long getMinActiveTxnId() {
-        long result = Long.MAX_VALUE;
+    public Optional<Long> getMinActiveTxnId() {
+        long minId = Long.MAX_VALUE;
         Map<Long, AlterJobV2> alterJobV2Map = getAlterJobsV2();
         for (AlterJobV2 job : alterJobV2Map.values()) {
             AlterJobV2.JobState jobState = job.getJobState();
             if (jobState == AlterJobV2.JobState.FINISHED || jobState == AlterJobV2.JobState.CANCELLED) {
                 continue;
             }
-            if (job instanceof LakeTableSchemaChangeJob) {
-                result = min(result, ((LakeTableSchemaChangeJob) job).getWatershedTxnId());
-            }
+            minId = Math.min(minId, job.getTransactionId().orElse(Long.MAX_VALUE));
         }
-        return result == Long.MAX_VALUE ? null : result;
+        return minId == Long.MAX_VALUE ? Optional.empty() : Optional.of(minId);
     }
 
     @VisibleForTesting

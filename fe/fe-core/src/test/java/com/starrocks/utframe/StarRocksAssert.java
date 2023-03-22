@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DdlStmt;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -76,6 +77,7 @@ import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.lang.StringUtils;
 import org.junit.Assert;
@@ -128,7 +130,7 @@ public class StarRocksAssert {
     public StarRocksAssert withRole(String roleName) throws Exception {
         CreateRoleStmt createRoleStmt =
                 (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser("create role " + roleName + ";", ctx);
-        GlobalStateMgr.getCurrentState().getPrivilegeManager().createRole(createRoleStmt);
+        GlobalStateMgr.getCurrentState().getAuthorizationManager().createRole(createRoleStmt);
         return this;
     }
 
@@ -229,6 +231,13 @@ public class StarRocksAssert {
         DropTableStmt dropViewStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop view " + viewName + ";", ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+        return this;
+    }
+
+    public StarRocksAssert dropCatalog(String catalogName) throws Exception {
+        DropCatalogStmt dropCatalogStmt =
+                (DropCatalogStmt) UtFrameUtils.parseStmtWithNewParser("drop catalog " + catalogName + ";", ctx);
+        GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
         return this;
     }
 
@@ -379,7 +388,7 @@ public class StarRocksAssert {
 
     public ShowResultSet showTablet(String db, String table) throws DdlException, AnalysisException {
         TableName tableName = new TableName(db, table);
-        ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableName, -1);
+        ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableName, -1, NodePosition.ZERO);
         ShowExecutor showExecutor = new ShowExecutor(getCtx(), showTabletStmt);
         return showExecutor.execute();
     }

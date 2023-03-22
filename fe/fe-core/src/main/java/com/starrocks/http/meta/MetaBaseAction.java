@@ -53,6 +53,7 @@ public class MetaBaseAction extends WebBaseAction {
 
     public static final String CLUSTER_ID = "cluster_id";
     public static final String TOKEN = "token";
+    public static final String RUN_MODE = "run_mode";
 
     protected File imageDir;
 

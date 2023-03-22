@@ -48,8 +48,10 @@ add_library(Formats STATIC
         parquet/stored_column_reader.cpp
         parquet/utils.cpp
         parquet/metadata.cpp
+        parquet/meta_helper.cpp
         parquet/group_reader.cpp
         parquet/file_reader.cpp
+        parquet/file_writer.cpp
         )
 
 add_subdirectory(orc/apache-orc)

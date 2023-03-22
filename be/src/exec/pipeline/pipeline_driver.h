@@ -264,6 +264,7 @@ public:
         return _operators.empty() ? nullptr : down_cast<SourceOperator*>(_operators.front().get());
     }
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
+    void update_peak_driver_queue_size_counter(size_t new_value);
     // drivers that waits for runtime filters' readiness must be marked PRECONDITION_NOT_READY and put into
     // PipelineDriverPoller.
     void mark_precondition_not_ready();
@@ -473,8 +474,6 @@ protected:
     size_t _driver_queue_level = 0;
     std::atomic<bool> _in_ready_queue{false};
 
-    bool _is_profile_enabled = false;
-
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;
@@ -503,6 +502,8 @@ protected:
     MonotonicStopWatch* _input_empty_timer_sw = nullptr;
     MonotonicStopWatch* _output_full_timer_sw = nullptr;
     MonotonicStopWatch* _pending_finish_timer_sw = nullptr;
+
+    RuntimeProfile::HighWaterMarkCounter* _peak_driver_queue_size_counter = nullptr;
 };
 
 } // namespace pipeline

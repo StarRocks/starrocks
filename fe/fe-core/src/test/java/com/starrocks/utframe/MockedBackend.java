@@ -20,6 +20,8 @@ package com.starrocks.utframe;
 import com.google.common.collect.Queues;
 import com.starrocks.common.ClientPool;
 import com.starrocks.leader.LeaderImpl;
+import com.starrocks.proto.ExecuteCommandRequestPB;
+import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
@@ -403,6 +405,11 @@ public class MockedBackend {
 
         @Override
         public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request) {
+            throw new NotImplementedException("TODO");
+        }
+
+        @Override
+        public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
             throw new NotImplementedException("TODO");
         }
     }

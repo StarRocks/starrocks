@@ -100,7 +100,7 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
         public LogicalHudiScanOperator.Builder withOperator(LogicalHudiScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.predicates = scanOperator.predicates;
+            this.predicates = scanOperator.predicates.clone();
             this.partitionColumns = scanOperator.partitionColumns;
             return this;
         }

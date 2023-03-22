@@ -49,6 +49,8 @@ public class HudiConnectorInternalMgr {
     private final boolean isRecursive;
     private final int loadRemoteFileMetadataThreadNum;
 
+    private final boolean enableBackgroundRefreshHudiMetadata;
+
     public HudiConnectorInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
         this.properties = properties;
@@ -62,6 +64,9 @@ public class HudiConnectorInternalMgr {
         this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("enable_recursive_listing", "false"));
         this.loadRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_load_thread_num",
                 String.valueOf(Config.remote_file_metadata_load_concurrency)));
+
+        this.enableBackgroundRefreshHudiMetadata = Boolean.parseBoolean(properties.getOrDefault(
+                "enable_background_refresh_connector_metadata", "true"));
     }
 
     public void shutdown() {
@@ -138,5 +143,9 @@ public class HudiConnectorInternalMgr {
 
     public CachingRemoteFileConf getRemoteFileConf() {
         return remoteFileConf;
+    }
+
+    public boolean isEnableBackgroundRefreshHudiMetadata() {
+        return enableBackgroundRefreshHudiMetadata;
     }
 }

@@ -137,6 +137,8 @@ public:
     }
 
     void TearDown() override {
+        // check primary index cache's ref
+        EXPECT_TRUE(_update_manager->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
         tablet.delete_txn_log(_txn_id);
         _txn_id++;
@@ -318,6 +320,38 @@ TEST_F(ConditionUpdateTest, test_condition_update_multi_segment) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 4 == c1) && (c0 * 5 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 5);
+}
+
+TEST_F(ConditionUpdateTest, test_condition_update_in_memtable) {
+    // condition update
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+    VChunk chunks[2];
+    chunks[0] = generate_data(kChunkSize, 0, 4, 5);
+    chunks[1] = generate_data(kChunkSize, 0, 3, 6);
+    std::pair<int, int> result = std::make_pair(4, 5);
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    _txn_id++;
+    auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr, "c1",
+                                            _mem_tracker.get());
+    ASSERT_OK(delta_writer->open());
+    // finish condition merge in one memtable
+    ASSERT_OK(delta_writer->write(chunks[0], indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->write(chunks[1], indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish());
+    delta_writer->close();
+    // Publish version
+    ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+    version++;
+    ASSERT_EQ(kChunkSize, check(version, [&](int c0, int c1, int c2) {
+                  return (c0 * result.first == c1) && (c0 * result.second == c2);
+              }));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
 }
 
 } // namespace starrocks::lake

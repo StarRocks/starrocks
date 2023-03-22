@@ -16,6 +16,7 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -36,15 +37,18 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
+import java.util.Map;
 
 public interface ConnectorMetadata {
     /**
@@ -88,12 +92,23 @@ public interface ConnectorMetadata {
     }
 
     /**
-     * Get the remote file information from hdfs or s3. It is mainly used to generate ScanRange for scheduling.
+     * It is mainly used to generate ScanRange for scheduling.
+     * There are two ways of current connector table.
+     * 1. Get the remote files information from hdfs or s3 according to table or partition.
+     * 2. Get file scan tasks for iceberg metadata by query predicate.
      * @param table
      * @param partitionKeys selected columns
+     * @param predicate used to filter metadata for iceberg, etc
+     * @param snapshotId selected snapshot id
+     *
      * @return the remote file information of the query to scan.
      */
-    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
+    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
+                                                    long snapshotId, ScalarOperator predicate) {
+        return Lists.newArrayList();
+    }
+
+    default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
     }
 
@@ -103,12 +118,15 @@ public interface ConnectorMetadata {
      * @param table
      * @param columns selected columns
      * @param partitionKeys selected partition keys
+     * @param predicate used to filter metadata for iceberg, etc
+     *
      * @return the table statistics for the table.
      */
     default Statistics getTableStatistics(OptimizerContext session,
                                           Table table,
-                                          List<ColumnRefOperator> columns,
-                                          List<PartitionKey> partitionKeys) {
+                                          Map<ColumnRefOperator, Column> columns,
+                                          List<PartitionKey> partitionKeys,
+                                          ScalarOperator predicate) {
         return Statistics.builder().build();
     }
 
@@ -145,7 +163,8 @@ public interface ConnectorMetadata {
     default void alterTable(AlterTableStmt stmt) throws UserException {
     }
 
-    default void createTable(CreateTableStmt stmt) throws DdlException {
+    default boolean createTable(CreateTableStmt stmt) throws DdlException {
+        return true;
     }
 
     default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
@@ -181,7 +200,8 @@ public interface ConnectorMetadata {
             throws DdlException, MetaNotFoundException, AnalysisException {
     }
 
-    default void refreshMaterializedView(String dbName, String mvName, int priority)
+    default void refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
+                                         int priority, boolean mergeRedundant, boolean isManual)
             throws DdlException, MetaNotFoundException {
     }
 

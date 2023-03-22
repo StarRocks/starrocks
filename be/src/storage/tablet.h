@@ -120,7 +120,8 @@ public:
 
     // operation in rowsets
     Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
-    void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete);
+    void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
+                        std::vector<RowsetSharedPtr>* to_replace);
 
     // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
     // The caller must call hold _meta_lock when call this two function.
@@ -284,6 +285,8 @@ public:
         return _tablet_meta->set_enable_persistent_index(enable_persistent_index);
     }
 
+    Status support_binlog();
+
     void set_binlog_config(TBinlogConfig binlog_config) { _tablet_meta->set_binlog_config(binlog_config); }
 
     BinlogManager* binlog_manager() { return _binlog_manager == nullptr ? nullptr : _binlog_manager.get(); }
@@ -309,8 +312,6 @@ private:
     void _delete_stale_rowset_by_version(const Version& version);
     Status _capture_consistent_rowsets_unlocked(const vector<Version>& version_path,
                                                 vector<RowsetSharedPtr>* rowsets) const;
-
-    bool _check_versions_completeness();
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;

@@ -41,12 +41,15 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -243,20 +246,23 @@ public class CreateTableTest {
                                 + "properties('replication_num' = '1', 'compression' = 'xxx');"));
 
         ExceptionChecker
-                .expectThrowsWithMsg(IllegalArgumentException.class, "The AUTO_INCREMENT column must be BIGINT",
+                .expectThrowsWithMsg(AnalysisException.class, "Getting analyzing error from line 1, " +
+                                "column 24 to line 1, column 33. Detail message: The AUTO_INCREMENT column must be BIGINT.",
                         () -> createTable("create table test.atbl9(col1 int AUTO_INCREMENT, col2 varchar(10)) \n"
                                 + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
                                 + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
 
         ExceptionChecker
-                .expectThrowsWithMsg(AnalysisException.class, "AUTO_INCREMENT column col1 must be NOT NULL",
+                .expectThrowsWithMsg(AnalysisException.class, "Getting syntax error at line 1, column 25. " +
+                                "Detail message: AUTO_INCREMENT column col1 must be NOT NULL.",
                         () -> createTable("create table test.atbl10(col1 bigint NULL AUTO_INCREMENT, col2 varchar(10)) \n"
                                 + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
                                 + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
 
         ExceptionChecker
-                .expectThrowsWithMsg(IllegalArgumentException.class,
-                        "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement",
+                .expectThrowsWithMsg(AnalysisException.class,
+                        "Getting analyzing error from line 1, column 53 to line 1, column 65. Detail message: " +
+                                "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
                         () -> createTable("create table test.atbl11(col1 bigint AUTO_INCREMENT, col2 bigint AUTO_INCREMENT) \n"
                                 + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
                                 + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
@@ -267,6 +273,15 @@ public class CreateTableTest {
                                 + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
                                 + "properties('replication_num' = '1', 'replicated_storage' = 'FALSE');"));
 
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Unknown properties: {wrong_key=value}",
+                        () -> createTable("create table test.atbl13 (k1 int, k2 int) duplicate key(k1)\n"
+                                + "distributed by hash(k2) buckets 1\n"
+                                + "properties('replication_num' = '1', 'wrong_key' = 'value'); "));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Unknown properties: {wrong_key=value}",
+                () -> createTable("create table test.atbl14 (k1 int, k2 int, k3 float) duplicate key(k1)\n"
+                        + "partition by range(k1) (partition p1 values less than(\"10\") ('wrong_key' = 'value'))\n"
+                        + "distributed by hash(k2) buckets 1 properties('replication_num' = '1'); "));
     }
 
     @Test
@@ -929,6 +944,37 @@ public class CreateTableTest {
                                 "PROPERTIES (\n" +
                                 "\"replication_num\" = \"1\",\n" +
                                 "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table2(k1)\"\n" +
+                                ");"
+                ));
+    }
+
+    @Test
+    public void testCannotCreateOlapTable() {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Cannot create table without persistent volume in current run mode \"shared_data\"",
+                () -> createTable(
+                        "CREATE TABLE test.base_table2(\n" +
+                                "k1 INT,\n" +
+                                "k2 VARCHAR(20),\n" +
+                                "k3 INT,\n" +
+                                "k4 VARCHAR(20),\n" +
+                                "k5 INT,\n" +
+                                "k6 VARCHAR(20),\n" +
+                                "k7 INT,\n" +
+                                "k8 VARCHAR(20)\n" +
+                                ") ENGINE=OLAP\n" +
+                                "DUPLICATE KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"storage_volume\" = \"local\"\n" +
                                 ");"
                 ));
     }

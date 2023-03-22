@@ -15,7 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetDefaultRoleExecutor;
@@ -64,7 +64,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         for (int i = 0; i < 2; ++i) {
             starRocksAssert.withTable("create table db1.tbl" + i + createTblStmtStr);
         }
-        ctx.getGlobalStateMgr().getPrivilegeManager().initBuiltinRolesAndUsers();
+        ctx.getGlobalStateMgr().getAuthorizationManager().initBuiltinRolesAndUsers();
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         ctx.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
@@ -146,10 +146,10 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "grant select,insert,delete on table db1.tbl1 to test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke create_table on database db1 from test_user";
+        sql = "revoke create table on database db1 from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke create_table,drop on database db1 from test_user";
+        sql = "revoke create table,drop on database db1 from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
         sql = "grant ALL on table db1.tbl0, db1.tbl1 to test_user";
@@ -163,7 +163,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("cannot find privilege object type TTTABLE"));
+            Assert.assertTrue(e.getMessage().contains("syntax error"));
         }
 
         sql = "revoke select on database db1 from test_user";
@@ -171,7 +171,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Cant grant SELECT to object DATABASE"));
+            Assert.assertTrue(e.getMessage().contains("Cannot grant or revoke SELECT on 'DATABASE' type object"));
         }
 
         sql = "grant insert on table dbx to test_user";
@@ -258,7 +258,8 @@ public class PrivilegeStmtAnalyzerV2Test {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Operation DROP USER failed for 'root'@'%' : cannot drop user'root'@'%'"));
+            Assert.assertTrue(e.getMessage().contains(
+                    "Operation DROP USER failed for 'root'@'%' : cannot drop user 'root'@'%'"));
         }
     }
 
@@ -267,12 +268,12 @@ public class PrivilegeStmtAnalyzerV2Test {
         String sql = "create role test_role";
         CreateRoleStmt createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("test_role", createStmt.getRoles().get(0));
-        ctx.getGlobalStateMgr().getPrivilegeManager().createRole(createStmt);
+        ctx.getGlobalStateMgr().getAuthorizationManager().createRole(createStmt);
 
         sql = "create role test_role2";
         createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("test_role2", createStmt.getRoles().get(0));
-        ctx.getGlobalStateMgr().getPrivilegeManager().createRole(createStmt);
+        ctx.getGlobalStateMgr().getAuthorizationManager().createRole(createStmt);
 
         // bad name
         sql = "create role ___";
@@ -385,7 +386,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create role role" + i, ctx), ctx);
         }
 
-        PrivilegeManager privilegeManager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager authorizationManager = ctx.getGlobalStateMgr().getAuthorizationManager();
 
         String sql = "grant role1, role2 to user test_user";
         GrantRoleStmt grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -394,25 +395,25 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "set default role all to test_user";
         SetDefaultRoleStmt setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
-        List<Long> roleId = new ArrayList<>(privilegeManager
+        List<Long> roleId = new ArrayList<>(authorizationManager
                 .getDefaultRoleIdsByUser(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%")));
         Assert.assertEquals(2, roleId.size());
 
         sql = "set default role none to test_user";
         setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
-        roleId = new ArrayList<>(privilegeManager
+        roleId = new ArrayList<>(authorizationManager
                 .getDefaultRoleIdsByUser(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%")));
         Assert.assertEquals(0, roleId.size());
 
         sql = "set default role 'role1' to test_user";
         setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
-        roleId = new ArrayList<>(privilegeManager
+        roleId = new ArrayList<>(authorizationManager
                 .getDefaultRoleIdsByUser(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%")));
         Assert.assertEquals(1, roleId.size());
         Assert.assertEquals("role1",
-                privilegeManager.getRolePrivilegeCollectionUnlocked(roleId.get(0), true).getName());
+                authorizationManager.getRolePrivilegeCollectionUnlocked(roleId.get(0), true).getName());
 
         sql = "set default role xxx to test_user";
         try {
@@ -447,27 +448,27 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "revoke select on ALL tables in database db1 from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "grant create_table on ALL databases to test_user";
+        sql = "grant create table on ALL databases to test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
-        sql = "revoke create_table on ALL databases from test_user";
+        sql = "revoke create table on ALL databases from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
         sql = "grant impersonate on ALL users to test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "grant create_table on ALL database to test_user";
+        sql = "grant create table on ALL database to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid plural privilege type DATABASE"));
+            Assert.assertTrue(e.getMessage().contains("syntax error"));
         }
 
-        sql = "grant create_table on ALL tables to test_user";
+        sql = "grant create table on ALL tables to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("ALL TABLES must be restricted with database"));
+            Assert.assertTrue(e.getMessage().contains("Invalid grant statement with error privilege object"));
         }
 
         sql = "revoke select on ALL tables IN ALL tables IN all databases from test_user";
@@ -476,7 +477,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Getting syntax error at line 1, column 35. " +
-                    "Detail message: Input 'tables' is not valid at this position, please check the SQL Reference."));
+                    "Detail message: Input 'tables' is not valid at this position."));
         }
 
         sql = "revoke select on ALL tables IN ALL tables from test_user";
@@ -488,13 +489,13 @@ public class PrivilegeStmtAnalyzerV2Test {
                     "Detail message: Input 'tables' is not valid at this position"));
         }
 
-        sql = "grant create_table on ALL databases in database db1 to test_user";
+        sql = "grant create table on ALL databases in database db1 to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("cannot find catalog"));
+            Assert.assertTrue(e.getMessage().contains("Invalid grant statement with error privilege object"));
         }
 
         sql = "grant impersonate on ALL users in all databases to test_user";
@@ -502,7 +503,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for user! only support ON ALL USERS"));
+            Assert.assertTrue(e.getMessage().contains("Invalid grant statement with error privilege object"));
         }
 
     }
@@ -554,7 +555,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (Exception e) {
             System.err.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one: [*, *]"));
+            Assert.assertTrue(e.getMessage().contains("Invalid grant statement with error privilege object"));
         }
 
         try {
@@ -563,7 +564,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (Exception e) {
             System.err.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one"));
+            Assert.assertTrue(e.getMessage().contains("Invalid grant statement with error privilege object"));
         }
 
         try {
@@ -608,7 +609,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("ALL VIEWS must be restricted with database"));
+            Assert.assertTrue(e.getMessage().contains("Invalid grant statement with error privilege object"));
         }
 
         sql = "revoke select on ALL views IN ALL views IN all databases from test_user";
@@ -617,7 +618,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Getting syntax error at line 1, column 34. " +
-                    "Detail message: Input 'views' is not valid at this position, please check the SQL Reference."));
+                    "Detail message: Input 'views' is not valid at this position."));
         }
 
         sql = "revoke select on ALL views IN ALL views from test_user";
@@ -708,12 +709,12 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "revoke NODE on system from role root";
         analyzeFail(sql, "Operation not permitted, 'NODE' cannot be granted to user or role directly");
 
-        sql = "grant CREATE_RESOURCE on system to user test_user";
+        sql = "grant CREATE RESOURCE on system to user test_user";
         grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
-        Assert.assertEquals("GRANT CREATE_RESOURCE ON SYSTEM TO USER 'test_user'@'%'",
+        Assert.assertEquals("GRANT CREATE RESOURCE ON SYSTEM TO USER 'test_user'@'%'",
                 AstToSQLBuilder.toSQL(grantPrivilegeStmt));
 
-        sql = "grant NODE, CREATE_RESOURCE on system to user test_user";
+        sql = "grant NODE, CREATE RESOURCE on system to user test_user";
         analyzeFail(sql, "Operation not permitted, 'NODE' cannot be granted to user or role directly");
 
         sql = "grant IMPERSONATE on user test_user to user test_user";
@@ -748,7 +749,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         context = AnalyzeTestUtil.getConnectContext();
         CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create role role_exists", context);
-        context.getGlobalStateMgr().getPrivilegeManager().createRole(createRoleStmt);
+        context.getGlobalStateMgr().getAuthorizationManager().createRole(createRoleStmt);
 
         analyzeSuccess("create role role_not_exists");
         analyzeSuccess("create role if not exists role_not_exists");
@@ -763,10 +764,41 @@ public class PrivilegeStmtAnalyzerV2Test {
 
     @Test
     public void testGrantFunction() {
-        String sql = "GRANT usage ON GLOBAL_FUNCTION xxx to user test_user";
-        analyzeFail(sql, "cannot find function: xxx");
+        String sql = "GRANT usage ON GLOBAL FUNCTION xxx to user test_user";
+        analyzeFail(sql, "syntax error");
 
         sql = "GRANT usage ON FUNCTION db1.xxx to user test_user";
-        analyzeFail(sql, "cannot find function: xxx");
+        analyzeFail(sql, "syntax error");
+
+        sql = "GRANT usage ON GLOBAL FUNCTION TO USER test_user";
+        analyzeFail(sql, "syntax error");
+    }
+
+    @Test
+    public void testErrorParam() {
+        analyzeFail("grant SELECT on ALL TABLES to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant SELECT on ALL DATABASES in all databases to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant IMPERSONATE on ALL USERS in all databases to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant USAGE on ALL RESOURCES in all databases to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant USAGE on ALL CATALOGS in all databases to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant USAGE on ALL RESOURCE GROUPS in all databases to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant USAGE on ALL FUNCTIONS to test_user",
+                "Invalid grant statement with error privilege object");
+
+        analyzeFail("grant USAGE on ALL GLOBAL FUNCTIONS in all databases to test_user",
+                "Invalid grant statement with error privilege object");
+
     }
 }

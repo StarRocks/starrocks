@@ -313,15 +313,17 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             if (tables.size() != 1) {
                 throw new SemanticException("The materialized view only support one table in from clause.");
             }
-            Table table = tables.entrySet().iterator().next().getValue();
+            Map.Entry<TableName, Table> entry = tables.entrySet().iterator().next();
+            Table table = entry.getValue();
             if (table instanceof View) {
                 // Only in order to make the error message keep compatibility
                 throw new SemanticException("Do not support alter non-OLAP table[" + table.getName() + "]");
             } else if (!(table instanceof OlapTable)) {
                 throw new SemanticException("The materialized view only support olap table.");
             }
+            TableName tableName = entry.getKey();
             statement.setBaseIndexName(table.getName());
-            statement.setDBName(context.getDatabase());
+            statement.setDBName(tableName.getDb());
 
             SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
             if (!(selectRelation.getRelation() instanceof TableRelation)) {

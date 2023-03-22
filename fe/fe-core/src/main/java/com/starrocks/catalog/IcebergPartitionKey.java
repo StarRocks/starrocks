@@ -15,6 +15,8 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.connector.iceberg.IcebergApiConverter;
+
 public class IcebergPartitionKey extends PartitionKey implements NullablePartitionKey {
     public IcebergPartitionKey() {
         super();
@@ -22,6 +24,6 @@ public class IcebergPartitionKey extends PartitionKey implements NullablePartiti
 
     @Override
     public String nullPartitionValue() {
-        return IcebergTable.PARTITION_NULL_VALUE;
+        return IcebergApiConverter.PARTITION_NULL_VALUE;
     }
 }

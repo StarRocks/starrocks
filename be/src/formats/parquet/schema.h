@@ -63,6 +63,9 @@ struct ParquetField {
     // used to get ColumnChunk in parquet file's metadata
     int physical_column_index;
 
+    // Unique parquet field id
+    int32_t field_id;
+
     LevelInfo level_info;
     std::vector<ParquetField> children;
 
@@ -80,10 +83,16 @@ public:
 
     std::string debug_string() const;
 
-    int get_column_index(const std::string& column) const;
-    const ParquetField* get_stored_column_by_idx(int idx) const { return &_fields[idx]; }
-    const ParquetField* resolve_by_name(const std::string& name) const;
-    void get_field_names(std::unordered_set<std::string>* names) const;
+    const bool exist_filed_id() const { return _exist_field_id; }
+    const int32_t get_field_pos_by_column_name(const std::string& column_name) const;
+    const int32_t get_field_pos_by_field_id(int32_t field_id) const;
+    const ParquetField* get_stored_column_by_idx(size_t idx) const { return &_fields[idx]; }
+    const ParquetField* get_stored_column_by_field_id(int32_t field_id) const;
+    const ParquetField* get_stored_column_by_column_name(const std::string& column_name) const;
+    const size_t get_fields_size() const { return _fields.size(); }
+    const bool contain_field_id(int32_t field_id) const {
+        return _field_id_2_field_pos.find(field_id) != _field_id_2_field_pos.end();
+    }
 
 private:
     void leaf_to_field(const tparquet::SchemaElement& t_schema, const LevelInfo& cur_level_info, bool is_nullable,
@@ -106,8 +115,13 @@ private:
 
     std::vector<ParquetField> _fields;
     std::vector<ParquetField*> _physical_fields;
-    std::unordered_map<std::string, int> _field_idx_by_name;
+    // Parquet filed name(formatted with case sensitive) mapping to field position in schema.
+    std::unordered_map<std::string, size_t> _formatted_column_name_2_field_pos;
+    // Parquet unique field id mapping to field position in schema.
+    std::unordered_map<int32_t, size_t> _field_id_2_field_pos;
 
+    // Not every parquet file contains field id, if field id not existed, we should not read it with iceberg schema.
+    bool _exist_field_id = false;
     bool _case_sensitive = false;
 };
 

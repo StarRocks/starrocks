@@ -210,13 +210,13 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 FunctionName name = stmt.getFunctionName();
                 if (name.isGlobalFunction()) {
-                    context.getGlobalStateMgr().getGlobalFunctionMgr().userDropFunction(stmt.getFunction());
+                    context.getGlobalStateMgr().getGlobalFunctionMgr().userDropFunction(stmt.getFunctionSearchDesc());
                 } else {
                     Database db = context.getGlobalStateMgr().getDb(name.getDb());
                     if (db == null) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                     }
-                    db.dropFunction(stmt.getFunction());
+                    db.dropFunction(stmt.getFunctionSearchDesc());
                 }
             });
             return null;
@@ -442,9 +442,9 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
                     if (stmt instanceof GrantRoleStmt) {
-                        context.getGlobalStateMgr().getPrivilegeManager().grantRole((GrantRoleStmt) stmt);
+                        context.getGlobalStateMgr().getAuthorizationManager().grantRole((GrantRoleStmt) stmt);
                     } else {
-                        context.getGlobalStateMgr().getPrivilegeManager().revokeRole((RevokeRoleStmt) stmt);
+                        context.getGlobalStateMgr().getAuthorizationManager().revokeRole((RevokeRoleStmt) stmt);
                     }
                 } else {
                     if (stmt instanceof GrantRoleStmt) {
@@ -463,13 +463,13 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt instanceof GrantPrivilegeStmt) {
                     if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        context.getGlobalStateMgr().getPrivilegeManager().grant((GrantPrivilegeStmt) stmt);
+                        context.getGlobalStateMgr().getAuthorizationManager().grant((GrantPrivilegeStmt) stmt);
                     } else {
                         context.getGlobalStateMgr().getAuth().grant((GrantPrivilegeStmt) stmt);
                     }
                 } else {
                     if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        context.getGlobalStateMgr().getPrivilegeManager().revoke((RevokePrivilegeStmt) stmt);
+                        context.getGlobalStateMgr().getAuthorizationManager().revoke((RevokePrivilegeStmt) stmt);
                     } else {
                         context.getGlobalStateMgr().getAuth().revoke((RevokePrivilegeStmt) stmt);
                     }
@@ -482,7 +482,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getPrivilegeManager().createRole(stmt);
+                    context.getGlobalStateMgr().getAuthorizationManager().createRole(stmt);
                 } else {
                     context.getGlobalStateMgr().getAuth().createRole(stmt);
                 }
@@ -494,7 +494,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitDropRoleStatement(DropRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getPrivilegeManager().dropRole(stmt);
+                    context.getGlobalStateMgr().getAuthorizationManager().dropRole(stmt);
                 } else {
                     context.getGlobalStateMgr().getAuth().dropRole(stmt);
                 }

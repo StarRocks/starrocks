@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -23,7 +22,6 @@ public class TruncatePartitionClause extends AlterTableClause {
 
     private PartitionNames partitionNames;
 
-    @VisibleForTesting
     public TruncatePartitionClause(AlterOpType opType) {
         super(opType, NodePosition.ZERO);
     }

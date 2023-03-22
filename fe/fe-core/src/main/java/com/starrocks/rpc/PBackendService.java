@@ -15,6 +15,8 @@
 package com.starrocks.rpc;
 
 import com.baidu.jprotobuf.pbrpc.ProtobufRPC;
+import com.starrocks.proto.ExecuteCommandRequestPB;
+import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
@@ -34,6 +36,7 @@ public interface PBackendService {
     @ProtobufRPC(serviceName = "PBackendService", methodName = "exec_plan_fragment",
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
     Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request);
+
     @ProtobufRPC(serviceName = "PBackendService", methodName = "exec_batch_plan_fragments",
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
     Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(PExecBatchPlanFragmentsRequest request);
@@ -64,5 +67,9 @@ public interface PBackendService {
     @ProtobufRPC(serviceName = "PBackendService", methodName = "submit_mv_maintenance_task", onceTalkTimeout = 60000,
             attachmentHandler = ThriftClientAttachmentHandler.class)
     Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request);
+
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "execute_command", onceTalkTimeout = 60000,
+            attachmentHandler = ThriftClientAttachmentHandler.class)
+    Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
 }
 

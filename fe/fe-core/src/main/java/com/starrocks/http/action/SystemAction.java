@@ -190,6 +190,9 @@ public class SystemAction extends WebBaseAction {
                     lastSlashIndex = tempIndex;
                     return path.substring(0, lastSlashIndex);
                 }
+            } else {
+                // exist the loop
+                break;
             }
         }
         return "/";

@@ -314,10 +314,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             throws SchedException {
         TabletScheduler.PathSlot srcBePathSlot = backendsWorkingSlots.get(beId);
         if (srcBePathSlot == null) {
-            throw new SchedException(SchedException.Status.UNRECOVERABLE, "working slots not exist for src be");
+            throw new SchedException(SchedException.Status.UNRECOVERABLE, "working slots not exist for be: " + beId);
         }
         if (srcBePathSlot.takeSlot(pathHash) == -1) {
-            throw new SchedException(SchedException.Status.SCHEDULE_FAILED, "path busy, wait for next round");
+            throw new SchedException(SchedException.Status.SCHEDULE_RETRY, "path busy, wait for next round");
         }
     }
 
@@ -1228,7 +1228,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             if (table == null) {
                 return result;
             }
-            if (table.isLakeTable()) {
+            if (table.isCloudNativeTable()) {
                 // replicas are managed by StarOS and cloud storage.
                 return result;
             }
@@ -1408,7 +1408,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     if (!table.needSchedule(isLocalBalance)) {
                         continue;
                     }
-                    if (table.isLakeTable()) {
+                    if (table.isCloudNativeTable()) {
                         // replicas are managed by StarOS and cloud storage.
                         continue;
                     }
