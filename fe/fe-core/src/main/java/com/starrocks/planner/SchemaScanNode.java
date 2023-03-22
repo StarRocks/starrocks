@@ -64,6 +64,8 @@ public class SchemaScanNode extends ScanNode {
     private String schemaWild;
     private String frontendIP;
     private int frontendPort;
+    private Long jobId;
+    private String label;
 
     // only used for BE related schema scans
     private Long beId = null;
@@ -101,6 +103,14 @@ public class SchemaScanNode extends ScanNode {
 
     public void setFrontendPort(int frontendPort) {
         this.frontendPort = frontendPort;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    public void setJobId(long jobId) {
+        this.jobId = jobId;
     }
 
     /**
@@ -162,6 +172,14 @@ public class SchemaScanNode extends ScanNode {
 
         if (tabletId != null) {
             msg.schema_scan_node.setTablet_id(tabletId);
+        }
+
+        if (jobId != null) {
+            msg.schema_scan_node.setJob_id(jobId);
+        }
+
+        if (label != null) {
+            msg.schema_scan_node.setLabel(label);
         }
     }
 
