@@ -414,13 +414,10 @@ public:
                                      1, batch_size);
         RETURN_IF_UNLIKELY_NULL(res, (void)0);
         LOCAL_REF_GUARD_ENV(env, res);
-<<<<<<< HEAD
         PrimitiveType type = udf_ctxs->finalize->method_desc[0].type;
-=======
 
         LogicalType type = udf_ctxs->finalize->method_desc[0].type;
         // For nullable inputs, our UDAF does not produce nullable results
->>>>>>> d9fcef106 ([BugFix] Fix use wrong aggregate function context in no-group by aggregate (#19216))
         if (!to->is_nullable()) {
             ColumnPtr wrapper(const_cast<Column*>(to), [](auto p) {});
             auto output = NullableColumn::create(wrapper, NullColumn::create());
