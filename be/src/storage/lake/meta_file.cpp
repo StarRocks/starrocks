@@ -95,8 +95,6 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
             }
         }
         if (need_del) {
-            // free cache
-            _tablet.tablet_mgr()->erase_metacache(delvec_cache_key(_tablet_meta->id(), delvec_it->second));
             delvec_it = _tablet_meta->mutable_delvec_meta()->mutable_delvecs()->erase(delvec_it);
             delvec_erase_cnt++;
         } else {
@@ -123,8 +121,6 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version) {
     for (auto&& each_delvec : *(_tablet_meta->mutable_delvec_meta()->mutable_delvecs())) {
         auto iter = _delvecs.find(each_delvec.first);
         if (iter != _delvecs.end()) {
-            // erase old version delvec from cache
-            _tablet.tablet_mgr()->erase_metacache(delvec_cache_key(_tablet_meta->id(), each_delvec.second));
             each_delvec.second.set_version(version);
             each_delvec.second.set_offset(iter->second.offset());
             each_delvec.second.set_size(iter->second.size());
@@ -150,7 +146,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version) {
         }
         RETURN_IF_ERROR((*writer_file)->append(Slice(_buf.data(), _buf.size())));
         RETURN_IF_ERROR((*writer_file)->close());
-        if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
+        if (watch.elapsed_time() > /*100ms=*/100 * 1000 * 1000) {
             LOG(INFO) << "MetaFileBuilder sync delvec cost(ms): " << watch.elapsed_time() / 1000000;
         }
     }
@@ -165,7 +161,7 @@ Status MetaFileBuilder::finalize() {
     // finalize delvec
     RETURN_IF_ERROR(_finalize_delvec(version));
     RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
-    if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
+    if (watch.elapsed_time() > /*100ms=*/100 * 1000 * 1000) {
         LOG(INFO) << "MetaFileBuilder finalize cost(ms): " << watch.elapsed_time() / 1000000;
     }
     _update_mgr->update_primary_index_data_version(_tablet, version);
@@ -229,7 +225,7 @@ Status MetaFileReader::load() {
         return Status::Corruption(fmt::format("failed to parse tablet meta {}", _access_file->filename()));
     }
     _load = true;
-    if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
+    if (watch.elapsed_time() > /*100ms=*/100 * 1000 * 1000) {
         LOG(INFO) << "MetaFileReader load cost(ms): " << watch.elapsed_time() / 1000000;
     }
     return Status::OK();
@@ -271,7 +267,7 @@ Status MetaFileReader::get_del_vec(TabletManager* tablet_mgr, uint32_t segment_i
         delvec_cache_ptr = std::make_shared<DelVector>();
         delvec_cache_ptr->copy_from(*delvec);
         tablet_mgr->cache_delvec(cache_key, delvec_cache_ptr);
-        if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
+        if (watch.elapsed_time() > /*100ms=*/100 * 1000 * 1000) {
             LOG(INFO) << "MetaFileReader read delvec cost(ms): " << watch.elapsed_time() / 1000000;
         }
         return Status::OK();

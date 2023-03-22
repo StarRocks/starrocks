@@ -42,12 +42,12 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -75,9 +75,9 @@ public class RangePartitionInfo extends PartitionInfo {
     @SerializedName(value = "partitionColumns")
     private List<Column> partitionColumns = Lists.newArrayList();
     // formal partition id -> partition range
-    private Map<Long, Range<PartitionKey>> idToRange = Maps.newConcurrentMap();
+    private Map<Long, Range<PartitionKey>> idToRange = Maps.newHashMap();
     // temp partition id -> partition range
-    private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newConcurrentMap();
+    private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newHashMap();
 
     // partitionId -> serialized Range<PartitionKey>
     // because Range<PartitionKey> and PartitionKey can not be serialized by gson
@@ -99,6 +99,14 @@ public class RangePartitionInfo extends PartitionInfo {
     public RangePartitionInfo(List<Column> partitionColumns) {
         super(PartitionType.RANGE);
         this.partitionColumns = partitionColumns;
+        this.isMultiColumnPartition = partitionColumns.size() > 1;
+    }
+
+    public RangePartitionInfo(RangePartitionInfo other) {
+        super(other.type);
+        this.partitionColumns = Lists.newArrayList(other.partitionColumns);
+        this.idToRange = Maps.newHashMap(other.idToRange);
+        this.idToTempRange = Maps.newHashMap(other.idToTempRange);
         this.isMultiColumnPartition = partitionColumns.size() > 1;
     }
 
@@ -519,7 +527,7 @@ public class RangePartitionInfo extends PartitionInfo {
         String replicationNumStr = table.getTableProperty().getProperties().get("replication_num");
         short replicationNum;
         if (replicationNumStr == null) {
-            replicationNum = FeConstants.default_replication_num;
+            replicationNum = RunMode.defaultReplicationNum();
         } else {
             replicationNum = Short.parseShort(replicationNumStr);
         }

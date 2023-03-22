@@ -59,7 +59,7 @@ public class OptOlapPartitionPruner {
 
         PartitionInfo partitionInfo = table.getPartitionInfo();
 
-        if (partitionInfo.getType() == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             selectedPartitionIds = rangePartitionPrune(table, (RangePartitionInfo) partitionInfo, logicalOlapScanOperator);
         } else if (partitionInfo.getType() == PartitionType.LIST) {
             selectedPartitionIds = listPartitionPrune(table, (ListPartitionInfo) partitionInfo, logicalOlapScanOperator);
@@ -103,7 +103,7 @@ public class OptOlapPartitionPruner {
 
         OlapTable table = (OlapTable) logicalOlapScanOperator.getTable();
         PartitionInfo tablePartitionInfo = table.getPartitionInfo();
-        if (tablePartitionInfo.getType() != PartitionType.RANGE) {
+        if (!tablePartitionInfo.isRangePartition()) {
             return null;
         }
 
@@ -205,6 +205,7 @@ public class OptOlapPartitionPruner {
         // Currently queries either specify a temporary partition, or do not. There is no situation
         // where two partitions are checked at the same time
         boolean isTemporaryPartitionPrune = false;
+        List<Long> specifyPartitionIds = null;
         // single item list partition has only one column mapper
         Map<Long, List<LiteralExpr>> literalExprValuesMap = listPartitionInfo.getLiteralExprValues();
         List<Long> partitionIds = Lists.newArrayList();
@@ -220,6 +221,7 @@ public class OptOlapPartitionPruner {
                 }
                 partitionIds.add(part.getId());
             }
+            specifyPartitionIds = partitionIds;
         } else {
             partitionIds = listPartitionInfo.getPartitionIds(false);
         }
@@ -268,7 +270,7 @@ public class OptOlapPartitionPruner {
 
         List<ScalarOperator> scalarOperatorList = Utils.extractConjuncts(operator.getPredicate());
         PartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
-                columnToNullPartitions, scalarOperatorList);
+                columnToNullPartitions, scalarOperatorList, specifyPartitionIds);
         try {
             List<Long> prune = partitionPruner.prune();
             if (prune == null && isTemporaryPartitionPrune)  {
@@ -312,9 +314,13 @@ public class OptOlapPartitionPruner {
         boolean probeResult = true;
         if (candidatePartitions.isEmpty()) {
             probeResult = false;
-        } else if (partitionInfo.getType() != PartitionType.RANGE) {
+        } else if (!partitionInfo.isRangePartition()) {
             probeResult = false;
         } else if (((RangePartitionInfo) partitionInfo).getPartitionColumns().size() > 1) {
+            probeResult = false;
+        } else if (((RangePartitionInfo) partitionInfo).getIdToRange(true)
+                .containsKey(candidatePartitions.get(0))) {
+            // it's a temp partition list, no need to do the further prune
             probeResult = false;
         } else if (olapScanOperator.getPredicate() == null) {
             probeResult = false;

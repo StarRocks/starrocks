@@ -17,6 +17,10 @@ thirdparty/src
 **/output
 # negate the output as it might be used for packing container from locally build artifact
 !output
+output/fe/meta
+output/fe/log
+output/be/storage
+output/be/log
 
 
 

@@ -29,6 +29,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -225,7 +226,7 @@ public class Explain {
             PhysicalIcebergScanOperator scan = (PhysicalIcebergScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- ICEBERG-SCAN [")
-                    .append(((IcebergTable) scan.getTable()).getTable())
+                    .append(((IcebergTable) scan.getTable()).getRemoteTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
@@ -574,7 +575,8 @@ public class Explain {
                                                       OperatorPrinter.ExplainContext context) {
             PhysicalTableFunctionOperator tableFunction = (PhysicalTableFunctionOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("- TABLE FUNCTION [" + tableFunction.getFn().functionName() + "]");
-            sb.append(buildOutputColumns(tableFunction, "[" + tableFunction.getOutputColumns() + "]"));
+            sb.append(buildOutputColumns(tableFunction,
+                    "[" + new ColumnRefSet(tableFunction.getOutputColRefs()) + "]"));
             sb.append("\n");
 
             buildCostEstimate(sb, optExpression, context.step);

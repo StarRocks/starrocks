@@ -142,8 +142,8 @@ public class StatisticExecutor {
 
         Database db = MetaUtils.getDatabase(dbId);
         Table table = MetaUtils.getTable(dbId, tableId);
-        if (!table.isOlapOrLakeTable()) {
-            throw new SemanticException("Table '%s' is not a OLAP table or LAKE table", table.getName());
+        if (!(table.isOlapOrLakeTable() || table.isMaterializedView())) {
+            throw new SemanticException("Table '%s' is not a OLAP table or LAKE table or Materialize View", table.getName());
         }
 
         OlapTable olapTable = (OlapTable) table;
@@ -152,9 +152,8 @@ public class StatisticExecutor {
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
-                "dict_merge(" + "`" + column +
-                "`) as _dict_merge_" + column +
-                " from " + catalogName + "." + db.getOriginName() + "." + table.getName() + " [_META_]";
+                "dict_merge(" +  StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+                " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
 
         ConnectContext context = StatisticUtils.buildConnectContext();
@@ -221,12 +220,12 @@ public class StatisticExecutor {
         Database db = statsJob.getDb();
         Table table = statsJob.getTable();
 
-        //Only update running status without edit log, make restart job status is failed
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
-        GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
-
         try {
             GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
+            //Only update running status without edit log, make restart job status is failed
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
+            GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+
             statsJob.collect(statsConnectCtx, analyzeStatus);
         } catch (Exception e) {
             LOG.warn("Collect statistics error ", e);

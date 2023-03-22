@@ -24,10 +24,13 @@
 # --job param for *make*
 # support macos
 if [[ $(uname) == "Darwin" ]]; then
-    PARALLEL=$[$(sysctl -n hw.physicalcpu)/4+1]
+    default_parallel=$[$(sysctl -n hw.physicalcpu)/4+1]
 else
-    PARALLEL=$[$(nproc)/4+1]
+    default_parallel=$[$(nproc)/4+1]
 fi
+
+# use the value if $PARALEL is already set, otherwise use $default_parallel
+PARALLEL=${PARALLEL:-$default_parallel}
 
 ###################################################
 # DO NOT change variables bellow unless you known
@@ -297,6 +300,12 @@ JINDOSDK_NAME="jindosdk-4.6.2.tar.gz"
 JINDOSDK_SOURCE="jindosdk-4.6.2"
 JINDOSDK_MD5SUM="7288ffb8f2fbdde6b907d15041a0f79c"
 
+# Google Cloud Storage, gcs-connector
+GCS_CONNECTOR_DOWNLOAD="https://cdn-thirdparty.starrocks.com/gcs-connector-hadoop3-2.2.11-shaded.zip"
+GCS_CONNECTOR_NAME="gcs-connector-hadoop3-2.2.11-shaded.zip"
+GCS_CONNECTOR_SOURCE="gcs-connector-hadoop3-2.2.11-shaded"
+GCS_CONNECTOR_MD5SUM="51fd0eb5cb913a84e4ad8a5ed2069e21"
+
 # aws-sdk-cpp
 AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.9.179.tar.gz"
 AWS_SDK_CPP_NAME="aws-sdk-cpp-1.9.179.tar.gz"
@@ -367,4 +376,4 @@ SERDES_MD5SUM="61012487a8845f37540710ac4ac2f7ab"
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
-            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS JANSSON AVRO SERDES"
+            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS JANSSON AVRO SERDES GCS_CONNECTOR"

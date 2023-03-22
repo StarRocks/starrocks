@@ -211,6 +211,14 @@ public class Config extends ConfigBase {
     public static String big_query_log_delete_age = "7d";
 
     /**
+     * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
+     * It is only effective when enable_collect_query_detail_info is set to false, since the plan will be recorded
+     * in the query detail when enable_collect_query_detail_info is true.
+     */
+    @ConfField(mutable = true)
+    public static boolean log_plan_cancelled_by_crash_be = true;
+
+    /**
      * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
      * to avoid creating too many partitions at one time.
      */
@@ -448,6 +456,13 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int bdbje_replay_cost_percent = 150;
+
+    /**
+     * For the version of 5.7, bdb-je will reserve unprotected files (which can be deleted safely) as much as possible,
+     * this param (default is 0 in bdb-je, which means unlimited) controls the limit of reserved unprotected files.
+     */
+    @ConfField
+    public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
 
     /**
      * the max txn number which bdbje can rollback when trying to rejoin the group
@@ -1402,6 +1417,13 @@ public class Config extends ConfigBase {
     public static String authentication_kerberos_service_key_tab = "";
 
     /**
+     * When set to true, we cannot drop user named 'admin' or grant/revoke role to/from user named 'admin',
+     * except that we're root user.
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_admin_user_protection = false;
+
+    /**
      * In some cases, some tablets may have all replicas damaged or lost.
      * At this time, the data has been lost, and the damaged tablets
      * will cause the entire query to fail, and the remaining healthy tablets cannot be queried.
@@ -1564,6 +1586,12 @@ public class Config extends ConfigBase {
     public static long max_partitions_in_one_batch = 4096;
 
     /**
+     * Used to limit num of partition for automatic partition table automatically created
+     */
+    @ConfField(mutable = true)
+    public static long max_automatic_partition_number = 4096;
+
+    /**
      * Used to limit num of agent task for one be. currently only for drop task.
      */
     @ConfField(mutable = true)
@@ -1603,7 +1631,7 @@ public class Config extends ConfigBase {
      * The maximum number of partitions to fetch from the metastore in one RPC.
      */
     @ConfField
-    public static int max_hive_partitions_per_rpc = 1000;
+    public static int max_hive_partitions_per_rpc = 5000;
 
     /**
      * The interval of lazy refreshing remote file's metadata cache
@@ -1661,16 +1689,28 @@ public class Config extends ConfigBase {
     public static long hive_max_split_size = 64L * 1024L * 1024L;
 
     /**
-     * Enable background refresh all hive external tables all partitions metadata on internal catalog.
+     * Enable background refresh all external tables all partitions metadata on internal catalog.
      */
     @ConfField
-    public static boolean enable_background_refresh_hive_metadata = false;
+    public static boolean enable_background_refresh_connector_metadata = false;
+
+    /**
+     * Enable background refresh all external tables all partitions metadata based on resource in internal catalog.
+     */
+    @ConfField
+    public static boolean enable_background_refresh_resource_table_metadata = false;
+
+    /**
+     * Number of threads to refresh remote file's metadata concurrency.
+     */
+    @ConfField
+    public static int background_refresh_file_metadata_concurrency = 4;
 
     /**
      * Background refresh hive external table metadata interval in milliseconds.
      */
     @ConfField(mutable = true)
-    public static int background_refresh_hive_metadata_interval_millis = 600000;
+    public static int background_refresh_metadata_interval_millis = 600000;
 
     /**
      * Enable refresh hive partition statistics.
@@ -1702,6 +1742,48 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int iceberg_table_refresh_expire_sec = 86400;
+
+    /**
+     * iceberg metadata cache dir
+     */
+    @ConfField(mutable = true)
+    public static String iceberg_metadata_cache_disk_path = StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg";
+
+    /**
+     * iceberg metadata memory cache total size, default 512MB
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_memory_cache_capacity = 536870912L;
+
+    /**
+     * iceberg metadata memory cache expiration time, default 86500s
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_memory_cache_expiration_seconds = 86500;
+
+    /**
+     * enable iceberg metadata disk cache, default false
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_iceberg_metadata_disk_cache = false;
+
+    /**
+     * iceberg metadata disk cache total size, default 2GB
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_disk_cache_capacity = 2147483648L;
+
+    /**
+     * iceberg metadata disk cache expire after access
+     */
+    @ConfField
+    public static long iceberg_metadata_disk_cache_expiration_seconds = 7L * 24L * 60L * 60L;
+
+    /**
+     * iceberg metadata cache max entry size, default 8MB
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_metadata_cache_max_entry_size = 8388608L;
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
@@ -1781,7 +1863,7 @@ public class Config extends ConfigBase {
     /**
      * shared_data: means run on cloud-native
      * shared_nothing: means run on local
-     * hybrid: run on both, not support yet.
+     * hybrid: run on both, not production ready, should only be used in test environment now.
      */
     @ConfField
     public static String run_mode = "shared_nothing";
@@ -1817,39 +1899,37 @@ public class Config extends ConfigBase {
     /**
      * cloud native storage: hdfs storage url
      */
+    @ConfField
     public static String cloud_native_hdfs_url = "";
 
     // AWS S3 storage configuration
     @ConfField
-    public static String cloud_native_aws_s3_bucket = "";
+    public static String aws_s3_path = "";
     @ConfField
-    public static String cloud_native_aws_s3_region = "";
+    public static String aws_s3_region = "";
     @ConfField
-    public static String cloud_native_aws_s3_endpoint = "";
-    /**
-     * Sub path to used for the backend storage
-     */
-    @ConfField
-    public static String cloud_native_aws_s3_path = "";
+    public static String aws_s3_endpoint = "";
+
     // AWS credential configuration
-    /**
-     * AWS credential type, can be one of the following value, case-sensitive
-     * - "simple"
-     * - "instance_profile"
-     * - "assume_role"
-     */
     @ConfField
-    public static String cloud_native_aws_credential_type = "simple";
-    // Configurations for aws credential_type = "simple"
+    public static boolean aws_s3_use_aws_sdk_default_behavior = false;
     @ConfField
-    public static String cloud_native_simple_credential_access_key_id = "";
+    public static boolean aws_s3_use_instance_profile = false;
+
     @ConfField
-    public static String cloud_native_simple_credential_access_key_secret = "";
-    // Configurations for aws credential_type = "assume_role"
+    public static String aws_s3_access_key = "";
     @ConfField
-    public static String cloud_native_assume_role_credential_arn = "";
+    public static String aws_s3_secret_key = "";
+
     @ConfField
-    public static String cloud_native_assume_role_credential_external_id = "";
+    public static String aws_s3_iam_role_arn = "";
+    @ConfField
+    public static String aws_s3_external_id = "";
+
+    // Enables or disables SSL connections to AWS services. Not support for now
+    // @ConfField
+    // public static String aws_s3_enable_ssl = "true";
+    
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
     // ***********************************************************

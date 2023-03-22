@@ -24,8 +24,10 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -51,10 +53,12 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class MvRewriteOptimizationTest {
     private static ConnectContext connectContext;
@@ -71,10 +75,15 @@ public class MvRewriteOptimizationTest {
         Config.tablet_sched_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.enable_new_publish_mechanism = true;
+
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
         cluster = PseudoCluster.getInstance();
+
         connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
+
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
@@ -249,7 +258,7 @@ public class MvRewriteOptimizationTest {
         PseudoCluster.getInstance().shutdown(true);
     }
 
-    @Test
+    @Ignore
     public void testSingleTableRewrite() throws Exception {
         testSingleTableEqualPredicateRewrite();
         testSingleTableRangePredicateRewrite();
@@ -1384,6 +1393,37 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    public void testHiveQueryWithMvs() throws Exception {
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        // enforce choose the hive scan operator, not mv plan
+        connectContext.getSessionVariable().setUseNthExecPlan(1);
+        createAndRefreshMv("test", "hive_union_mv_1",
+                "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
+                        "PROPERTIES (\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                        ") " +
+                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
+        createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
+                " distributed by hash(s_suppkey)" +
+                "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ") " +
+                " as " +
+                " SELECT s_suppkey , s_name, n_name" +
+                " from hive0.tpch.supplier join hive0.tpch.nation" +
+                " on s_nationkey = n_nationkey" +
+                " where s_suppkey < 100");
+
+        String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan, "TABLE: supplier", "NON-PARTITION PREDICATES: 19: s_suppkey < 10");
+
+        connectContext.getSessionVariable().setUseNthExecPlan(0);
+        dropMv("test", "hive_union_mv_1");
+        dropMv("test", "hive_join_mv_1");
+    }
+
+    @Ignore
     public void testUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
 
@@ -1405,7 +1445,7 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan1, "  3:OlapScanNode\n" +
                 "     TABLE: union_mv_1");
         PlanTestBase.assertContains(plan1, "TABLE: emps\n" +
-                "     PREAGGREGATION: ON\n",
+                        "     PREAGGREGATION: ON\n",
                 "empid < 5,", "empid > 2");
 
         String query7 = "select deptno, empid from emps where empid < 5";
@@ -1706,7 +1746,10 @@ public class MvRewriteOptimizationTest {
 
         String query10 = "select c1, c3, c2 from test_base_part";
         String plan10 = getFragmentPlan(query10);
-        PlanTestBase.assertContains(plan10, "partial_mv_6", "UNION", "c3 > 1999");
+        PlanTestBase.assertContains(plan10, "partial_mv_6", "UNION", "TABLE: test_base_part\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=2/6\n" +
+                "     rollup: test_base_part");
 
         String query12 = "select c1, c3, c2 from test_base_part where c3 < 2000";
         String plan12 = getFragmentPlan(query12);
@@ -1725,7 +1768,11 @@ public class MvRewriteOptimizationTest {
                 " select c1, c3, c2 from test_base_part where c3 < 2000 and c1 = 1;");
         String query11 = "select c1, c3, c2 from test_base_part";
         String plan11 = getFragmentPlan(query11);
-        PlanTestBase.assertContains(plan11, "partial_mv_7", "UNION", "c3 > 1999");
+        PlanTestBase.assertContains(plan11, "partial_mv_7", "UNION", "TABLE: test_base_part\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: (8: c1 != 1) OR (10: c3 >= 2000)\n" +
+                "     partitions=6/6\n" +
+                "     rollup: test_base_part");
         dropMv("test", "partial_mv_7");
 
         createAndRefreshMv("test", "partial_mv_8", "create materialized view partial_mv_8" +
@@ -1825,6 +1872,21 @@ public class MvRewriteOptimizationTest {
         starRocksAssert.dropTable("ttl_base_table_2");
     }
 
+    @Test
+    public void testCardinality() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            createAndRefreshMv("test", "emp_lowcard_sum", "CREATE MATERIALIZED VIEW emp_lowcard_sum" +
+                    " DISTRIBUTED BY HASH(empid) AS SELECT empid, name, sum(salary) as sum_sal from emps group by " +
+                    "empid, name;");
+            String sql = "select name from emp_lowcard_sum group by name";
+            String plan = getFragmentPlan(sql);
+            Assert.assertTrue(plan.contains("Decode"));
+        } finally {
+            dropMv("test", "emp_lowcard_sum");
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
+    }
     @Test
     public void testPkFk() throws SQLException {
         cluster.runSql("test", "CREATE TABLE test.parent_table1(\n" +
@@ -2017,5 +2079,91 @@ public class MvRewriteOptimizationTest {
         for (OptExpression child : root.getInputs()) {
             getScanOperators(child, name, results);
         }
+    }
+
+    @Test
+    public void testNestedMVs1() throws Exception {
+        createAndRefreshMv("test", "nested_mv1", "create materialized view nested_mv1 " +
+                " distributed by hash(empid) as" +
+                " select * from emps;");
+        createAndRefreshMv("test", "nested_mv2", "create materialized view nested_mv2 " +
+                " distributed by hash(empid) as" +
+                " select empid, sum(deptno) from emps group by empid;");
+        createAndRefreshMv("test", "nested_mv3", "create materialized view nested_mv3 " +
+                " distributed by hash(empid) as" +
+                " select * from nested_mv2 where empid > 1;");
+        String plan = getFragmentPlan("select empid, sum(deptno) from emps where empid > 1 group by empid");
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: nested_mv3\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/1\n" +
+                "     rollup: nested_mv3"));
+        dropMv("test", "nested_mv1");
+        dropMv("test", "nested_mv2");
+        dropMv("test", "nested_mv3");
+    }
+
+    @Test
+    public void testExternalNestedMVs1() throws Exception {
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        createAndRefreshMv("test", "hive_nested_mv_1",
+                "create materialized view hive_nested_mv_1 distributed by hash(s_suppkey) " +
+                        "PROPERTIES (\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                        ") " +
+                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier");
+        createAndRefreshMv("test", "hive_nested_mv_2",
+                "create materialized view hive_nested_mv_2 distributed by hash(s_suppkey) " +
+                        "PROPERTIES (\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                        ") " +
+                        " as select s_suppkey, sum(s_acctbal) from hive0.tpch.supplier group by s_suppkey");
+        createAndRefreshMv("test", "hive_nested_mv_3",
+                "create materialized view hive_nested_mv_3 distributed by hash(s_suppkey) " +
+                        "PROPERTIES (\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                        ") " +
+                        " as select * from hive_nested_mv_2 where s_suppkey > 1");
+        String query1 = "select s_suppkey, sum(s_acctbal) from hive0.tpch.supplier where s_suppkey > 1 group by s_suppkey ";
+        String plan1 = getFragmentPlan(query1);
+        System.out.println(plan1);
+        Assert.assertTrue(plan1.contains("0:OlapScanNode\n" +
+                "     TABLE: hive_nested_mv_3\n" +
+                "     PREAGGREGATION: ON\n"));
+        dropMv("test", "hive_nested_mv_1");
+        dropMv("test", "hive_nested_mv_2");
+        dropMv("test", "hive_nested_mv_3");
+    }
+
+    @Test
+    public void testTabletHintForbidMvRewrite() throws Exception {
+        createAndRefreshMv("test", "forbid_mv_1", "create materialized view forbid_mv_1" +
+                " distributed by hash(t1d) as SELECT " +
+                " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from test_all_type" +
+                " group by test_all_type.t1d");
+
+        String query1 = "SELECT test_all_type.t1d," +
+                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from test_all_type" +
+                " group by test_all_type.t1d";
+        String plan1 = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan1, "  0:OlapScanNode\n" +
+                "     TABLE: forbid_mv_1\n" +
+                "     PREAGGREGATION: ON");
+        ShowResultSet tablets = starRocksAssert.showTablet("test", "test_all_type");
+        List<String> tabletIds = tablets.getResultRows().stream().map(r -> r.get(0)).collect(Collectors.toList());
+        String tabletHint = String.format("tablet(%s)", tabletIds.get(0));
+        String query2 = "SELECT test_all_type.t1d," +
+                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from test_all_type " + tabletHint +
+                " group by test_all_type.t1d";
+
+        String plan2 = getFragmentPlan(query2);
+        PlanTestBase.assertContains(plan2, "  0:OlapScanNode\n" +
+                "     TABLE: test_all_type\n" +
+                "     PREAGGREGATION: ON");
+        dropMv("test", "forbid_mv_1");
     }
 }

@@ -14,8 +14,12 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.load.loadv2.InsertLoadJob;
@@ -57,6 +61,8 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private TaskRunStatus status;
 
+    private Constants.TaskType type;
+
     TaskRun() {
         future = new CompletableFuture<>();
     }
@@ -92,14 +98,52 @@ public class TaskRun implements Comparable<TaskRun> {
     public TaskRunProcessor getProcessor() {
         return processor;
     }
-
     public void setProcessor(TaskRunProcessor processor) {
         this.processor = processor;
+    }
+
+    public void setType(Constants.TaskType type) {
+        this.type = type;
+    }
+
+    public Constants.TaskType getType() {
+        return this.type;
+    }
+
+    public Map<String, String>  refreshTaskProperties(ConnectContext ctx) {
+        Map<String, String> newProperties = Maps.newHashMap();
+        if (task.getSource() != Constants.TaskSource.MV) {
+            return newProperties;
+        }
+
+        try {
+            // NOTE: mvId is set in Task's properties when creating
+            long mvId = Long.parseLong(properties.get(PartitionBasedMaterializedViewRefreshProcessor.MV_ID));
+            Database database = GlobalStateMgr.getCurrentState().getDb(ctx.getDatabase());
+            if (database == null) {
+                LOG.warn("database {} do not exist when refreshing materialized view:{}", ctx.getDatabase(), mvId);
+                return newProperties;
+            }
+
+            Table table = database.getTable(mvId);
+            if (table == null) {
+                LOG.warn("materialized view:{} in database:{} do not exist when refreshing", mvId,
+                        ctx.getDatabase());
+                return newProperties;
+            }
+            MaterializedView materializedView = (MaterializedView) table;
+            Preconditions.checkState(materializedView != null);
+            newProperties = materializedView.getProperties();
+        } catch (Exception e) {
+            LOG.warn("refresh task properties failed:", e);
+        }
+        return newProperties;
     }
 
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
         taskRunContext.setDefinition(status.getDefinition());
+
         runCtx = new ConnectContext(null);
         runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         runCtx.setDatabase(task.getDbName());
@@ -108,6 +152,10 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.setCurrentRoleIds(runCtx.getCurrentUserIdentity());
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
+
+        Map<String, String> newProperties = refreshTaskProperties(runCtx);
+        properties.putAll(newProperties);
+
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
         runCtx.resetSessionVariable();
         if (properties != null) {
@@ -124,6 +172,8 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);
         taskRunContext.setPriority(status.getPriority());
+        taskRunContext.setTaskType(type);
+        taskRunContext.setStatus(status);
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
         if (runCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
@@ -174,7 +224,9 @@ public class TaskRun implements Comparable<TaskRun> {
     public TaskRunStatus initStatus(String queryId, Long createTime) {
         TaskRunStatus status = new TaskRunStatus();
         status.setQueryId(queryId);
+        status.setTaskId(task.getId());
         status.setTaskName(task.getName());
+        status.setSource(task.getSource());
         if (createTime == null) {
             status.setCreateTime(System.currentTimeMillis());
         } else {

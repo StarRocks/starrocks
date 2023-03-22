@@ -73,6 +73,11 @@ public class InsertStmt extends DmlStmt {
     // If this is set to true it means a system refresh operation, which is allowed to write to materialized view.
     private boolean isSystem = false;
 
+    /**
+     * `true` means that it's created by CTAS statement
+     */
+    private boolean forCTAS = false;
+
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite) {
         this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
@@ -97,6 +102,7 @@ public class InsertStmt extends DmlStmt {
         this.targetPartitionNames = null;
         this.targetColumnNames = null;
         this.queryStatement = queryStatement;
+        this.forCTAS = true;
     }
 
     public Table getTargetTable() {
@@ -189,6 +195,10 @@ public class InsertStmt extends DmlStmt {
         } else {
             return RedirectStatus.FORWARD_WITH_SYNC;
         }
+    }
+
+    public boolean isForCTAS() {
+        return forCTAS;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

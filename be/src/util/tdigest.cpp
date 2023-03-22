@@ -565,8 +565,7 @@ void TDigest::updateCumulative() {
 
 void TDigest::process() {
     CentroidComparator cc;
-    pdqsort(false, _unprocessed.begin(), _unprocessed.end(),
-            [&](auto& lhs, auto& rhs) { return lhs.mean() < rhs.mean(); });
+    pdqsort(_unprocessed.begin(), _unprocessed.end(), [&](auto& lhs, auto& rhs) { return lhs.mean() < rhs.mean(); });
     auto count = _unprocessed.size();
     _unprocessed.insert(_unprocessed.end(), _processed.cbegin(), _processed.cend());
     std::inplace_merge(_unprocessed.begin(), _unprocessed.begin() + count, _unprocessed.end(), cc);

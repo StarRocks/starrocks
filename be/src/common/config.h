@@ -436,12 +436,6 @@ CONF_mBool(enable_prefetch, "true");
 // Otherwise, StarRocks will use all cores returned from "/proc/cpuinfo".
 CONF_Int32(num_cores, "0");
 
-// CONF_Bool(thread_creation_fault_injection, "false");
-
-// Set this to encrypt and perform an integrity
-// check on all data spilled to disk during a query
-// CONF_Bool(disk_spill_encryption, "false");
-
 // When BE start, If there is a broken disk, BE process will exit by default.
 // Otherwise, we will ignore the broken disk,
 CONF_Bool(ignore_broken_disk, "false");
@@ -691,6 +685,20 @@ CONF_Int64(pipeline_sink_brpc_dop, "64");
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 CONF_mBool(pipeline_print_profile, "false");
 
+// The arguments of multilevel feedback pipeline_driver_queue. It prioritizes small queries over larger ones,
+// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
+CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");
+CONF_Double(pipeline_driver_queue_ratio_of_adjacent_queue, "1.2");
+// 0 represents PriorityScanTaskQueue (by default), while 1 represents MultiLevelFeedScanTaskQueue.
+// - PriorityScanTaskQueue prioritizes scan tasks with lower committed times.
+// - MultiLevelFeedScanTaskQueue prioritizes scan tasks with shorter execution time.
+//   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
+CONF_Int64(pipeline_scan_queue_mode, "0");
+// The arguments of MultiLevelFeedScanTaskQueue. It prioritizes small queries over larger ones,
+// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
+CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
+CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
+
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
@@ -783,9 +791,6 @@ CONF_Int64(deliver_broadcast_rf_passthrough_bytes_limit, "131072");
 CONF_Int64(deliver_broadcast_rf_passthrough_inflight_num, "10");
 CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 
-// enable optimized implementation of schema change
-CONF_Bool(enable_schema_change_v2, "true");
-
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
 // Config for opentelemetry tracing.
@@ -796,6 +801,7 @@ CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
 
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
+CONF_Int32(starlet_cache_thread_num, "64");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
 #endif
@@ -830,6 +836,13 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 // The minimum allowed value is 10000(10 seconds).
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
+// spill dirs
+CONF_String(spill_local_storage_dir, "spill");
+CONF_mBool(experimental_spill_skip_sync, "false");
+// The maximum size of a single log block container file, this is not a hard limit.
+// If the file size exceeds this limit, a new file will be created to store the block.
+CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
+
 // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
 CONF_Int32(internal_service_async_thread_num, "10");
@@ -862,7 +875,14 @@ CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
 CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
 CONF_Int64(block_cache_block_size, "1048576");  // 1MB
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
-CONF_Bool(block_cache_checksum_enable, "true");
+CONF_Bool(block_cache_checksum_enable, "false");
+// Maximum number of concurrent inserts we allow globally for block cache.
+// 0 means unlimited.
+CONF_Int64(block_cache_max_concurrent_inserts, "1000000");
+// Total memory limit for in-flight parcels.
+// Once this is reached, requests will be rejected until the parcel memory usage gets under the limit.
+CONF_Int64(block_cache_max_parcel_memory_mb, "256");
+CONF_Bool(block_cache_report_stats, "false");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
@@ -889,11 +909,10 @@ CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache=1
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
-CONF_mInt64(wait_apply_time, "6000")                                 // 6s
+CONF_mInt64(wait_apply_time, "6000");                                // 6s
 
-        // Max size of a binlog file. The default is 512MB.
-        CONF_Int64(binlog_file_max_size, "536870912");
-
+// Max size of a binlog file. The default is 512MB.
+CONF_Int64(binlog_file_max_size, "536870912");
 // Max size of a binlog page. The default is 1MB.
 CONF_Int32(binlog_page_max_size, "1048576");
 

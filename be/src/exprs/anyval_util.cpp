@@ -106,9 +106,13 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
         break;
     case TYPE_ARRAY:
     case TYPE_MAP:
-    case TYPE_STRUCT:
+    case TYPE_STRUCT: {
         out.type = type.type;
+        for (auto child : type.children) {
+            out.children.emplace_back(column_type_to_type_desc(child));
+        }
         break;
+    }
     case TYPE_DECIMAL32:
         out.type = TYPE_DECIMAL32;
         out.precision = type.precision;

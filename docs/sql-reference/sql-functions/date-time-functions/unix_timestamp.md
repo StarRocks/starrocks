@@ -17,9 +17,9 @@ This function may return different results for different time zones. For more in
 ## Syntax
 
 ```Haskell
-INT UNIX_TIMESTAMP()
-INT UNIX_TIMESTAMP(DATETIME date)
-INT UNIX_TIMESTAMP(DATETIME date, STRING fmt)
+BIGINT UNIX_TIMESTAMP()
+BIGINT UNIX_TIMESTAMP(DATETIME date)
+BIGINT UNIX_TIMESTAMP(DATETIME date, STRING fmt)
 ```
 
 ## Examples

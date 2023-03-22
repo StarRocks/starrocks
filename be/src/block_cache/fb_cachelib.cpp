@@ -32,6 +32,8 @@ Status FbCacheLib::init(const CacheOptions& options) {
 
         for (auto& dir : options.disk_spaces) {
             nvm_files.emplace_back(dir.path + "/cachelib_data");
+            // If exist, truncate it to empty file
+            FileSystemUtil::resize_file(nvm_files.back(), 0);
         }
         if (nvm_files.size() == 1) {
             nvmConfig.navyConfig.setSimpleFile(nvm_files[0], options.disk_spaces[0].size, false);
@@ -40,11 +42,14 @@ Status FbCacheLib::init(const CacheOptions& options) {
         }
         nvmConfig.navyConfig.blockCache().setRegionSize(16 * 1024 * 1024);
         nvmConfig.navyConfig.blockCache().setDataChecksum(options.checksum);
+        nvmConfig.navyConfig.setMaxParcelMemoryMB(options.max_parcel_memory_mb);
+        nvmConfig.navyConfig.setMaxConcurrentInserts(options.max_concurrent_inserts);
         config.enableNvmCache(nvmConfig);
     }
 
     _cache = std::make_unique<Cache>(config);
     _default_pool = _cache->addPool("default pool", _cache->getCacheMemoryStats().cacheSize);
+    _meta_path = options.meta_path;
     return Status::OK();
 }
 
@@ -68,6 +73,10 @@ StatusOr<size_t> FbCacheLib::read_cache(const std::string& key, char* value, siz
     if (!handle) {
         return Status::NotFound("not found cachelib item");
     }
+    // to check if cached.
+    if (value == nullptr) {
+        return 0;
+    }
     DCHECK((off + size) <= handle->getSize());
     // std::memcpy(value, (char*)handle->getMemory() + off, size);
     strings::memcpy_inlined(value, (char*)handle->getMemory() + off, size);
@@ -82,15 +91,26 @@ Status FbCacheLib::remove_cache(const std::string& key) {
     return Status::OK();
 }
 
+std::unordered_map<std::string, double> FbCacheLib::cache_stats() {
+    const auto navy_stats = _cache->getNvmCacheStatsMap().toMap();
+    return navy_stats;
+}
+
 Status FbCacheLib::shutdown() {
     if (_cache) {
-        auto res = _cache->shutDown();
-        if (res != Cache::ShutDownStatus::kSuccess) {
-            LOG(WARNING) << "block cache shutdown failed";
-            return Status::InternalError("block cache shutdown failed");
-        }
+        _dump_cache_stats();
     }
     return Status::OK();
+}
+
+void FbCacheLib::_dump_cache_stats() {
+    std::ofstream of;
+    of.open(_meta_path + "/cachelib_stat", std::ios::out | std::ios::trunc);
+    const auto stats = cache_stats();
+    for (auto& stat : stats) {
+        of << stat.first << " : " << stat.second << "\n";
+    }
+    of.close();
 }
 
 } // namespace starrocks

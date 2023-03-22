@@ -47,8 +47,7 @@ public:
     Status execute() override;
 
 public:
-    EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& alter_tablet_request, int64_t signature,
-                          const TTaskType::type task_type, vector<string>* error_msgs, const string& process_name);
+    EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& alter_tablet_request);
     ~EngineAlterTabletTask() override = default;
 
 private:

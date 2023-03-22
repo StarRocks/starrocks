@@ -34,6 +34,7 @@
 
 package com.starrocks.service;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -221,7 +222,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -464,18 +464,28 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         for (List<String> rowSet : rowSets) {
             TMaterializedViewStatus status = new TMaterializedViewStatus();
             status.setId(rowSet.get(0));
-            status.setName(rowSet.get(1));
-            status.setDatabase_name(rowSet.get(2));
+            status.setDatabase_name(rowSet.get(1));
+            status.setName(rowSet.get(2));
             status.setRefresh_type(rowSet.get(3));
             status.setIs_active(rowSet.get(4));
-            status.setLast_refresh_start_time(rowSet.get(5));
-            status.setLast_refresh_finished_time(rowSet.get(6));
-            status.setLast_refresh_duration(rowSet.get(7));
-            status.setLast_refresh_state(rowSet.get(8));
-            status.setInactive_code(rowSet.get(9));
-            status.setInactive_reason(rowSet.get(10));
-            status.setText(rowSet.get(11));
-            status.setRows(rowSet.get(12));
+            status.setPartition_type(rowSet.get(5));
+
+            status.setTask_id(rowSet.get(6));
+            status.setTask_name(rowSet.get(7));
+            status.setLast_refresh_start_time(rowSet.get(8));
+            status.setLast_refresh_finished_time(rowSet.get(9));
+            status.setLast_refresh_duration(rowSet.get(10));
+            status.setLast_refresh_state(rowSet.get(11));
+            status.setLast_refresh_force_refresh(rowSet.get(12));
+            status.setLast_refresh_start_partition(rowSet.get(13));
+            status.setLast_refresh_end_partition(rowSet.get(14));
+            status.setLast_refresh_base_refresh_partitions(rowSet.get(15));
+            status.setLast_refresh_mv_refresh_partitions(rowSet.get(16));
+
+            status.setLast_refresh_error_code(rowSet.get(17));
+            status.setLast_refresh_error_message(rowSet.get(18));
+            status.setText(rowSet.get(19));
+            status.setRows(rowSet.get(20));
             tablesResult.add(status);
         }
         return result;
@@ -489,7 +499,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         db.readLock();
         try {
             for (Table table : db.getTables()) {
-                if (Table.TableType.MATERIALIZED_VIEW == table.getType()) {
+                if (table.isMaterializedView()) {
                     MaterializedView mvTable = (MaterializedView) table;
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                         if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, dbName, mvTable)) {
@@ -613,6 +623,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setError_message(status.getErrorMessage());
             info.setExpire_time(status.getExpireTime() / 1000);
             info.setProgress(status.getProgress() + "%");
+            info.setExtra_message(status.getExtraMessage());
             tasksResult.add(info);
         }
         return result;
@@ -1584,7 +1595,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TCreatePartitionResult createPartition(TCreatePartitionRequest request) throws TException {
 
-        LOG.info("Recieve create partition: {}", request);
+        LOG.info("Receive create partition: {}", request);
 
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
@@ -1630,7 +1641,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setStatus(errorStatus);
             return result;
         }
-        List<Expr> partitionExprs = ((ExpressionRangePartitionInfo) partitionInfo).getPartitionExprs();
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs();
         if (partitionExprs.size() != 1) {
             errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support one expression partitionExpr."));
             result.setStatus(errorStatus);
@@ -1693,8 +1705,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         Map<String, AddPartitionClause> addPartitionClauseMap;
         try {
+            Column firstPartitionColumn = expressionRangePartitionInfo.getPartitionColumns().get(0);
             addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
-                    partitionValues, interval, granularity);
+                    partitionValues, interval, granularity, firstPartitionColumn.getType());
         } catch (AnalysisException ex) {
             errorStatus.setError_msgs(Lists.newArrayList(ex.getMessage()));
             result.setStatus(errorStatus);
@@ -1704,8 +1717,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
         for (AddPartitionClause addPartitionClause : addPartitionClauseMap.values()) {
             try {
+                if (olapTable.getNumberOfPartitions() > Config.max_automatic_partition_number) {
+                    throw new AnalysisException(" Automatically created partitions exceeded the maximum limit: " +
+                            Config.max_automatic_partition_number + ". You can modify this restriction on by setting" +
+                            " max_automatic_partition_number larger.");
+                }
                 state.addPartitions(db, olapTable.getName(), addPartitionClause);
-            } catch (DdlException | AnalysisException e) {
+            } catch (Exception e) {
                 LOG.warn(e);
                 errorStatus.setError_msgs(Lists.newArrayList(
                         String.format("automatic create partition failed. error:%s", e.getMessage())));
@@ -1754,11 +1772,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     Multimap<Replica, Long> bePathsMap =
                             localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
                     if (bePathsMap.keySet().size() < quorum) {
-                        LOG.warn("auto go quorum exception");
+                        errorStatus.setError_msgs(Lists.newArrayList(
+                                "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
+                                + tablet.getId() + ", backends: " +
+                                Joiner.on(",").join(localTablet.getBackends())));
+                        result.setStatus(errorStatus);
+                        return result;
                     }
                     // replicas[0] will be the primary replica
+                    // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable 
                     List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
-                    Collections.shuffle(replicas);
                     tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
                             .collect(Collectors.toList())));
                 }

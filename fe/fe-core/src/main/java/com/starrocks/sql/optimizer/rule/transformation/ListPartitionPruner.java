@@ -42,6 +42,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 public class ListPartitionPruner implements PartitionPruner {
     private static final Logger LOG = LogManager.getLogger(ListPartitionPruner.class);
@@ -77,15 +78,17 @@ public class ListPartitionPruner implements PartitionPruner {
 
     private final Set<Long> allPartitions;
     private final List<ColumnRefOperator> partitionColumnRefs;
+    private final List<Long> specifyPartitionIds;
 
     public ListPartitionPruner(Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
                                Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
-                               List<ScalarOperator> partitionConjuncts) {
+                               List<ScalarOperator> partitionConjuncts, List<Long> specifyPartitionIds) {
         this.columnToPartitionValuesMap = columnToPartitionValuesMap;
         this.columnToNullPartitions = columnToNullPartitions;
         this.partitionConjuncts = partitionConjuncts;
         this.allPartitions = getAllPartitions();
         this.partitionColumnRefs = getPartitionColumnRefs();
+        this.specifyPartitionIds = specifyPartitionIds;
     }
 
     private Set<Long> getAllPartitions() {
@@ -126,14 +129,14 @@ public class ListPartitionPruner implements PartitionPruner {
         Preconditions.checkNotNull(columnToNullPartitions);
         Preconditions.checkArgument(columnToPartitionValuesMap.size() == columnToNullPartitions.size());
         Preconditions.checkNotNull(partitionConjuncts);
-        if (columnToPartitionValuesMap.isEmpty() && columnToNullPartitions.isEmpty()) {
+        if (columnToPartitionValuesMap.isEmpty()) {
             // no partition columns, notEvalConjuncts is same with conjuncts
             noEvalConjuncts.addAll(partitionConjuncts);
             return null;
         }
         if (partitionConjuncts.isEmpty()) {
             // no conjuncts, notEvalConjuncts is empty
-            return null;
+            return specifyPartitionIds;
         }
 
         Set<Long> matches = null;
@@ -156,10 +159,23 @@ public class ListPartitionPruner implements PartitionPruner {
                 noEvalConjuncts.add(operator);
             }
         }
+        // Null represents the full set. If a partition is specified,
+        // the intersection of the full set and the specified partition is the specified partition.
+        // If a match is found, the intersection data is taken.
+        // If no partition is specified, the match result will be taken
         if (matches == null) {
-            return null;
+            if (specifyPartitionIds != null && !specifyPartitionIds.isEmpty()) {
+                return specifyPartitionIds;
+            } else {
+                return null;
+            }
         } else {
-            return new ArrayList<>(matches);
+            if (specifyPartitionIds != null && !specifyPartitionIds.isEmpty()) {
+                // intersect
+                return specifyPartitionIds.stream().filter(matches::contains).collect(Collectors.toList());
+            } else {
+                return new ArrayList<>(matches);
+            }
         }
     }
 

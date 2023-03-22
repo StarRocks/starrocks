@@ -100,4 +100,4 @@ You can only set the configuration items of a broker by changing them in the cor
 | audit_log_modules | Empty string | N/A | The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the slow_query module and the query module. You can specify multiple modules, whose names must be separated by a comma (,) and a space. |
 | audit_log_roll_mode | TIME-DAY | N/A | Valid values include `TIME-DAY`, `TIME-HOUR`, and `SIZE-MB-<size>`. |
 | audit_log_roll_num | 10 | N/A | This configuration does not work if the audit_log_roll_mode is set to `SIZE-MB-<size>`. |
-| sys_log_verbose_modules | com.starrocks | N/A | The modules for which StarRocks generates system logs. Valid values are namespaces in BE, including `starrocks`, `starrocks::vectorized`, and `pipeline`. |
+| sys_log_verbose_modules | com.starrocks | N/A | The modules for which StarRocks generates system logs. Valid values are namespaces in BE, including `starrocks`, `starrocks::debug`, `starrocks::fs`, `starrocks::io`, `starrocks::lake`, `starrocks::pipeline`, `starrocks::query_cache`, `starrocks::stream`, and `starrocks::workgroup`. |

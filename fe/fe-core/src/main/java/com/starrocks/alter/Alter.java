@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -80,6 +81,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -98,7 +100,10 @@ import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
+import com.starrocks.sql.ast.SetListItem;
+import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SwapTableClause;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
@@ -155,8 +160,9 @@ public class Alter {
             if (table == null) {
                 throw new DdlException("create materialized failed. table:" + tableName + " not exist");
             }
-            if (table.getType() != TableType.OLAP) {
-                throw new DdlException("Do not support create materialized view on non-OLAP table[" + tableName + "]");
+            if (!table.isOlapTable()) {
+                throw new DdlException("Do not support create rollup on " + table.getType().name() +
+                        " table[" + tableName + "], please use new syntax to create materialized view");
             }
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
@@ -301,22 +307,38 @@ public class Alter {
         int partitionTTL = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             partitionTTL = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
+            properties.remove(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER);
         }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
             partitionRefreshNumber = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
+            properties.remove(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER);
         }
         int autoRefreshPartitionsLimit = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
             autoRefreshPartitionsLimit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
+            properties.remove(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT);
         }
         List<TableName> excludedTriggerTables = Lists.newArrayList();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
             excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
+            properties.remove(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES);
         }
 
         if (!properties.isEmpty()) {
-            throw new AnalysisException("Modify failed because unknown properties: " + properties);
+            // analyze properties
+            List<SetListItem> setListItems = Lists.newArrayList();
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                    throw new AnalysisException("Modify failed because unknown properties: " + properties +
+                            ", please add `session.` prefix if you want add session variables for mv(" +
+                            "eg, \"session.query_timeout\"=\"30000000\").");
+                }
+                String varKey = entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
+                setListItems.add(variable);
+            }
+            SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
         }
 
         boolean isChanged = false;
@@ -344,12 +366,20 @@ public class Alter {
             isChanged = true;
         }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
+        if (!properties.isEmpty()) {
+            // set properties if there are no exceptions
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                materializedView.getTableProperty().modifyTableProperties(entry.getKey(), entry.getValue());
+            }
+            isChanged = true;
+        }
+
         if (isChanged) {
             ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(materializedView.getDbId(),
                     materializedView.getId(), propClone);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMaterializedViewProperties(log);
         }
-        LOG.info("alter materialized view properties {}, id: {}", properties, materializedView.getId());
+        LOG.info("alter materialized view properties {}, id: {}", propClone, materializedView.getId());
     }
 
     private void processChangeRefreshScheme(RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView,
@@ -517,7 +547,9 @@ public class Alter {
         boolean needProcessOutsideDatabaseLock = false;
         String tableName = dbTableName.getTbl();
 
+        boolean isSynchronous = true;
         db.writeLock();
+        OlapTable olapTable;
         try {
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -527,7 +559,7 @@ public class Alter {
             if (!table.isOlapOrLakeTable()) {
                 throw new DdlException("Do not support alter non-OLAP or non-LAKE table[" + tableName + "]");
             }
-            OlapTable olapTable = (OlapTable) table;
+            olapTable = (OlapTable) table;
 
             if (olapTable.getState() != OlapTableState.NORMAL) {
                 throw new DdlException(
@@ -537,8 +569,10 @@ public class Alter {
             if (currentAlterOps.hasSchemaChangeOp()) {
                 // if modify storage type to v2, do schema change to convert all related tablets to segment v2 format
                 schemaChangeHandler.process(alterClauses, db, olapTable);
+                isSynchronous = false;
             } else if (currentAlterOps.hasRollupOp()) {
                 materializedViewHandler.process(alterClauses, db, olapTable);
+                isSynchronous = false;
             } else if (currentAlterOps.hasPartitionOp()) {
                 Preconditions.checkState(alterClauses.size() == 1);
                 AlterClause alterClause = alterClauses.get(0);
@@ -621,7 +655,7 @@ public class Alter {
                 List<String> partitionNames = clause.getPartitionNames();
                 // currently, only in memory property could reach here
                 Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY));
-                OlapTable olapTable = (OlapTable) db.getTable(tableName);
+                olapTable = (OlapTable) db.getTable(tableName);
                 if (olapTable.isLakeTable()) {
                     throw new DdlException("Lake table not support alter in_memory");
                 }
@@ -647,7 +681,7 @@ public class Alter {
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
 
-                OlapTable olapTable = (OlapTable) db.getTable(tableName);
+                olapTable = (OlapTable) db.getTable(tableName);
                 if (olapTable.isLakeTable()) {
                     throw new DdlException("Lake table not support alter in_memory or enable_persistent_index or write_quorum");
                 }
@@ -679,6 +713,10 @@ public class Alter {
                     throw new DdlException("Invalid alter operation: " + alterClause.getOpType());
                 }
             }
+        }
+
+        if (isSynchronous) {
+            olapTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
         }
     }
 

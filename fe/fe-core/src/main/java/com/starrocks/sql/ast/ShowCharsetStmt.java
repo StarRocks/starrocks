@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -45,13 +44,8 @@ public class ShowCharsetStmt extends ShowStmt {
     private String pattern;
     private Expr where;
 
-    @VisibleForTesting
     public ShowCharsetStmt() {
         super(NodePosition.ZERO);
-    }
-
-    public ShowCharsetStmt(String pattern, Expr where) {
-        this(pattern, where, NodePosition.ZERO);
     }
 
     public ShowCharsetStmt(String pattern, Expr where, NodePosition pos) {

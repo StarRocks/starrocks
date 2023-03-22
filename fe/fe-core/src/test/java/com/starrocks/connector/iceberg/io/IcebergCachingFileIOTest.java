@@ -66,5 +66,6 @@ public class IcebergCachingFileIOTest {
         long hadoopIOInputFileSize = hadoopFileIOInputFile.getLength();
         Assert.assertEquals(cacheIOInputFileSize, 39);
         Assert.assertEquals(hadoopIOInputFileSize, 39);
+        hadoopFileIO.deleteFile(path);
     }
 }

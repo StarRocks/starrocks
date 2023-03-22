@@ -59,6 +59,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -85,6 +86,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -302,6 +304,15 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
+        public ScalarOperator visitMapExpr(MapExpr node, Context context) {
+            List<ScalarOperator> mapElements = new ArrayList<>();
+            for (Expr expr : node.getChildren()) {
+                mapElements.add(visit(expr, context.clone(node)));
+            }
+            return new MapOperator(node.getType(), node.isNullable(), mapElements);
+        }
+
+        @Override
         public ScalarOperator visitCollectionElementExpr(CollectionElementExpr node, Context context) {
             Preconditions.checkState(node.getChildren().size() == 2);
             ScalarOperator collectionOperator = visit(node.getChild(0), context.clone(node));
@@ -340,10 +351,6 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitLambdaFunctionExpr(LambdaFunctionExpr node,
                                                       Context context) {
-            // To avoid the ids of lambda arguments are different after each visit()
-            if (node.getTransformed() != null) {
-                return node.getTransformed();
-            }
             Preconditions.checkArgument(node.getChildren().size() >= 2);
             List<ColumnRefOperator> refs = Lists.newArrayList();
             List<LambdaArgument> args = Lists.newArrayList();
@@ -356,13 +363,16 @@ public final class SqlToScalarOperatorTranslator {
             expressionMapping = new ExpressionMapping(scope, refs, expressionMapping);
             ScalarOperator lambda = visit(node.getChild(0), context.clone(node));
             expressionMapping = old; // recover it
-            node.setTransformed(new LambdaFunctionOperator(refs, lambda, Type.FUNCTION));
-            return node.getTransformed();
+            return new LambdaFunctionOperator(refs, lambda, Type.FUNCTION);
         }
 
         @Override
         public ScalarOperator visitLambdaArguments(LambdaArgument node, Context context) {
-            return columnRefFactory.create(node.getName(), node.getType(), node.isNullable(), true);
+            // To avoid the ids of lambda arguments are different after each visit()
+            if (node.getTransformed() == null) {
+                node.setTransformed(columnRefFactory.create(node.getName(), node.getType(), node.isNullable(), true));
+            }
+            return node.getTransformed();
         }
 
         @Override
@@ -641,12 +651,14 @@ public final class SqlToScalarOperatorTranslator {
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
 
-            return new CallOperator(
+            CallOperator callOperator = new CallOperator(
                     node.getFnName().getFunction(),
                     node.getType(),
                     arguments,
                     node.getFn(),
                     node.getParams().isDistinct());
+            callOperator.setHints(node.getHints());
+            return callOperator;
         }
 
         @Override

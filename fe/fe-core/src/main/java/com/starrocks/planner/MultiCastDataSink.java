@@ -15,8 +15,8 @@
 
 package com.starrocks.planner;
 
-import com.clearspring.analytics.util.Lists;
-import com.clearspring.analytics.util.Preconditions;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TDataStreamSink;

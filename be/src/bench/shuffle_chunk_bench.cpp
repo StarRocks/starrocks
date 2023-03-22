@@ -25,7 +25,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ShuffleChunkPerf {
 public:
@@ -225,6 +225,6 @@ static void process_args(benchmark::internal::Benchmark* b) {
 
 BENCHMARK(bench_func)->Apply(process_args);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 BENCHMARK_MAIN();

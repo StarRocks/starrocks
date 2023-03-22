@@ -40,7 +40,10 @@ using ExceptPartitionContextFactoryPtr = std::shared_ptr<ExceptPartitionContextF
 // Used as the shared context for ExceptBuildSinkOperator, ExceptProbeSinkOperator, and ExceptOutputSourceOperator.
 class ExceptContext final : public ContextWithDependency {
 public:
-    explicit ExceptContext(const int dst_tuple_id) : _dst_tuple_id(dst_tuple_id) {}
+    explicit ExceptContext(const int dst_tuple_id, const size_t num_probe_factories)
+            : _dst_tuple_id(dst_tuple_id),
+              _num_probers_per_factory(num_probe_factories),
+              _num_finished_probers_per_factory(num_probe_factories) {}
     ~ExceptContext() override = default;
 
     bool is_ht_empty() const { return _is_hash_set_empty; }
@@ -49,15 +52,13 @@ public:
         _is_hash_set_empty = _hash_set->empty();
         _next_processed_iter = _hash_set->begin();
         _hash_set_end_iter = _hash_set->end();
-        _finished_dependency_index.fetch_add(1, std::memory_order_release);
+        _is_build_finished = true;
     }
+    void incr_prober(size_t factory_idx);
+    void finish_probe_ht(size_t factory_idx);
 
-    void finish_probe_ht() { _finished_dependency_index.fetch_add(1, std::memory_order_release); }
-
-    bool is_dependency_finished(const int32_t dependency_index) const {
-        return _finished_dependency_index.load(std::memory_order_acquire) == dependency_index;
-    }
-
+    bool is_build_finished() const;
+    bool is_probe_finished() const;
     bool is_output_finished() const { return _next_processed_iter == _hash_set_end_iter; }
 
     // Called in the preparation phase of ExceptBuildSinkOperator.
@@ -66,11 +67,10 @@ public:
     // Called in the close phase of ExceptOutputSourceOperator.
     void close(RuntimeState* state) override;
 
-    Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& dst_exprs);
-
-    Status erase_chunk_from_ht(RuntimeState* state, const ChunkPtr& chunk,
-                               const std::vector<ExprContext*>& child_exprs);
-
+    Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& dst_exprs,
+                              ExceptBufferState* buffer_state);
+    Status erase_chunk_from_ht(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& child_exprs,
+                               ExceptBufferState* buffer_state);
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
 private:
@@ -100,7 +100,9 @@ private:
     // _finished_dependency_index will increase by one when a BUILD or PROBE is finished.
     // The i-th PROBE must wait for _finished_dependency_index becoming i-1,
     // and OUTPUT must wait for _finished_dependency_index becoming n.
-    std::atomic<int32_t> _finished_dependency_index{-1};
+    std::vector<int64_t> _num_probers_per_factory;
+    std::vector<std::atomic<int64_t>> _num_finished_probers_per_factory;
+    std::atomic<bool> _is_build_finished{false};
 };
 
 // The input chunks of BUILD and PROBE are shuffled by the local shuffle operator.
@@ -109,7 +111,8 @@ private:
 // are both DOP. And each pair of BUILD/PROBE/OUTPUT drivers shares a same except partition context.
 class ExceptPartitionContextFactory {
 public:
-    explicit ExceptPartitionContextFactory(const size_t dst_tuple_id) : _dst_tuple_id(dst_tuple_id) {}
+    explicit ExceptPartitionContextFactory(const size_t dst_tuple_id, const size_t num_probe_factories)
+            : _dst_tuple_id(dst_tuple_id), _num_probe_factories(num_probe_factories) {}
 
     ExceptContextPtr get_or_create(const int partition_id) {
         auto it = _partition_id2ctx.find(partition_id);
@@ -117,13 +120,16 @@ public:
             return it->second;
         }
 
-        auto ctx = std::make_shared<ExceptContext>(_dst_tuple_id);
+        auto ctx = std::make_shared<ExceptContext>(_dst_tuple_id, _num_probe_factories);
         _partition_id2ctx[partition_id] = ctx;
         return ctx;
     }
 
+    ExceptContextPtr get(const int partition_id);
+
 private:
     const size_t _dst_tuple_id;
+    const size_t _num_probe_factories;
     std::unordered_map<size_t, ExceptContextPtr> _partition_id2ctx;
 };
 

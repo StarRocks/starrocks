@@ -15,32 +15,18 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class MaterializedViewSSBTest extends MaterializedViewTestBase {
-    private static final String MATERIALIZED_DB_NAME = "test_mv";
-
     @BeforeClass
     public static void setUp() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+        MaterializedViewTestBase.setUp();
 
-        connectContext= UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(true);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
-        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
-        FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
-                .useDatabase(MATERIALIZED_DB_NAME);
+        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         // create SSB tables
         // put lineorder last because it depends on other tables for foreign key constraints
@@ -48,7 +34,6 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
 
         // create lineorder_flat_mv
         createMaterializedViews("sql/materialized-view/ssb/", Lists.newArrayList("lineorder_flat_mv"));
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
     }
 
     @Test
@@ -114,5 +99,18 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
     @Test
     public void testQuery4_3() {
         runFileUnitTest("materialized-view/ssb/q4-3");
+    }
+
+    @Test
+    public void testPartitionPredicate() throws Exception {
+        String query = "select sum(LO_EXTENDEDPRICE * LO_DISCOUNT) AS revenue\n" +
+                "from lineorder\n" +
+                "join dates on lo_orderdate = d_datekey\n" +
+                "where weekofyear(LO_ORDERDATE) = 6 AND LO_ORDERDATE >= 19940101 and LO_ORDERDATE <= 19941231\n" +
+                "and lo_discount between 5 and 7\n" +
+                "and lo_quantity between 26 and 35;";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "lineorder_flat_mv");
+        PlanTestBase.assertNotContains(plan, "LO_ORDERDATE <= 19950100");
     }
 }

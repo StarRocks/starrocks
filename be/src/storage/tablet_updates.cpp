@@ -2378,7 +2378,8 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                                     _tablet.tablet_id(), _error_msg));
     }
     std::unique_lock<std::mutex> ul(_lock);
-    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 60000, ul));
+    // wait for version timeout 55s, should smaller than exec_plan_fragment rpc timeout(60s)
+    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000, ul));
     if (_edit_version_infos.empty()) {
         string msg = strings::Substitute("tablet deleted when get_applied_rowsets tablet:$0", _tablet.tablet_id());
         LOG(WARNING) << msg;
@@ -2829,7 +2830,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     std::vector<ChunkPtr> chunk_arr;
 
     Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
-    ChunkSorter chunk_sorter(_chunk_allocator);
+    ChunkSorter chunk_sorter;
 
     OlapReaderStatistics stats;
 
@@ -3337,6 +3338,16 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         l2.unlock();                     // _rowsets_lock
         _try_commit_pendings_unlocked(); // may acquire |_rowset_stats_lock| and |_rowsets_lock|
 
+        _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
+        _apply_version_changed.notify_all();
+        // The function `unload` of index_entry in the following code acquire `_lock` in PrimaryIndex.
+        // If there are other thread to do rowset commit, it will load PrimaryIndex first which hold `_lock` in
+        // PrimaryIndex and it will acquire `_lock` in TabletUpdates which is `l1` to get applied rowset which will
+        // cause dead lock.
+        // Actually, unload PrimayIndex doesn't need to hold `_lock` of TabletUpdates, so we can release l1 in advance
+        // to avoid dead lock.
+        l1.unlock();
+
         // unload primary index
         auto manager = StorageEngine::instance()->update_manager();
         auto& index_cache = manager->index_cache();
@@ -3344,9 +3355,6 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
         index_entry->value().unload();
         index_cache.release(index_entry);
-        _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
-
-        _apply_version_changed.notify_all();
 
         LOG(INFO) << "load full snapshot done " << _debug_string(false);
 

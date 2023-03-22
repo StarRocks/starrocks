@@ -25,6 +25,7 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
@@ -109,7 +110,7 @@ public abstract class StatisticsCollectJob {
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 LOG.warn("Statistics collect fail | Error Message [" + context.getState().getErrorMessage() + "] | " +
                         "SQL [" + sql + "]");
-                if (context.getState().getErrorMessage().contains("Too many versions")) {
+                if (StringUtils.contains(context.getState().getErrorMessage(), "Too many versions")) {
                     Thread.sleep(60000);
                     count++;
                 } else {
@@ -126,9 +127,10 @@ public abstract class StatisticsCollectJob {
     protected String getDataSize(Column column, boolean isSample) {
         if (column.getPrimitiveType().isCharFamily() || column.getPrimitiveType().isJsonType()) {
             if (isSample) {
-                return "IFNULL(SUM(CHAR_LENGTH(`" + column.getName() + "`) * t1.count), 0)";
+                return "IFNULL(SUM(CHAR_LENGTH(`column_key`) * t1.count), 0)";
+            } else {
+                return "IFNULL(SUM(CHAR_LENGTH(" + StatisticUtils.quoting(column.getName()) + ")), 0)";
             }
-            return "IFNULL(SUM(CHAR_LENGTH(`" + column.getName() + "`)), 0)";
         }
 
         long typeSize = column.getType().getTypeSize();

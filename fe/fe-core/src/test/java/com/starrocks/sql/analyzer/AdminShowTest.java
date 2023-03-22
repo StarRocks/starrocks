@@ -54,11 +54,11 @@ public class AdminShowTest {
                 "WHERE STATUS != \"OK\";");
 
         analyzeFail("ADMIN SHOW REPLICA STATUS FROM tbl1 WHERE TabletId = '10001'",
-                "Where clause should looks like: status =/!= 'OK/DEAD/VERSION_ERROR/SCHEMA_ERROR/MISSING'");
+                "Where clause can only be 'status =|!= 'OK'|'DEAD'|'VERSION_ERROR'|'SCHEMA_ERROR'|'MISSING''");
         analyzeFail("ADMIN SHOW REPLICA STATUS FROM tbl1 WHERE STASUS = '10001'",
-                "Where clause should looks like: status =/!= 'OK/DEAD/VERSION_ERROR/SCHEMA_ERROR/MISSING'");
+                "Where clause can only be 'status =|!= 'OK'|'DEAD'|'VERSION_ERROR'|'SCHEMA_ERROR'|'MISSING''");
         analyzeFail("ADMIN SHOW REPLICA STATUS FROM tbl1 WHERE STASUS > 'OK'",
-                "Where clause should looks like: status =/!= 'OK/DEAD/VERSION_ERROR/SCHEMA_ERROR/MISSING'");
+                "Where clause can only be 'status =|!= 'OK'|'DEAD'|'VERSION_ERROR'|'SCHEMA_ERROR'|'MISSING''");
     }
 
     @Test

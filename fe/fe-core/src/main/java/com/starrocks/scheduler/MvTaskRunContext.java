@@ -36,6 +36,8 @@ public class MvTaskRunContext extends TaskRunContext {
         this.definition = context.definition;
         this.remoteIp = context.remoteIp;
         this.properties = context.properties;
+        this.type = context.type;
+        this.status = context.status;
     }
 
     public Map<String, Set<String>> getBaseToMvNameRef() {
@@ -88,5 +90,9 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setExecPlan(ExecPlan execPlan) {
         this.execPlan = execPlan;
+    }
+
+    public Constants.TaskType getTaskType() {
+        return this.type;
     }
 }

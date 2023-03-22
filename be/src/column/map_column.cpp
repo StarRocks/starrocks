@@ -536,6 +536,11 @@ size_t MapColumn::get_map_size(size_t idx) const {
     return _offsets->get_data()[idx + 1] - _offsets->get_data()[idx];
 }
 
+std::pair<size_t, size_t> MapColumn::get_map_offset_size(size_t idx) const {
+    DCHECK_LT(idx + 1, _offsets->size());
+    return {_offsets->get_data()[idx], _offsets->get_data()[idx + 1] - _offsets->get_data()[idx]};
+}
+
 bool MapColumn::set_null(size_t idx) {
     return false;
 }
@@ -619,6 +624,38 @@ Status MapColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
     _keys = ColumnHelper::unfold_const_column(type.children[0], _keys->size(), _keys);
     _values = ColumnHelper::unfold_const_column(type.children[1], _values->size(), _values);
     return Status::OK();
+}
+
+// keep the last identical key
+void MapColumn::remove_duplicated_keys() {
+    Filter filter(_keys->size(), 1);
+
+    bool has_duplicated_keys = false;
+    UInt32Column::Ptr new_offsets = UInt32Column::create();
+    auto& offsets_vec = new_offsets->get_data();
+    offsets_vec.push_back(0);
+
+    uint32_t new_offset = 0;
+    size_t size = this->size();
+    for (auto i = 0; i < size; ++i) {
+        for (auto j = _offsets->get_data()[i]; j < _offsets->get_data()[i + 1]; ++j) {
+            for (auto k = j + 1; k < _offsets->get_data()[i + 1]; ++k) {
+                if (_keys->equals(j, *_keys, k)) {
+                    filter[j] = 0;
+                    has_duplicated_keys = true;
+                    break;
+                }
+            }
+            new_offset += filter[j];
+        }
+        offsets_vec.push_back(new_offset);
+    }
+    if (has_duplicated_keys) {
+        auto new_keys_size = _keys->filter(filter);
+        auto new_values_size = _values->filter(filter);
+        DCHECK(new_keys_size == new_values_size);
+        _offsets.swap(new_offsets);
+    }
 }
 
 } // namespace starrocks

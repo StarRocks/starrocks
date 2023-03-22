@@ -23,6 +23,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -82,6 +83,16 @@ public class SelectRelation extends QueryRelation {
             Expr predicate,
             GroupByClause groupByClause,
             Expr having) {
+        this(selectList, fromRelation, predicate, groupByClause, having, NodePosition.ZERO);
+    }
+
+    public SelectRelation(
+            SelectList selectList,
+            Relation fromRelation,
+            Expr predicate,
+            GroupByClause groupByClause,
+            Expr having, NodePosition pos) {
+        super(pos);
         this.selectList = selectList;
         this.relation = fromRelation;
         this.predicate = predicate;
@@ -142,10 +153,6 @@ public class SelectRelation extends QueryRelation {
         this.columnReferences = analyzeState.getColumnReferences();
 
         this.setScope(analyzeState.getOutputScope());
-    }
-
-    public List<Expr> getOutputExpr() {
-        return outputExpr;
     }
 
     public Expr getPredicate() {
@@ -284,10 +291,6 @@ public class SelectRelation extends QueryRelation {
     public boolean hasAnalyticInfo() {
         return (outputAnalytic != null && outputAnalytic.size() > 0)
                 || (orderByAnalytic != null && orderByAnalytic.size() > 0);
-    }
-
-    public List<OrderByElement> getSortClause() {
-        return sortClause;
     }
 
     @Override

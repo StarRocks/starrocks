@@ -62,6 +62,15 @@ public class SchemaTable extends Table {
         return name.startsWith("be_");
     }
 
+    public boolean isBeSchemaTable() {
+        return SchemaTable.isBeSchemaTable(getName());
+    }
+
+    @Override
+    public boolean supportsUpdate() {
+        return name.equals("be_configs");
+    }
+
     protected SchemaTable(long id, String name, TableType type, List<Column> baseSchema) {
         super(id, name, type, baseSchema);
     }
@@ -113,6 +122,36 @@ public class SchemaTable extends Table {
                                     .column("CREATE_OPTIONS", ScalarType.createVarchar(255))
                                     .column("TABLE_COMMENT", ScalarType.createVarchar(2048))
                                     .build()))
+                    .put("partitions", new SchemaTable(
+                            SystemId.PARTITIONS_ID,
+                            "partitions",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("TABLE_CATALOG", ScalarType.createVarchar(FN_REFLEN))
+                                    .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PARTITION_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("SUBPARTITION_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PARTITION_ORDINAL_POSITION", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("PARTITION_METHOD", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("SUBPARTITION_METHOD", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PARTITION_EXPRESSION", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("SUBPARTITION_EXPRESSION", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PARTITION_DESCRIPTION", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLE_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("AVG_ROW_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("DATA_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("MAX_DATA_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("INDEX_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("DATA_FREE", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("UPDATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("CHECK_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("CHECKSUM", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("PARTITION_COMMENT", ScalarType.createVarchar(2048))
+                                    .column("NODEGROUP", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLESPACE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
                     .put("table_privileges", new SchemaTable(
                             SystemId.TABLE_PRIVILEGES_ID,
                             "table_privileges",
@@ -122,6 +161,19 @@ public class SchemaTable extends Table {
                                     .column("TABLE_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PRIVILEGE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("IS_GRANTABLE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
+                    .put("column_privileges", new SchemaTable(
+                            SystemId.COLUMN_PRIVILEGES_ID,
+                            "column_privileges",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLE_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("COLUMN_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("PRIVILEGE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("IS_GRANTABLE", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .build()))
@@ -467,6 +519,7 @@ public class SchemaTable extends Table {
                                             .column("ERROR_CODE", ScalarType.createType(PrimitiveType.BIGINT))
                                             .column("ERROR_MESSAGE", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .column("PROGRESS", ScalarType.createVarchar(64))
+                                            .column("EXTRA_MESSAGE", ScalarType.createVarchar(8192))
                                             .build()))
                     .put("materialized_views",
                             new SchemaTable(
@@ -479,15 +532,23 @@ public class SchemaTable extends Table {
                                             .column("TABLE_NAME", ScalarType.createVarchar(50))
                                             .column("REFRESH_TYPE", ScalarType.createVarchar(20))
                                             .column("IS_ACTIVE", ScalarType.createVarchar(10))
+                                            .column("PARTITION_TYPE", ScalarType.createVarchar(16))
+                                            .column("TASK_ID", ScalarType.createVarchar(20))
+                                            .column("TASK_NAME", ScalarType.createVarchar(50))
                                             .column("LAST_REFRESH_START_TIME", ScalarType.createVarchar(20))
                                             .column("LAST_REFRESH_FINISHED_TIME", ScalarType.createVarchar(20))
                                             .column("LAST_REFRESH_DURATION", ScalarType.createVarchar(20))
                                             .column("LAST_REFRESH_STATE", ScalarType.createVarchar(20))
-                                            .column("INACTIVE_CODE", ScalarType.createVarchar(20))
-                                            .column("INACTIVE_REASON", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .column("LAST_REFRESH_FORCE_REFRESH", ScalarType.createVarchar(8))
+                                            .column("LAST_REFRESH_START_PARTITION", ScalarType.createVarchar(1024))
+                                            .column("LAST_REFRESH_END_PARTITION", ScalarType.createVarchar(1024))
+                                            .column("LAST_REFRESH_BASE_REFRESH_PARTITIONS", ScalarType.createVarchar(1024))
+                                            .column("LAST_REFRESH_MV_REFRESH_PARTITIONS", ScalarType.createVarchar(1024))
+                                            .column("LAST_REFRESH_ERROR_CODE", ScalarType.createVarchar(20))
+                                            .column("LAST_REFRESH_ERROR_MESSAGE", ScalarType.createVarchar(1024))
+                                            .column("TABLE_ROWS", ScalarType.createVarchar(50))
                                             .column("MATERIALIZED_VIEW_DEFINITION",
                                                     ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
-                                            .column("TABLE_ROWS", ScalarType.createVarchar(50))
                                             .build()))
                     .put("tables_config",
                             new SchemaTable(
@@ -557,6 +618,15 @@ public class SchemaTable extends Table {
                                     .column("DATA_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
                                     .column("VERSION", ScalarType.createType(PrimitiveType.BIGINT))
                                     .build()))
+                    .put("be_configs", new SchemaTable(
+                            SystemId.BE_CONFIGS_ID,
+                            "be_configs",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("VALUE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
                     .build();
 
     public static class Builder {
@@ -589,6 +659,10 @@ public class SchemaTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    public static Table getSchemaTable(String name) {
+        return TABLE_MAP.get(name);
     }
 
     public enum SchemaTableType {
@@ -648,7 +722,9 @@ public class SchemaTable extends Table {
         SCH_BE_METRICS("BE_METRICS", "BE_METRICS",
                 TSchemaTableType.SCH_BE_METRICS),
         SCH_BE_TXNS("BE_TXNS", "BE_TXNS",
-                TSchemaTableType.SCH_BE_TXNS);
+                TSchemaTableType.SCH_BE_TXNS),
+
+        SCH_BE_CONFIGS("BE_CONFIGS", "BE_CONFIGS", TSchemaTableType.SCH_BE_CONFIGS);
 
         private final String description;
         private final String tableName;

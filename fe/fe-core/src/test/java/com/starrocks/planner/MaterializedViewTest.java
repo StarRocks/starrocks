@@ -15,13 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -29,25 +22,13 @@ import org.junit.Test;
 import java.util.List;
 
 public class MaterializedViewTest extends MaterializedViewTestBase {
-    private static final Logger LOG = LogManager.getLogger(MaterializedViewTest.class);
-    private static final String MATERIALIZED_DB_NAME = "test_mv";
     private static final List<String> outerJoinTypes = ImmutableList.of("left", "right");
 
     @BeforeClass
     public static void setUp() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
+        MaterializedViewTestBase.setUp();
 
-        connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(false);
-        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         String deptsTable = "" +
                 "CREATE TABLE depts(    \n" +
@@ -98,8 +79,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
 
-        starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
-                .useDatabase(MATERIALIZED_DB_NAME)
+        starRocksAssert
                 .withTable(deptsTable)
                 .withTable(empsTable)
                 .withTable(locationsTable)
@@ -326,25 +306,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
     }
 
-    @AfterClass
-    public static void afterClass() {
-        try {
-            starRocksAssert.dropDatabase(MATERIALIZED_DB_NAME);
-        } catch (Exception e) {
-            LOG.warn("drop database failed:", e);
-        }
-    }
-
     @Test
     public void testFilter0() {
         String mv = "select empid + 1 as col1 from emps where deptno = 10";
         testRewriteOK(mv, "select empid + 1 from emps where deptno = 10");
         testRewriteOK(mv, "select max(empid + 1) from emps where deptno = 10");
-        testRewriteFail(mv, "select max(empid) from emps where deptno = 10");
+        testRewriteOK(mv, "select max(empid) from emps where deptno = 10").contains("col1 - 1");
 
         testRewriteFail(mv, "select max(empid) from emps where deptno = 11");
         testRewriteFail(mv, "select max(empid) from emps");
-        testRewriteFail(mv, "select empid from emps where deptno = 10");
+        testRewriteOK(mv, "select empid from emps where deptno = 10").contains("col1 - 1");
     }
 
     @Test
@@ -422,7 +393,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testMultiOuterJoinQueryComplete() {
-        for (String joinType: outerJoinTypes) {
+        for (String joinType : outerJoinTypes) {
             String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
                     "" + joinType + " join locations on emps.locationid = locations.locationid";
             testRewriteOK(mv, "select count(*) from " +
@@ -441,9 +412,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "and locations.locationid > 10");
         }
     }
+
     @Test
     public void testMultiOuterJoinQueryDelta() {
-        for (String joinType: outerJoinTypes) {
+        for (String joinType : outerJoinTypes) {
             String mv = "select deptno as col1, empid as col2, locations.locationid as col3 from emps " +
                     "" + joinType + " join locations on emps.locationid = locations.locationid";
             testRewriteOK(mv, "select count(*)  from emps " +
@@ -525,8 +497,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggregate8() {
-        // TODO: support rewrite query by using mv's binary predicate later
-        testRewriteFail("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
+        testRewriteOK("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
                 "select deptno + 1, sum(empid) + 1 as s\n"
                         + "from emps where deptno > 10 group by deptno");
@@ -736,13 +707,13 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "from emps where deptno > 10 group by deptno");
     }
 
-    @Ignore
-    // TODO: Support deptno + 1 rewrite to deptno
+    @Test
     public void testAggregateMaterializationAggregateFuncs8() {
-        testRewriteOK("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
+        testRewriteOK("select empid, deptno + 1 as col, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
+
                 "select deptno + 1, sum(empid) + 1 as s\n"
-                        + "from emps where deptno > 10 group by deptno");
+                        + "from emps where deptno > 10 group by deptno").contains("col - 1");
     }
 
     @Test
@@ -1533,7 +1504,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "(select * from emps where empid = 1) a\n"
                 + "join depts using (deptno)";
         String query = "select empid from emps where empid = 1";
-        testRewriteFail(mv, query);
+        testRewriteOK(mv, query)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 7: empid = 1");
     }
 
     @Test
@@ -1645,5 +1620,359 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "inner join dependents using (empid)\n"
                 + "where emps.empid = 1";
         testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaColumnCaseSensitiveOnDuplicate() throws Exception {
+        {
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
+                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"colocate_with\" = \"groupa4\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"unique_constraints\" = \"C5\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
+                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"colocate_with\" = \"groupa4\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"unique_constraints\" = \"C5\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
+                    "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `C4` decimal(38, 19) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"colocate_with\" = \"groupa4\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(C5)\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+
+            String mv = "select c1 as col1, c2, c3, l.c6, r.c7\n" +
+                    " from tbl_01 join tbl_02 l on tbl_01.c2 = l.c5\n" +
+                    " join tbl_02 r on tbl_01.c3 = r.c5\n" +
+                    " join tbl_03 on tbl_01.c2 = tbl_03.c5";
+            String query = "select c1, c2, c3, tbl_03.c5 from tbl_01 join tbl_03 on tbl_01.c2 = tbl_03.c5;";
+            testRewriteOK(mv, query);
+
+            starRocksAssert.dropTable("tbl_01");
+            starRocksAssert.dropTable("tbl_02");
+            starRocksAssert.dropTable("tbl_03");
+        }
+
+        {
+            // multi key columns
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
+                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`, `c6`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c5`, `c6`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"unique_constraints\" = \"C5\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
+                    "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`C5`, `C6`, `c7`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`C5`, `C6`, `c7`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"unique_constraints\" = \"C5, C6, c7\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
+                    "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `C4` int(11) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"foreign_key_constraints\" = \"(c2, c4, C3) REFERENCES tbl_02(c5, C7, C6)\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+
+            String mv = "select c1 as col1, c2, c3, l.c6, l.c7\n" +
+                    " from tbl_01 join tbl_02 l on tbl_01.c2 = l.C5 and tbl_01.c3 = l.c6 and tbl_01.c4 = l.c7\n" +
+                    " join tbl_03 on tbl_01.c2 = tbl_03.c5";
+            String query = "select c1, c2, c3, tbl_03.c5 from tbl_01 join tbl_03 on tbl_01.c2 = tbl_03.c5;";
+            testRewriteOK(mv, query);
+
+            starRocksAssert.dropTable("tbl_01");
+            starRocksAssert.dropTable("tbl_02");
+            starRocksAssert.dropTable("tbl_03");
+        }
+    }
+
+    @Test
+    public void testViewDeltaColumnCaseSensitiveOnPrimary() throws Exception {
+        {
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
+                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"colocate_with\" = \"groupa4\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"unique_constraints\" = \"C5\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
+                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "PRIMARY KEY(`c5`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"colocate_with\" = \"groupa4\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
+                    "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `C4` decimal(38, 19) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"colocate_with\" = \"groupa4\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(c5)\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+
+            String mv = "select c1 as col1, c2, c3, l.c6, r.c7\n" +
+                    " from tbl_01 join tbl_02 l on tbl_01.c2 = l.c5\n" +
+                    " join tbl_02 r on tbl_01.c3 = r.c5\n" +
+                    " join tbl_03 on tbl_01.c2 = tbl_03.c5";
+            String query = "select c1, c2, c3, tbl_03.c5 from tbl_01 join tbl_03 on tbl_01.c2 = tbl_03.c5;";
+            testRewriteOK(mv, query);
+
+            starRocksAssert.dropTable("tbl_01");
+            starRocksAssert.dropTable("tbl_02");
+            starRocksAssert.dropTable("tbl_03");
+        }
+
+        {
+            // multi key columns
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
+                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`, `c6`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c5`, `c6`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"unique_constraints\" = \"C5\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
+                    "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "PRIMARY KEY(`C5`, `C6`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`C5`, `C6`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
+                    "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `C4` decimal(38, 19) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"foreign_key_constraints\" = \"(c2, C3) REFERENCES tbl_02(c5, C6)\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+
+            String mv = "select c1 as col1, c2, c3, l.c6, l.c7\n" +
+                    " from tbl_01 join tbl_02 l on tbl_01.c2 = l.C5 and tbl_01.c3 = l.c6\n" +
+                    " join tbl_03 on tbl_01.c2 = tbl_03.c5";
+            String query = "select c1, c2, c3, tbl_03.c5 from tbl_01 join tbl_03 on tbl_01.c2 = tbl_03.c5;";
+            testRewriteOK(mv, query);
+
+            starRocksAssert.dropTable("tbl_01");
+            starRocksAssert.dropTable("tbl_02");
+            starRocksAssert.dropTable("tbl_03");
+        }
+    }
+
+
+    @Test
+    public void testViewDeltaColumnCaseSensitiveOnUnique() throws Exception {
+        {
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
+                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"unique_constraints\" = \"C5\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
+                    "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "UNIQUE KEY(`C5`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`C5`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
+                    "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `C4` decimal(38, 19) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(c5)\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+
+            String mv = "select c1 as col1, c2, c3, l.c6, r.c7\n" +
+                    " from tbl_01 join tbl_02 l on tbl_01.c2 = l.C5\n" +
+                    " join tbl_02 r on tbl_01.c3 = r.c5\n" +
+                    " join tbl_03 on tbl_01.c2 = tbl_03.c5";
+            String query = "select c1, c2, c3, tbl_03.c5 from tbl_01 join tbl_03 on tbl_01.c2 = tbl_03.c5;";
+            testRewriteOK(mv, query);
+
+            starRocksAssert.dropTable("tbl_01");
+            starRocksAssert.dropTable("tbl_02");
+            starRocksAssert.dropTable("tbl_03");
+        }
+
+        {
+            // multi key columns
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
+                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c5`, `c6`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c5`, `c6`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"unique_constraints\" = \"C5\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
+                    "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "UNIQUE KEY(`C5`, `C6`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`C5`, `C6`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
+                    "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
+                    "    `C4` decimal(38, 19) NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`c1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"foreign_key_constraints\" = \"(C3, c2) REFERENCES tbl_02(C6, c5)\",\n" +
+                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    ");");
+
+            String mv = "select c1 as col1, c2, c3, l.c6, l.c7\n" +
+                    " from tbl_01 join tbl_02 l on tbl_01.c2 = l.C5 and tbl_01.c3 = l.c6\n" +
+                    " join tbl_03 on tbl_01.c2 = tbl_03.c5";
+            String query = "select c1, c2, c3, tbl_03.c5 from tbl_01 join tbl_03 on tbl_01.c2 = tbl_03.c5;";
+            testRewriteOK(mv, query);
+
+            starRocksAssert.dropTable("tbl_01");
+            starRocksAssert.dropTable("tbl_02");
+            starRocksAssert.dropTable("tbl_03");
+        }
     }
 }

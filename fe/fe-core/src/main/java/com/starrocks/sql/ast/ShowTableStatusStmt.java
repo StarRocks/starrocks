@@ -163,7 +163,7 @@ public class ShowTableStatusStmt extends ShowStmt {
         where = where.substitute(aliasMap);
 
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                where, null, null), NodePosition.ZERO);
+                where, null, null));
     }
 
     @Override

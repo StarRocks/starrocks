@@ -14,8 +14,7 @@
 
 package com.starrocks.pseudocluster;
 
-import com.clearspring.analytics.util.Lists;
-import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.ibm.icu.impl.Assert;
 import com.staros.proto.FileCacheInfo;
@@ -138,9 +137,7 @@ public class PseudoCluster {
 
         @Override
         protected LakeService getLakeServiceImpl(TNetworkAddress address) {
-            Preconditions.checkNotNull(getBackendByHost(address.getHostname()));
-            Preconditions.checkState(false, "not implemented");
-            return null;
+            return getBackendByHost(address.getHostname()).pLakeService;
         }
     }
 
@@ -160,6 +157,11 @@ public class PseudoCluster {
         private long nextId = 65535;
         private final List<Worker> workers = new ArrayList<>();
         private final List<ShardInfo> shardInfos = new ArrayList<>();
+
+        @Override
+        public boolean registerAndBootstrapService() {
+            return true;
+        }
 
         @Override
         public FilePathInfo allocateFilePath(long tableId) throws DdlException {
@@ -204,7 +206,7 @@ public class PseudoCluster {
 
         @Override
         public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
-                                       long groupId)
+                                       long groupId, List<Long> matchShardIds)
                 throws DdlException {
             List<Long> shardIds = new ArrayList<>();
             for (int i = 0; i < numShards; i++) {
@@ -566,7 +568,7 @@ public class PseudoCluster {
                                 "\"write_quorum\" = \"%s\", " +
                                 "\"replication_num\" = \"%d\", " +
                                 "\"storage_medium\" = \"%s\", " +
-                                "\"group_with\" = \"%s\")",
+                                "\"colocate_with\" = \"%s\")",
                     tableName,
                     buckets, quorum, replication,
                     ssd ? "SSD" : "HDD",

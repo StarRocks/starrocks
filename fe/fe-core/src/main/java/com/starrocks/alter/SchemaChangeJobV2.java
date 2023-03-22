@@ -94,6 +94,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -667,12 +668,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         return modifiedColumns;
     }
 
-    private void inactiveRelatedMv(Set<String> modifiedColumns, OlapTable tbl) {
+    private void inactiveRelatedMv(Set<String> modifiedColumns, OlapTable table) {
         if (modifiedColumns.isEmpty()) {
             return;
         }
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        for (MvId mvId : tbl.getRelatedMaterializedViews()) {
+        for (MvId mvId : table.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
@@ -680,8 +681,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
             for (Column mvColumn : mv.getColumns()) {
                 if (modifiedColumns.contains(mvColumn.getName())) {
-                    LOG.warn("Set materialized view {} inactive because the base table's scheme has changed",
-                            mv.getName());
+                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                            "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
+                            mvColumn.getName(), table.getName());
                     mv.setActive(false);
                     return;
                 }
@@ -784,6 +786,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         tbl.setState(OlapTableState.NORMAL);
+        tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
     }
 
     /*
@@ -1196,4 +1199,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
     }
 
+    @Override
+    public Optional<Long> getTransactionId() {
+        return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
+    }
 }

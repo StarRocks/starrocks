@@ -26,7 +26,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.NoAliveBackendException;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.rpc.BrpcProxy;
@@ -45,11 +44,14 @@ import java.util.stream.Collectors;
 public class LakeTableTxnStateListener implements TransactionStateListener {
     private static final Logger LOG = LogManager.getLogger(LakeTableTxnStateListener.class);
     private final DatabaseTransactionMgr dbTxnMgr;
-    private final LakeTable table;
+    // lake table or lake materialized view
+    private final OlapTable table;
 
     private Set<Long> dirtyPartitionSet;
+    private Set<String> invalidDictCacheColumns;
+    private Set<String> validDictCacheColumns;
 
-    public LakeTableTxnStateListener(DatabaseTransactionMgr dbTxnMgr, LakeTable table) {
+    public LakeTableTxnStateListener(DatabaseTransactionMgr dbTxnMgr, OlapTable table) {
         this.dbTxnMgr = dbTxnMgr;
         this.table = table;
     }
@@ -62,6 +64,9 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
         }
         dirtyPartitionSet = Sets.newHashSet();
+        invalidDictCacheColumns = Sets.newHashSet();
+        validDictCacheColumns = Sets.newHashSet();
+
         Set<Long> finishedTabletsOfThisTable = Sets.newHashSet();
 
         TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
@@ -81,6 +86,20 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                 continue;
             }
             dirtyPartitionSet.add(tabletMeta.getPartitionId());
+
+            // Invalid column set should union
+            invalidDictCacheColumns.addAll(finishedTablets.get(i).getInvalidDictCacheColumns());
+
+            // Valid column set should intersect and remove all invalid columns
+            // Only need to add valid column set once
+            if (validDictCacheColumns.isEmpty() &&
+                    !finishedTablets.get(i).getValidDictCacheColumns().isEmpty()) {
+                validDictCacheColumns.addAll(finishedTablets.get(i).getValidDictCacheColumns());
+            }
+            if (i == tabletMetaList.size() - 1) {
+                validDictCacheColumns.removeAll(invalidDictCacheColumns);
+            }
+
             finishedTabletsOfThisTable.add(finishedTablets.get(i).getTabletId());
         }
 
@@ -109,13 +128,26 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void preWriteCommitLog(TransactionState txnState) {
-        Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.COMMITTED);
+        Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.COMMITTED
+                || txnState.getTransactionStatus() == TransactionStatus.PREPARED);
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
+        boolean isFirstPartition = true;
         for (long partitionId : dirtyPartitionSet) {
             Partition partition = table.getPartition(partitionId);
-            long version = partition.getNextVersion();
-            PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(partitionId, version, 0);
+            PartitionCommitInfo partitionCommitInfo;
+            long version = -1;
+            if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                version = partition.getNextVersion();
+            }
+            if (isFirstPartition) {
+                partitionCommitInfo = new PartitionCommitInfo(partitionId, version, 0,
+                        Lists.newArrayList(invalidDictCacheColumns),
+                        Lists.newArrayList(validDictCacheColumns));
+            } else {
+                partitionCommitInfo = new PartitionCommitInfo(partitionId, version, 0);
+            }
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+            isFirstPartition = false;
         }
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
     }

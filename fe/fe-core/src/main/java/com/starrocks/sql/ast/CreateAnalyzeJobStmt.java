@@ -31,18 +31,14 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     private final boolean isSample;
     private Map<String, String> properties;
 
-    public CreateAnalyzeJobStmt(boolean isSample, Map<String, String> properties) {
-        this(null, Lists.newArrayList(), isSample, properties, NodePosition.ZERO);
+    public CreateAnalyzeJobStmt(boolean isSample, Map<String, String> properties, NodePosition pos) {
+        this(null, Lists.newArrayList(), isSample, properties, pos);
     }
 
-    public CreateAnalyzeJobStmt(String db, boolean isSample, Map<String, String> properties) {
-        this(new TableName(db, null), Lists.newArrayList(), isSample, properties, NodePosition.ZERO);
+    public CreateAnalyzeJobStmt(String db, boolean isSample, Map<String, String> properties, NodePosition pos) {
+        this(new TableName(db, null), Lists.newArrayList(), isSample, properties, pos);
     }
 
-    public CreateAnalyzeJobStmt(TableName tbl, List<String> columnNames, boolean isSample,
-                                Map<String, String> properties) {
-        this(tbl, columnNames, isSample, properties, NodePosition.ZERO);
-    }
     public CreateAnalyzeJobStmt(TableName tbl, List<String> columnNames, boolean isSample,
                                 Map<String, String> properties, NodePosition pos) {
         super(pos);

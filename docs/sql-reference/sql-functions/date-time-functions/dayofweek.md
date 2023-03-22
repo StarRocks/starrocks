@@ -2,7 +2,7 @@
 
 ## Description
 
-Returns the weekday index for a given date. For example, the index for Monday is 1, for Tuesday is 2, for Saturday is 7.
+Returns the weekday index for a given date. For example, the index for Sunday is 1, for Monday is 2, for Saturday is 7.
 
 The `date` parameter must be of the DATE or DATETIME type, or a valid expression that can be cast into a DATE or DATETIME value.
 

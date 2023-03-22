@@ -48,7 +48,6 @@ class Schema;
 class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
-class ChunkAllocator;
 
 struct CompactionInfo {
     EditVersion start_version;
@@ -62,6 +61,9 @@ public:
     using ColumnUniquePtr = std::unique_ptr<Column>;
     using segment_rowid_t = uint32_t;
     using DeletesMap = std::unordered_map<uint32_t, vector<segment_rowid_t>>;
+
+    TabletUpdates(const TabletUpdates&) = delete;
+    const TabletUpdates& operator=(const TabletUpdates&) = delete;
 
     explicit TabletUpdates(Tablet& tablet);
     ~TabletUpdates();
@@ -239,11 +241,6 @@ public:
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns, void* state);
 
-    /*
-    Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
-                                         EditVersion* read_version, uint32_t* next_rowset_id,
-                                         std::vector<std::vector<uint64_t>*>* rss_rowids);
-    */
     Status prepare_partial_update_states(Tablet* tablet, const ColumnUniquePtr& upserts, EditVersion* read_version,
                                          std::vector<uint64_t>* rss_rowids);
 
@@ -289,8 +286,6 @@ private:
         int64_t compaction_score = 0;
         std::string to_string() const;
     };
-
-    Status _get_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets, EditVersion* full_version);
 
     // used for PrimaryIndex load
     Status _get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
@@ -405,7 +400,7 @@ private:
     int64_t _last_compaction_time_ms = 0;
     std::atomic<int64_t> _last_compaction_success_millis{0};
     std::atomic<int64_t> _last_compaction_failure_millis{0};
-    int64_t _compaction_cost_seek = 32 * 1024 * 1024; // 32MB
+    static const int64_t _compaction_cost_seek = 32 * 1024 * 1024; // 32MB
 
     mutable std::mutex _rowset_stats_lock;
     // maintain current version(applied version) rowsets' stats
@@ -426,11 +421,6 @@ private:
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
     std::string _error_msg;
-
-    ChunkAllocator* _chunk_allocator = nullptr;
-
-    TabletUpdates(const TabletUpdates&) = delete;
-    const TabletUpdates& operator=(const TabletUpdates&) = delete;
 };
 
 } // namespace starrocks

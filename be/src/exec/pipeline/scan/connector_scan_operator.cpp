@@ -48,6 +48,12 @@ OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_
     return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, dop, _scan_node);
 }
 
+const std::vector<ExprContext*>& ConnectorScanOperatorFactory::partition_exprs() const {
+    auto* connector_scan_node = down_cast<ConnectorScanNode*>(_scan_node);
+    auto* provider = connector_scan_node->data_source_provider();
+    return provider->partition_exprs();
+}
+
 // ==================== ConnectorScanOperator ====================
 
 ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
@@ -168,6 +174,7 @@ ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProf
     _data_source->set_runtime_filters(_runtime_bloom_filters);
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
+    _data_source->update_has_any_predicate();
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
@@ -179,7 +186,6 @@ ConnectorChunkSource::~ConnectorChunkSource() {
 Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
-    _ck_acc.set_max_size(state->chunk_size());
     if (config::connector_min_max_predicate_from_runtime_filter_enable) {
         _data_source->parse_runtime_filters(state);
     }
@@ -192,11 +198,24 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     _data_source->close(state);
 }
 
-Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    if (!_opened) {
-        RETURN_IF_ERROR(_data_source->open(state));
-        _opened = true;
+Status ConnectorChunkSource::_open_data_source(RuntimeState* state) {
+    if (_opened) {
+        return Status::OK();
     }
+
+    RETURN_IF_ERROR(_data_source->open(state));
+    if (!_data_source->has_any_predicate() && _limit != -1 && _limit < state->chunk_size()) {
+        _ck_acc.set_max_size(_limit);
+    } else {
+        _ck_acc.set_max_size(state->chunk_size());
+    }
+    _opened = true;
+
+    return Status::OK();
+}
+
+Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
+    RETURN_IF_ERROR(_open_data_source(state));
 
     if (state->is_cancelled()) {
         return Status::Cancelled("canceled state");

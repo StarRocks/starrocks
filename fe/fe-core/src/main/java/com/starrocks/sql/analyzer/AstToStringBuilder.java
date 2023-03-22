@@ -55,6 +55,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -77,6 +78,7 @@ import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -95,6 +97,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -169,7 +172,11 @@ public class AstToStringBuilder {
                 sb.append("REVOKE ");
             }
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                List<String> privList = stmt.getPrivilegeTypes().stream().map(Enum::name).collect(toList());
+                List<String> privList = new ArrayList<>();
+                for (PrivilegeType privilegeType : stmt.getPrivilegeTypes()) {
+                    privList.add(privilegeType.name().replace("_", " "));
+                }
+
                 sb.append(Joiner.on(", ").join(privList));
                 sb.append(" ON ");
 
@@ -280,10 +287,16 @@ public class AstToStringBuilder {
                             + " as " + userVariable.getEvaluatedExpression().getType().toSql() + ")";
                     setVarList.add(setVarSql);
                 } else if (setVar instanceof SetPassVar) {
-                    String tmp = "PASSWORD FOR " +
-                            ((SetPassVar) setVar).getUserIdent().toString() +
-                            " = PASSWORD('***')";
-                    setVarList.add(tmp);
+                    SetPassVar setPassVar = (SetPassVar) setVar;
+                    UserIdentity userIdentity = setPassVar.getUserIdent();
+                    String setPassSql = "";
+                    if (userIdentity == null) {
+                        setPassSql += "PASSWORD";
+                    } else {
+                        setPassSql += "PASSWORD FOR " + userIdentity;
+                    }
+                    setPassSql += " = PASSWORD('***')";
+                    setVarList.add(setPassSql);
                 }
             }
 
@@ -749,6 +762,14 @@ public class AstToStringBuilder {
             sb.append('[');
             sb.append(visitAstList(node.getChildren()));
             sb.append(']');
+            return sb.toString();
+        }
+
+        public String visitMapExpr(MapExpr node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append('(');
+            sb.append(visitAstList(node.getChildren()));
+            sb.append(')');
             return sb.toString();
         }
 

@@ -118,7 +118,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.RunMode;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
@@ -135,10 +134,10 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hive.BackgroundHiveMetadataProcessor;
+import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
-import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
+import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.FrontendNodeType;
@@ -205,8 +204,8 @@ import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeActions;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -257,13 +256,13 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
@@ -272,6 +271,8 @@ import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TNodeInfo;
+import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TResourceUsage;
@@ -356,9 +357,8 @@ public class GlobalStateMgr {
     private Daemon timePrinter;
     private EsRepository esRepository;  // it is a daemon, so add it here
     private StarRocksRepository starRocksRepository;
-    private IcebergRepository icebergRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
-    private BackgroundHiveMetadataProcessor backgroundHiveMetadataProcessor;
+    private ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
 
     // set to true after finished replay all meta and ready to serve
     // set to false when globalStateMgr is not ready.
@@ -414,7 +414,7 @@ public class GlobalStateMgr {
     private AtomicBoolean usingNewPrivilege;
 
     private AuthenticationManager authenticationManager;
-    private PrivilegeManager privilegeManager;
+    private AuthorizationManager authorizationManager;
 
     private DomainResolver domainResolver;
 
@@ -493,20 +493,6 @@ public class GlobalStateMgr {
 
     private ConfigRefreshDaemon configRefreshDaemon;
 
-    private RunMode runMode = RunMode.SHARED_NOTHING;
-
-    public boolean isSharedNothingMode() {
-        return runMode.equals(RunMode.SHARED_NOTHING);
-    }
-
-    public boolean isSharedDataMode() {
-        return runMode.equals(RunMode.SHARED_DATA);
-    }
-
-    public void setRunMode(RunMode runmode) {
-        this.runMode = runmode;
-    }
-
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -521,6 +507,16 @@ public class GlobalStateMgr {
 
     public SystemInfoService getOrCreateSystemInfo(Integer clusterId) {
         return nodeMgr.getOrCreateSystemInfo(clusterId);
+    }
+
+    public TNodesInfo createNodesInfo(Integer clusterId) {
+        TNodesInfo nodesInfo = new TNodesInfo();
+        SystemInfoService systemInfoService = getOrCreateSystemInfo(clusterId);
+        for (Long id : systemInfoService.getBackendIds(false)) {
+            Backend backend = systemInfoService.getBackend(id);
+            nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+        }
+        return nodesInfo;
     }
 
     public SystemInfoService getClusterInfo() {
@@ -583,6 +579,14 @@ public class GlobalStateMgr {
 
     // if isCkptGlobalState is true, it means that we should not collect thread pool metric
     private GlobalStateMgr(boolean isCkptGlobalState) {
+        if (!isCkptGlobalState) {
+            RunMode.detectRunMode();
+        }
+
+        if (RunMode.allowCreateLakeTable()) {
+            this.starOSAgent = new StarOSAgent();
+        }
+
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
@@ -624,9 +628,8 @@ public class GlobalStateMgr {
 
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
-        this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
-        this.backgroundHiveMetadataProcessor = new BackgroundHiveMetadataProcessor();
+        this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
 
         this.metaContext = new MetaContext();
         this.metaContext.setThreadLocalInfo();
@@ -664,24 +667,12 @@ public class GlobalStateMgr {
         this.pluginMgr = new PluginMgr();
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
-
-        if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_DATA.name())) {
-            runMode = RunMode.SHARED_DATA;
-            this.starOSAgent = new StarOSAgent();
-        } else if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_NOTHING.name())) {
-            runMode = RunMode.SHARED_NOTHING;
-        } else {
-            LOG.error("Invalid run_mode config: {}, should be shared_data or shared_nothing", Config.run_mode);
-            System.exit(-1);
-        }
-
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, connectorTblMetaInfoMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
-
 
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
@@ -771,8 +762,8 @@ public class GlobalStateMgr {
         return authenticationManager;
     }
 
-    public PrivilegeManager getPrivilegeManager() {
-        return privilegeManager;
+    public AuthorizationManager getAuthorizationManager() {
+        return authorizationManager;
     }
 
     public ResourceGroupMgr getResourceGroupMgr() {
@@ -906,6 +897,10 @@ public class GlobalStateMgr {
         return connectorTblMetaInfoMgr;
     }
 
+    public ConnectorTableMetadataProcessor getConnectorTableMetadataProcessor() {
+        return connectorTableMetadataProcessor;
+    }
+
     // Use tryLock to avoid potential dead lock
     public boolean tryLock(boolean mustLock) {
         while (true) {
@@ -994,7 +989,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (isSharedDataMode() && !starOSAgent.init(null)) {
+        if (RunMode.allowCreateLakeTable() && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -1007,12 +1002,12 @@ public class GlobalStateMgr {
         if (usingNewPrivilege) {
             this.authenticationManager = new AuthenticationManager();
             this.domainResolver = new DomainResolver(authenticationManager);
-            this.privilegeManager = new PrivilegeManager(this, null);
+            this.authorizationManager = new AuthorizationManager(this, null);
             LOG.info("using new privilege framework..");
         } else {
             this.domainResolver = new DomainResolver(auth);
             this.authenticationManager = null;
-            this.privilegeManager = null;
+            this.authorizationManager = null;
         }
     }
 
@@ -1026,7 +1021,7 @@ public class GlobalStateMgr {
     }
 
     private boolean needUpgradedToNewPrivilege() {
-        return !privilegeManager.isLoaded() || !authenticationManager.isLoaded();
+        return !authorizationManager.isLoaded() || !authenticationManager.isLoaded();
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -1144,7 +1139,7 @@ public class GlobalStateMgr {
             if (USING_NEW_PRIVILEGE) {
                 if (needUpgradedToNewPrivilege()) {
                     reInitializeNewPrivilegeOnUpgrade();
-                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, authorizationManager, this);
                     // upgrade metadata in old privilege framework to the new one
                     upgrader.upgradeAsLeader();
                     this.domainResolver.setAuthenticationManager(authenticationManager);
@@ -1193,7 +1188,7 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
-        if (isSharedDataMode()) {
+        if (RunMode.allowCreateLakeTable()) {
             // register service to starMgr
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
@@ -1260,7 +1255,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
         taskRunStateSynchronizer.start();
 
-        if (isSharedDataMode()) {
+        if (RunMode.allowCreateLakeTable()) {
             shardDeleter.start();
         }
     }
@@ -1278,13 +1273,11 @@ public class GlobalStateMgr {
             metastoreEventsProcessor.start();
         }
 
-        if (!Config.enable_hms_events_incremental_sync && Config.enable_background_refresh_hive_metadata) {
-            backgroundHiveMetadataProcessor.start();
-        }
+        connectorTableMetadataProcessor.start();
 
         // domain resolver
         domainResolver.start();
-        if (isSharedDataMode()) {
+        if (RunMode.allowCreateLakeTable()) {
             compactionManager.start();
         }
         configRefreshDaemon.start();
@@ -1435,20 +1428,22 @@ public class GlobalStateMgr {
                 for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
                     Table table = baseTableInfo.getTable();
                     if (table == null) {
-                        LOG.warn("tableName :{} do not exist. set materialized view:{} to invalid",
-                                baseTableInfo.getTableName(), mv.getId());
+                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
                         mv.setActive(false);
                         continue;
                     }
                     if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                        LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
-                                baseTableInfo.getTableName(), mv.getId());
+                        MaterializedView baseMv = (MaterializedView) table;
+                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                        "the materialized view{}({}) is invalid.", mv.getName(), mv.getId(),
+                                baseMv.getName(), baseMv.getId());
                         mv.setActive(false);
                         continue;
                     }
                     MvId mvId = new MvId(db.getId(), mv.getId());
                     table.addRelatedMaterializedView(mvId);
-                    if (!table.isLocalTable()) {
+                    if (!table.isNativeTable()) {
                         connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
                                 ConnectorTableInfo.builder().setRelatedMaterializedViews(
@@ -1532,7 +1527,7 @@ public class GlobalStateMgr {
     public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
         if (USING_NEW_PRIVILEGE) {
             this.authenticationManager = AuthenticationManager.load(dis);
-            this.privilegeManager = PrivilegeManager.load(dis, this, null);
+            this.authorizationManager = AuthorizationManager.load(dis, this, null);
             this.domainResolver = new DomainResolver(authenticationManager);
         }
     }
@@ -1761,7 +1756,7 @@ public class GlobalStateMgr {
     public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
         if (USING_NEW_PRIVILEGE) {
             this.authenticationManager.save(dos);
-            this.privilegeManager.save(dos);
+            this.authorizationManager.save(dos);
         }
     }
 
@@ -1965,7 +1960,6 @@ public class GlobalStateMgr {
 
         streamLoadManager.cancelUnDurableTaskAfterRestart();
 
-
         long replayInterval = System.currentTimeMillis() - replayStartTime;
         LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
     }
@@ -2130,12 +2124,12 @@ public class GlobalStateMgr {
         localMetastore.replayRenameDatabase(dbName, newDbName);
     }
 
-    public void createTable(CreateTableStmt stmt) throws DdlException {
-        localMetastore.createTable(stmt);
+    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+        return localMetastore.createTable(stmt);
     }
 
     public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
-        localMetastore.createTableLike(stmt);
+        localMetastore.createTable(stmt.getCreateTableStmt());
     }
 
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
@@ -2178,7 +2172,7 @@ public class GlobalStateMgr {
                                   List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
         // 1. create table
         // 1.1 materialized view
-        if (table.getType() == TableType.MATERIALIZED_VIEW) {
+        if (table.isMaterializedView()) {
             MaterializedView mv = (MaterializedView) table;
             createTableStmt.add(mv.getMaterializedViewDdlStmt(true));
             return;
@@ -2249,13 +2243,10 @@ public class GlobalStateMgr {
                 }
             }
         }
-        sb.append("\n) ENGINE=");
-        if (table.isLakeTable()) {
-            sb.append(EngineType.STARROCKS.name()).append(" ");
-        } else {
-            sb.append(table.getType().name()).append(" ");
-        }
 
+        sb.append("\n) ENGINE=");
+        sb.append(table.getType() == TableType.LAKE ? "OLAP" : table.getType().name()).append(" ");
+        
         if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
 
@@ -2354,9 +2345,9 @@ public class GlobalStateMgr {
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
                         .append("\" = \"");
-                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
             } else {
                 // in memory
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
@@ -2502,7 +2493,6 @@ public class GlobalStateMgr {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("table\" = \"")
                         .append(externalOlapTable.getSourceTableName()).append("\"");
             }
-
             sb.append("\n)");
         } else if (table.getType() == TableType.MYSQL) {
             MysqlTable mysqlTable = (MysqlTable) table;
@@ -2591,11 +2581,13 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
+            Map<String, String> fileProperties = fileTable.getFileProperties();
+            CloudCredentialUtil.maskCloudCredential(fileProperties);
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
             sb.append("\nPROPERTIES (\n");
-            sb.append(new PrintableMap<>(fileTable.getFileProperties(), " = ", true, true, false).toString());
+            sb.append(new PrintableMap<>(fileProperties, " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
             HudiTable hudiTable = (HudiTable) table;
@@ -2617,12 +2609,8 @@ public class GlobalStateMgr {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(icebergTable.getDb()).append("\",\n");
-            sb.append("\"table\" = \"").append(icebergTable.getTable()).append("\",\n");
-            String maxTotalBytes = icebergTable.getFileIOMaxTotalBytes();
-            if (!Strings.isNullOrEmpty(maxTotalBytes)) {
-                sb.append("\"fileIO.cache.max-total-bytes\" = \"").append(maxTotalBytes).append("\",\n");
-            }
+            sb.append("\"database\" = \"").append(icebergTable.getRemoteDbName()).append("\",\n");
+            sb.append("\"table\" = \"").append(icebergTable.getRemoteTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == TableType.JDBC) {
@@ -2643,8 +2631,8 @@ public class GlobalStateMgr {
 
         // 2. add partition
         if (separatePartition && (table instanceof OlapTable)
-                && ((OlapTable) table).getPartitionInfo().getType() == PartitionType.RANGE
-                && ((OlapTable) table).getPartitions().size() > 1) {
+                && ((OlapTable) table).getPartitionInfo().isRangePartition()
+                && table.getPartitions().size() > 1) {
             OlapTable olapTable = (OlapTable) table;
             RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             boolean first = true;
@@ -2957,10 +2945,6 @@ public class GlobalStateMgr {
         return this.starRocksRepository;
     }
 
-    public IcebergRepository getIcebergRepository() {
-        return this.icebergRepository;
-    }
-
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
     }
@@ -3255,62 +3239,63 @@ public class GlobalStateMgr {
         ctx.setCurrentWarehouse(newWarehouseName);
     }
 
-    // Change current catalog of this session.
+    // Change current catalog of this session, and reset current database.
     // We can support "use 'catalog <catalog_name>'" from mysql client or "use catalog <catalog_name>" from jdbc.
-    public void changeCatalog(ConnectContext ctx, String newCatalogName) throws AnalysisException {
+    public void changeCatalog(ConnectContext ctx, String newCatalogName) throws DdlException {
         if (!catalogMgr.catalogExists(newCatalogName)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
         if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+                !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
         }
         ctx.setCurrentCatalog(newCatalogName);
+        ctx.setDatabase("");
     }
 
     // Change current catalog and database of this session.
-    // We can support 'USE CATALOG.DB'
+    // identifier could be "CATALOG.DB" or "DB".
+    // For "CATALOG.DB", we change the current catalog database.
+    // For "DB", we keep the current catalog and change the current database.
     public void changeCatalogDb(ConnectContext ctx, String identifier) throws DdlException {
-        String dbName = ctx.getDatabase();
+        String dbName;
 
-        String[] parts = identifier.split("\\.");
+        String[] parts = identifier.split("\\.", 2); // at most 2 parts
         if (parts.length != 1 && parts.length != 2) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
-        } else if (parts.length == 1) {
+        }
+
+        if (parts.length == 1) { // use database
             dbName = identifier;
-        } else {
+        } else { // use catalog.database
             String newCatalogName = parts[0];
-            if (catalogMgr.catalogExists(newCatalogName)) {
-                dbName = parts[1];
-            } else {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
+            if (!catalogMgr.catalogExists(newCatalogName)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
             }
             if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                    !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+                    !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
             }
             ctx.setCurrentCatalog(newCatalogName);
+            dbName = parts[1];
         }
 
-        if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
-            LOG.debug("Unknown catalog '%s' and db '%s'", ctx.getCurrentCatalog(), dbName);
+        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
+            LOG.debug("Unknown catalog {} and db {}", ctx.getCurrentCatalog(), dbName);
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
-        // So we didn't check UseDbStmt permission in PrivilegeChecker.
-        if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
-            if (isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, dbName)) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                            ctx.getQualifiedUser(), dbName);
-                }
-            } else {
-                if (!auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                            ctx.getQualifiedUser(), dbName);
-                }
+        // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
+        if (isUsingNewPrivilege()) {
+            if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, ctx.getCurrentCatalog(), dbName)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                        ctx.getQualifiedUser(), dbName);
+            }
+        } else {
+            if (!auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                        ctx.getQualifiedUser(), dbName);
             }
         }
 
@@ -3556,8 +3541,8 @@ public class GlobalStateMgr {
         return localMetastore.allocateAutoIncrementId(tableId, rows);
     }
 
-    public void removeAutoIncrementIdByTableId(Long tableId) {
-        localMetastore.removeAutoIncrementIdByTableId(tableId);
+    public void removeAutoIncrementIdByTableId(Long tableId, boolean isReplay) {
+        localMetastore.removeAutoIncrementIdByTableId(tableId, isReplay);
     }
 
     public Long getCurrentAutoIncrementIdByTableId(Long tableId) {
@@ -3610,9 +3595,9 @@ public class GlobalStateMgr {
             //    privilege operation, then generate old auth journal
             // in both cases, we need a definite upgrade, so we mark the managers of
             // new privilege framework as unloaded to trigger upgrade process.
-            LOG.info("set authenticationManager and privilegeManager as unloaded because of old auth journal");
+            LOG.info("set authenticationManager and authorizationManager as unloaded because of old auth journal");
             authenticationManager.setLoaded(false);
-            privilegeManager.setLoaded(false);
+            authorizationManager.setLoaded(false);
             domainResolver = new DomainResolver(auth);
         }
         switch (code) {
@@ -3674,16 +3659,16 @@ public class GlobalStateMgr {
         // In the case where we upgrade again, i.e. upgrade->rollback->upgrade,
         // we may already load the image from last upgrade, in this case we should
         // discard the privilege data from last upgrade and only use the data from
-        // current image to upgrade, so we initialize a new PrivilegeManager and AuthenticationManger
+        // current image to upgrade, so we initialize a new AuthorizationManager and AuthenticationManger
         // instance here
         LOG.info("reinitialize privilege info before upgrade");
         this.authenticationManager = new AuthenticationManager();
-        this.privilegeManager = new PrivilegeManager(this, null);
+        this.authorizationManager = new AuthorizationManager(this, null);
     }
 
     public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
         reInitializeNewPrivilegeOnUpgrade();
-        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, authorizationManager, this);
         upgrader.replayUpgrade(info.getRoleNameToId());
         LOG.info("set usingNewPrivilege to true after auth upgrade log replayed");
         usingNewPrivilege.set(true);

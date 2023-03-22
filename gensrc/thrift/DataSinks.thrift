@@ -50,6 +50,7 @@ enum TDataSinkType {
     OLAP_TABLE_SINK,
     MEMORY_SCRATCH_SINK,
     MULTI_CAST_DATA_STREAM_SINK,
+    SCHEMA_TABLE_SINK
 }
 
 enum TResultSinkType {
@@ -197,6 +198,11 @@ struct TOlapTableSink {
     24: optional i32 auto_increment_slot_id;
 }
 
+struct TSchemaTableSink {
+    1: optional string table
+    2: optional Descriptors.TNodesInfo nodes_info
+}
+
 struct TDataSink {
   1: required TDataSinkType type
   2: optional TDataStreamSink stream_sink
@@ -206,4 +212,24 @@ struct TDataSink {
   7: optional TOlapTableSink olap_table_sink
   8: optional TMemoryScratchSink memory_scratch_sink
   9: optional TMultiCastDataStreamSink multi_cast_stream_sink
+  10: optional TSchemaTableSink schema_table_sink
+}
+
+struct TIcebergColumnStats {
+    1: optional map<i32, i64> columnSizes
+    2: optional map<i32, i64> valueCounts
+    3: optional map<i32, i64> nullValueCounts
+    4: optional map<i32, i64> nanValueCounts
+    5: optional map<i32, binary> lowerBounds;
+    6: optional map<i32, binary> upperBounds;
+}
+
+struct TIcebergDataFile {
+    1: optional string path
+    2: optional string format
+    3: optional i64 record_count
+    4: optional i64 file_size_in_bytes
+    5: optional string partition_path;
+    6: optional list<i64> split_offsets;
+    7: optional TIcebergColumnStats column_stats;
 }

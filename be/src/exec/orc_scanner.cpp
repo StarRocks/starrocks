@@ -31,7 +31,7 @@ namespace starrocks {
 class ORCFileStream : public ORCHdfsFileStream {
 public:
     ORCFileStream(std::shared_ptr<RandomAccessFile> file, uint64_t length, starrocks::ScannerCounter* counter)
-            : ORCHdfsFileStream(file.get(), length), _file(std::move(file)), _counter(counter) {}
+            : ORCHdfsFileStream(file.get(), length, nullptr), _file(std::move(file)), _counter(counter) {}
 
     ~ORCFileStream() override { _file.reset(); }
 
@@ -86,7 +86,7 @@ Status ORCScanner::open() {
     _orc_reader->set_timezone(_state->timezone());
     _orc_reader->drop_nanoseconds_in_datetime();
     _orc_reader->set_runtime_state(_state);
-    _orc_reader->set_case_sensitive(true);
+    _orc_reader->set_case_sensitive(_case_sensitive);
     RETURN_IF_ERROR(_open_next_orc_reader());
 
     return Status::OK();

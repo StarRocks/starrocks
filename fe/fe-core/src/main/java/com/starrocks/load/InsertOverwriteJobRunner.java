@@ -21,7 +21,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -300,7 +299,7 @@ public class InsertOverwriteJobRunner {
                 }
             });
 
-            if (targetTable.getPartitionInfo().getType() == PartitionType.RANGE) {
+            if (targetTable.getPartitionInfo().isRangePartition()) {
                 targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
             } else {
                 targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
@@ -313,11 +312,19 @@ public class InsertOverwriteJobRunner {
                     invertedIndex.markTabletForceDelete(tabletId);
                 }
 
-                GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(targetTable);
-
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                         InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getTmpPartitionIds());
                 GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
+
+                try {
+                    GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(targetTable,
+                            true /* isJoin */, null /* expectGroupId */);
+                } catch (DdlException e) {
+                    // log an error if update colocation info failed, insert overwrite already succeeded
+                    LOG.error("table {} update colocation info failed after insert overwrite, {}.", tableId, e.getMessage());
+                }
+
+                targetTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
             }
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",

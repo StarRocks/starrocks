@@ -148,7 +148,6 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
               -DUSE_STAROS=${USE_STAROS} -DWITH_GCOV=${WITH_GCOV} \
               -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
-              -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
               -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
               -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
               -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \

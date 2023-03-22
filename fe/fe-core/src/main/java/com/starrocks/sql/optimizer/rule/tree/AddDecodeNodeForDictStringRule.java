@@ -15,9 +15,9 @@
 
 package com.starrocks.sql.optimizer.rule.tree;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
@@ -43,9 +43,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -536,7 +534,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             }
 
             return new PhysicalTopNOperator(newOrderSpec, operator.getLimit(), operator.getOffset(), partitionByColumns,
-                    Operator.DEFAULT_LIMIT, operator.getSortPhase(), operator.getTopNType(), operator.isSplit(),
+                    operator.getPartitionLimit(), operator.getSortPhase(), operator.getTopNType(), operator.isSplit(),
                     operator.isEnforced(), predicate, operator.getProjection());
         }
 
@@ -792,6 +790,19 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             visitProjectionBefore(aggExpr, context);
 
             PhysicalHashAggregateOperator aggOperator = (PhysicalHashAggregateOperator) aggExpr.getOp();
+            // Fix issue: https://github.com/StarRocks/starrocks/issues/19901
+            // TODO(by satanson): forbid dict optimization if the Agg is multi-stage Agg and has having-clause.
+            //  it is quite conservative, but actually, if the Agg's having-clause references aggregations,
+            //  then the optimization can not propagate upwards. In the future, this Rule should be refined as
+            //  follows:
+            //   1. Assign each expr a property that describes axiom exprs on whom the expr depends. the axiom
+            //      exprs means ColumnRefOperators represent tablet columns. so from this, we can break through
+            //      project operators and obtain the truth whether a expr depends on dict-encoding column or not.
+            //   2. Rewrite this Rule to make each visitXXX method can discards rewritten child OptExpression
+            //      and resorts to the orignal child OptExpression according to the current OptExpression's state.
+            if (!aggOperator.isOnePhaseAgg() && aggOperator.getPredicate() != null) {
+                return aggExpr;
+            }
             context.needEncode = aggOperator.couldApplyStringDict(context.allStringColumnIds);
             if (context.needEncode) {
                 aggOperator.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns,
@@ -866,9 +877,9 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             return root;
         }
 
-        List<LogicalOlapScanOperator> scanOperators = taskContext.getAllScanOperators();
+        List<PhysicalOlapScanOperator> scanOperators = Utils.extractPhysicalOlapScanOperator(root);
 
-        for (LogicalOlapScanOperator scanOperator : scanOperators) {
+        for (PhysicalOlapScanOperator scanOperator : scanOperators) {
             OlapTable table = (OlapTable) scanOperator.getTable();
             long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo)
                     .orElse(0L);
@@ -1034,7 +1045,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
         @Override
         public Void visitCall(CallOperator call, CouldApplyDictOptimizeContext context) {
-            if (!call.getFunction().isCouldApplyDictOptimize()) {
+            if (call.getFunction() == null || !call.getFunction().isCouldApplyDictOptimize()) {
                 context.stopOptPropagateUpward = true;
                 return null;
             }

@@ -279,31 +279,6 @@ ScalarTypeInfoResolver::ScalarTypeInfoResolver() {
 
 ScalarTypeInfoResolver::~ScalarTypeInfoResolver() = default;
 
-bool is_scalar_field_type(LogicalType field_type) {
-    switch (field_type) {
-    case TYPE_STRUCT:
-    case TYPE_ARRAY:
-    case TYPE_MAP:
-    case TYPE_DECIMAL32:
-    case TYPE_DECIMAL64:
-    case TYPE_DECIMAL128:
-        return false;
-    default:
-        return true;
-    }
-}
-
-bool is_complex_metric_type(LogicalType field_type) {
-    switch (field_type) {
-    case TYPE_OBJECT:
-    case TYPE_PERCENTILE:
-    case TYPE_HLL:
-        return true;
-    default:
-        return false;
-    }
-}
-
 TypeInfoPtr get_type_info(LogicalType field_type) {
     return ScalarTypeInfoResolver::instance()->get_type_info(field_type);
 }

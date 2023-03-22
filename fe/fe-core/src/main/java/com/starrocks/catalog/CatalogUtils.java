@@ -33,6 +33,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+
 public class CatalogUtils {
 
     private static final Logger LOG = LogManager.getLogger(CatalogUtils.class);
@@ -90,7 +92,7 @@ public class CatalogUtils {
                 return;
             }
             if (table.isLakeTable()) {
-                throw new AnalysisException("Unsupported operation on lake table [" + dbName + "." + tableName + "]");
+                throw new AnalysisException(PARSER_ERROR_MSG.unsupportedOpWithInfo("lake table " + db + "." + tableName));
             }
         } finally {
             db.readUnlock();
@@ -235,15 +237,16 @@ public class CatalogUtils {
         // When POC, the backends is not greater than three most of the time.
         // The bucketNum will be given a small multiplier factor for small backends.
         int bucketNum = 0;
-        if (backendNum <= 3) {
+        if (backendNum <= 12) {
             bucketNum = 2 * backendNum;
-        } else if (backendNum <= 6) {
-            bucketNum = backendNum;
-        } else if (backendNum <= 12) {
-            bucketNum = 12;
+        } else if (backendNum <= 24) {
+            bucketNum = (int) (1.5 * backendNum);
+        } else if (backendNum <= 36) {
+            bucketNum = 36;
         } else {
             bucketNum = Math.min(backendNum, 48);
         }
         return bucketNum;
+
     }
 }

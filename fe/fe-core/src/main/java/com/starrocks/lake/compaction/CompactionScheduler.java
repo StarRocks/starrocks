@@ -29,7 +29,6 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.Daemon;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.CompactRequest;
@@ -107,11 +106,13 @@ public class CompactionScheduler extends Daemon {
         if (finishedWaiting) {
             return true;
         }
+        // Note: must call getMinActiveTxnId() before getNextTransactionId(), otherwise if there are no running transactions
+        // waitTxnId <= minActiveTxnId will always be false.
+        long minActiveTxnId = transactionMgr.getMinActiveTxnId();
         if (waitTxnId < 0) {
             waitTxnId = transactionMgr.getTransactionIDGenerator().getNextTransactionId();
         }
-        Long minActiveTxnId = transactionMgr.getMinActiveTxnId();
-        finishedWaiting = (minActiveTxnId == null) || minActiveTxnId > waitTxnId;
+        finishedWaiting = waitTxnId <= minActiveTxnId;
         return finishedWaiting;
     }
 
@@ -199,7 +200,8 @@ public class CompactionScheduler extends Daemon {
         }
         db.readLock();
         try {
-            LakeTable table = (LakeTable) db.getTable(partition.getTableId());
+            // lake table or lake materialized view
+            OlapTable table = (OlapTable) db.getTable(partition.getTableId());
             return table != null && table.getPartition(partition.getPartitionId()) != null;
         } finally {
             db.readUnlock();
@@ -221,12 +223,13 @@ public class CompactionScheduler extends Daemon {
 
         long txnId;
         long currentVersion;
-        LakeTable table;
+        OlapTable table;
         Partition partition;
         Map<Long, List<Long>> beToTablets;
 
         try {
-            table = (LakeTable) db.getTable(partitionIdentifier.getTableId());
+            // lake table or lake materialized view
+            table = (OlapTable) db.getTable(partitionIdentifier.getTableId());
             // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
             // will not be used after the schema change job finished.
             if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {

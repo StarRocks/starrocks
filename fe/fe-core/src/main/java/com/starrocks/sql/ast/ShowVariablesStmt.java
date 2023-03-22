@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotRef;
@@ -51,7 +50,6 @@ public class ShowVariablesStmt extends ShowStmt {
     private final String pattern;
     private Expr where;
 
-    @VisibleForTesting
     public ShowVariablesStmt(SetType type, String pattern) {
         this(type, pattern, null, NodePosition.ZERO);
     }
