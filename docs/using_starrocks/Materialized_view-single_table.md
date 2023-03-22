@@ -8,7 +8,7 @@ Synchronous materialized views in StarRocks can be created only on a single base
 
 From v2.4 onwards, StarRocks provides asynchronous materialized views, which supports creation on multiple tables and more aggregation operators. For the usage of **asynchronous materialized views**, see [Asynchronous materialized view](../using_starrocks/Materialized_view.md).
 
-The following table compares the asynchronous materialized views (ASYNC MVs) in StarRocks v2.5, v2.4, and the synchronized materialized view (SYNC MV) in the perspective of features that they support:
+The following table compares the asynchronous materialized views (ASYNC MVs) in StarRocks v2.5, v2.4, and the synchronous materialized view (SYNC MV) in the perspective of features that they support:
 
 |                       | **Single-table aggregation** | **Multi-table join** | **Query rewrite** | **Refresh strategy** | **Base table** |
 | --------------------- | ---------------------------- | -------------------- | ----------------- | -------------------- | -------------- |
@@ -32,7 +32,7 @@ The following table compares the asynchronous materialized views (ASYNC MVs) in 
 
   Query rewrite means that when executing a query on base tables with materialized views built on, the system automatically judges whether the pre-computed results in the materialized view can be reused for the query. If they can be reused, the system will load the data directly from the relevant materialized view to avoid the time- and resource-consuming computations or joins.
 
-  Synchronous materialized views support query rewrite based on some of the aggregate functions. For more information, see [Correspondence of aggregate functions](#correspondence-of-aggregate-functions).
+  Synchronous materialized views support query rewrite based on some of the aggregate operators. For more information, see [Correspondence of aggregate operators](#correspondence-of-aggregate-operators).
 
 ## Preparation
 
@@ -358,7 +358,7 @@ SELECT k3, k2, k1
 FROM tableA
 ```
 
-## Correspondence of aggregate functions
+## Correspondence of aggregate operators
 
 When a query is executed with a synchronous materialized view, the original query statement will be automatically rewritten and used to query the intermediate results stored in the synchronous materialized view. The following table shows the correspondence between the aggregate function in the original query and the aggregate function used to construct the synchronous materialized view. You can select the corresponding aggregate function to build a synchronous materialized view according to your business scenario.
 
