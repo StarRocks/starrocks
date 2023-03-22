@@ -1441,6 +1441,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
 }
 
 void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info) {
+    DeferOp defer([&]() { _compaction_running = false; });
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace_tablet("apply_compaction", _tablet.tablet_id()));
     // NOTE: after commit, apply must success or fatal crash
     auto info = version_info.compaction.get();
@@ -1838,7 +1839,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
         return Status::InternalError("illegal state: another compaction is running");
     }
-    DeferOp defer([&]() { _compaction_running = false; });
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     vector<uint32_t> rowsets;
     {
@@ -1949,7 +1949,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
         return Status::InternalError("illegal state: another compaction is running");
     }
-    DeferOp defer([&]() { _compaction_running = false; });
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     std::unordered_set<uint32_t> all_rowsets;
     {
