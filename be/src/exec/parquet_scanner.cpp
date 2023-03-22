@@ -267,7 +267,7 @@ Status ParquetScanner::convert_array_to_column(ConvertFunc conv_func, size_t num
     } else {
         null_data = nullptr;
         // Fill nullable array into not-nullable column, positions of NULLs is marked as 1
-        fill_filter(array, _batch_start_idx, num_elements, &_chunk_filter, _chunk_start_idx);
+        fill_filter(array, _batch_start_idx, num_elements, &_chunk_filter, _chunk_start_idx, &_conv_ctx);
         data_column = column.get();
     }
 
