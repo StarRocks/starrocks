@@ -21,7 +21,7 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "fs/fs_hdfs.h"
+#include "fs/fs.h"
 #include "io/cache_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
