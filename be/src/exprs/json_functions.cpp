@@ -125,16 +125,17 @@ Status JsonFunctions::json_path_close(FunctionContext* context, FunctionContext:
 
 Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
                                           simdjson::ondemand::value* value) noexcept {
-#define HANDLE_SIMDJSON_ERROR(err, msg)                                                                            \
-    do {                                                                                                           \
-        const simdjson::error_code& _err = err;                                                                    \
-        const std::string& _msg = msg;                                                                             \
-        if (UNLIKELY(_err)) {                                                                                      \
-            if (_err == simdjson::NO_SUCH_FIELD || _err == simdjson::INDEX_OUT_OF_BOUNDS) {                        \
-                return Status::NotFound(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), _msg));     \
-            }                                                                                                      \
-            return Status::DataQualityError(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), _msg)); \
-        }                                                                                                          \
+#define HANDLE_SIMDJSON_ERROR(err, msg)                                                           \
+    do {                                                                                          \
+        const simdjson::error_code& _err = err;                                                   \
+        const std::string& _msg = msg;                                                            \
+        if (UNLIKELY(_err)) {                                                                     \
+            auto err_msg = fmt::format("err: {}, msg: {}", simdjson::error_message(_err), _msg); \
+            VLOG(2) << err_msg;                                                                   \
+            if (_err == simdjson::NO_SUCH_FIELD || _err == simdjson::INDEX_OUT_OF_BOUNDS)         \
+                return Status::NotFound(err_msg);                                                 \
+            return Status::DataQualityError(err_msg);                                             \
+        }                                                                                         \
     } while (false);
 
     if (jsonpath.size() <= 1) {
@@ -148,7 +149,9 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
     // Skip the first $.
     for (int i = 1; i < jsonpath.size(); i++) {
         if (UNLIKELY(!jsonpath[i].is_valid)) {
-            return Status::InvalidArgument(fmt::format("invalid json path: {}", jsonpaths_to_string(jsonpath)));
+            auto msg = fmt::format("invalid json path: {}", jsonpaths_to_string(jsonpath));
+            VLOG(2) << msg;
+            return Status::InvalidArgument(msg);
         }
 
         const std::string& col = jsonpath[i].key;
@@ -159,7 +162,9 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
         // If the key is not found in json object, simdjson::NO_SUCH_FIELD would be returned.
         if (i == 1) {
             if (obj.is_empty()) {
-                return Status::NotFound(fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath)));
+                auto msg = fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i));
+                VLOG(2) << msg;
+                return Status::NotFound(msg);
             }
 
             if (col == "*") {
@@ -169,7 +174,7 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
                                     jsonpaths_to_string(jsonpath)));
             } else {
                 HANDLE_SIMDJSON_ERROR(obj.find_field_unordered(col).get(tvalue),
-                                      fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath)));
+                                      fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i)));
             }
         } else {
             // There are always two patterns.
@@ -179,11 +184,15 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
             // For pattern2, we get the first field of object as next value.
 
             if (tvalue.is_null()) {
-                return Status::NotFound(fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath)));
+                auto msg = fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i));
+                VLOG(2) << msg;
+                return Status::NotFound(msg);
             }
 
             if (tvalue.type() != simdjson::ondemand::json_type::object) {
-                return Status::NotFound(fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath)));
+                auto msg = fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i));
+                VLOG(2) << msg;
+                return Status::NotFound(msg);
             }
 
             if (col == "*") {
@@ -193,7 +202,7 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
                 }
             } else {
                 HANDLE_SIMDJSON_ERROR(tvalue.find_field_unordered(col).get(tvalue),
-                                      fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath)));
+                                      fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i)));
             }
         }
 
@@ -212,7 +221,9 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
     }
 
     if (tvalue.is_null()) {
-        return Status::NotFound(fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath)));
+        auto msg = fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath));
+        VLOG(2) << msg;
+        return Status::NotFound(msg);
     }
 
     std::swap(*value, tvalue);
@@ -232,10 +243,11 @@ void JsonFunctions::parse_json_paths(const std::string& path_string, std::vector
     _get_parsed_paths(paths, parsed_paths);
 }
 
-std::string JsonFunctions::jsonpaths_to_string(const std::vector<SimpleJsonPath>& paths) {
+std::string JsonFunctions::jsonpaths_to_string(const std::vector<SimpleJsonPath>& paths, size_t sub_index) {
     std::string output{"$"};
-    for (auto const& path : paths) {
-        output.append(".").append(path.to_string());
+    size_t sz = (sub_index == -1 || sub_index >= paths.size()) ? paths.size() - 1 : sub_index;
+    for (size_t i = 1; i <= sz; ++i) {
+        output.append(".").append(paths[i].to_string());
     }
     return output;
 }
