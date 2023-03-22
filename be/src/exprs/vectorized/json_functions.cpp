@@ -720,4 +720,4 @@ ColumnPtr JsonFunctions::to_json(FunctionContext* context, const Columns& column
     return cast_nested_to_json(columns[0]).value();
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized
