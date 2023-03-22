@@ -257,8 +257,6 @@ jobs:
 
       - name: Clean Report
         run: rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
-      
-      
 
   build:
     runs-on: self-hosted
