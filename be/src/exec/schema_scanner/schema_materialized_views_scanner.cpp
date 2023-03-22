@@ -44,8 +44,8 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
 
         {"LAST_REFRESH_ERROR_CODE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"LAST_REFRESH_ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TABLE_ROWS", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -276,20 +276,20 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 20: {
-            // view_definition
+            // table_rows
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(20);
-                const std::string* str = &tbl_status.text;
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(21);
+                const std::string* str = &tbl_status.rows;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 21: {
-            // table_rows
+            // view_definition
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(21);
-                const std::string* str = &tbl_status.rows;
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(20);
+                const std::string* str = &tbl_status.text;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
