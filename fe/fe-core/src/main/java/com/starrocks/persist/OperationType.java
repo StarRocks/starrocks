@@ -320,4 +320,8 @@ public class OperationType {
 
     // constraint properties
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
+
+    // data node
+    public static final short OP_ADD_DATANODE = 11140;
+
 }

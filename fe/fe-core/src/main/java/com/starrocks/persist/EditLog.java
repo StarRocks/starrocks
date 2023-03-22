@@ -102,6 +102,7 @@ import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
@@ -1275,6 +1276,10 @@ public class EditLog {
 
     public void logAddBackend(Backend be) {
         logEdit(OperationType.OP_ADD_BACKEND, be);
+    }
+
+    public void logAddDataNode(DataNode dn) {
+        logEdit(OperationType.OP_ADD_DATANODE, dn);
     }
 
     public void logDropComputeNode(DropComputeNodeLog log) {

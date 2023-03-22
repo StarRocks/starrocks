@@ -105,6 +105,9 @@ public class SystemInfoService {
 
     private volatile ImmutableMap<Long, ComputeNode> idToComputeNodeRef;
 
+    // for data node management
+    private volatile ImmutableMap<Long, DataNode> idToDataNodeRef;
+
     private long lastBackendIdForCreation = -1;
     private long lastBackendIdForOther = -1;
 
@@ -123,9 +126,6 @@ public class SystemInfoService {
             throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
-            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
-                throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
-            }
             if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) != null) {
                 throw new DdlException("Same compute node already exists[" + pair.first + ":" + pair.second + "]");
             }
@@ -197,6 +197,7 @@ public class SystemInfoService {
             addBackend(pair.first, pair.second);
         }
     }
+
 
     // for test
     public void dropBackend(Backend backend) {
@@ -1143,6 +1144,54 @@ public class SystemInfoService {
         ImmutableMap<Long, DiskInfo> newPathInfos = ImmutableMap.copyOf(copiedPathInfos);
         pathHashToDishInfoRef = newPathInfos;
         LOG.debug("update path infos: {}", newPathInfos);
+    }
+
+    // ---------------------------------------- datanode management -----------------------------------------------------
+    /**
+     * @param hostPortPairs : backend's host and port
+     * @throws DdlException
+     */
+    public void addDataNodes(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            // check is already exist
+            if (getDataNodeWithHeartbeatPort(pair.first, pair.second) != null) {
+                throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
+            }
+        }
+
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            addDataNode(pair.first, pair.second);
+        }
+    }
+
+    public DataNode getDataNodeWithHeartbeatPort(String host, int heartbeatPort) {
+        for (DataNode dataNode : idToDataNodeRef.values()) {
+            if (dataNode.getHost().equals(host) && dataNode.getHeartbeatPort() == heartbeatPort) {
+                return dataNode;
+            }
+        }
+        return null;
+    }
+
+    public void addDataNode(String host, int heartbeatPort) {
+        DataNode dataNode = new DataNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
+        // update idToBackend
+        Map<Long, DataNode> copiedDataNodes = Maps.newHashMap(idToDataNodeRef);
+        copiedDataNodes.put(dataNode.getId(), dataNode);
+        idToDataNodeRef = ImmutableMap.copyOf(copiedDataNodes);
+
+        // set new dataNode's report version as 0L
+        Map<Long, AtomicLong> copiedReportVersions = Maps.newHashMap(idToReportVersionRef);
+        copiedReportVersions.put(dataNode.getId(), new AtomicLong(0L));
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
+
+        // log
+        GlobalStateMgr.getCurrentState().getEditLog().logAddDataNode(dataNode);
+        LOG.info("finished to add data node {} ", dataNode);
+
+        // backends is changed, regenerated tablet number metrics
+        // TODO: change be -> cn
+        MetricRepo.generateBackendsTabletMetrics();
     }
 }
 
