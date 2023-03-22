@@ -47,10 +47,8 @@ include "RuntimeProfile.thrift"
 include "WorkGroup.thrift"
 include "RuntimeFilter.thrift"
 
-// constants for function version
-enum TFunctionVersion {
-    FUNC_VERSION_UNIX_TIMESTAMP_INT64 = 5
-}
+// constants for TPlanNodeId
+const i32 INVALID_PLAN_NODE_ID = -1
 
 enum TQueryType {
     SELECT,

@@ -69,7 +69,6 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
-import com.starrocks.thrift.TFunctionVersion;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TLoadJobType;
@@ -873,7 +872,8 @@ public class CoordinatorPreprocessor {
         return bucketShuffleFragmentIds.contains(fragmentId);
     }
 
-    // Returns the id of the leftmost node of any of the gives types in 'plan_root'.
+    // Returns the id of the leftmost node of any of the gives types in 'plan_root',
+    // or INVALID_PLAN_NODE_ID if no such node present.
     private PlanNode findLeftmostNode(PlanNode plan) {
         PlanNode newPlan = plan;
         while (newPlan.getChildren().size() != 0 && !(newPlan instanceof ExchangeNode)) {
@@ -1506,7 +1506,7 @@ public class CoordinatorPreprocessor {
             commonParams.setProtocol_version(InternalServiceVersion.V1);
             commonParams.setFragment(fragment.toThrift());
             commonParams.setDesc_tbl(descTable);
-            commonParams.setFunc_version(TFunctionVersion.FUNC_VERSION_UNIX_TIMESTAMP_INT64.getValue());
+            commonParams.setFunc_version(4);
             commonParams.setCoord(coordAddress);
 
             commonParams.setParams(new TPlanFragmentExecParams());
