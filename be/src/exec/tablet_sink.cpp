@@ -180,6 +180,9 @@ Status NodeChannel::open_wait() {
     _add_batch_closure->addFailedHandler([this]() {
         _cancelled = true;
         _err_st = _add_batch_closure->result.status();
+        if (_err_st.ok()) {
+            _err_st = Status::Cancelled("write cancelled");
+        }
     });
 
     _add_batch_closure->addSuccessHandler([this](const PTabletWriterAddBatchResult& result, bool is_last_rpc) {
