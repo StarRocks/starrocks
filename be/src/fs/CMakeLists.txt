@@ -24,7 +24,8 @@ set(EXEC_FILES
     fs_broker.cpp
     fs_memory.cpp
     fs_s3.cpp
-    fs_hdfs.cpp
+    hdfs/fs_hdfs.cpp
+    hdfs/hdfs_fs_cache.cpp
     fs_util.cpp
     fs_starlet.cpp
     )
