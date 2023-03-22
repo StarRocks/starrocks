@@ -49,6 +49,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.Utils;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -76,6 +77,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -241,6 +243,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @VisibleForTesting
     public static void writeEditLog(LakeTableSchemaChangeJob job) {
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(job);
+    }
+
+    @VisibleForTesting
+    public static Future<Boolean> writeEditLogAsync(LakeTableSchemaChangeJob job) {
+        return GlobalStateMgr.getCurrentState().getEditLog().logAlterJobNoWait(job);
     }
 
     @VisibleForTesting
@@ -451,6 +458,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             return;
         }
 
+        long startWriteTs;
+        Future<Boolean> editLogFuture;
         // Replace the current index with shadow index.
         Set<String> modifiedColumns;
         List<MaterializedIndex> droppedIndexes;
@@ -465,7 +474,25 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             modifiedColumns = collectModifiedColumnsForRelatedMVs(table);
             // Below this point, all query and load jobs will use the new schema.
             droppedIndexes = visualiseShadowIndex(table);
+
+            // update colocation info and inactivate related mv
+            try {
+                GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(table, true, null);
+            } catch (DdlException e) {
+                // log an error if update colocation info failed, schema change already succeeded
+                LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
+            }
+
+            inactiveRelatedMv(modifiedColumns, table);
+
+            this.jobState = JobState.FINISHED;
+            this.finishedTimeMs = System.currentTimeMillis();
+
+            startWriteTs = System.nanoTime();
+            editLogFuture = writeEditLogAsync(this);
         }
+
+        EditLog.waitInfinity(startWriteTs, editLogFuture);
 
         // Delete tablet and shards
         List<Long> unusedShards = new ArrayList<>();
@@ -475,29 +502,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
         // TODO: what if unusedShards deletion is partially successful?
         ShardDeleter.dropTabletAndDeleteShard(unusedShards, GlobalStateMgr.getCurrentStarOSAgent());
-
-        // update colocation info and inactivate related mv
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            LakeTable table = (db != null) ? db.getTable(tableId) : null;
-            if (table != null) {
-                try {
-                    GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo((OlapTable) table,
-                            true /* isJoin */, null /* expectGroupId */);
-                } catch (DdlException e) {
-                    // log an error if update colocation info failed, schema change already succeeded
-                    LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
-                }
-
-                inactiveRelatedMv(modifiedColumns, table);
-            } else {
-                LOG.info("database or table has been dropped while trying to update colocation info for job {}.", jobId);
-            }
-        }
-
-        this.jobState = JobState.FINISHED;
-        this.finishedTimeMs = System.currentTimeMillis();
-
-        writeEditLog(this);
 
         if (span != null) {
             span.end();
