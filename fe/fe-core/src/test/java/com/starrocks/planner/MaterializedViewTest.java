@@ -79,11 +79,27 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
 
+        String empsWithBigintTable = "" +
+                "CREATE TABLE emps_bigint\n" +
+                "(\n" +
+                "    empid      BIGINT        NOT NULL,\n" +
+                "    deptno     BIGINT         NOT NULL,\n" +
+                "    locationid BIGINT         NOT NULL,\n" +
+                "    commission BIGINT         NOT NULL,\n" +
+                "    name       VARCHAR(20) NOT NULL,\n" +
+                "    salary     DECIMAL(18, 2)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`empid`)\n" +
+                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
         starRocksAssert
                 .withTable(deptsTable)
                 .withTable(empsTable)
                 .withTable(locationsTable)
-                .withTable(ependentsTable);
+                .withTable(ependentsTable)
+                .withTable(empsWithBigintTable);
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer` (\n" +
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -304,6 +320,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"foreign_key_constraints\" = \"(c2) REFERENCES t2(c5);(c3) REFERENCES t2(c5)\",\n" +
                 "    \"storage_format\" = \"DEFAULT\"\n" +
                 ")");
+
     }
 
     @Test
@@ -311,11 +328,18 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String mv = "select empid + 1 as col1 from emps where deptno = 10";
         testRewriteOK(mv, "select empid + 1 from emps where deptno = 10");
         testRewriteOK(mv, "select max(empid + 1) from emps where deptno = 10");
-        testRewriteOK(mv, "select max(empid) from emps where deptno = 10").contains("col1 - 1");
+        testRewriteFail(mv, "select max(empid) from emps where deptno = 10");
+        // with typecast, cast(empid as bigint) is rewritten as col1 - 1
+        testRewriteOK(mv, "select max(empid + 2) from emps where deptno = 10").contains("col1 - 1 + 2");
 
         testRewriteFail(mv, "select max(empid) from emps where deptno = 11");
         testRewriteFail(mv, "select max(empid) from emps");
-        testRewriteOK(mv, "select empid from emps where deptno = 10").contains("col1 - 1");
+        testRewriteFail(mv, "select empid from emps where deptno = 10");
+
+        // no typecasting, empid is rewritten as col1 - 1
+        mv = "select empid + 1 as col1 from emps_bigint where deptno = 10";
+        testRewriteOK(mv, "select max(empid) from emps_bigint where deptno = 10").contains("col1 - 1");
+        testRewriteOK(mv, "select empid from emps_bigint where deptno = 10").contains("col1 - 1");
     }
 
     @Test
@@ -497,10 +521,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggregate8() {
-        testRewriteOK("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
+        //TODO: Support deptno + 1 rewrite to deptno (considering typecasting)
+        testRewriteFail("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
                 "select deptno + 1, sum(empid) + 1 as s\n"
                         + "from emps where deptno > 10 group by deptno");
+
+        testRewriteOK("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
+                        + "from emps_bigint where deptno >= 10 group by empid, deptno",
+                "select deptno + 1, sum(empid) + 1 as s\n"
+                        + "from emps_bigint where deptno > 10 group by deptno");
     }
 
     @Test
@@ -709,11 +739,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggregateMaterializationAggregateFuncs8() {
-        testRewriteOK("select empid, deptno + 1 as col, count(*) + 1 as c, sum(empid) as s\n"
+        //TODO: Support deptno + 1 rewrite to deptno (considering typecasting)
+        testRewriteFail("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
-
                 "select deptno + 1, sum(empid) + 1 as s\n"
-                        + "from emps where deptno > 10 group by deptno").contains("col - 1");
+                        + "from emps where deptno > 10 group by deptno");
+
+        testRewriteOK("select empid, deptno + 1 as col, count(*) + 1 as c, sum(empid) as s\n"
+                        + "from emps_bigint where deptno >= 10 group by empid, deptno",
+                "select deptno + 1, sum(empid) + 1 as s\n"
+                        + "from emps_bigint where deptno > 10 group by deptno").contains("col - 1");
     }
 
     @Test
