@@ -215,10 +215,10 @@ public class DecimalV3FunctionAnalyzer {
             } else if (argType.isDecimalV3() && DECIMAL_SUM_FUNCTION_TYPE.contains(fn.functionName())) {
                 // For decimal aggregation sum, there is a risk of overflow if the scale is too large,
                 // so we limit the maximum scale for this case
-                if (((ScalarType) argType).getScalarScale() > 18) {
-                    argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18);
-                    returnType = argType;
-                }
+                //if (((ScalarType) argType).getScalarScale() > 18) {
+                //    argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18);
+                //    returnType = argType;
+                //}
             }
         }
         AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), Arrays.asList(argType), returnType,
