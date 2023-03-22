@@ -98,6 +98,8 @@ jobs:
     runs-on: self-hosted
     needs: be-checker
     name: Clang-Format
+    env:
+      PR_NUMBER: ${{ github.event.number }}
     if: ${{ needs.be-checker.outputs.output1 == 'true' }}
     steps:
       - name: Clean Workspace
@@ -108,6 +110,23 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+      
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
+      - name: Checkout PR
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
           
       - name: Run Clang-Format
         run: |
