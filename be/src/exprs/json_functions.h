@@ -201,6 +201,11 @@ public:
      */
     DEFINE_VECTORIZED_FN(json_keys);
 
+    /**
+     * Return json built from struct/map
+     */
+    DEFINE_VECTORIZED_FN(to_json);
+
     static Status native_json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status native_json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
