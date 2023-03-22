@@ -65,8 +65,10 @@ StatusOr<ColumnPtr> MapFunctions::map_from_arrays(FunctionContext* context, cons
         auto copied_key_elements = keys_data->elements().clone_shared();
         auto copied_value_elements = values_data->elements().clone_shared();
         auto copied_offsets = keys_data->offsets().clone_shared();
-        return MapColumn::create(std::move(copied_key_elements), std::move(copied_value_elements),
-                                 std::static_pointer_cast<UInt32Column>(copied_offsets));
+        auto map_column = MapColumn::create(std::move(copied_key_elements), std::move(copied_value_elements),
+                                            std::static_pointer_cast<UInt32Column>(copied_offsets));
+        map_column->remove_duplicated_keys();
+        return map_column;
     } else {
         // build the null column
         NullColumnPtr null_column;
@@ -117,6 +119,7 @@ StatusOr<ColumnPtr> MapFunctions::map_from_arrays(FunctionContext* context, cons
         }
         auto map_column = MapColumn::create(std::move(map_key_elements), std::move(map_value_elements),
                                             std::static_pointer_cast<UInt32Column>(map_offsets_column));
+        map_column->remove_duplicated_keys();
         return NullableColumn::create(std::move(map_column), std::move(null_column));
     }
 }
