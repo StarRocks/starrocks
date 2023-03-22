@@ -3,6 +3,7 @@
 #include "exec/vectorized/schema_scanner.h"
 
 #include "column/type_traits.h"
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner.cpp
 #include "exec/vectorized/schema_scanner/schema_be_configs_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_be_metrics_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_be_tablets_scanner.h"
@@ -22,6 +23,29 @@
 #include "exec/vectorized/schema_scanner/schema_user_privileges_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_variables_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_views_scanner.h"
+=======
+#include "exec/schema_scanner/schema_be_configs_scanner.h"
+#include "exec/schema_scanner/schema_be_metrics_scanner.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
+#include "exec/schema_scanner/schema_be_txns_scanner.h"
+#include "exec/schema_scanner/schema_charsets_scanner.h"
+#include "exec/schema_scanner/schema_collations_scanner.h"
+#include "exec/schema_scanner/schema_columns_scanner.h"
+#include "exec/schema_scanner/schema_dummy_scanner.h"
+#include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
+#include "exec/schema_scanner/schema_loads_scanner.h"
+#include "exec/schema_scanner/schema_materialized_views_scanner.h"
+#include "exec/schema_scanner/schema_schema_privileges_scanner.h"
+#include "exec/schema_scanner/schema_schemata_scanner.h"
+#include "exec/schema_scanner/schema_table_privileges_scanner.h"
+#include "exec/schema_scanner/schema_tables_config_scanner.h"
+#include "exec/schema_scanner/schema_tables_scanner.h"
+#include "exec/schema_scanner/schema_task_runs_scanner.h"
+#include "exec/schema_scanner/schema_tasks_scanner.h"
+#include "exec/schema_scanner/schema_user_privileges_scanner.h"
+#include "exec/schema_scanner/schema_variables_scanner.h"
+#include "exec/schema_scanner/schema_views_scanner.h"
+>>>>>>> 9933fe8cc ([Feature] Support information_schema loads table & tracking message through sql (#19264)):be/src/exec/schema_scanner.cpp
 
 namespace starrocks::vectorized {
 
@@ -101,7 +125,15 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
     case TSchemaTableType::SCH_TASK_RUNS:
         return std::make_unique<vectorized::SchemaTaskRunsScanner>();
     case TSchemaTableType::SCH_MATERIALIZED_VIEWS:
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner.cpp
         return std::make_unique<vectorized::SchemaMaterializedViewsScanner>();
+=======
+        return std::make_unique<SchemaMaterializedViewsScanner>();
+    case TSchemaTableType::SCH_LOADS:
+        return std::make_unique<SchemaLoadsScanner>();
+    case TSchemaTableType::SCH_LOAD_TRACKING_LOGS:
+        return std::make_unique<SchemaLoadTrackingLogsScanner>();
+>>>>>>> 9933fe8cc ([Feature] Support information_schema loads table & tracking message through sql (#19264)):be/src/exec/schema_scanner.cpp
     case TSchemaTableType::SCH_TABLES_CONFIG:
         return std::make_unique<vectorized::SchemaTablesConfigScanner>();
     case TSchemaTableType::SCH_BE_TABLETS:

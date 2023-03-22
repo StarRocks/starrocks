@@ -488,6 +488,48 @@ public class LoadManager implements Writable {
             }
         }
 
+<<<<<<< HEAD
+=======
+        List<LoadJob> loadJobList = getLoadJobsByDb(dbId, labelValue, accurateMatch);
+        // check state
+        for (LoadJob loadJob : loadJobList) {
+            try {
+                if (!states.contains(loadJob.getState())) {
+                    continue;
+                }
+                // add load job info
+                loadJobInfos.add(loadJob.getShowInfo());
+            } catch (DdlException ignored) {
+                // ignored
+            }
+        }
+        return loadJobInfos;
+    }
+
+    public List<LoadJob> getLoadJobs(String labelValue) {
+        List<LoadJob> loadJobList = Lists.newArrayList();
+        readLock();
+        try {
+            if (Strings.isNullOrEmpty(labelValue)) {
+                loadJobList.addAll(dbIdToLabelToLoadJobs.values().stream().flatMap(it -> it.values().stream())
+                        .flatMap(Collection::stream).collect(Collectors.toList()));
+            } else {
+                loadJobList.addAll(dbIdToLabelToLoadJobs.values().stream().flatMap(it -> it.values().stream())
+                        .flatMap(Collection::stream).filter(it -> it.getLabel().equals(labelValue)).collect(Collectors.toList()));
+            }
+            return loadJobList;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public List<LoadJob> getLoadJobsByDb(long dbId, String labelValue, boolean accurateMatch) {
+
+        List<LoadJob> loadJobList = Lists.newArrayList();
+        if (!dbIdToLabelToLoadJobs.containsKey(dbId)) {
+            return loadJobList;
+        }
+>>>>>>> 9933fe8cc ([Feature] Support information_schema loads table & tracking message through sql (#19264))
         readLock();
         try {
             Map<String, List<LoadJob>> labelToLoadJobs = dbIdToLabelToLoadJobs.get(dbId);
