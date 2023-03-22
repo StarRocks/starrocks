@@ -41,7 +41,7 @@ public:
 
     Status seek(int64_t position) override {
         _offset = position;
-        return Status::OK();
+        return _stream->seek(position);
     }
     StatusOr<int64_t> position() override { return _offset; }
     StatusOr<int64_t> read(void* data, int64_t count) override;
@@ -49,7 +49,7 @@ public:
     StatusOr<int64_t> get_size() override;
     Status skip(int64_t count) override {
         _offset += count;
-        return Status::OK();
+        return _stream->skip(count);
     }
 
     Status set_io_ranges(const std::vector<IORange>& ranges);

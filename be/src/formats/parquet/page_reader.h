@@ -48,6 +48,7 @@ public:
     void seek_to_offset(uint64_t offset) {
         _offset = offset;
         _next_header_pos = offset;
+        _stream->seek(offset);
     }
 
     uint64_t get_offset() const { return _offset; }
