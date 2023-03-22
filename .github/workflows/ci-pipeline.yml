@@ -1,4 +1,4 @@
-name: CI PIPELINE - BRANCH
+name: CI PIPELINE
 
 on:
   pull_request_target:
@@ -7,7 +7,7 @@ on:
       - synchronize
 
     branches:
-      - 'branch*'
+      - main
 
 concurrency:
   group: ${{ github.event.number }}
@@ -107,7 +107,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          
+      
       - name: Checkout PR
         uses: dawidd6/action-checkout-pr@v1
         with:
@@ -141,7 +141,7 @@ jobs:
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{steps.branch.outputs.branch}}
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be
 
       - name: clean ECI
         if: always()
@@ -238,7 +238,7 @@ jobs:
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}}
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe
 
       - name: Clean ECI
         if: always()
@@ -256,3 +256,124 @@ jobs:
 
       - name: Clean Report
         run: rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
+
+  build:
+    runs-on: self-hosted
+    needs: [be-checker, fe-checker, be-ut, fe-ut]
+    name: BUILD
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
+    if: always() && (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success') || (needs.be-checker.outputs.output1 != 'true' && needs.fe-ut.result == 'success') || (needs.fe-checker.outputs.output1 != 'true' && needs.be-ut.result == 'success')
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
+      - name: UPDATE ECI & RUN BUILD
+        id: run_build
+        shell: bash
+        timeout-minutes: 90
+        run: |
+          rm -rf ./elastic-service
+          ln -s /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/elastic-build.sh --pr ${PR_NUMBER}
+
+      - name: build result
+        run: |
+          echo ${{ steps.run_build.outputs.OUTPUT_TAR }}
+
+      - name: clean ECI
+        if: always()
+        run: |
+          echo ${{ steps.run_build.outputs.ECI_ID }}
+          eci rm ${{ steps.run_build.outputs.ECI_ID }}
+
+  deploy:
+    runs-on: self-hosted
+    if: always() && needs.build.result == 'success'
+    needs: build
+    name: DEPLOY SR
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CLUSTER_NAME: admit-default
+    outputs:
+      fe: ${{steps.deploy_sr.outputs.fe}}
+      be: ${{steps.deploy_sr.outputs.be}}
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
+      - name: Apply for resources
+        id: apply_resource
+        run: |
+          set -x
+          rm -rf ./elastic-service
+          cp -rf /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/elastic-cluster.sh --template admit-default
+          cp conf/starrocks_deploy.conf /var/lib/elastic-service/conf/starrocks_deploy.conf
+
+      - name: Deploy SR
+        id: deploy_sr
+        run: |
+          set -x
+          cd elastic-service
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output oss://starrocks-ci-release/${{steps.branch.outputs.branch}}/Release/pr/${{needs.build.outputs.build_output_tar}}
+
+      - run: |
+          echo "FE: ${{steps.deploy_sr.outputs.fe}}, BE: ${{steps.deploy_sr.outputs.be}}"
+
+  admit:
+    runs-on: self-hosted
+    name: ADMIT TEST
+    needs: deploy
+    if: always() && needs.deploy.result == 'success'
+    timeout-minutes: 60
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CLUSTER_NAME: admit-default
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: Run Case
+        run: |
+          set -x
+          echo "FE: ${{needs.deploy.outputs.fe}}, BE: ${{needs.deploy.outputs.be}}"
+          
+          cd ${{ github.workspace }}
+          rm -rf ./elastic-service
+          ln -s /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          
+          cd ${{ github.workspace }}
+          rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest
+          cd ./StarRocksTest && git pull
+          
+          cd ${{ github.workspace }}/elastic-service
+          ./bin/run-admit.sh
+
+      - name: Publish Test Results
+        uses: mikepenz/action-junit-report@v3
+        if: success() || failure()
+        with:
+          check_name: 'Admit Test Results'
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: 'StarRocksTest/result/*.xml'
