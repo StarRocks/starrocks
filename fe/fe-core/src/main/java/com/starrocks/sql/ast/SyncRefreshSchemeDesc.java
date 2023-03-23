@@ -20,15 +20,7 @@ import com.starrocks.catalog.MaterializedView;
 public class SyncRefreshSchemeDesc extends RefreshSchemeDesc {
 
     public SyncRefreshSchemeDesc() {
-<<<<<<< HEAD
-        super(MaterializedView.RefreshType.SYNC);
-=======
-        this(NodePosition.ZERO);
-    }
-
-    public SyncRefreshSchemeDesc(NodePosition pos) {
-        super(MaterializedView.RefreshType.SYNC, pos, MaterializedView.RefreshMoment.IMMEDIATE);
->>>>>>> 5da386c3e ([Feature] Support deferred and immediate refresh materialized view (#16737))
+        super(MaterializedView.RefreshType.SYNC, MaterializedView.RefreshMoment.IMMEDIATE);
     }
 
 }

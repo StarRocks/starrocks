@@ -1363,7 +1363,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 refreshSchemeDesc = new SyncRefreshSchemeDesc();
             } else {
                 // use new manual refresh
-                refreshSchemeDesc = new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
+                refreshSchemeDesc = new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE);
             }
         }
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
@@ -5651,14 +5651,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitRefreshSchemeDesc(StarRocksParser.RefreshSchemeDescContext context) {
         LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
-<<<<<<< HEAD
-=======
-        NodePosition pos = createPos(context);
         MaterializedView.RefreshMoment refreshMoment = MaterializedView.RefreshMoment.IMMEDIATE;
         if (context.DEFERRED() != null) {
             refreshMoment = MaterializedView.RefreshMoment.DEFERRED;
         }
->>>>>>> 5da386c3e ([Feature] Support deferred and immediate refresh materialized view (#16737))
         if (context.ASYNC() != null) {
             if (context.START() != null && context.interval() == null) {
                 throw new SemanticException("Please input interval clause");
@@ -5690,19 +5686,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                             "Refresh every " + intervalLiteral.getValue() + " must be IntLiteral");
                 }
             }
-<<<<<<< HEAD
-            return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral);
+            return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral, refreshMoment);
         } else if (context.MANUAL() != null) {
-            return new ManualRefreshSchemeDesc();
+            return new ManualRefreshSchemeDesc(refreshMoment);
         } else if (context.INCREMENTAL() != null) {
-            return new IncrementalRefreshSchemeDesc();
-=======
-            return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral, refreshMoment, pos);
-        } else if (context.MANUAL() != null) {
-            return new ManualRefreshSchemeDesc(refreshMoment, pos);
-        } else if (context.INCREMENTAL() != null) {
-            return new IncrementalRefreshSchemeDesc(refreshMoment, pos);
->>>>>>> 5da386c3e ([Feature] Support deferred and immediate refresh materialized view (#16737))
+            return new IncrementalRefreshSchemeDesc(refreshMoment);
         }
         return null;
     }

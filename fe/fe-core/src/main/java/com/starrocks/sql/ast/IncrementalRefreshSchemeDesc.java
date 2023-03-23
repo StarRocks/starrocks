@@ -18,12 +18,11 @@ import com.starrocks.catalog.MaterializedView;
 
 public class IncrementalRefreshSchemeDesc extends RefreshSchemeDesc {
 
-<<<<<<< HEAD
     public IncrementalRefreshSchemeDesc() {
         super(MaterializedView.RefreshType.INCREMENTAL);
-=======
-    public IncrementalRefreshSchemeDesc(MaterializedView.RefreshMoment moment, NodePosition pos) {
-        super(MaterializedView.RefreshType.INCREMENTAL, pos, moment);
->>>>>>> 5da386c3e ([Feature] Support deferred and immediate refresh materialized view (#16737))
+    }
+
+    public IncrementalRefreshSchemeDesc(MaterializedView.RefreshMoment moment) {
+        super(MaterializedView.RefreshType.INCREMENTAL, moment);
     }
 }
