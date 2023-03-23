@@ -6,6 +6,8 @@ Deletes CBO statistics, which include basic statistics and histograms. For more 
 
 You can delete statistical information you do not need. When you delete statistics, both the data and metadata of the statistics are deleted, as well as the statistics in expired cache. Note that if an automatic collection task is ongoing, previously deleted statistics may be collected again. You can use `SHOW ANALYZE STATUS` to view the history of collection tasks.
 
+This statement is supported from v2.4.
+
 ## Syntax
 
 ### Delete basic statistics

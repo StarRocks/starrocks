@@ -2,7 +2,9 @@
 
 ## Description
 
-Views metadata of statistics, including basic statistics and histograms.
+Views metadata of CBO statistics, including basic statistics and histograms.
+
+This statement is supported from v2.4.
 
 ### View metadata of basic statistics
 

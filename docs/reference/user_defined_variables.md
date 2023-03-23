@@ -21,7 +21,7 @@ SET @var_name = expr [, ...];
 > **NOTE**
 >
 > - All variables must be preceded by a single at sign (@).
-> - Multiple variables can be declared in the same SET statement and need to be separated with commas (,).
+> - Multiple variables can be declared in the same SET statement and need to be separated with commas (`,`).
 > - You can declare the same variable multiple times. The newly declared value overwrites the original value.
 > - If an undeclared variable is used, the value of the variable is `NULL` by default, and the NULL type is STRING.
 

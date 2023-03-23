@@ -6,6 +6,8 @@ Views the status of collection tasks.
 
 This statement cannot be used to view the status of custom collection tasks. To view the status of custom collection tasks, use SHOW ANALYZE JOB.
 
+This statement is supported from v2.4.
+
 ## Syntax
 
 ```SQL
