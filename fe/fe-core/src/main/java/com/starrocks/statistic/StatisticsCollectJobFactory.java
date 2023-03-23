@@ -174,16 +174,14 @@ public class StatisticsCollectJobFactory {
                             table.getName(), statisticsUpdateTime, healthy,
                             Config.statistic_auto_sample_ratio, ByteSizeUnit.BYTES.toMB(sumDataSize),
                             ByteSizeUnit.BYTES.toMB(Config.statistic_auto_sample_data_size));
-                    allTableJobMap.add(buildStatisticsCollectJob(db, table, null, columns,
-                            StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties()));
+                    createSampleStatsJob(allTableJobMap, job, db, table, columns);
                     return;
                 }
             }
         }
 
         if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.SAMPLE)) {
-            allTableJobMap.add(buildStatisticsCollectJob(db, table, null, columns,
-                    job.getAnalyzeType(), job.getScheduleType(), job.getProperties()));
+            createSampleStatsJob(allTableJobMap, job, db, table, columns);
         } else if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
             if (basicStatsMeta == null) {
                 createFullStatsJob(allTableJobMap, job, LocalDateTime.MIN, db, table, columns);
@@ -194,6 +192,13 @@ public class StatisticsCollectJobFactory {
             throw new StarRocksPlannerException("Unknown analyze type " + job.getAnalyzeType(),
                     ErrorType.INTERNAL_ERROR);
         }
+    }
+
+    private static void createSampleStatsJob(List<StatisticsCollectJob> allTableJobMap, AnalyzeJob job, Database db,
+                                             Table table, List<String> columns) {
+        StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, null, columns,
+                StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties());
+        allTableJobMap.add(sample);
     }
 
     private static void createFullStatsJob(List<StatisticsCollectJob> allTableJobMap,

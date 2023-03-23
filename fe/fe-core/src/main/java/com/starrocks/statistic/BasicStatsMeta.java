@@ -119,7 +119,6 @@ public class BasicStatsMeta implements Writable {
                 continue;
             }
 
-            LocalDateTime.class.getClassLoader();
             LocalDateTime loadTimes = StatisticUtils.getPartitionLastUpdateTime(partition);
             if (updateTime.isAfter(loadTimes)) {
                 continue;

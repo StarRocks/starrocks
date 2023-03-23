@@ -60,10 +60,6 @@ public class StatisticsSQLTest extends PlanTestBase {
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("stat0");
         t0StatsTableId = t0.getId();
-        // Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
-        // partition.updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
-        //         .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
-        // setTableStatistics(t0, 20000000);
     }
 
     @Test
