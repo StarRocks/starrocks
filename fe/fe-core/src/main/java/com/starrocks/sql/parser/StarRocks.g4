@@ -1161,7 +1161,7 @@ showOpenTableStatement
     ;
 
 showProcedureStatement
-    : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
+    : SHOW (PROCEDURE | FUNCTION) STATUS ((LIKE pattern=string) | (WHERE where=expression))?
     ;
 
 showProcStatement
