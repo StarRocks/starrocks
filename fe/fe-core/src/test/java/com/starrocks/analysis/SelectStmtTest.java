@@ -294,4 +294,24 @@ public class SelectStmtTest {
         Assert.assertFalse(s, s.contains("murmur_hash3_32"));
         FeConstants.runningUnitTest = false;
     }
+
+    @Test
+    public void testScalarCorrelatedSubquery() {
+        try {
+            String sql = "select *, (select [a.k1,a.k2] from db1.tbl1 a where a.k4 = b.k1) as r from db1.baseall b;";
+            UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.fail("Must throw an exception");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(),
+                    e.getMessage().contains("NOT support scalar correlated sub-query of type ARRAY<varchar(32)>"));
+        }
+
+        try {
+            String sql = "select *, (select a.k1 from db1.tbl1 a where a.k4 = b.k1) as r from db1.baseall b;";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("assert_true[((7: countRows IS NULL) OR (7: countRows <= 1)"));
+        } catch (Exception e) {
+            Assert.fail("Should not throw an exception");
+        }
+    }
 }

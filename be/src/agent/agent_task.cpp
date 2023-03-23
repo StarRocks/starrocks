@@ -16,7 +16,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/finish_task.h"
-#include "agent/task_singatures_manager.h"
+#include "agent/task_signatures_manager.h"
 #include "boost/lexical_cast.hpp"
 #include "common/status.h"
 #include "runtime/current_thread.h"

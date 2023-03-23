@@ -62,6 +62,7 @@ set(EXEC_FILES
     lake_meta_scan_node.cpp
     hash_joiner.cpp
     hash_join_node.cpp
+    hash_join_components.cpp
     join_hash_map.cpp
     topn_node.cpp
     chunks_sorter.cpp
@@ -80,6 +81,7 @@ set(EXEC_FILES
     arrow_to_json_converter.cpp
     parquet_scanner.cpp
     parquet_reader.cpp
+    parquet_writer.cpp
     parquet_builder.cpp
     file_scan_node.cpp
     assert_num_rows_node.cpp
@@ -112,6 +114,8 @@ set(EXEC_FILES
     schema_scanner/schema_materialized_views_scanner.cpp
     schema_scanner/schema_tasks_scanner.cpp
     schema_scanner/schema_task_runs_scanner.cpp
+    schema_scanner/schema_loads_scanner.cpp
+    schema_scanner/schema_load_tracking_logs_scanner.cpp
     schema_scanner/schema_user_privileges_scanner.cpp
     schema_scanner/schema_schema_privileges_scanner.cpp
     schema_scanner/schema_table_privileges_scanner.cpp

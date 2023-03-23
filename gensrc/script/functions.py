@@ -418,6 +418,7 @@ vectorized_functions = [
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
     [60010, 'LIKE', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'LikePredicate::like', 'LikePredicate::like_prepare',
      'LikePredicate::like_close'],
+    [60011, 'ILIKE', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'nullptr'],
     [60020, 'REGEXP', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'LikePredicate::regex', 'LikePredicate::regex_prepare',
      'LikePredicate::regex_close'],
 
@@ -590,6 +591,8 @@ vectorized_functions = [
     [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
     [110019, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys",
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+    [110100, "to_json", "JSON", ["ANY_MAP"], "JsonFunctions::to_json", False],
+    [110101, "to_json", "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json", False],
 
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt", False],

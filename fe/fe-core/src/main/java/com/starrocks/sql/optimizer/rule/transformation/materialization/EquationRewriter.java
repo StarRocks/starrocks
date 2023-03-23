@@ -20,7 +20,6 @@ import com.google.common.collect.Multimap;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -36,8 +35,8 @@ import java.util.Optional;
 
 public class EquationRewriter {
 
-    Multimap<ScalarOperator, Pair<ColumnRefOperator, ScalarOperator>> equationMap;
-    Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
+    private Multimap<ScalarOperator, Pair<ColumnRefOperator, ScalarOperator>> equationMap;
+    private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
 
     public EquationRewriter() {
         this.equationMap = ArrayListMultimap.create();
@@ -86,9 +85,6 @@ public class EquationRewriter {
                     Optional<Pair<ColumnRefOperator, ScalarOperator>> mappedColumnAndExprRef =
                             equationMap.get(scalarOperator).stream().findFirst();
 
-                    if (!mappedColumnAndExprRef.isPresent()) {
-                        return null;
-                    }
                     ColumnRefOperator basedColumn = mappedColumnAndExprRef.get().first;
                     ScalarOperator extendedExpr = mappedColumnAndExprRef.get().second;
 
@@ -117,6 +113,8 @@ public class EquationRewriter {
                 for (int i = 0; i < expr.getChildren().size(); i++) {
                     if (oldCol.equals(expr.getChild(i))) {
                         expr.setChild(i, newCol);
+                        return true;
+                    } else if (replaceColInExpr(expr.getChild(i), oldCol, newCol)) {
                         return true;
                     }
                 }
@@ -187,15 +185,6 @@ public class EquationRewriter {
             return null;
         }
 
-        @Override
-        public Void visitCastOperator(CastOperator operator, Void context) {
-
-            if (Type.isImplicitlyCastable(operator.getType(), equalExpr.getType(), true)) {
-                needReducedExpr = needReducedExpr.getChild(0);
-                needReducedExpr.accept(this, context);
-            }
-            return null;
-        }
 
         private Function findArithmeticFunction(CallOperator call, String fnName) {
             return Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(), Function.CompareMode.IS_IDENTICAL);

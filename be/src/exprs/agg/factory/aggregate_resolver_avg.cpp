@@ -25,7 +25,7 @@ namespace starrocks {
 struct AvgDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_aggregate<lt>) {
+        if constexpr (lt_is_aggregate<lt> && !lt_is_string<lt>) {
             auto func = AggregateFactory::MakeAvgAggregateFunction<lt>();
             using AvgState = AvgAggregateState<RunTimeCppType<ImmediateAvgResultLT<lt>>>;
             resolver->add_aggregate_mapping<lt, AvgResultLT<lt>, AvgState>("avg", true, func);
@@ -36,7 +36,7 @@ struct AvgDispatcher {
 struct ArrayAggDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_aggregate<lt> || lt_is_string<lt> || lt_is_json<lt>) {
+        if constexpr (lt_is_aggregate<lt> || lt_is_json<lt>) {
             auto func = std::make_shared<ArrayAggAggregateFunction<lt>>();
             using AggState = ArrayAggAggregateState<lt>;
             resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg", false,

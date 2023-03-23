@@ -22,7 +22,7 @@ ARG starlet_tag=v0.2.6
 
 
 FROM ${builder} as base
-RUN yum install -y epel-release && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make libtool which git ccache binutils-devel python3 && \
+RUN yum install -y epel-release && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make libtool which git ccache binutils-devel python3 file && \
     yum clean all && rm -rf /var/cache/yum
 
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
@@ -40,7 +40,7 @@ RUN if test "x$predownload_thirdparty" = "xtrue" ; then \
         mkdir -p starrocks/thirdparty/src && tar -xf thirdparty.tar -C starrocks/thirdparty/src ; \
     fi
 RUN mkdir -p $STARROCKS_THIRDPARTY/installed && cd starrocks/thirdparty && \
-     ./build-thirdparty.sh && cp -r installed $STARROCKS_THIRDPARTY/
+     PARALLEL=`nproc` ./build-thirdparty.sh && cp -r installed $STARROCKS_THIRDPARTY/
 RUN if test "x$prebuild_maven" = "xtrue" ; then \
         export MAVEN_OPTS='-Dmaven.artifact.threads=128' ; cd /root/starrocks ; ./build.sh --fe || true ; \
         cd java-extensions ; mvn package -DskipTests || true ;  \

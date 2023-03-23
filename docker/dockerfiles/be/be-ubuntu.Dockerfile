@@ -51,5 +51,5 @@ COPY --from=artifacts /release/be_artifacts/ $STARROCKS_ROOT/
 # Copy be k8s scripts to the runtime container image
 COPY docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
 
-# Create directory for BE storage
-RUN mkdir -p $STARROCKS_ROOT/be/storage
+# Create directory for BE storage, create cn symbolic link to be
+RUN mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
