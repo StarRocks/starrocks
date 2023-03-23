@@ -112,6 +112,7 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
             offset += chunk->data_size();
         }
     }
+<<<<<<< HEAD
     Status st;
     st.to_protobuf(response->mutable_status());
     TRY_CATCH_ALL(st, _exec_env->stream_mgr()->transmit_chunk(*request, &done));
@@ -126,6 +127,53 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
     }
     VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
              << " node=" << request->node_id() << " cost time = " << MonotonicNanos() - begin_ts;
+=======
+
+    st = _exec_env->stream_mgr()->transmit_chunk(*request, &done);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcController* cntl_base,
+                                                          const PHttpRequest* request, PTransmitChunkResult* response,
+                                                          google::protobuf::Closure* done) {
+    auto task = [=]() {
+        auto params = std::make_shared<PTransmitChunkParams>();
+        auto get_params = [&]() -> Status {
+            auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+            butil::IOBuf& iobuf = cntl->request_attachment();
+            // deserialize PTransmitChunkParams
+            size_t params_size = 0;
+            iobuf.cutn(&params_size, sizeof(params_size));
+            butil::IOBuf params_from;
+            iobuf.cutn(&params_from, params_size);
+            butil::IOBufAsZeroCopyInputStream wrapper(params_from);
+            params->ParseFromZeroCopyStream(&wrapper);
+            // the left size is from chunks' data
+            size_t attachment_size = 0;
+            iobuf.cutn(&attachment_size, sizeof(attachment_size));
+            if (attachment_size != iobuf.size()) {
+                Status st = Status::InternalError(
+                        fmt::format("{} != {} during deserialization via http", attachment_size, iobuf.size()));
+                return st;
+            }
+            return Status::OK();
+        };
+        // may throw std::bad_alloc exception.
+        Status st = get_params();
+        if (!st.ok()) {
+            st.to_protobuf(response->mutable_status());
+            done->Run();
+            LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.get_error_msg();
+            return;
+        }
+        this->_transmit_chunk(cntl_base, params.get(), response, done);
+    };
+    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+        ClosureGuard closure_guard(done);
+        Status::ServiceUnavailable("submit transmit_chunk_via_http task failed")
+                .to_protobuf(response->mutable_status());
+    }
+>>>>>>> 48f0d8554 ([Enhancement] support exchanging >=2GB message via http rpc (#19444))
 }
 
 template <typename T>
