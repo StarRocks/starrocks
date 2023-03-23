@@ -929,6 +929,7 @@ public class ExpressionAnalyzer {
                 fn = getStrToDateFunction(node, argumentTypes);
             } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
                 fn = getArrayGenerateFunction(node);
+                argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
