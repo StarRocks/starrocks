@@ -216,6 +216,8 @@ struct TQueryOptions {
   70: optional bool allow_throw_exception = 0;
 
   71: optional bool hudi_mor_force_jni_reader;
+
+  72: optional i64 rpc_http_min_size;
 }
 
 
