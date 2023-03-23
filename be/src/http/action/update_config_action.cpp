@@ -42,6 +42,7 @@
 #include "storage/memtable_flush_executor.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
+#include "storage/update_manager.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
@@ -72,6 +73,13 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         _config_callback.emplace("update_compaction_num_threads_per_disk", [&]() {
             StorageEngine::instance()->increase_update_compaction_thread(
                     config::update_compaction_num_threads_per_disk);
+        });
+        _config_callback.emplace("update_memory_limit_percent", [&]() {
+            StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
+                    config::update_memory_limit_percent);
+#if defined(USE_STAROS) && !defined(BE_TEST)
+            _exec_env->lake_update_manager()->update_primary_index_memory_limit(config::update_memory_limit_percent);
+#endif
         });
     });
 

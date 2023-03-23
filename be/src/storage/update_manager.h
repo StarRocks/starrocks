@@ -8,6 +8,8 @@
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
 #include "util/dynamic_cache.h"
+#include "util/mem_info.h"
+#include "util/parse_util.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -64,6 +66,8 @@ public:
 
     void expire_cache();
 
+    void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
+
     MemTracker* mem_tracker() const { return _update_mem_tracker; }
 
     string memory_stats();
@@ -71,6 +75,13 @@ public:
     string detail_memory_stats();
 
     string topn_memory_stats(size_t topn);
+
+    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
+        int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
+        int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
+        _index_cache.set_capacity(byte_limits * update_mem_percent);
+        return Status::OK();
+    }
 
 private:
     // default 6min
