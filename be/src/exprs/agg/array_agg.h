@@ -96,8 +96,8 @@ public:
                                                                                   arg_type->precision, arg_type->scale),
                                                 true));
         }
-        CHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
-        CHECK(state->data_columns->size() == ctx->get_is_asc_order().size() + 1);
+        DCHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
+        DCHECK(state->data_columns->size() == ctx->get_is_asc_order().size() + 1);
     }
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
@@ -181,7 +181,7 @@ public:
             // release order-by columns early
             order_by_columns.clear();
             state_impl.release_order_by_columns();
-            CHECK(st.ok());
+            DCHECK(ctx->state()->cancelled_ref() || st.ok());
             materialize_column_by_permutation(tmp.get(), {(*state_impl.data_columns)[0]}, perm);
             res = ColumnPtr(std::move(tmp));
         }
