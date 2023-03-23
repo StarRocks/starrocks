@@ -765,6 +765,7 @@ public class CreateTableTest {
 
     @Test
     public void testTemporaryTable() throws Exception {
+        Config.enable_experimental_temporary_table = true;
         createTable(
                 "CREATE TABLE test.base_tbl (\n" +
                         "k1 INT,\n" +
