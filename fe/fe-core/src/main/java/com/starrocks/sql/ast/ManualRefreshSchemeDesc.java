@@ -20,8 +20,13 @@ import com.starrocks.catalog.MaterializedView;
 
 public class ManualRefreshSchemeDesc extends RefreshSchemeDesc {
 
+<<<<<<< HEAD
     public ManualRefreshSchemeDesc() {
         super(MaterializedView.RefreshType.MANUAL);
+=======
+    public ManualRefreshSchemeDesc(MaterializedView.RefreshMoment moment, NodePosition pos) {
+        super(MaterializedView.RefreshType.MANUAL,  pos, moment);
+>>>>>>> 5da386c3e ([Feature] Support deferred and immediate refresh materialized view (#16737))
     }
 
 }

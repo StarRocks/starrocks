@@ -21,13 +21,42 @@ import com.starrocks.catalog.MaterializedView;
 public class RefreshSchemeDesc implements ParseNode {
 
     protected MaterializedView.RefreshType type;
+<<<<<<< HEAD
 
     public RefreshSchemeDesc(MaterializedView.RefreshType type) {
+=======
+    protected MaterializedView.RefreshMoment moment;
+    protected final NodePosition pos;
+
+    public RefreshSchemeDesc(MaterializedView.RefreshType type) {
+        this(type, NodePosition.ZERO);
+    }
+
+    public RefreshSchemeDesc(MaterializedView.RefreshType type, NodePosition pos) {
+        this(type, pos, MaterializedView.RefreshMoment.IMMEDIATE);
+    }
+
+    public RefreshSchemeDesc(MaterializedView.RefreshType type, NodePosition pos, MaterializedView.RefreshMoment moment) {
+>>>>>>> 5da386c3e ([Feature] Support deferred and immediate refresh materialized view (#16737))
         this.type = type;
+        this.moment = moment;
+        this.pos = pos;
     }
 
     public MaterializedView.RefreshType getType() {
         return type;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public NodePosition getPos() {
+        return pos;
+    }
+
+    public MaterializedView.RefreshMoment getMoment() {
+        return moment;
+    }
+
+>>>>>>> 5da386c3e ([Feature] Support deferred and immediate refresh materialized view (#16737))
 }

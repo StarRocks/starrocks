@@ -27,8 +27,14 @@ public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
 
     private IntervalLiteral intervalLiteral;
 
+<<<<<<< HEAD
     public AsyncRefreshSchemeDesc(boolean defineStartTime, LocalDateTime startTime, IntervalLiteral intervalLiteral) {
         super(MaterializedView.RefreshType.ASYNC);
+=======
+    public AsyncRefreshSchemeDesc(boolean defineStartTime, LocalDateTime startTime, IntervalLiteral intervalLiteral,
+                                  MaterializedView.RefreshMoment moment, NodePosition pos) {
+        super(MaterializedView.RefreshType.ASYNC, pos, moment);
+>>>>>>> 5da386c3e ([Feature] Support deferred and immediate refresh materialized view (#16737))
         this.defineStartTime = defineStartTime;
         this.startTime = startTime;
         this.intervalLiteral = intervalLiteral;
