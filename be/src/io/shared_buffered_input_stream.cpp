@@ -177,7 +177,6 @@ StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
     const uint8_t* buf = nullptr;
     size_t nbytes = count;
     RETURN_IF_ERROR(get_bytes(&buf, _offset, &nbytes));
-    _offset += count;
     return std::string_view((const char*)buf, count);
 }
 

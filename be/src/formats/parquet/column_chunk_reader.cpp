@@ -129,27 +129,16 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
                                                          bool is_compressed) {
     RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read and decompress page"));
     is_compressed = is_compressed && (_compress_codec != nullptr);
-
-<<<<<<< HEAD
-        _reserve_uncompress_buf(uncompressed_size);
-        _data = Slice(_uncompressed_buf.get(), uncompressed_size);
-        RETURN_IF_ERROR(_compress_codec->decompress(com_slice, &_data));
-    } else {
-        _opts.stats->request_bytes_read += uncompressed_size;
-        _data.size = uncompressed_size;
-        RETURN_IF_ERROR(_page_reader->read_bytes((const uint8_t**)&_data.data, _data.size));
-    }
-
-=======
     size_t read_size = is_compressed ? compressed_size : uncompressed_size;
     std::vector<uint8_t>& read_buffer = is_compressed ? _compressed_buf : _uncompressed_buf;
     _opts.stats->request_bytes_read += read_size;
-    _opts.stats->request_bytes_read_uncompressed += uncompressed_size;
 
     // check if we can zero copy read.
     Slice read_data;
     auto ret = _page_reader->peek(read_size);
-    if (ret.ok()) {
+    if (ret.ok() && ret.value().size() == read_size) {
+        // peek dos not advance offset.
+        _page_reader->skip_bytes(read_size);
         read_data = Slice(ret.value().data(), read_size);
     } else {
         read_buffer.reserve(read_size);
@@ -166,7 +155,6 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
     } else {
         _data = read_data;
     }
->>>>>>> 587277352 ([Enhancement] Move io coalesce input stream below cache input stream (zero-copy feature) (#19584))
     return Status::OK();
 }
 
