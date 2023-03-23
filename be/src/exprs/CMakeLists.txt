@@ -50,6 +50,7 @@ set(EXPR_FILES
   vectorized/case_expr.cpp
   vectorized/cast_expr.cpp
   vectorized/cast_expr_array.cpp
+  vectorized/cast_expr_json.cpp
   vectorized/column_ref.cpp
   vectorized/placeholder_ref.cpp
   vectorized/dictmapping_expr.cpp

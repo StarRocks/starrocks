@@ -1164,6 +1164,7 @@ public class FunctionSet {
         ArrayType typeArray = null;
         Type typeElement = null;
         MapType typeMap = null;
+        StructType typeStruct = null;
         Type retType = fn.getReturnType();
         for (int i = 0; i < declTypes.length; i++) {
             Type declType = declTypes[i];
@@ -1186,6 +1187,16 @@ public class FunctionSet {
                     typeMap = (MapType) realType;
                 } else {
                     LOGGER.warn("could not determine polymorphic type because input has two map types");
+                    return null;
+                }
+            } else if (declType instanceof AnyStructType) {
+                if (realType.isNull()) {
+                    continue;
+                }
+                if (typeStruct == null) {
+                    typeStruct = (StructType) realType;
+                } else {
+                    LOGGER.warn("could not determine polymorphic type because input has two struct types");
                     return null;
                 }
             } else if (declType instanceof AnyElementType) {
