@@ -216,10 +216,10 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         // means we cannot optimize this projection and need add a decodeNode before this projection.
         // scalarOperators can be optimized are:
         // 1. if it's a pass-through entry like col1 -> col1, we don't care it.
-        // 2. other scalarOperator can be optimized should meet these requirements:
-        //    a. scalarOperator uses cols from encoded string cols
-        //    b. all these dict cols of these string cols exist in the global dict
-        //    c. can gain benefit from the optimization
+        // 2. scalarOperator don't ref cols from encoded string cols, we don't care it
+        // 2. scalarOperator ref cols from encoded string cols should meet these requirements:
+        //    a. all these dict cols of these string cols exist in the global dict
+        //    b. can gain benefit from the optimization
         private boolean couldApplyStringDict(DecodeContext context, Projection projection) {
             final Set<Integer> globalDictIds =
                     context.globalDicts.stream().map(a -> a.first).collect(Collectors.toSet());
