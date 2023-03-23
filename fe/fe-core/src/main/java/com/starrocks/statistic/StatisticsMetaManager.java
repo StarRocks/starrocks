@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.statistic;
 
 import com.google.common.base.Preconditions;
@@ -179,7 +178,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 properties,
                 null,
                 "");
-   
+
         Analyzer.analyze(stmt, context);
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
@@ -210,7 +209,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 properties,
                 null,
                 "");
-        
+
         Analyzer.analyze(stmt, context);
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
@@ -301,7 +300,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
         }
     }
 
-
     @Override
     protected void runAfterCatalogReady() {
         // To make UT pass, some UT will create database and table
@@ -319,5 +317,28 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
         GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedTable();
         GlobalStateMgr.getCurrentAnalyzeMgr().clearExpiredAnalyzeStatus();
+    }
+
+    public void createStatisticsTablesForTest() {
+        while (!checkDatabaseExist()) {
+            if (createDatabase()) {
+                break;
+            }
+            trySleep(1);
+        }
+
+        boolean existsSample = false;
+        boolean existsFull = false;
+        while (!existsSample || !existsFull) {
+            existsSample = checkTableExist(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
+            existsFull = checkTableExist(StatsConstants.FULL_STATISTICS_TABLE_NAME);
+            if (!existsSample) {
+                createTable(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
+            }
+            if (!existsFull) {
+                createTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
+            }
+            trySleep(1);
+        }
     }
 }

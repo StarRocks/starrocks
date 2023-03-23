@@ -399,12 +399,12 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new AnalyzeJob(db.getId(), t0StatsTableId, null,
-                        StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                        StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
+        Assert.assertTrue(jobs.get(0) instanceof SampleStatisticsCollectJob);
 
         int splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns", 10L);
         Assert.assertEquals(5, splitSize);
