@@ -171,7 +171,7 @@ TO (
     role='string', 
     query_type in ('select'), 
     source_ip='cidr'
-) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (,).
+) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
 WITH (
     "cpu_core_limit" = "INT",
     "mem_limit" = "m%",

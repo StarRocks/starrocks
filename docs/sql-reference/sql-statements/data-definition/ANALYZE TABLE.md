@@ -2,7 +2,11 @@
 
 ## Description
 
-Creates a manual collection task for collecting CBO statistics. **Manual collection is an asynchronous operation. The result for running this command is returned immediately after you run this command. However, the collection task will be running in the background. You can check the status of the task by running SHOW ANALYZE STATUS. Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.**
+Creates a manual collection task for collecting CBO statistics. By default, manual collection is a synchronous operation. You can also set it to an asynchronous operation. In asynchronous mode, after you run ANALYZE TABLE, the system immediately returns whether this statement is successful. However, the collection task will be running in the background and you do not have to wait for the result. You can check the status of the task by running SHOW ANALYZE STATUS. Asynchronous collection is suitable for tables with large data volume, whereas synchronous collection is suitable for tables with small data volume.
+
+**Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.**
+
+This statement is supported from v2.4.
 
 ### Manually collect basic statistics
 
@@ -23,9 +27,9 @@ PROPERTIES (property [,property])
   - SAMPLE: indicates sampled collection.
   - If no collection type is specified, full collection is used by default.
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected.
+- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
 
-- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
+- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you do not specify this parameter.
 
 - `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in the `fe.conf` file are used. The properties that are actually used can be viewed via the `Properties` column in the output of SHOW ANALYZE STATUS.
 
@@ -75,9 +79,9 @@ PROPERTIES (property [,property]);
 
 #### Parameter description
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected. This parameter is required for histograms.
+- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected. This parameter is required for histograms.
 
-- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
+- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you do not specify this parameter.
 
 - `WITH N BUCKETS`: `N` is the number of buckets for histogram collection. If not specified, the default value in `fe.conf` is used.
 
