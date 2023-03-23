@@ -50,7 +50,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -277,9 +276,8 @@ public class MaterializedViewAnalyzer {
 
         private void deriveSelectAlias(SelectList selectList, HashSet<String> aliases) {
             for (SelectListItem selectListItem : selectList.getItems()) {
-                if (!(selectListItem.getExpr() instanceof SlotRef)
-                        && selectListItem.getAlias() == null) {
-                    String alias = Util.deriveAliasFromOrdinal(aliases.size());
+                if (!(selectListItem.getExpr() instanceof SlotRef) && selectListItem.getAlias() == null) {
+                    String alias = selectListItem.getExpr().toSql();
                     selectListItem.setAlias(alias);
                     aliases.add(alias);
                 }

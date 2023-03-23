@@ -71,6 +71,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class CreateMaterializedViewTest {
     private static final Logger LOG = LogManager.getLogger(CreateMaterializedViewTest.class);
@@ -2047,12 +2048,13 @@ public class CreateMaterializedViewTest {
 
         try {
             CreateMaterializedViewStatement stmt =
-                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            starRocksAssert.getCtx());
             currentState.createMaterializedView(stmt);
             Table mv1 = testDb.getTable("mv_with_property1");
             Assert.assertTrue(mv1 instanceof MaterializedView);
         } catch (Exception e) {
-            Assert.fail();;
+            Assert.fail();
         }
     }
 
@@ -2499,7 +2501,7 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testCreateMVWithDifferentDB() {
-        try{
+        try {
             ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
             StarRocksAssert newStarRocksAssert = new StarRocksAssert(newConnectContext);
             newStarRocksAssert.withDatabase("test_mv_different_db")
@@ -2514,8 +2516,8 @@ public class CreateMaterializedViewTest {
             waitingRollupJobV2Finish();
 
             Table table = testDb.getTable("tbl5");
-            Assert.assertTrue(table != null);
-            OlapTable olapTable = (OlapTable)  table;
+            Assert.assertNotNull(table);
+            OlapTable olapTable = (OlapTable) table;
             Assert.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
             Assert.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
                     .anyMatch(x -> x.getValue().getKeysType().isAggregationFamily()));
@@ -2577,6 +2579,32 @@ public class CreateMaterializedViewTest {
                 "create materialized view deferred_mv refresh immediate manual distributed by hash(c_1_9) as" +
                         " select c_1_9, c_1_4 from t1";
         starRocksAssert.withMaterializedView(createDeferred);
+    }
+
+    private void testMVColumnAlias(String expr) throws Exception {
+        String mvName = "mv_alias";
+        try {
+            String createMvExpr =
+                    String.format("create materialized view %s " +
+                            "refresh deferred manual distributed by hash(c_1_9) as" +
+                            " select c_1_9, %s from t1", mvName, expr);
+            starRocksAssert.withMaterializedView(createMvExpr);
+            Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
+            Table table = db.getTable(mvName);
+            List<String> columnNames = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
+            Assert.assertTrue(columnNames.toString(), columnNames.contains(expr));
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+    }
+
+    @Test
+    public void testExprAlias() throws Exception {
+        testMVColumnAlias("c_1_9 + 1");
+        testMVColumnAlias("char_length(c_1_9)");
+        testMVColumnAlias("char_length(c_1_9) + 1");
+        testMVColumnAlias("char_length(c_1_9) + '$'");
+        testMVColumnAlias("c_1_9 + c_1_10");
     }
 }
 
