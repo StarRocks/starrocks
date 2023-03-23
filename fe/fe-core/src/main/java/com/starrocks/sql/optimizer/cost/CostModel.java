@@ -266,10 +266,14 @@ public class CostModel {
             double groupByColDistinctValues = Math.max(1, groupByColStat.getDistinctValuesCount());
             final double groupByColDistinctHighWaterMark = 10000;
             final double groupByColDistinctLowWaterMark = 100;
-            final double avgDistValuesPerGroup = distColStat.getDistinctValuesCount() / groupByColDistinctValues;
+            final double distColDistinctValuesCountWaterMark = 10000000;
+            final double distColDistinctValuesCount = distColStat.getDistinctValuesCount();
+            final double avgDistValuesPerGroup = distColDistinctValuesCount / groupByColDistinctValues;
 
-            if ((groupByColDistinctValues <= groupByColDistinctLowWaterMark) ||
-                    (groupByColDistinctValues < groupByColDistinctHighWaterMark && avgDistValuesPerGroup > 100)) {
+            if (distColDistinctValuesCount > distColDistinctValuesCountWaterMark &&
+                    ((groupByColDistinctValues <= groupByColDistinctLowWaterMark) ||
+                            (groupByColDistinctValues < groupByColDistinctHighWaterMark &&
+                                    avgDistValuesPerGroup > 100))) {
                 return 0.5;
             } else {
                 return 1.5;
