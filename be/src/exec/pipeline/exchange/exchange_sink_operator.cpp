@@ -249,9 +249,15 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
             delta_statistic->to_pb(_chunk_request->mutable_query_statistics());
         }
         butil::IOBuf attachment;
+<<<<<<< HEAD
         auto chunks_data_ref = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
                                   std::move(chunks_data_ref)};
+=======
+        int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
+        TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(_chunk_request), attachment,
+                                  attachment_physical_bytes,   _brpc_dest_addr};
+>>>>>>> 48f0d8554 ([Enhancement] support exchanging >=2GB message via http rpc (#19444))
         RETURN_IF_ERROR(_parent->_buffer->add_request(info));
         _current_request_bytes = 0;
         _chunk_request.reset();
@@ -277,8 +283,13 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
         delta_statistic->to_pb(chunk_request->mutable_query_statistics());
     }
 
+<<<<<<< HEAD
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment,
                               chunks_data_ref};
+=======
+    TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(chunk_request), attachment,
+                              attachment_physical_bytes,   _brpc_dest_addr};
+>>>>>>> 48f0d8554 ([Enhancement] support exchanging >=2GB message via http rpc (#19444))
     RETURN_IF_ERROR(_parent->_buffer->add_request(info));
 
     return Status::OK();

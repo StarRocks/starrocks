@@ -37,6 +37,11 @@
 namespace starrocks::pipeline {
 
 using PTransmitChunkParamsPtr = std::shared_ptr<PTransmitChunkParams>;
+struct ClosureContext {
+    TUniqueId instance_id;
+    int64_t sequence;
+    int64_t send_timestamp;
+};
 
 // ChunksDataRef holds reference to chunks' data and is released after sent by brpc,
 // so that it is valid that brpc IO::buf refers to the c_str of data chunks' data.
@@ -54,6 +59,7 @@ struct TransmitChunkInfo {
     doris::PBackendService_Stub* brpc_stub;
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
+<<<<<<< HEAD
     std::shared_ptr<ChunksDataRef> chunks_data_ref;
 };
 
@@ -62,6 +68,10 @@ struct ClosureContext {
     int64_t sequence;
     int64_t send_timestamp;
     std::shared_ptr<ChunksDataRef> chunks_data_ref;
+=======
+    int64_t attachment_physical_bytes;
+    const TNetworkAddress brpc_addr;
+>>>>>>> 48f0d8554 ([Enhancement] support exchanging >=2GB message via http rpc (#19444))
 };
 
 // TimeTrace is introduced to estimate time more accurately.
@@ -120,6 +130,9 @@ private:
     // Try to send rpc if buffer is not empty and channel is not busy
     // And we need to put this function and other extra works(pre_works) together as an atomic operation
     Status _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
+
+    // send by rpc or http
+    Status _send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure, const TransmitChunkInfo& req);
 
     // Roughly estimate network time which is defined as the time between sending a and receiving a packet,
     // and the processing time of both sides are excluded
@@ -193,6 +206,7 @@ private:
     // Non-atomic type is enough because the concurrency inconsistency is acceptable
     int64_t _first_send_time = -1;
     int64_t _last_receive_time = -1;
+    int64_t _rpc_http_min_size = 0;
 };
 
 } // namespace starrocks::pipeline

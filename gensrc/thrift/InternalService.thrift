@@ -216,6 +216,17 @@ struct TQueryOptions {
   70: optional bool allow_throw_exception = 0;
 
   71: optional bool hudi_mor_force_jni_reader;
+<<<<<<< HEAD
+=======
+
+  72: optional i32 spill_mem_table_size;
+  73: optional i32 spill_mem_table_num;
+  74: optional double spill_mem_limit_threshold;
+  75: optional i64 spill_operator_min_bytes;
+  76: optional TSpillMode spill_mode;
+  77: optional i64 rpc_http_min_size;
+
+>>>>>>> 48f0d8554 ([Enhancement] support exchanging >=2GB message via http rpc (#19444))
 }
 
 
