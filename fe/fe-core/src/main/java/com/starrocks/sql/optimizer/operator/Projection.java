@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class Projection {
     private final Map<ColumnRefOperator, ScalarOperator> columnRefMap;
@@ -73,6 +74,12 @@ public class Projection {
         return new ArrayList<>(columnRefMap.keySet());
     }
 
+    public ColumnRefSet getUsedColumns() {
+        final ColumnRefSet usedColumns = new ColumnRefSet();
+        columnRefMap.values().stream().forEach(e -> usedColumns.union(e.getUsedColumns()));
+        return usedColumns;
+    }
+
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
         return columnRefMap;
     }
@@ -104,26 +111,17 @@ public class Projection {
         return false;
     }
 
-    public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
-        Preconditions.checkState(!childDictColumns.isEmpty());
-        ColumnRefSet dictSet = new ColumnRefSet();
-        for (Integer id : childDictColumns) {
-            dictSet.union(id);
-        }
-
+    // exist any scalarOperator if used encoded string cols and cannot apply dict optimize
+    // means we cannot optimize this projection and need add a decodeNode before this projection
+    public boolean couldApplyStringDict(ColumnRefSet encodedStringCols) {
+        Set<Integer> sids = encodedStringCols.getStream().collect(Collectors.toSet());
         for (ScalarOperator operator : columnRefMap.values()) {
-            if (couldApplyStringDict(operator, dictSet, childDictColumns)) {
-                return true;
+            if (operator.getUsedColumns().isIntersect(encodedStringCols) && !couldApplyDictOptimize(operator, sids)) {
+                return false;
             }
         }
+        return true;
 
-        for (ScalarOperator operator : commonSubOperatorMap.values()) {
-            if (couldApplyStringDict(operator, dictSet, childDictColumns)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     public static boolean couldApplyDictOptimize(ScalarOperator operator, Set<Integer> sids) {

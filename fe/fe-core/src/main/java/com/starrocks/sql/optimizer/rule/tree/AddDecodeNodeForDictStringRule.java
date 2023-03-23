@@ -257,22 +257,21 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         public OptExpression visitProjectionAfter(OptExpression optExpression, DecodeContext context) {
             if (context.hasEncoded && optExpression.getOp().getProjection() != null) {
                 Projection projection = optExpression.getOp().getProjection();
-                Set<Integer> stringColumnIds = context.getEncodedStringCols();
+                ColumnRefSet encodedStringCols = ColumnRefSet.createByIds(context.getEncodedStringCols());
 
-                if (projectionNeedDecode(context, projection)) {
-                    // child has dict columns
-                    OptExpression decodeExp = generateDecodeOExpr(context, Collections.singletonList(optExpression));
-                    decodeExp.getOp().setProjection(optExpression.getOp().getProjection());
-                    optExpression.getOp().setProjection(null);
-                    return decodeExp;
-                } else if (projection.couldApplyStringDict(stringColumnIds)) {
+                if (!projection.getUsedColumns().isIntersect(encodedStringCols)) {
+                    context.clear();
+                } else if (projection.couldApplyStringDict(encodedStringCols)) {
                     Projection newProjection = rewriteProjectOperator(projection, context);
                     optExpression.getOp().setProjection(newProjection);
                     optExpression.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
                             new ColumnRefSet(newProjection.getOutputColumns())));
                     return optExpression;
                 } else {
-                    context.clear();
+                    OptExpression decodeExp = generateDecodeOExpr(context, Collections.singletonList(optExpression));
+                    decodeExp.getOp().setProjection(optExpression.getOp().getProjection());
+                    optExpression.getOp().setProjection(null);
+                    return decodeExp;
                 }
             }
             return optExpression;
@@ -542,28 +541,23 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                                            DecodeContext context,
                                                            Map<ColumnRefOperator, ScalarOperator> newProjectMap,
                                                            Map<Integer, Integer> newStringToDicts) {
+            ColumnRefSet encodedCols = ColumnRefSet.createByIds(context.getEncodedStringCols());
+            if (!valueOperator.getUsedColumns().isIntersect(encodedCols)) {
+                return;
+            }
+
             if (valueOperator instanceof ColumnRefOperator) {
                 ColumnRefOperator stringColumn = (ColumnRefOperator) valueOperator;
-                if (context.stringColumnIdToDictColumnIds.containsKey(stringColumn.getId())) {
-                    Integer columnId = context.stringColumnIdToDictColumnIds.get(stringColumn.getId());
-                    ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
+                Integer columnId = context.stringColumnIdToDictColumnIds.get(stringColumn.getId());
+                ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
 
-                    newProjectMap.put(dictColumn, dictColumn);
-                    newProjectMap.remove(keyColumn);
+                newProjectMap.put(dictColumn, dictColumn);
+                newProjectMap.remove(keyColumn);
 
-                    newStringToDicts.put(keyColumn.getId(), dictColumn.getId());
-                }
+                newStringToDicts.put(keyColumn.getId(), dictColumn.getId());
                 return;
             }
 
-            if (!Projection.couldApplyDictOptimize(valueOperator, context.getEncodedStringCols())) {
-                ColumnRefSet usedCols = valueOperator.getUsedColumns();
-                ColumnRefSet encodedCols = ColumnRefSet.createByIds(context.getEncodedStringCols());
-                Preconditions.checkState(!usedCols.isIntersect(encodedCols),
-                        "cols %s have been encoded, but operator [%s] doesn't support encode optimize",
-                        encodedCols, valueOperator);
-                return;
-            }
             // rewrite value operator
             final DictMappingRewriter rewriter = new DictMappingRewriter(context);
             final ScalarOperator newCallOperator = rewriter.rewrite(valueOperator.clone());
