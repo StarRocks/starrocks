@@ -176,6 +176,8 @@ public class Replica implements Writable {
     // if lastWriteFail is true, we can not use it as replicated storage primary replica
     private volatile boolean lastWriteFail = false;
 
+    private boolean isErrorState = false;
+
     public Replica() {
     }
 
@@ -311,6 +313,18 @@ public class Replica implements Writable {
 
     public boolean isSetBadForce() {
         return this.setBadForce;
+    }
+
+    public boolean isErrorState() {
+        return this.isErrorState;
+    }
+
+    public boolean setIsErrorState(boolean state) {
+        if (this.isErrorState == state) {
+            return false;
+        }
+        this.isErrorState = state;
+        return true;
     }
 
     public boolean needFurtherRepair() {
