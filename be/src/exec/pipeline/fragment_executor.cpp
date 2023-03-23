@@ -222,7 +222,9 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
 
-    int func_version = request.common().__isset.func_version ? request.common().func_version : 2;
+    int func_version = request.common().__isset.func_version
+                               ? request.common().func_version
+                               : TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64;
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
     runtime_state->set_be_number(request.backend_num());
