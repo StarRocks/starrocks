@@ -589,6 +589,13 @@ under the License.
             <artifactId>hadoop-azure</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.google.cloud.bigdataoss/gcs-connector -->
+        <dependency>
+            <groupId>com.google.cloud.bigdataoss</groupId>
+            <artifactId>gcs-connector</artifactId>
+            <classifier>shaded</classifier>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/org.antlr/antlr4 -->
         <dependency>
             <groupId>org.antlr</groupId>

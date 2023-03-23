@@ -16,12 +16,30 @@ package com.starrocks.credential.aws;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.hive.conf.HiveConf;
 
 import java.util.Map;
+
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_ENDPOINT;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_EXTERNAL_ID;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_IAM_ROLE_ARN;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_REGION;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_SECRET_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_INSTANCE_PROFILE;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENABLE_SSL;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_EXTERNAL_ID;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 public class AWSCloudConfigurationFactory extends CloudConfigurationFactory {
     private final Map<String, String> properties;
     private final HiveConf hiveConf;
@@ -42,14 +60,14 @@ public class AWSCloudConfigurationFactory extends CloudConfigurationFactory {
     public CloudCredential buildGlueCloudCredential() {
         Preconditions.checkNotNull(hiveConf);
         AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
-                hiveConf.getBoolean(CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, false),
-                hiveConf.getBoolean(CloudConfigurationConstants.AWS_GLUE_USE_INSTANCE_PROFILE, false),
-                hiveConf.get(CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY, ""),
-                hiveConf.get(CloudConfigurationConstants.AWS_GLUE_SECRET_KEY, ""),
-                hiveConf.get(CloudConfigurationConstants.AWS_GLUE_IAM_ROLE_ARN, ""),
-                hiveConf.get(CloudConfigurationConstants.AWS_GLUE_EXTERNAL_ID, ""),
-                hiveConf.get(CloudConfigurationConstants.AWS_GLUE_REGION, ""),
-                hiveConf.get(CloudConfigurationConstants.AWS_GLUE_ENDPOINT, "")
+                hiveConf.getBoolean(AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, false),
+                hiveConf.getBoolean(AWS_GLUE_USE_INSTANCE_PROFILE, false),
+                hiveConf.get(AWS_GLUE_ACCESS_KEY, ""),
+                hiveConf.get(AWS_GLUE_SECRET_KEY, ""),
+                hiveConf.get(AWS_GLUE_IAM_ROLE_ARN, ""),
+                hiveConf.get(AWS_GLUE_EXTERNAL_ID, ""),
+                hiveConf.get(AWS_GLUE_REGION, ""),
+                hiveConf.get(AWS_GLUE_ENDPOINT, "")
         );
         if (!awsCloudCredential.validate()) {
             return null;
@@ -61,17 +79,14 @@ public class AWSCloudConfigurationFactory extends CloudConfigurationFactory {
     protected CloudConfiguration buildForStorage() {
         Preconditions.checkNotNull(properties);
         AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
-                Boolean.parseBoolean(
-                        properties.getOrDefault(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR,
-                                "false")),
-                Boolean.parseBoolean(
-                        properties.getOrDefault(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false")),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_SECRET_KEY, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_REGION, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ENDPOINT, "")
+                Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false")),
+                Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_INSTANCE_PROFILE, "false")),
+                properties.getOrDefault(AWS_S3_ACCESS_KEY, ""),
+                properties.getOrDefault(AWS_S3_SECRET_KEY, ""),
+                properties.getOrDefault(AWS_S3_IAM_ROLE_ARN, ""),
+                properties.getOrDefault(AWS_S3_EXTERNAL_ID, ""),
+                properties.getOrDefault(AWS_S3_REGION, ""),
+                properties.getOrDefault(AWS_S3_ENDPOINT, "")
         );
         if (!awsCloudCredential.validate()) {
             return null;
@@ -79,16 +94,13 @@ public class AWSCloudConfigurationFactory extends CloudConfigurationFactory {
 
         AWSCloudConfiguration awsCloudConfiguration = new AWSCloudConfiguration(awsCloudCredential);
         // put cloud configuration
-        if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS)) {
+        if (properties.containsKey(AWS_S3_ENABLE_PATH_STYLE_ACCESS)) {
             awsCloudConfiguration.setEnablePathStyleAccess(
-                    Boolean.parseBoolean(properties.get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS))
-            );
+                    Boolean.parseBoolean(properties.get(AWS_S3_ENABLE_PATH_STYLE_ACCESS)));
         }
 
-        if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ENABLE_SSL)) {
-            awsCloudConfiguration.setEnableSSL(
-                    Boolean.parseBoolean(properties.get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL))
-            );
+        if (properties.containsKey(AWS_S3_ENABLE_SSL)) {
+            awsCloudConfiguration.setEnableSSL(Boolean.parseBoolean(properties.get(AWS_S3_ENABLE_SSL)));
         }
 
         return awsCloudConfiguration;

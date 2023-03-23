@@ -111,8 +111,8 @@ void HdfsInputStream::set_size(int64_t value) {
 }
 
 StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
-    // `GetReadStatistics` is not supported in Juicefs and Azure hadoop sdk, and will cause Be crashed
-    if (fs::is_jfs_uri(_file_name) || fs::is_azure_uri(_file_name)) {
+    // `GetReadStatistics` is not supported in Juicefs & Azure hadoop sdk & GCS sdk, and will cause Be crashed
+    if (fs::is_jfs_uri(_file_name) || fs::is_azure_uri(_file_name) || fs::is_gcs_uri(_file_name)) {
         return nullptr;
     }
 

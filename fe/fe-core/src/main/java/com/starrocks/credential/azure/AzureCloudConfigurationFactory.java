@@ -16,11 +16,26 @@ package com.starrocks.credential.azure;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudCredentialUtil;
 
 import java.util.Map;
+
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CLIENT_ID;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_ENDPOINT;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS1_USE_MANAGED_SERVICE_IDENTITY;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS2_STORAGE_ACCOUNT;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_CONTAINER;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT;
 
 public class AzureCloudConfigurationFactory extends CloudConfigurationFactory {
 
@@ -43,10 +58,10 @@ public class AzureCloudConfigurationFactory extends CloudConfigurationFactory {
 
         // Try to build azure blob storage
         AzureBlobCloudCredential blob = new AzureBlobCloudCredential(
-                properties.getOrDefault(CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT, storageAccount),
-                properties.getOrDefault(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, container),
-                properties.getOrDefault(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, "")
+                properties.getOrDefault(AZURE_BLOB_STORAGE_ACCOUNT, storageAccount),
+                properties.getOrDefault(AZURE_BLOB_SHARED_KEY, ""),
+                properties.getOrDefault(AZURE_BLOB_CONTAINER, container),
+                properties.getOrDefault(AZURE_BLOB_SAS_TOKEN, "")
         );
         if (blob.validate()) {
             return new AzureCloudConfiguration(blob);
@@ -55,10 +70,10 @@ public class AzureCloudConfigurationFactory extends CloudConfigurationFactory {
         // Try to build azure data lake gen1
         AzureADLS1CloudCredential adls1 = new AzureADLS1CloudCredential(
                 Boolean.parseBoolean(
-                        properties.getOrDefault(CloudConfigurationConstants.AZURE_ADLS1_USE_MANAGED_SERVICE_IDENTITY, "false")),
-                properties.getOrDefault(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CLIENT_ID, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_ENDPOINT, "")
+                        properties.getOrDefault(AZURE_ADLS1_USE_MANAGED_SERVICE_IDENTITY, "false")),
+                properties.getOrDefault(AZURE_ADLS1_OAUTH2_CLIENT_ID, ""),
+                properties.getOrDefault(AZURE_ADLS1_OAUTH2_CREDENTIAL, ""),
+                properties.getOrDefault(AZURE_ADLS1_OAUTH2_ENDPOINT, "")
         );
         if (adls1.validate()) {
             return new AzureCloudConfiguration(adls1);
@@ -66,16 +81,13 @@ public class AzureCloudConfigurationFactory extends CloudConfigurationFactory {
 
         // Try to build azure data lake gen2
         AzureADLS2CloudCredential adls2 = new AzureADLS2CloudCredential(
-                Boolean.parseBoolean(
-                        properties.getOrDefault(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY,
-                                "false")
-                ),
-                properties.getOrDefault(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AZURE_ADLS2_STORAGE_ACCOUNT, storageAccount),
-                properties.getOrDefault(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "")
+                Boolean.parseBoolean(properties.getOrDefault(AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "false")),
+                properties.getOrDefault(AZURE_ADLS2_OAUTH2_TENANT_ID, ""),
+                properties.getOrDefault(AZURE_ADLS2_OAUTH2_CLIENT_ID, ""),
+                properties.getOrDefault(AZURE_ADLS2_STORAGE_ACCOUNT, storageAccount),
+                properties.getOrDefault(AZURE_ADLS2_SHARED_KEY, ""),
+                properties.getOrDefault(AZURE_ADLS2_OAUTH2_CLIENT_SECRET, ""),
+                properties.getOrDefault(AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "")
         );
         if (adls2.validate()) {
             return new AzureCloudConfiguration(adls2);
