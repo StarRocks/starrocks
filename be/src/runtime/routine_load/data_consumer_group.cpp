@@ -242,7 +242,6 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     // We must ensure the msg len > 0.
                     if (msg->len() > 0) {
                         avro_value_t avro;
-                        DeferOp op([&] { avro_value_decref(&avro); });
                         serdes_schema_t* schema;
                         serdes_err_t err = serdes_deserialize_avro(serdes, &avro, &schema, msg->payload(), msg->len(),
                                                                    errstr, sizeof(errstr));
@@ -251,6 +250,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                             LOG(ERROR) << err_msg;
                             return Status::InternalError(err_msg);
                         }
+                        DeferOp op([&] { avro_value_decref(&avro); });
                         char* as_json;
                         if (avro_value_to_json(&avro, 1, &as_json)) {
                             auto err_msg = strings::Substitute("avro to json failed: $0", avro_strerror());
