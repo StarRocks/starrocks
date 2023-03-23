@@ -2092,6 +2092,31 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testCreateMvWithSortCols() throws Exception {
+        String sql = "create materialized view mv1\n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2)\n" +
+                "order by (`k1`, `s2`)\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
+                UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assert.assertEquals(2, createMaterializedViewStatement.getSortKeys().size());
+        Assert.assertTrue(createMaterializedViewStatement.getMvColumnItems().get(0).isKey());
+        Assert.assertTrue(createMaterializedViewStatement.getMvColumnItems().get(1).isKey());
+    }
+
+    @Test
+    public void testCreateMvWithInvalidSortCols() throws Exception {
+        String sql = "create materialized view mv1\n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2)\n" +
+                "order by (`s2`, `k1`)\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        Assert.assertThrows("Sort columns should be a ordered prefix of select cols", Exception.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+    }
+
+    @Test
     public void testCreateMvWithHll() {
         String sql = "CREATE MATERIALIZED VIEW mv_function\n" +
                 "AS SELECT k1,MAX(v2),MIN(v3),SUM(v4),HLL_UNION(v5),BITMAP_UNION(v6),PERCENTILE_UNION(v7)\n" +
