@@ -4,7 +4,7 @@ commands_restrictions:
     conditions:
       - sender-permission>=read
     assignees:
-      - "{{ author }}"
+      - "{{author}}"
 
 pull_request_rules:
   - name: assign PRs with the pr author
