@@ -21,6 +21,7 @@ import org.spark_project.guava.base.Strings;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 // unique constraint is used to guide optimizer rewrite for now,
@@ -39,6 +40,12 @@ public class UniqueConstraint {
 
     public List<String> getUniqueColumns() {
         return uniqueColumns;
+    }
+
+    // foreignKeys must be in lower case for case insensitive
+    public boolean isMatch(Set<String> foreignKeys) {
+        Set<String> uniqueColumnSet = uniqueColumns.stream().map(String::toLowerCase).collect(Collectors.toSet());
+        return uniqueColumnSet.equals(foreignKeys);
     }
 
     public String toString() {
