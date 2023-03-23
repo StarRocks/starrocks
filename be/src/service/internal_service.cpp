@@ -233,7 +233,6 @@ void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcC
     }
 }
 
-
 template <typename T>
 void PInternalServiceImplBase<T>::transmit_runtime_filter(google::protobuf::RpcController* cntl_base,
                                                           const PTransmitRuntimeFilterParams* request,
