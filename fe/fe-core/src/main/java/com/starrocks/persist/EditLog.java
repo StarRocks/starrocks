@@ -1342,8 +1342,12 @@ public class EditLog {
         logEdit(OperationType.OP_BACKEND_STATE_CHANGE, be);
     }
 
-    public void logDataNodeStateChange(DataNode be) {
-        logEdit(OperationType.OP_DATANODE_STATE_CHANGE, be);
+    public void logDataNodeStateChange(DataNode dn) {
+        logEdit(OperationType.OP_DATANODE_STATE_CHANGE, dn);
+    }
+
+    public void logComputeNodeStateChange(ComputeNode cn) {
+        logEdit(OperationType.OP_COMPUTENODE_STATE_CHANGE, cn);
     }
 
     public void logCreateUser(PrivInfo info) {

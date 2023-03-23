@@ -99,26 +99,28 @@ public class SystemHandler extends AlterHandler {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         // check if decommission is finished
-        for (Long beId : systemInfoService.getBackendIds(false)) {
-            Backend backend = systemInfoService.getBackend(beId);
-            if (backend == null || !backend.isDecommissioned()) {
+        for (Long dataNodeId : systemInfoService.getDataNodeIds()) {
+            DataNode dataNode = systemInfoService.getDataNode(dataNodeId);
+            if (dataNode == null || !dataNode.isDecommissioned()) {
                 continue;
             }
 
-            List<Long> backendTabletIds = invertedIndex.getTabletIdsByBackendId(beId);
-            if (backendTabletIds.isEmpty() && Config.drop_backend_after_decommission) {
+            List<Long> dataNodeTabletIds = invertedIndex.getTabletIdsByDataNodeId(dataNodeId);
+            if (dataNodeTabletIds.isEmpty() && Config.drop_backend_after_decommission) {
                 try {
-                    systemInfoService.dropBackend(beId);
-                    LOG.info("no tablet on decommission backend {}, drop it", beId);
+                    systemInfoService.dropDataNode(dataNodeId);
+                    LOG.info("no tablet on decommission dataNode {}, drop it", dataNodeId);
                 } catch (DdlException e) {
                     // does not matter, may be backend not exist
-                    LOG.info("backend {} is dropped failed after decommission {}", beId, e.getMessage());
+                    LOG.info("dataNode {} is dropped failed after decommission {}", dataNodeId, e.getMessage());
                 }
                 continue;
             }
 
-            LOG.info("backend {} lefts {} replicas to decommission(show up to 20): {}", beId, backendTabletIds.size(),
-                     backendTabletIds.stream().limit(20).collect(Collectors.toList()));
+            LOG.info("dataNode {} lefts {} replicas to decommission(show up to 20): {}",
+                    dataNodeId,
+                    dataNodeTabletIds.size(),
+                    dataNodeTabletIds.stream().limit(20).collect(Collectors.toList()));
         }
     }
 

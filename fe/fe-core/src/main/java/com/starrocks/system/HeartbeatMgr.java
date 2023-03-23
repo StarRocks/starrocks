@@ -121,21 +121,15 @@ public class HeartbeatMgr extends LeaderDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
-        ImmutableMap<Long, Backend> idToBackendRef = nodeMgr.getIdToBackend();
-        if (idToBackendRef == null) {
+        ImmutableMap<Long, ComputeNode> idToComputeNodeRef = nodeMgr.getIdComputeNode();
+        if (idToComputeNodeRef == null) {
             return;
         }
 
         List<Future<HeartbeatResponse>> hbResponses = Lists.newArrayList();
 
-        // send backend heartbeat
-        for (Backend backend : idToBackendRef.values()) {
-            BackendHeartbeatHandler handler = new BackendHeartbeatHandler(backend);
-            hbResponses.add(executor.submit(handler));
-        }
-
         // send compute node heartbeat
-        for (ComputeNode computeNode : nodeMgr.getIdComputeNode().values()) {
+        for (ComputeNode computeNode : idToComputeNodeRef.values()) {
             BackendHeartbeatHandler handler = new BackendHeartbeatHandler(computeNode);
             hbResponses.add(executor.submit(handler));
         }
@@ -187,13 +181,15 @@ public class HeartbeatMgr extends LeaderDaemon {
         } // end for all results
 
         // we also add a 'mocked' master Frontend heartbeat response to synchronize master info to other Frontends.
-        Map<Long, Integer> backendId2cpuCores = Maps.newHashMap();
-        idToBackendRef.values().forEach(
-                backend -> backendId2cpuCores.put(backend.getId(), BackendCoreStat.getCoresOfBe(backend.getId())));
+        Map<Long, Integer> computeNodeId2cpuCores = Maps.newHashMap();
+        // TODO: rename BackendCoreStat to ComputeNodeCoreStat
+        idToComputeNodeRef.values().forEach(
+                computeNode -> computeNodeId2cpuCores.put(computeNode.getId(),
+                        BackendCoreStat.getCoresOfBe(computeNode.getId())));
         hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName, Config.query_port, Config.rpc_port,
                 GlobalStateMgr.getCurrentState().getMaxJournalId(),
                 System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getFeStartTime(),
-                Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH, backendId2cpuCores));
+                Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH, computeNodeId2cpuCores));
 
         // write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logHeartbeat(hbPackage);
@@ -206,11 +202,11 @@ public class HeartbeatMgr extends LeaderDaemon {
 
                 // Synchronize cpu cores of backends when synchronizing master info to other Frontends.
                 // It is non-empty, only when replaying a 'mocked' master Frontend heartbeat response to other Frontends.
-                hbResponse.getBackendId2cpuCores().forEach((backendId, cpuCores) -> {
-                    Backend be = nodeMgr.getBackend(backendId);
-                    if (be != null && be.getCpuCores() != cpuCores) {
-                        be.setCpuCores(cpuCores);
-                        BackendCoreStat.setNumOfHardwareCoresOfBe(backendId, cpuCores);
+                hbResponse.getBackendId2cpuCores().forEach((computeNodeId, cpuCores) -> {
+                    ComputeNode cn = nodeMgr.getComputeNode(computeNodeId);
+                    if (cn != null && cn.getCpuCores() != cpuCores) {
+                        cn.setCpuCores(cpuCores);
+                        BackendCoreStat.setNumOfHardwareCoresOfBe(computeNodeId, cpuCores);
                     }
                 });
 
@@ -222,10 +218,8 @@ public class HeartbeatMgr extends LeaderDaemon {
             }
             case BACKEND: {
                 BackendHbResponse hbResponse = (BackendHbResponse) response;
-                ComputeNode computeNode = nodeMgr.getBackend(hbResponse.getBeId());
-                if (computeNode == null) {
-                    computeNode = nodeMgr.getComputeNode(hbResponse.getBeId());
-                }
+                // deal with compute node
+                ComputeNode computeNode = nodeMgr.getComputeNode(hbResponse.getBeId());
                 if (computeNode != null) {
                     boolean isChanged = computeNode.handleHbResponse(hbResponse, isReplay);
                     if (hbResponse.getStatus() != HbStatus.OK) {

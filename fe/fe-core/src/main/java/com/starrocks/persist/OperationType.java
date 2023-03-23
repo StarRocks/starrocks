@@ -326,4 +326,7 @@ public class OperationType {
     public static final short OP_DROP_DATANODE = 11141;
     public static final short OP_DATANODE_STATE_CHANGE = 11142;
 
+
+    public static final short OP_COMPUTENODE_STATE_CHANGE = 11143;
+
 }

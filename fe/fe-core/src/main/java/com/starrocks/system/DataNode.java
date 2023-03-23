@@ -58,6 +58,10 @@ public class DataNode implements Writable {
     @SerializedName("ownerClusterName")
     private volatile String ownerClusterName;
 
+
+    @SerializedName("isAlive")
+    private AtomicBoolean isAlive;
+
     @SerializedName("lastWriteFail")
     private volatile boolean lastWriteFail = false;
 
@@ -117,6 +121,14 @@ public class DataNode implements Writable {
             return true;
         }
         return false;
+    }
+
+    public boolean isAlive() {
+        return this.isAlive.get();
+    }
+
+    public void setHost(String host) {
+        this.host = host;
     }
 
     @Override
