@@ -1161,7 +1161,11 @@ void StorageEngine::remove_increment_map_by_table_id(int64_t table_id) {
 }
 
 Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num_row, std::vector<int64_t>& ids) {
-    bool need_init = false;
+    if (num_row == 0) {
+        return Status::OK();
+    }
+    DCHECK_EQ(num_row, ids.size());
+
     std::shared_ptr<AutoIncrementMeta> meta;
 
     {
@@ -1169,7 +1173,6 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
 
         if (UNLIKELY(_auto_increment_meta_map.find(tableid) == _auto_increment_meta_map.end())) {
             _auto_increment_meta_map.insert({tableid, std::make_shared<AutoIncrementMeta>()});
-            need_init = true;
         }
         meta = _auto_increment_meta_map[tableid];
     }
@@ -1184,7 +1187,7 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
 
     size_t cur_avaliable_rows = cur_max_id - cur_avaliable_min_id;
     auto ids_iter = ids.begin();
-    if (UNLIKELY(need_init || num_row > cur_avaliable_rows)) {
+    if (UNLIKELY(num_row > cur_avaliable_rows)) {
         size_t alloc_rows = num_row - cur_avaliable_rows;
         // rpc request for the new available interval from fe
         TAllocateAutoIncrementIdParam alloc_params;
