@@ -303,6 +303,7 @@ public class FunctionSet {
     public static final String ARRAY_REMOVE = "array_remove";
     public static final String ARRAY_FILTER = "array_filter";
     public static final String ARRAY_SORTBY = "array_sortby";
+    public static final String ARRAY_GENERATE = "array_generate";
 
     // Bit functions:
     public static final String BITAND = "bitand";
