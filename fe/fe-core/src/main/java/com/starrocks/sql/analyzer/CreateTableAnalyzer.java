@@ -181,7 +181,7 @@ public class CreateTableAnalyzer {
                             }
                             break;
                         }
-                        if (!columnDef.getType().isKeyType()) {
+                        if (!columnDef.getType().canDistributedBy()) {
                             break;
                         }
                         if (columnDef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {

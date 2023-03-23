@@ -1157,6 +1157,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Map<String, String> properties = new HashMap<>();
         ExpressionPartitionDesc expressionPartitionDesc = null;
         DistributionDesc distributionDesc = null;
+        List<String> sortKeys = null;
 
         for (StarRocksParser.MaterializedViewDescContext desc : ListUtils.emptyIfNull(context.materializedViewDesc())) {
             // process properties
@@ -1208,6 +1209,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
                 distributionDesc = (DistributionDesc) visit(desc.distributionDesc());
             }
+
+            if (desc.orderByDesc() != null) {
+                sortKeys = visit(desc.orderByDesc().identifierList().identifier(), Identifier.class)
+                        .stream().map(Identifier::getValue).collect(toList());
+            }
         }
 
         if (refreshSchemeDesc == null) {
@@ -1247,7 +1253,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment,
-                refreshSchemeDesc, expressionPartitionDesc, distributionDesc, properties, queryStatement);
+                refreshSchemeDesc, expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement);
     }
 
     @Override

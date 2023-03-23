@@ -741,6 +741,10 @@ public abstract class Type implements Cloneable {
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType() && !isFunctionType();
     }
 
+    public boolean canBeWindowFunctionArgumentTypes() {
+        return !(isNull() || isChar() || isTime() || isComplexType() || isPseudoType() || isFunctionType());
+    }
+
     /**
      * Can be a key of materialized view
      */
