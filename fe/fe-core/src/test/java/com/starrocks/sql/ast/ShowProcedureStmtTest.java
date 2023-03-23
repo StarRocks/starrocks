@@ -44,5 +44,10 @@ public class ShowProcedureStmtTest {
         Assert.assertNotNull(stmt.getPattern());
         Assert.assertEquals(11, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Db", stmt.getMetaData().getColumn(0).getName());
+
+        // MySQLWorkbench use
+        stmt = (ShowProcedureStmt) com.starrocks.sql.parser.SqlParser.parse(
+                "SHOW FUNCTION STATUS where Db='abc'", 32).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
     }
 }
