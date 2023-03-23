@@ -64,6 +64,7 @@ import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
@@ -764,6 +765,18 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = executor.execute();
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("root", resultSet.getString(0));
+    }
+
+    @Test
+    public void testShowCharset() throws DdlException, AnalysisException {
+        // Dbeaver 23 Use
+        ShowCharsetStmt stmt = new ShowCharsetStmt();
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertTrue(resultSet.next());
+        List<List<String>> resultRows = resultSet.getResultRows();
+        Assert.assertTrue(resultRows.size() >= 1);
+        Assert.assertEquals(resultRows.get(0).get(0), "utf8");
     }
 
     @Test
