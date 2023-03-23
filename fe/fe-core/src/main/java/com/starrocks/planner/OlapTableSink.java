@@ -87,6 +87,7 @@ import com.starrocks.thrift.TOlapTableSink;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.transaction.TransactionState;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -195,6 +196,11 @@ public class OlapTableSink extends DataSink {
         tDataSink.getOlap_table_sink().setLoad_id(newLoadId);
     }
 
+    public void setPartialUpdateMode(TPartialUpdateMode mode) {
+        TOlapTableSink tSink = tDataSink.getOlap_table_sink();
+        tSink.setPartial_update_mode(mode);
+    }
+
     public void complete(String mergeCondition) throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
@@ -222,6 +228,7 @@ public class OlapTableSink extends DataSink {
         tSink.setPartition(createPartition(tSink.getDb_id(), dstTable));
         tSink.setLocation(createLocation(dstTable));
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(clusterId));
+        tSink.setPartial_update_mode(TPartialUpdateMode.COLUMN_MODE);
     }
 
     @Override

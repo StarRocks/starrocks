@@ -918,4 +918,5 @@ CONF_Int32(binlog_page_max_size, "1048576");
 
 CONF_mInt64(txn_info_history_size, "20000");
 
+CONF_Bool(enable_preload_column_mode_update_cache, "true");
 } // namespace starrocks::config

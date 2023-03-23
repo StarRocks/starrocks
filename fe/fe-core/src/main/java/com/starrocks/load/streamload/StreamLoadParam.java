@@ -19,8 +19,11 @@ import com.starrocks.common.UserException;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import io.netty.handler.codec.http.HttpHeaders;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class StreamLoadParam {
+    private static final Logger LOG = LogManager.getLogger(StreamLoadParam.class);
     private static final String FORMAT_KEY = "format";
     private static final String COLUMNS = "columns";
     private static final String WHERE = "where";
@@ -42,6 +45,7 @@ public class StreamLoadParam {
     private static final String LOAD_DOP = "load_dop";
     private static final String MAX_FILTER_RATIO = "max_filter_ratio";
     private static final String IDLE_TRANSACTION_TIMEOUT = "idle_transaction_timeout";
+    private static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
 
     public TFileFormatType formatType = TFileFormatType.FORMAT_CSV_PLAIN;
     public TFileType fileType = TFileType.FILE_STREAM;
@@ -68,6 +72,7 @@ public class StreamLoadParam {
     public int loadDop = 1;
     public double maxFilterRatio = 0.0;
     public int idleTransactionTimeout = 1000;
+    public String partialUpdateMode = "row";
 
     public TFileFormatType parseStreamLoadFormat(String formatKey) {
         if (formatKey.equalsIgnoreCase("csv")) {
@@ -175,6 +180,9 @@ public class StreamLoadParam {
             if (context.idleTransactionTimeout <= 0) {
                 throw new UserException("idle transaction timeout must be greater than 0");
             }
+        }
+        if (headers.contains(PARTIAL_UPDATE_MODE)) {
+            context.partialUpdateMode = headers.get(PARTIAL_UPDATE_MODE);
         }
         return context;
     }

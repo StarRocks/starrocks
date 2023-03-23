@@ -64,6 +64,7 @@ struct DeltaWriterOptions {
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
     bool abort_delete = false;
+    PartialUpdateMode partial_update_mode = PartialUpdateMode::ROW_MODE;
 };
 
 enum State {

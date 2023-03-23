@@ -52,7 +52,11 @@ Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::strin
 
 Status RowsetFactory::create_rowset_writer(const RowsetWriterContext& context, std::unique_ptr<RowsetWriter>* output) {
     if (context.writer_type == kHorizontal) {
-        *output = std::make_unique<HorizontalRowsetWriter>(context);
+        if (context.partial_update_mode == PartialUpdateMode::COLUMN_MODE) {
+            *output = std::make_unique<HorizontalUpdateRowsetWriter>(context);
+        } else {
+            *output = std::make_unique<HorizontalRowsetWriter>(context);
+        }
     } else {
         DCHECK(context.writer_type == kVertical);
         *output = std::make_unique<VerticalRowsetWriter>(context);

@@ -117,6 +117,14 @@ public:
         return &_rowset_meta_pb->txn_meta().partial_rowset_footers(segment_id);
     }
 
+    bool is_column_mode_partial_update() const {
+        if (_rowset_meta_pb->has_txn_meta() &&
+            _rowset_meta_pb->txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_MODE) {
+            return true;
+        }
+        return false;
+    }
+
     void clear_txn_meta() { _rowset_meta_pb->clear_txn_meta(); }
 
     bool empty() const { return _rowset_meta_pb->empty(); }
@@ -189,6 +197,8 @@ public:
     void set_rowset_seg_id(uint32_t id) { _rowset_meta_pb->set_rowset_seg_id(id); }
 
     uint32_t get_num_delete_files() const { return _rowset_meta_pb->num_delete_files(); }
+
+    uint32_t get_num_update_files() const { return _rowset_meta_pb->num_update_files(); }
 
     const RowsetMetaPB& get_meta_pb() const { return *_rowset_meta_pb; }
 
