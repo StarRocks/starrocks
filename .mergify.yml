@@ -3,6 +3,10 @@ commands_restrictions:
   backport:
     conditions:
       - sender-permission>=read
+    actions:
+      assign:
+        add_users: 
+          - "{{author}}"
 
 pull_request_rules:
   - name: assign PRs with the pr author
