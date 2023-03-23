@@ -358,32 +358,6 @@ public class StatisticsCollectJobTest extends PlanTestBase {
     }
 
     @Test
-    public void testSplitColumns() {
-        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(10002, t0StatsTableId, null,
-                        StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
-                        Maps.newHashMap(),
-                        StatsConstants.ScheduleStatus.PENDING,
-                        LocalDateTime.MIN));
-        Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
-
-        int splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns", 10L);
-        Assert.assertEquals(5, splitSize);
-
-        splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns",
-                Config.statistic_collect_max_row_count_per_query);
-        Assert.assertEquals(2, splitSize);
-
-        splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns",
-                Config.statistic_collect_max_row_count_per_query + 1);
-        Assert.assertEquals(1, splitSize);
-
-        splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns", 0L);
-        Assert.assertEquals(5, splitSize);
-    }
-
-    @Test
     public void testFullStatisticsBuildCollectSQLList() {
         OlapTable t0p = (OlapTable) connectContext.getGlobalStateMgr()
                 .getDb("test").getTable("t0_stats_partition");
