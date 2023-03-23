@@ -60,9 +60,9 @@ public class TaskBuilder {
         String stmt;
         String analyze = ctx.getSessionVariable().getAnalyzeForMV();
         if ("sample".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE SAMPLE TABLE " + tableName;
+            stmt = "ANALYZE SAMPLE TABLE " + tableName + " WITH ASYNC MODE";
         } else if ("full".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE TABLE " + tableName;
+            stmt = "ANALYZE TABLE " + tableName + " WITH ASYNC MODE";
         } else {
             stmt = "";
         }
