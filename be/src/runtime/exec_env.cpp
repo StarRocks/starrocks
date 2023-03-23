@@ -410,7 +410,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_column_metadata_mem_tracker);
     SAFE_DELETE(_segment_metadata_mem_tracker);
     SAFE_DELETE(_rowset_metadata_mem_tracker);
-    SAFE_DELETE(_tablet_schema_mem_tracker);
+    SAFE_DELETE(_tablet_metadata_mem_tracker);
 
     SAFE_DELETE(_metadata_mem_tracker);
 
