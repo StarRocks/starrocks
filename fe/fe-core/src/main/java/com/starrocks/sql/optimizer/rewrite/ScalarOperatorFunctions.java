@@ -63,6 +63,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.Year;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -74,6 +75,7 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.TemporalUnit;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -123,6 +125,8 @@ public class ScalarOperatorFunctions {
 
     private static final int MAX_NOW_PRECISION = 6;
     private static final Integer[] NOW_PRECISION_FACTORS = new Integer[MAX_NOW_PRECISION];
+    private static final long DATE_MAX_DAYNR = 3652424;
+    private static final int TIME_MAX_HOUR = 838;
 
     static {
         for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
@@ -216,6 +220,71 @@ public class ScalarOperatorFunctions {
             return days / 7 + 1;
         }
     }
+
+    private static final List<String> S_MONTH_NAME = new ArrayList<>() {
+        {
+            add("");
+            add("January");
+            add("February");
+            add("March");
+            add("April");
+            add("May");
+            add("June");
+            add("July");
+            add("August");
+            add("September");
+            add("October");
+            add("November");
+            add("December");
+        }
+    };
+
+    private static final List<String> S_AB_MONTH_NAME = new ArrayList<>() {
+        {
+            add("");
+            add("Jan");
+            add("Feb");
+            add("Mar");
+            add("Apr");
+            add("May");
+            add("Jun");
+            add("Jul");
+            add("Aug");
+            add("Sep");
+            add("Oct");
+            add("Nov");
+            add("Dec");
+        }
+    };
+
+    private static final long[] LOG_10_INT = { 1, 10, 100, 1000, 10000L, 100000L, 1000000L, 10000000L, 100000000L,
+            1000000000L, 10000000000L, 100000000000L};
+
+    private static final List<String> S_DAY_NAME = new ArrayList<>() {
+        {
+            add("Monday");
+            add("Tuesday");
+            add("Wednesday");
+            add("Thursday");
+            add("Friday");
+            add("Saturday");
+            add("Sunday");
+        }
+    };
+
+    private static final List<String> S_AB_DAY_NAME = new ArrayList<>() {
+        {
+            add("Mon");
+            add("Tue");
+            add("Wed");
+            add("Thu");
+            add("Fri");
+            add("Sat");
+            add("Sun");
+        }
+    };
+
+    private static final int[] S_DAYS_IN_MONTH = new int[] { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
     /**
      * date and time function
@@ -396,24 +465,551 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
-        DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar(), false);
         String dateStr = StringUtils.strip(date.getVarchar(), "\r\n\t ");
         if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
-            LocalDateTime ldt;
-            try {
-                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
-            } catch (DateTimeParseException e) {
-                // If parsing fails, it can be re-parsed from the position of the successful prefix string.
-                // This way datetime string can use incomplete format
-                // eg. str_to_date('2022-10-18 00:00:00','%Y-%m-%d %H:%s');
-                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
-                        .parse(dateStr.substring(0, e.getErrorIndex())));
-            }
-            return ConstantOperator.createDatetimeOrNull(ldt);
+            return strToDateFromDateTimeFormat(dateStr, fmtLiteral.getVarchar());
         } else {
+            DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar(), false);
             LocalDate ld = LocalDate.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
             return ConstantOperator.createDatetimeOrNull(ld.atTime(0, 0, 0));
         }
+    }
+
+    private static ConstantOperator strToDateFromDateTimeFormat(String dateStr, String fmt) {
+        DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmt, false);
+        LocalDateTime ldt;
+        try {
+            ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+        } catch (DateTimeParseException e) {
+            // If parsing fails, it can be re-parsed from the position of the successful prefix string.
+            // This way datetime string can use incomplete format
+            // 1. str.length > pattern.length; sub str to make the length is same with pattern
+            // eg. str_to_date('2022-10-18 00:00:00','%Y-%m-%d %H:%i');
+            try {
+                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
+                        .parse(dateStr.substring(0, e.getErrorIndex())));
+            } catch (DateTimeParseException e2) {
+                DatetimeContent dtContent = new DatetimeContent();
+                boolean parseSuccess = uncommonFormatStr(dateStr, fmt, dtContent);
+                if (!parseSuccess) {
+                    throw e;
+                }
+                builder = DateUtils.unixDatetimeFormatter("%Y-%m-%d %H:%i:%s", false);
+                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
+                        .parse(String.format("%04d", dtContent.getYear())
+                                + "-" + String.format("%02d", dtContent.getMonth())
+                                + "-" + String.format("%02d", dtContent.getDay())
+                                + " " + String.format("%02d", dtContent.getHour())
+                                + ":" + String.format("%02d", dtContent.getMinute())
+                                + ":" + String.format("%02d", dtContent.getSecond())));
+            }
+        }
+        return ConstantOperator.createDatetimeOrNull(ldt);
+    }
+
+    // eg. str_to_date('2022-10-18 00:00','%Y-%m-%d %H:%i:%s') => 2022-10-18 00:00:00;
+    // str_to_date('20141221', '%Y%m%d%H') => 2014-12-21 00:00:00
+    // str_to_date('2022-10','%Y-%m-%d %H:%s:%i') => null.
+    // str_to_date('2022-10-01 101','%Y-%m-%d %H%i'); => 2022-10-01 10:01:00
+    private static boolean uncommonFormatStr(String val, String ptr, DatetimeContent datetimeContent) {
+
+        boolean datePartUsed = false;
+        boolean timePartUsed = false;
+        boolean fracPartUsed = false;
+
+        int dayPart = 0;
+        int weekday = -1;
+        int yearday = -1;
+        int weekNum = -1;
+
+        boolean strictWeekNumber = false;
+        boolean sundayFirst = false;
+        boolean strictWeekNumberYearType = false;
+        int strictWeekNumberYear = -1;
+        boolean usaTime = false;
+
+        int ptrIndex = 0;
+        int end = ptr.length();
+        int valIndex = 0;
+        int valEnd = val.length();
+
+        int year = -1;
+        int month = -1;
+        int day = -1;
+        int hour = -1;
+        int minute = -1;
+        int second = -1;
+        int microsecond = -1;
+
+        while (ptrIndex < end && valIndex < valEnd) {
+            // Skip space character
+            while (valIndex < val.length() && val.charAt(valIndex) == ' ') {
+                valIndex++;
+            }
+            if (valIndex >= val.length()) {
+                break;
+            }
+            // Check switch
+            if (ptr.charAt(ptrIndex) == '%' && ptrIndex + 1 < end) {
+                int tmpIndex = 0;
+                int intValue = 0;
+
+                ptrIndex++;
+                switch (ptr.charAt(ptrIndex++)) {
+                    // Year
+                    case 'y':
+                        // Year, numeric (two digits)
+                        tmpIndex = valIndex + Math.min(2, (valEnd - valIndex));
+                        try {
+                            intValue = Integer.parseInt(val.substring(valIndex, tmpIndex));
+                        } catch (Exception e) {
+                            return false;
+                        }
+                        year = intValue >= 70 ? 1900 : 2000;
+                        year += intValue;
+                        datetimeContent.setYear(year);
+                        valIndex = tmpIndex;
+                        datePartUsed = true;
+                        break;
+                    case 'Y':
+                        // Year, numeric, four digits
+                        tmpIndex = valIndex + Math.min(4, (valEnd - valIndex));
+                        try {
+                            intValue = Integer.parseInt(val.substring(valIndex, tmpIndex));
+                        } catch (Exception e) {
+                            return false;
+                        }
+                        if (intValue < 100) {
+                            year = intValue >= 70 ? 1900 : 2000;
+                            year += intValue;
+                        } else {
+                            year = intValue;
+                        }
+                        datetimeContent.setYear(year);
+                        valIndex = tmpIndex;
+                        datePartUsed = true;
+                        break;
+                    // Month
+                    case 'm':
+                    case 'c':
+                        tmpIndex = valIndex + Math.min(2, (valEnd - valIndex));
+                        try {
+                            intValue = Integer.parseInt(val.substring(valIndex, tmpIndex));
+                        } catch (Exception e) {
+                            return false;
+                        }
+                        month = intValue;
+                        datetimeContent.setMonth(month);
+                        valIndex = tmpIndex;
+                        datePartUsed = true;
+                        break;
+                    case 'M':
+                        intValue = checkWord(S_MONTH_NAME, val.substring(valIndex));
+                        if (intValue <= 0) {
+                            return false;
+                        }
+                        month = intValue;
+                        datetimeContent.setMonth(month);
+                        valIndex += S_MONTH_NAME.get(intValue).length();
+                        break;
+                    case 'b':
+                        intValue = checkWord(S_AB_MONTH_NAME, val.substring(valIndex));
+                        if (intValue <= 0) {
+                            return false;
+                        }
+                        month = intValue;
+                        datetimeContent.setMonth(month);
+                        valIndex += S_AB_MONTH_NAME.get(intValue).length();
+                        break;
+                    // Day
+                    case 'd':
+                    case 'e':
+                        tmpIndex = valIndex + Math.min(2, (valEnd - valIndex));
+                        try {
+                            intValue = Integer.parseInt(val.substring(valIndex, tmpIndex));
+                        } catch (Exception e) {
+                            return false;
+                        }
+                        day = intValue;
+                        datetimeContent.setDay(day);
+                        valIndex = tmpIndex;
+                        datePartUsed = true;
+                        break;
+                    case 'D':
+                        tmpIndex = valIndex + Math.min(2, (valEnd - valIndex));
+                        try {
+                            intValue = Integer.parseInt(val.substring(valIndex, tmpIndex));
+                        } catch (Exception e) {
+                            return false;
+                        }
+                        day = intValue;
+                        datetimeContent.setDay(day);
+                        valIndex = tmpIndex;
+                        valIndex += Math.min(2, (valEnd - valIndex));
+                        datePartUsed = true;
+                        break;
+                    // Hour
+                    case 'h':
+                    case 'I':
+                    case 'l':
+                        usaTime = true;
+                        // Fall through
+                    case 'k':
+                    case 'H':
+                        tmpIndex = valIndex + Math.min(2, (valEnd - valIndex));
+                        try {
+                            intValue = Integer.parseInt(val.substring(valIndex, tmpIndex));
+                        } catch (Exception e) {
+                            return false;
+                        }
+                        hour = intValue;
+                        datetimeContent.setHour(hour);
+                        valIndex = tmpIndex;
+                        timePartUsed = true;
+                        break;
+                    // Minute
+                    case 'i':
+                        tmpIndex = valIndex + Math.min(2, (valEnd - valIndex));
+                        try {
+                            intValue = Integer.parseInt(val.substring(valIndex, tmpIndex));
+                        } catch (Exception e) {
+                            return false;
+                        }
+                        minute = intValue;
+                        datetimeContent.setMinute(minute);
+                        valIndex = tmpIndex;
+                        timePartUsed = true;
+                        break;
+                    // Second
+                    case 's':
+                    case 'S':
+                        tmpIndex = valIndex + Math.min(2, (valEnd - valIndex));
+                        try {
+                            intValue = Integer.parseInt(val.substring(valIndex, tmpIndex));
+                        } catch (Exception e) {
+                            return false;
+                        }
+                        second = intValue;
+                        datetimeContent.setSecond(second);
+                        valIndex = tmpIndex;
+                        timePartUsed = true;
+                        break;
+                    // Micro second
+                    case 'f':
+                        tmpIndex = valIndex + Math.min(6, (valEnd - valIndex));
+                        try {
+                            intValue = Integer.parseInt(val.substring(valIndex, tmpIndex));
+                        } catch (Exception e) {
+                            return false;
+                        }
+                        intValue *= LOG_10_INT[6 - (tmpIndex - valIndex)];
+                        microsecond = intValue;
+                        datetimeContent.setMicrosecond(microsecond);
+                        valIndex = tmpIndex;
+                        fracPartUsed = true;
+                        break;
+                    // AM/PM
+                    case 'p':
+                        if ((valEnd - valIndex) < 2 || val.charAt(valIndex + 1) != 'M' || !usaTime)  {
+                            return false;
+                        }
+                        if (val.charAt(valIndex) == 'P') {
+                            dayPart = 12;
+                        }
+                        timePartUsed = true;
+                        valIndex += 2;
+                        break;
+                    // Weekday
+                    case 'W':
+                        intValue = checkWord(S_DAY_NAME, val.substring(valIndex));
+                        if (intValue <= 0) {
+                            return false;
+                        }
+                        valIndex += S_DAY_NAME.get(intValue).length();
+                        intValue++;
+                        weekday = intValue;
+                        datePartUsed = true;
+                        break;
+                    case 'a':
+                        intValue = checkWord(S_AB_DAY_NAME, val.substring(valIndex));
+                        if (intValue <= 0) {
+                            return false;
+                        }
+                        valIndex += S_AB_DAY_NAME.get(intValue).length();
+                        intValue++;
+                        weekday = intValue;
+                        datePartUsed = true;
+                        break;
+                    case 'w':
+                        tmpIndex = valIndex + Math.min(1, (valEnd - valIndex));
+                        try {
+                            intValue = Integer.parseInt(val.substring(valIndex, tmpIndex));
+                        } catch (Exception e) {
+                            return false;
+                        }
+                        if (intValue >= 7) {
+                            return false;
+                        }
+                        if (intValue == 0) {
+                            intValue = 7;
+                        }
+                        weekday = intValue;
+                        valIndex = tmpIndex;
+                        datePartUsed = true;
+                        break;
+                    case 'j':
+                        tmpIndex = valIndex + Math.min(3, (valEnd - valIndex));
+                        try {
+                            intValue = Integer.parseInt(val.substring(valIndex, tmpIndex));
+                        } catch (Exception e) {
+                            return false;
+                        }
+                        yearday = intValue;
+                        valIndex = tmpIndex;
+                        datePartUsed = true;
+                        break;
+                    case 'u':
+                    case 'v':
+                    case 'U':
+                    case 'V':
+                        sundayFirst = ptr.charAt(ptrIndex) == 'U' || ptr.charAt(ptrIndex) == 'V';
+                        // Used to check if there is %x or %X
+                        strictWeekNumber = ptr.charAt(ptrIndex) == 'V' || ptr.charAt(ptrIndex) == 'v';
+                        tmpIndex = valIndex + Math.min(2, (valEnd - valIndex));
+                        try {
+                            intValue = Integer.parseInt(val.substring(valIndex, tmpIndex));
+                        } catch (Exception e) {
+                            return false;
+                        }
+                        weekNum = intValue;
+                        if (weekNum > 53 || (strictWeekNumber && weekNum == 0)) {
+                            return false;
+                        }
+                        valIndex = tmpIndex;
+                        datePartUsed = true;
+                        break;
+                    // strict week number, must be used with %V or %v
+                    case 'x':
+                    case 'X':
+                        strictWeekNumberYearType = ptr.charAt(ptrIndex) == 'X';
+                        tmpIndex = valIndex + Math.min(4, (valEnd - valIndex));
+                        try {
+                            intValue = Integer.parseInt(val.substring(valIndex, tmpIndex));
+                        } catch (Exception e) {
+                            return false;
+                        }
+                        strictWeekNumberYear = intValue;
+                        valIndex = tmpIndex;
+                        datePartUsed = true;
+                        break;
+                    case 'r':
+                        if (valEnd - valIndex < 11) {
+                            return false;
+                        }
+                        if (uncommonFormatStr("%I:%i:%S %p", val.substring(valIndex, valIndex + 11), datetimeContent)) {
+                            return false;
+                        }
+                        valIndex += 11;
+                        timePartUsed = true;
+                        break;
+                    case 'T':
+                        if (valEnd - valIndex < 8) {
+                            return false;
+                        }
+
+                        if (uncommonFormatStr("%I:%i:%S", val.substring(valIndex, valIndex + 8), datetimeContent)) {
+                            return false;
+                        }
+                        valIndex += 8;
+                        timePartUsed = true;
+                        break;
+                    case '.':
+                        while (valIndex < valEnd && Character.getType(val.charAt(valIndex)) == Character.OTHER_PUNCTUATION) {
+                            valIndex++;
+                        }
+                        break;
+                    case '@':
+                        while (valIndex < valEnd && Character.isAlphabetic(val.charAt(valIndex))) {
+                            valIndex++;
+                        }
+                        break;
+                    case '#':
+                        while (valIndex < valEnd && Character.isDigit(val.charAt(valIndex))) {
+                            valIndex++;
+                        }
+                        break;
+                    case '%': // %%, escape the %
+                        if ('%' != val.charAt(valIndex)) {
+                            return false;
+                        }
+                        valIndex++;
+                        break;
+                    default:
+                        return false;
+                }
+            } else if (!Character.isSpaceChar(ptr.charAt(ptrIndex))) {
+                if (ptr.charAt(ptrIndex) != val.charAt(valIndex)) {
+                    return false;
+                }
+                ptrIndex++;
+                valIndex++;
+            } else {
+                ptrIndex++;
+            }
+        }
+
+        if (usaTime) {
+            if (hour > 12 || hour < 1) {
+                return false;
+            }
+            hour = (hour % 12) + dayPart;
+            datetimeContent.setHour(hour);
+        }
+
+        // Year day
+        if (yearday > 0) {
+            long days = calcDaynr(year, 1, 1) + yearday - 1;
+            if (!getDateFromDaynr(days, datetimeContent)) {
+                return false;
+            }
+        }
+
+        // weekday
+        if (weekNum >= 0 && weekday > 0) {
+            // Check
+            if ((strictWeekNumber && (strictWeekNumberYear < 0 || strictWeekNumberYearType != sundayFirst)) ||
+                    (!strictWeekNumber && strictWeekNumberYear >= 0)) {
+                return false;
+            }
+            long days = calcDaynr(strictWeekNumber ? strictWeekNumberYear : datetimeContent.getYear(), 1, 1);
+
+            long weekdayB = calcWeekday(days, sundayFirst);
+
+            if (sundayFirst) {
+                days += ((weekdayB == 0) ? 0 : 7) - weekdayB + (weekNum - 1) * 7 + weekday % 7;
+            } else {
+                days += ((weekdayB <= 3) ? 0 : 7) - weekdayB + (weekNum - 1) * 7 + weekday - 1;
+            }
+            if (!getDateFromDaynr(days, datetimeContent)) {
+                return false;
+            }
+        }
+
+        // Compute timestamp type
+        if (fracPartUsed) {
+            if (datePartUsed) {
+                datetimeContent.setType(DatetimeContentType.TIMESTAMP_DATETIME);
+            } else {
+                datetimeContent.setType(DatetimeContentType.TIMESTAMP_TIME);
+            }
+        } else {
+            if (datePartUsed) {
+                if (timePartUsed) {
+                    datetimeContent.setType(DatetimeContentType.TIMESTAMP_DATETIME);
+                } else {
+                    datetimeContent.setType(DatetimeContentType.TIMESTAMP_TIME);
+                }
+            } else {
+                datetimeContent.setType(DatetimeContentType.TIMESTAMP_TIME);
+            }
+        }
+
+        if (checkRange(datetimeContent) || checkDate(datetimeContent)) {
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean checkDate(DatetimeContent datetimeContent) {
+        if (datetimeContent.getMonth() == 0 || datetimeContent.getDay() == 0) {
+            return true;
+        }
+        if (datetimeContent.getDay() > S_DAYS_IN_MONTH[(int) datetimeContent.getMonth()]) {
+            // Feb 29 in leap year is valid.
+            if (datetimeContent.getMonth() == 2 && datetimeContent.getDay() == 29 && Year.isLeap(datetimeContent.getYear())) {
+                return false;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean checkRange(DatetimeContent datetimeContent) {
+        return datetimeContent.getYear() > 9999 || datetimeContent.getMonth() > 12 || datetimeContent.getDay() > 31 ||
+                datetimeContent.getHour() > (DatetimeContentType.TIMESTAMP_TIME.equals(datetimeContent.getType()) ?
+                        TIME_MAX_HOUR : 23)
+                || datetimeContent.getMinute() > 59 || datetimeContent.getSecond() > 59
+                || datetimeContent.getMicrosecond() > 999999;
+    }
+
+    private static long calcWeekday(long days, boolean isSundayFirstDay) {
+        return (days + 5L + (isSundayFirstDay ? 1L : 0L)) % 7;
+    }
+
+    private static boolean getDateFromDaynr(long daynr, DatetimeContent datetimeContent) {
+        if (daynr <= 0 || daynr > DATE_MAX_DAYNR) {
+            return false;
+        }
+        datetimeContent.setYear(daynr / 365);
+        long daysBeforYear = 0;
+        while (daynr < (daysBeforYear = calcDaynr(datetimeContent.getYear(), 1, 1))) {
+            datetimeContent.setYear(datetimeContent.getYear() - 1);
+        }
+        long daysOfYear = daynr - daysBeforYear + 1;
+        int leapDay = 0;
+        if (Year.isLeap(datetimeContent.getYear())) {
+            if (daysOfYear > 31 + 28) {
+                daysOfYear--;
+                if (daysOfYear == 31 + 28) {
+                    leapDay = 1;
+                }
+            }
+        }
+        datetimeContent.setMonth(1);
+        while (daysOfYear > S_DAYS_IN_MONTH[(int) datetimeContent.getMonth()]) {
+            daysOfYear -= S_DAYS_IN_MONTH[(int) datetimeContent.getMonth()];
+            datetimeContent.setMonth(datetimeContent.getMonth() + 1);
+        }
+        datetimeContent.setDay(daysOfYear + leapDay);
+        return true;
+    }
+
+    private static long calcDaynr(long year, long month, long day) {
+        long delsum = 0;
+        long y = year;
+        if (year == 0 && month == 0) {
+            return 0;
+        }
+        /* Cast to int to be able to handle month == 0 */
+        delsum = 365 * y + 31 * (month - 1) + day;
+        if (month <= 2) {
+            // No leap year
+            y--;
+        } else {
+            // This is great!!!
+            // 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+            // 0, 0, 3, 3, 4, 4, 5, 5, 5,  6,  7,  8
+            delsum -= (month * 4 + 23) / 10;
+        }
+        // Every 400 year has 97 leap year, 100, 200, 300 are not leap year.
+        return delsum + y / 4 - y / 100 + y / 400;
+    }
+
+    public static int checkWord(List<String> lib, String str) {
+        int pos = -1;
+        int endIndex = 0;
+        for (; endIndex < str.length(); endIndex++) {
+            if (!Character.isAlphabetic(str.charAt(endIndex))) {
+                break;
+            }
+        }
+        String word = str.substring(0, endIndex);
+        for (int i = 0; i < lib.size(); i++) {
+            if (lib.get(i).equalsIgnoreCase(word)) {
+                pos = i;
+            }
+        }
+        return pos;
     }
 
     @ConstantFunction(name = "str2date", argTypes = {VARCHAR, VARCHAR}, returnType = DATE)
