@@ -26,11 +26,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
     private static final String INSERT_SELECT_METRIC_SAMPLE_TEMPLATE =
             "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', COUNT(1) * $ratio, "
                     + "$dataSize * $ratio, 0, 0, '', '', NOW() "
-<<<<<<< HEAD
-                    + "FROM (SELECT `$columnName` as column_key FROM $tableName $hints ) as t";
-=======
                     + "FROM (SELECT `$columnName` as column_key FROM `$dbName`.`$tableName` $hints ) as t ";
->>>>>>> be1bfc959 ([BugFix] Fix json column & large string column collect bug (#20123))
 
     private static final String INSERT_SELECT_TYPE_SAMPLE_TEMPLATE =
             "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', IFNULL(SUM(t1.count), 0) * $ratio, "
@@ -159,13 +155,8 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
             context.put("tableId", tableId);
             context.put("columnName", name);
             context.put("dbName", db.getFullName());
-<<<<<<< HEAD
-            context.put("tableName", db.getOriginName() + "." + table.getName());
-            context.put("dataSize", getDataSize(column, true));
-=======
             context.put("tableName", table.getName());
             context.put("dataSize", getDataSize(column));
->>>>>>> be1bfc959 ([BugFix] Fix json column & large string column collect bug (#20123))
             context.put("ratio", ratio);
             context.put("hints", hintTablets);
             context.put("maxFunction", getMinMaxFunction(column, "t1.`column_key`", true));

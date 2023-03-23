@@ -369,13 +369,8 @@ public class StatisticsCollectJobTest extends PlanTestBase {
     @Test
     public void testSplitColumns() {
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-<<<<<<< HEAD
-                new AnalyzeJob(10002, 16325, null,
-                        StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
-=======
                 new AnalyzeJob(db.getId(), t0StatsTableId, null,
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
->>>>>>> be1bfc959 ([BugFix] Fix json column & large string column collect bug (#20123))
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));

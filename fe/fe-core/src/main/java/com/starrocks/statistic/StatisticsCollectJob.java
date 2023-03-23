@@ -110,43 +110,15 @@ public abstract class StatisticsCollectJob {
         throw new DdlException(context.getState().getErrorMessage());
     }
 
-<<<<<<< HEAD
-    protected String getDataSize(Column column, boolean isSample) {
-        if (column.getPrimitiveType().isCharFamily() || column.getPrimitiveType().isJsonType()) {
-            if (isSample) {
-                return "IFNULL(SUM(CHAR_LENGTH(`column_key`) * t1.count), 0)";
-            } else {
-                return "IFNULL(SUM(CHAR_LENGTH(`" + column.getName() + "`)), 0)";
-            }
-        }
-
-        long typeSize = column.getType().getTypeSize();
-
-        if (isSample && column.getType().canStatistic()) {
-            return "IFNULL(SUM(t1.count), 0) * " + typeSize;
-        }
-        return "COUNT(1) * " + typeSize;
-    }
-
-    protected int splitColumns(long rowCount) {
-        long splitSize;
-        if (rowCount == 0) {
-            splitSize = columns.size();
-=======
     protected String getMinMaxFunction(Column column, String name, boolean isMax) {
         String fn = isMax ? "MAX" : "MIN";
         if (column.getPrimitiveType().isCharFamily()) {
             fn = fn + "(LEFT(" + name + ", 200))";
->>>>>>> be1bfc959 ([BugFix] Fix json column & large string column collect bug (#20123))
         } else {
             fn = fn + "(" + name + ")";
         }
-<<<<<<< HEAD
-        return (int) splitSize;
-=======
         fn = "IFNULL(" + fn + ", '')";
         return fn;
->>>>>>> be1bfc959 ([BugFix] Fix json column & large string column collect bug (#20123))
     }
 
     protected String build(VelocityContext context, String template) {
