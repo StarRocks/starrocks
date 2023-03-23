@@ -22,6 +22,7 @@ import java.util.Map;
 public class TaskRunContext {
     ConnectContext ctx;
     String definition;
+    String postRun;
     String remoteIp;
     int priority;
     Map<String, String> properties;
@@ -42,6 +43,14 @@ public class TaskRunContext {
 
     public void setDefinition(String definition) {
         this.definition = definition;
+    }
+
+    public String getPostRun() {
+        return postRun;
+    }
+
+    public void setPostRun(String postRun) {
+        this.postRun = postRun;
     }
 
     public String getRemoteIp() {

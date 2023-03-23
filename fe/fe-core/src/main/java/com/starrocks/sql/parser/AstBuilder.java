@@ -80,6 +80,7 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -1405,7 +1406,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 refreshSchemeDesc = new SyncRefreshSchemeDesc();
             } else {
                 // use new manual refresh
-                refreshSchemeDesc = new ManualRefreshSchemeDesc();
+                refreshSchemeDesc = new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
             }
         }
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
@@ -5675,6 +5676,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
         NodePosition pos = createPos(context);
+        MaterializedView.RefreshMoment refreshMoment = MaterializedView.RefreshMoment.IMMEDIATE;
+        if (context.DEFERRED() != null) {
+            refreshMoment = MaterializedView.RefreshMoment.DEFERRED;
+        }
         if (context.ASYNC() != null) {
             boolean defineStartTime = false;
             if (context.START() != null) {
@@ -5704,11 +5709,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                             createPos(context.interval()));
                 }
             }
-            return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral, pos);
+            return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral, refreshMoment, pos);
         } else if (context.MANUAL() != null) {
-            return new ManualRefreshSchemeDesc(pos);
+            return new ManualRefreshSchemeDesc(refreshMoment, pos);
         } else if (context.INCREMENTAL() != null) {
-            return new IncrementalRefreshSchemeDesc(pos);
+            return new IncrementalRefreshSchemeDesc(refreshMoment, pos);
         }
         return null;
     }

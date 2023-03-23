@@ -56,6 +56,9 @@ public class Task implements Writable {
     @SerializedName("definition")
     private String definition;
 
+    @SerializedName("postRun")
+    private String postRun;
+
     @SerializedName("properties")
     private Map<String, String> properties;
 
@@ -173,6 +176,14 @@ public class Task implements Writable {
 
     public void setCreateUser(String createUser) {
         this.createUser = createUser;
+    }
+
+    public String getPostRun() {
+        return postRun;
+    }
+
+    public void setPostRun(String postRun) {
+        this.postRun = postRun;
     }
 
     public static Task read(DataInput in) throws IOException {

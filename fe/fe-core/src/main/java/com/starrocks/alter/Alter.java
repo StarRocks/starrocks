@@ -465,6 +465,7 @@ public class Alter {
         if (currentTask != null) {
             currentTask.setDefinition("insert overwrite " + materializedView.getName() + " " +
                     materializedView.getViewDefineSql());
+            currentTask.setPostRun(TaskBuilder.getAnalyzeMVStmt(materializedView.getName()));
         }
     }
 

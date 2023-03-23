@@ -93,6 +93,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         INCREMENTAL
     }
 
+    public enum RefreshMoment {
+        IMMEDIATE,
+        DEFERRED
+    }
+
     public static class BasePartitionInfo {
 
         @SerializedName(value = "id")
@@ -215,6 +220,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public static class MvRefreshScheme {
+        @SerializedName(value = "moment")
+        private RefreshMoment moment;
         @SerializedName(value = "type")
         private RefreshType type;
         // when type is ASYNC
@@ -225,6 +232,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         private long lastRefreshTime;
 
         public MvRefreshScheme() {
+            this.moment = RefreshMoment.IMMEDIATE;
             this.type = RefreshType.ASYNC;
             this.asyncRefreshContext = new AsyncRefreshContext();
             this.lastRefreshTime = 0;
@@ -232,6 +240,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         public boolean isIncremental() {
             return this.type.equals(RefreshType.INCREMENTAL);
+        }
+
+        public RefreshMoment getMoment() {
+            return moment;
+        }
+
+        public void setMoment(RefreshMoment moment) {
+            this.moment = moment;
         }
 
         public RefreshType getType() {
@@ -743,7 +759,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         if (refreshScheme == null) {
             sb.append("\nREFRESH ").append("UNKNOWN");
         } else {
-            sb.append("\nREFRESH ").append(refreshScheme.getType());
+            if (refreshScheme.getMoment().equals(RefreshMoment.DEFERRED)) {
+                sb.append(String.format("\nREFRESH %s %s", refreshScheme.getMoment(), refreshScheme.getType()));
+            } else {
+                sb.append("\nREFRESH ").append(refreshScheme.getType());
+            }
         }
         if (refreshScheme != null && refreshScheme.getType() == RefreshType.ASYNC) {
             AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
