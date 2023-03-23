@@ -14,25 +14,55 @@
 
 #pragma once
 
+#include <memory>
 #include <utility>
 
 #include "common/compiler_util.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "util/priority_thread_pool.hpp"
 
-namespace starrocks {
-namespace spill {
+namespace starrocks::spill {
 struct EmptyMemGuard {
-    void scoped_begin() const {}
+    bool scoped_begin() const { return true; }
     void scoped_end() const {}
 };
 
 struct MemTrackerGuard {
     MemTrackerGuard(MemTracker* scope_tracker_) : scope_tracker(scope_tracker_) {}
-    void scoped_begin() const { old_tracker = tls_thread_status.set_mem_tracker(scope_tracker); }
+    bool scoped_begin() const {
+        old_tracker = tls_thread_status.set_mem_tracker(scope_tracker);
+        return true;
+    }
     void scoped_end() const { tls_thread_status.set_mem_tracker(old_tracker); }
     MemTracker* scope_tracker;
+    mutable MemTracker* old_tracker = nullptr;
+};
+
+struct QueryCtxMemTrackerGuard {
+    QueryCtxMemTrackerGuard(const pipeline::QueryContextPtr& query_ctx_, MemTracker* scope_tracker_)
+            : query_ctx(query_ctx_->weak_from_this()), scope_tracker(scope_tracker_) {}
+
+    bool scoped_begin() const {
+        captured = query_ctx.lock();
+        if (captured == nullptr) {
+            return false;
+        }
+        old_tracker = tls_thread_status.set_mem_tracker(scope_tracker);
+        return true;
+    }
+
+    void scoped_end() const {
+        tls_thread_status.set_mem_tracker(old_tracker);
+        captured = nullptr;
+    }
+
+    std::weak_ptr<pipeline::QueryContext> query_ctx;
+    MemTracker* scope_tracker;
+
+    mutable std::shared_ptr<pipeline::QueryContext> captured;
     mutable MemTracker* old_tracker = nullptr;
 };
 
@@ -57,5 +87,4 @@ struct SyncTaskExecutor {
         return Status::OK();
     }
 };
-} // namespace spill
-} // namespace starrocks
+} // namespace starrocks::spill
