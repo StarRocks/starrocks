@@ -145,29 +145,24 @@ public class LakeMaterializedView extends MaterializedView {
     }
 
     @Override
-    public Short getDefaultReplicationNum() {
-        return 1;
-    }
-
-    @Override
-    protected void appendBaseProperties(StringBuilder sb) {
+    protected void appendUniqueProperties(StringBuilder sb) {
         Preconditions.checkNotNull(sb);
 
         Map<String, String> storageProperties = getProperties();
 
         // enable_storage_cache
-        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE).append("\" = \"");
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                .append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE).append("\" = \"");
         sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
 
         // storage_cache_ttl
-        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)
-                .append("\" = \"");
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                .append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL).append("\" = \"");
         sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
 
         // allow_sync_write_back
         sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
-                .append("\" = \"");
+                .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK).append("\" = \"");
         sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
     }
 
