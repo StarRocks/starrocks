@@ -453,7 +453,7 @@ Status OrcChunkReader::_init_cast_exprs() {
         // For example, if we assume column A is an integer column, but it's stored as string in orc file
         // then min/max of A is almost unusable. Think that there are values ["10", "10000", "100001", "11"]
         // min/max will be "10" and "11", and we expect min/max is 10/100001
-        if (!_broker_load_mode && !starrocks_type.is_implicit_castable(orc_type)) {
+        if (!_broker_load_mode && !is_implicit_castable(starrocks_type, orc_type)) {
             return Status::NotSupported(strings::Substitute("Type mismatch: orc $0 to native $1. file = $2",
                                                             orc_type.debug_string(), starrocks_type.debug_string(),
                                                             _current_file_name));
@@ -1225,6 +1225,13 @@ int OrcChunkReader::get_column_id_by_slot_name(const std::string& slot_name) con
         return it->second;
     }
     return -1;
+}
+
+bool OrcChunkReader::is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type) {
+    if (starrocks_type.is_decimal_type() && orc_type.is_decimal_type()) {
+        return true;
+    }
+    return false;
 }
 
 } // namespace starrocks
