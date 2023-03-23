@@ -39,6 +39,8 @@
 #include <zlib.h>
 #include <zstd/zstd.h>
 #include <zstd/zstd_errors.h>
+#include <lzo/lzo1x.h>
+#include <lzo/lzoconf.h>
 
 #include <memory>
 
@@ -424,17 +426,30 @@ Status ZstandardStreamCompression::decompress(uint8_t* input, size_t input_len, 
 
 // lzo
 class LzoStreamCompression : public StreamCompression {
+private:
+    bool _is_header_loaded = false;
+    enum LzoChecksum { CHECK_NONE, CHECK_CRC32, CHECK_ADLER };
+
+    struct HeaderInfo {
+        uint16_t version;
+        uint16_t lib_version;
+        uint16_t version_needed;
+        uint8_t method;
+        std::string filename;
+        uint32_t header_size;
+        LzoChecksum header_checksum_type;
+        LzoChecksum input_checksum_type;
+        LzoChecksum output_checksum_type;
+    };
+
+    struct HeaderInfo _header_info;
+
 public:
-    LzoStreamCompression()
-            : StreamCompression(CompressionTypePB::LZO) {}
+    LzoStreamCompression() : StreamCompression(CompressionTypePB::LZO) {}
 
-    ~LzoStreamCompression() override {}
+    ~LzoStreamCompression() override = default;
 
-    std::string debug_info() override {
-        std::stringstream ss;
-        ss << "LzoStreamCompression.";
-        return ss.str();
-    }
+    std::string debug_info() override;
 
     Status init() override;
 
@@ -442,368 +457,428 @@ public:
                       size_t* output_bytes_written, bool* stream_end) override;
 
 private:
-    const int32_t DEC_32_TABLE[8] = {4, 1, 2, 1, 4, 4, 4, 4};
-    const int32_t DEC_64_TABLE[8] = {0, 0, 0, -1, 0, 1, 2, 3};
+    const static uint8_t LZOP_MAGIC[9];
+    const static uint64_t LZOP_VERSION;
+    const static uint64_t MIN_LZO_VERSION;
+    const static uint32_t MIN_HEADER_SIZE;
+    const static uint32_t LZO_MAX_BLOCK_SIZE;
 
-    const int32_t SIZE_OF_SHORT = 2;
-    const int32_t SIZE_OF_INT = 4;
-    const static int32_t SIZE_OF_LONG = 8;
+    const static uint32_t CRC32_INIT_VALUE;
+    const static uint32_t ADLER32_INIT_VALUE;
 
-    std::string toHex(uint64_t val) {
-        std::ostringstream out;
-        out << "0x" << std::hex << val;
-        return out.str();
+    const static uint64_t F_H_CRC32;
+    const static uint64_t F_MASK;
+    const static uint64_t F_OS_MASK;
+    const static uint64_t F_CS_MASK;
+    const static uint64_t F_RESERVED;
+    const static uint64_t F_MULTIPART;
+    const static uint64_t F_H_FILTER;
+    const static uint64_t F_H_EXTRA_FIELD;
+    const static uint64_t F_CRC32_C;
+    const static uint64_t F_ADLER32_C;
+    const static uint64_t F_CRC32_D;
+    const static uint64_t F_ADLER32_D;
+
+    uint8_t* get_uint8(uint8_t* ptr, uint8_t* value) {
+        *value = *ptr;
+        return ptr + sizeof(uint8_t);
     }
+
+    uint8_t* get_uint16(uint8_t* ptr, uint16_t* value) {
+        *value = *ptr << 8 | *(ptr + 1);
+        return ptr + sizeof(uint16_t);
+    }
+
+    uint8_t* get_uint32(uint8_t* ptr, uint32_t* value) {
+        *value = (*ptr << 24) | (*(ptr + 1) << 16) | (*(ptr + 2) << 8) | *(ptr + 3);
+        return ptr + sizeof(uint32_t);
+    }
+
+    LzoChecksum header_type(int flags) { return (flags & F_H_CRC32) ? CHECK_CRC32 : CHECK_ADLER; }
+
+    LzoChecksum input_type(int flags) {
+        return (flags & F_CRC32_C) ? CHECK_CRC32 : (flags & F_ADLER32_C) ? CHECK_ADLER : CHECK_NONE;
+    }
+
+    LzoChecksum output_type(int flags) {
+        return (flags & F_CRC32_D) ? CHECK_CRC32 : (flags & F_ADLER32_D) ? CHECK_ADLER : CHECK_NONE;
+    }
+
+    Status parse_header_info(uint8_t* input, size_t input_len, size_t* input_bytes_read,
+                             size_t* more_bytes_needed);
+
+    Status checksum(LzoChecksum type, const std::string& source, uint32_t expected, uint8_t* ptr,
+                    size_t len);
 };
+
+// Lzop
+const uint8_t LzoStreamCompression::LZOP_MAGIC[9] = {0x89, 0x4c, 0x5a, 0x4f, 0x00,
+                                                     0x0d, 0x0a, 0x1a, 0x0a};
+
+const uint64_t LzoStreamCompression::LZOP_VERSION = 0x1030;
+const uint64_t LzoStreamCompression::MIN_LZO_VERSION = 0x0100;
+// magic(9) + ver(2) + lib_ver(2) + ver_needed(2) + method(1)
+// + lvl(1) + flags(4) + mode/mtime(12) + filename_len(1)
+// without the real file name, extra field and checksum
+const uint32_t LzoStreamCompression::MIN_HEADER_SIZE = 34;
+const uint32_t LzoStreamCompression::LZO_MAX_BLOCK_SIZE = (64 * 1024l * 1024l);
+
+const uint32_t LzoStreamCompression::CRC32_INIT_VALUE = 0;
+const uint32_t LzoStreamCompression::ADLER32_INIT_VALUE = 1;
+
+const uint64_t LzoStreamCompression::F_H_CRC32 = 0x00001000L;
+const uint64_t LzoStreamCompression::F_MASK = 0x00003FFFL;
+const uint64_t LzoStreamCompression::F_OS_MASK = 0xff000000L;
+const uint64_t LzoStreamCompression::F_CS_MASK = 0x00f00000L;
+const uint64_t LzoStreamCompression::F_RESERVED = ((F_MASK | F_OS_MASK | F_CS_MASK) ^ 0xffffffffL);
+const uint64_t LzoStreamCompression::F_MULTIPART = 0x00000400L;
+const uint64_t LzoStreamCompression::F_H_FILTER = 0x00000800L;
+const uint64_t LzoStreamCompression::F_H_EXTRA_FIELD = 0x00000040L;
+const uint64_t LzoStreamCompression::F_CRC32_C = 0x00000200L;
+const uint64_t LzoStreamCompression::F_ADLER32_C = 0x00000002L;
+const uint64_t LzoStreamCompression::F_CRC32_D = 0x00000100L;
+const uint64_t LzoStreamCompression::F_ADLER32_D = 0x00000001L;
 
 Status LzoStreamCompression::init() {
     return Status::OK();
 }
 
-#define COPY_VALUE(dst, src, type) memcpy(dst, src, sizeof(type))
+Status LzoStreamCompression::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read,
+                                        uint8_t* output, size_t output_max_len,
+                                        size_t* decompressed_len, bool* stream_end) {
+    size_t* more_input_bytes = &input_len;
+    size_t* more_output_bytes = &output_max_len;
 
-Status LzoStreamCompression::decompress(uint8_t* inputAddress, size_t input_len, size_t* input_bytes_read,
-                                        uint8_t* outputAddress, size_t output_len, size_t* output_bytes_written,
-                                        bool* stream_end) {
-    *input_bytes_read = 0;
-    *output_bytes_written = 0;
-    *stream_end = false;
+    if (!_is_header_loaded) {
+        // this is the first time to call lzo decompress, parse the header info first
+        RETURN_IF_ERROR(parse_header_info(input, input_len, input_bytes_read, more_input_bytes));
+        if (*more_input_bytes > 0) {
+            return Status::OK();
+        }
+    }
 
-    uint8_t* inputLimit = inputAddress + input_len;
-    uint8_t* outputLimit = outputAddress + output_len;
+    // LOG(INFO) << "after load header: " << *input_bytes_read;
 
-    // nothing compresses to nothing
-    if (inputAddress == inputLimit) {
+    // read compressed block
+    // compressed-block ::=
+    //   <uncompressed-size>
+    //   <compressed-size>
+    //   <uncompressed-checksums>
+    //   <compressed-checksums>
+    //   <compressed-data>
+    int left_input_len = input_len - *input_bytes_read;
+    if (left_input_len < sizeof(uint32_t)) {
+        // block is at least have uncompressed_size
+        *more_input_bytes = sizeof(uint32_t) - left_input_len;
         return Status::OK();
     }
 
-    // maximum offset in buffers to which it's safe to write long-at-a-time
-    uint8_t* const fastOutputLimit = outputLimit - SIZE_OF_LONG;
-
-    // LZO can concat two blocks together so, decode until the input data is
-    // consumed
-    const uint8_t* input = inputAddress;
-    uint8_t* output = outputAddress;
-    while (input < inputLimit) {
-        //
-        // Note: For safety some of the code below may stop decoding early or
-        // skip decoding, because input is not available.  This makes the code
-        // safe, and since LZO requires an explicit "stop" command, the decoder
-        // will still throw a exception.
-        //
-
-        bool firstCommand = true;
-        uint32_t lastLiteralLength = 0;
-        while (true) {
-            if (input >= inputLimit) {
-                std::stringstream ss;
-                ss << "LzoStreamCompression error: ";
-                return Status::InternalError(ss.str());
-            }
-            uint32_t command = *(input++) & 0xFF;
-            if (command == 0x11) {
-                break;
-            }
-
-            // Commands are described using a bit pattern notation:
-            // 0: bit is not set
-            // 1: bit is set
-            // L: part of literal length
-            // P: part of match offset position
-            // M: part of match length
-            // ?: see documentation in command decoder
-
-            int32_t matchLength;
-            int32_t matchOffset;
-            uint32_t literalLength;
-            if ((command & 0xf0) == 0) {
-                if (lastLiteralLength == 0) {
-                    // 0b0000_LLLL (0bLLLL_LLLL)*
-
-                    // copy length :: fixed
-                    //   0
-                    matchOffset = 0;
-
-                    // copy offset :: fixed
-                    //   0
-                    matchLength = 0;
-
-                    // literal length - 3 :: variable bits :: valid range [4..]
-                    //   3 + variableLength(command bits [0..3], 4)
-                    literalLength = command & 0xf;
-                    if (literalLength == 0) {
-                        literalLength = 0xf;
-
-                        uint32_t nextByte = 0;
-                        while (input < inputLimit && (nextByte = *(input++) & 0xFF) == 0) {
-                            literalLength += 0xff;
-                        }
-                        literalLength += nextByte;
-                    }
-                    literalLength += 3;
-                } else if (lastLiteralLength <= 3) {
-                    // 0b0000_PPLL 0bPPPP_PPPP
-
-                    // copy length: fixed
-                    //   3
-                    matchLength = 3;
-
-                    // copy offset :: 12 bits :: valid range [2048..3071]
-                    //   [0..1] from command [2..3]
-                    //   [2..9] from trailer [0..7]
-                    //   [10] unset
-                    //   [11] set
-                    if (input >= inputLimit) {
-                        std::stringstream ss;
-                        ss << "LzoStreamCompression error: ";
-                        return Status::InternalError(ss.str());
-                    }
-                    matchOffset = (command & 0xc) >> 2;
-                    matchOffset |= (*(input++) & 0xFF) << 2;
-                    matchOffset |= 0x800;
-
-                    // literal length :: 2 bits :: valid range [0..3]
-                    //   [0..1] from command [0..1]
-                    literalLength = (command & 0x3);
-                } else {
-                    // 0b0000_PPLL 0bPPPP_PPPP
-
-                    // copy length :: fixed
-                    //   2
-                    matchLength = 2;
-
-                    // copy offset :: 10 bits :: valid range [0..1023]
-                    //   [0..1] from command [2..3]
-                    //   [2..9] from trailer [0..7]
-                    if (input >= inputLimit) {
-                        std::stringstream ss;
-                        ss << "LzoStreamCompression error: ";
-                        return Status::InternalError(ss.str());
-                    }
-                    matchOffset = (command & 0xc) >> 2;
-                    matchOffset |= (*(input++) & 0xFF) << 2;
-
-                    // literal length :: 2 bits :: valid range [0..3]
-                    //   [0..1] from command [0..1]
-                    literalLength = (command & 0x3);
-                }
-            } else if (firstCommand) {
-                // first command has special handling when high nibble is set
-                matchLength = 0;
-                matchOffset = 0;
-                literalLength = command - 17;
-            } else if ((command & 0xf0) == 0x10) {
-                // 0b0001_?MMM (0bMMMM_MMMM)* 0bPPPP_PPPP_PPPP_PPLL
-
-                // copy length - 2 :: variable bits :: valid range [3..]
-                //   2 + variableLength(command bits [0..2], 3)
-                matchLength = command & 0x7;
-                if (matchLength == 0) {
-                    matchLength = 0x7;
-
-                    int32_t nextByte = 0;
-                    while (input < inputLimit && (nextByte = *(input++) & 0xFF) == 0) {
-                        matchLength += 0xff;
-                    }
-                    matchLength += nextByte;
-                }
-                matchLength += 2;
-
-                // read trailer
-                if (input + SIZE_OF_SHORT > inputLimit) {
-                    std::stringstream ss;
-                    ss << "LzoStreamCompression error: ";
-                    return Status::InternalError(ss.str());
-                }
-                uint32_t trailer = *reinterpret_cast<const uint16_t*>(input) & 0xFFFF;
-                input += SIZE_OF_SHORT;
-
-                // copy offset :: 16 bits :: valid range [32767..49151]
-                //   [0..13] from trailer [2..15]
-                //   [14] if command bit [3] unset
-                //   [15] if command bit [3] set
-                matchOffset = trailer >> 2;
-                if ((command & 0x8) == 0) {
-                    matchOffset |= 0x4000;
-                } else {
-                    matchOffset |= 0x8000;
-                }
-                matchOffset--;
-
-                // literal length :: 2 bits :: valid range [0..3]
-                //   [0..1] from trailer [0..1]
-                literalLength = trailer & 0x3;
-            } else if ((command & 0xe0) == 0x20) {
-                // 0b001M_MMMM (0bMMMM_MMMM)* 0bPPPP_PPPP_PPPP_PPLL
-
-                // copy length - 2 :: variable bits :: valid range [3..]
-                //   2 + variableLength(command bits [0..4], 5)
-                matchLength = command & 0x1f;
-                if (matchLength == 0) {
-                    matchLength = 0x1f;
-
-                    int nextByte = 0;
-                    while (input < inputLimit && (nextByte = *(input++) & 0xFF) == 0) {
-                        matchLength += 0xff;
-                    }
-                    matchLength += nextByte;
-                }
-                matchLength += 2;
-
-                // read trailer
-                if (input + SIZE_OF_SHORT > inputLimit) {
-                    std::stringstream ss;
-                    ss << "LzoStreamCompression error: ";
-                    return Status::InternalError(ss.str());
-                }
-                int32_t trailer = *reinterpret_cast<const int16_t*>(input) & 0xFFFF;
-                input += SIZE_OF_SHORT;
-
-                // copy offset :: 14 bits :: valid range [0..16383]
-                //  [0..13] from trailer [2..15]
-                matchOffset = trailer >> 2;
-
-                // literal length :: 2 bits :: valid range [0..3]
-                //   [0..1] from trailer [0..1]
-                literalLength = trailer & 0x3;
-            } else if ((command & 0xc0) != 0) {
-                // 0bMMMP_PPLL 0bPPPP_PPPP
-
-                // copy length - 1 :: 3 bits :: valid range [1..8]
-                //   [0..2] from command [5..7]
-                //   add 1
-                matchLength = (command & 0xe0) >> 5;
-                matchLength += 1;
-
-                // copy offset :: 11 bits :: valid range [0..4095]
-                //   [0..2] from command [2..4]
-                //   [3..10] from trailer [0..7]
-                if (input >= inputLimit) {
-                    std::stringstream ss;
-                    ss << "LzoStreamCompression error: ";
-                    return Status::InternalError(ss.str());
-                }
-                matchOffset = (command & 0x1c) >> 2;
-                matchOffset |= (*(input++) & 0xFF) << 3;
-
-                // literal length :: 2 bits :: valid range [0..3]
-                //   [0..1] from command [0..1]
-                literalLength = (command & 0x3);
-            } else {
-                std::stringstream ss;
-                ss << "LzoStreamCompression error: ";
-                return Status::InternalError(ss.str());
-            }
-            firstCommand = false;
-
-            // copy match
-            if (matchLength != 0) {
-                // lzo encodes match offset minus one
-                matchOffset++;
-
-                uint8_t* matchAddress = output - matchOffset;
-                if (matchAddress < outputAddress || output + matchLength > outputLimit) {
-                    std::stringstream ss;
-                    ss << "LzoStreamCompression error: ";
-                    return Status::InternalError(ss.str());
-                }
-                uint8_t* matchOutputLimit = output + matchLength;
-
-                if (output > fastOutputLimit) {
-                    // slow match copy
-                    while (output < matchOutputLimit) {
-                        *(output++) = *(matchAddress++);
-                    }
-                } else {
-                    // copy repeated sequence
-                    if (matchOffset < SIZE_OF_LONG) {
-                        // 8 bytes apart so that we can copy long-at-a-time below
-                        int32_t increment32 = DEC_32_TABLE[matchOffset];
-                        int32_t decrement64 = DEC_64_TABLE[matchOffset];
-
-                        output[0] = *matchAddress;
-                        output[1] = *(matchAddress + 1);
-                        output[2] = *(matchAddress + 2);
-                        output[3] = *(matchAddress + 3);
-                        output += SIZE_OF_INT;
-                        matchAddress += increment32;
-                        COPY_VALUE(output, matchAddress, int32_t);
-                        output += SIZE_OF_INT;
-                        matchAddress -= decrement64;
-                    } else {
-                        COPY_VALUE(output, matchAddress, int64_t);
-                        matchAddress += SIZE_OF_LONG;
-                        output += SIZE_OF_LONG;
-                    }
-
-                    if (matchOutputLimit >= fastOutputLimit) {
-                        if (matchOutputLimit > outputLimit) {
-                            std::stringstream ss;
-                            ss << "LzoStreamCompression error: ";
-                            return Status::InternalError(ss.str());
-                        }
-
-                        while (output < fastOutputLimit) {
-                            COPY_VALUE(output, matchAddress, int64_t);
-                            matchAddress += SIZE_OF_LONG;
-                            output += SIZE_OF_LONG;
-                        }
-
-                        while (output < matchOutputLimit) {
-                            *(output++) = *(matchAddress++);
-                        }
-                    } else {
-                        while (output < matchOutputLimit) {
-                            COPY_VALUE(output, matchAddress, int64_t);
-                            matchAddress += SIZE_OF_LONG;
-                            output += SIZE_OF_LONG;
-                        }
-                    }
-                }
-                output = matchOutputLimit; // correction in case we over-copied
-            }
-
-            // copy literal
-            uint8_t* literalOutputLimit = output + literalLength;
-            if (literalOutputLimit > fastOutputLimit || input + literalLength > inputLimit - SIZE_OF_LONG) {
-                if (literalOutputLimit > outputLimit) {
-                    std::stringstream ss;
-                    ss << "LzoStreamCompression error: ";
-                    return Status::InternalError(ss.str());
-                }
-
-                // slow, precise copy
-                memcpy(output, input, literalLength);
-                input += literalLength;
-                output += literalLength;
-            } else {
-                // fast copy. We may over-copy but there's enough room in input
-                // and output to not overrun them
-                do {
-                    COPY_VALUE(output, input, int64_t);
-                    input += SIZE_OF_LONG;
-                    output += SIZE_OF_LONG;
-                } while (output < literalOutputLimit);
-                // adjust index if we over-copied
-                input -= (output - literalOutputLimit);
-                output = literalOutputLimit;
-            }
-            lastLiteralLength = literalLength;
-        }
-
-        if (input + SIZE_OF_SHORT > inputLimit && *reinterpret_cast<const int16_t*>(input) != 0) {
-            std::stringstream ss;
-            ss << "LzoStreamCompression error: ";
-            return Status::InternalError(ss.str());
-        }
-        input += SIZE_OF_SHORT;
+    uint8_t* block_start = input + *input_bytes_read;
+    uint8_t* ptr = block_start;
+    // 1. uncompressed size
+    uint32_t uncompressed_size;
+    ptr = get_uint32(ptr, &uncompressed_size);
+    left_input_len -= sizeof(uint32_t);
+    if (uncompressed_size == 0) {
+        *stream_end = true;
+        return Status::OK();
     }
 
-    *input_bytes_read = input - inputAddress;
-    *output_bytes_written = output - outputAddress;
+    // 2. compressed size
+    if (left_input_len < sizeof(uint32_t)) {
+        *more_input_bytes = sizeof(uint32_t) - left_input_len;
+        return Status::OK();
+    }
+
+    uint32_t compressed_size;
+    ptr = get_uint32(ptr, &compressed_size);
+    left_input_len -= sizeof(uint32_t);
+    if (compressed_size > LZO_MAX_BLOCK_SIZE) {
+        std::stringstream ss;
+        ss << "lzo block size: " << compressed_size
+           << " is greater than LZO_MAX_BLOCK_SIZE: " << LZO_MAX_BLOCK_SIZE;
+        return Status::InternalError(ss.str());
+    }
+
+    // 3. out checksum
+    uint32_t out_checksum = 0;
+    if (_header_info.output_checksum_type != CHECK_NONE) {
+        if (left_input_len < sizeof(uint32_t)) {
+            *more_input_bytes = sizeof(uint32_t) - left_input_len;
+            return Status::OK();
+        }
+
+        ptr = get_uint32(ptr, &out_checksum);
+        left_input_len -= sizeof(uint32_t);
+    }
+
+    // 4. in checksum
+    uint32_t in_checksum = 0;
+    if (compressed_size < uncompressed_size && _header_info.input_checksum_type != CHECK_NONE) {
+        if (left_input_len < sizeof(uint32_t)) {
+            *more_input_bytes = sizeof(uint32_t) - left_input_len;
+            return Status::OK();
+        }
+
+        ptr = get_uint32(ptr, &out_checksum);
+        left_input_len -= sizeof(uint32_t);
+    } else {
+        // If the compressed data size is equal to the uncompressed data size, then
+        // the uncompressed data is stored and there is no compressed checksum.
+        in_checksum = out_checksum;
+    }
+
+    // 5. checksum compressed data
+    if (left_input_len < compressed_size) {
+        *more_input_bytes = compressed_size - left_input_len;
+        return Status::OK();
+    }
+    RETURN_IF_ERROR(checksum(_header_info.input_checksum_type, "compressed", in_checksum, ptr,
+                             compressed_size));
+
+    // 6. decompress
+    if (output_max_len < uncompressed_size) {
+        *more_output_bytes = uncompressed_size - output_max_len;
+        return Status::OK();
+    }
+    if (compressed_size == uncompressed_size) {
+        // the data is uncompressed, just copy to the output buf
+        memmove(output, ptr, compressed_size);
+        ptr += compressed_size;
+    } else {
+        // decompress
+        *decompressed_len = uncompressed_size;
+        int ret = lzo1x_decompress_safe(ptr, compressed_size, output,
+                                        reinterpret_cast<lzo_uint*>(&uncompressed_size), nullptr);
+        if (ret != LZO_E_OK || uncompressed_size != *decompressed_len) {
+            std::stringstream ss;
+            ss << "Lzo decompression failed with ret: " << ret
+               << " decompressed len: " << uncompressed_size << " expected: " << *decompressed_len;
+            return Status::InternalError(ss.str());
+        }
+
+        RETURN_IF_ERROR(checksum(_header_info.output_checksum_type, "decompressed", out_checksum,
+                                 output, uncompressed_size));
+        ptr += compressed_size;
+    }
+
+    // 7. peek next block's uncompressed size
+    uint32_t next_uncompressed_size;
+    get_uint32(ptr, &next_uncompressed_size);
+    if (next_uncompressed_size == 0) {
+        // 0 means current block is the last block.
+        // consume this uncompressed_size to finish reading.
+        ptr += sizeof(uint32_t);
+    }
+
+    // 8. done
     *stream_end = true;
+    *decompressed_len = uncompressed_size;
+    *input_bytes_read += ptr - block_start;
+
+    LOG(INFO) << "finished decompress lzo block."
+              << " compressed_size: " << compressed_size
+              << " decompressed_len: " << *decompressed_len
+              << " input_bytes_read: " << *input_bytes_read
+              << " next_uncompressed_size: " << next_uncompressed_size;
 
     return Status::OK();
+}
+
+// file-header ::=  -- most of this information is not used.
+//   <magic>
+//   <version>
+//   <lib-version>
+//   [<version-needed>] -- present for all modern files.
+//   <method>
+//   <level>
+//   <flags>
+//   <mode>
+//   <mtime>
+//   <file-name>
+//   <header-checksum>
+//   <extra-field> -- presence indicated in flags, not currently used.
+Status LzoStreamCompression::parse_header_info(uint8_t* input, size_t input_len,
+                                               size_t* input_bytes_read, size_t* more_input_bytes) {
+    if (input_len < MIN_HEADER_SIZE) {
+        LOG(INFO) << "highly recommanded that Lzo header size is larger than " << MIN_HEADER_SIZE
+                  << ", or parsing header info may failed."
+                  << " only given: " << input_len;
+        *more_input_bytes = MIN_HEADER_SIZE - input_len;
+        return Status::OK();
+    }
+
+    uint8_t* ptr = input;
+    // 1. magic
+    if (memcmp(ptr, LZOP_MAGIC, sizeof(LZOP_MAGIC))) {
+        std::stringstream ss;
+        ss << "invalid lzo magic number";
+        return Status::InternalError(ss.str());
+    }
+    ptr += sizeof(LZOP_MAGIC);
+    uint8_t* header = ptr;
+
+    // 2. version
+    ptr = get_uint16(ptr, &_header_info.version);
+    if (_header_info.version > LZOP_VERSION) {
+        std::stringstream ss;
+        ss << "compressed with later version of lzop: " << &_header_info.version
+           << " must be less than: " << LZOP_VERSION;
+        return Status::InternalError(ss.str());
+    }
+
+    // 3. lib version
+    ptr = get_uint16(ptr, &_header_info.lib_version);
+    if (_header_info.lib_version < MIN_LZO_VERSION) {
+        std::stringstream ss;
+        ss << "compressed with incompatible lzo version: " << &_header_info.lib_version
+           << "must be at least: " << MIN_LZO_VERSION;
+        return Status::InternalError(ss.str());
+    }
+
+    // 4. version needed
+    ptr = get_uint16(ptr, &_header_info.version_needed);
+    if (_header_info.version_needed > LZOP_VERSION) {
+        std::stringstream ss;
+        ss << "compressed with imp incompatible lzo version: " << &_header_info.version
+           << " must be at no more than: " << LZOP_VERSION;
+        return Status::InternalError(ss.str());
+    }
+
+    // 5. method
+    ptr = get_uint8(ptr, &_header_info.method);
+    if (_header_info.method < 1 || _header_info.method > 3) {
+        std::stringstream ss;
+        ss << "invalid compression method: " << _header_info.method;
+        return Status::InternalError(ss.str());
+    }
+
+    // 6. skip level
+    ++ptr;
+
+    // 7. flags
+    uint32_t flags;
+    ptr = get_uint32(ptr, &flags);
+    if (flags & (F_RESERVED | F_MULTIPART | F_H_FILTER)) {
+        std::stringstream ss;
+        ss << "unsupported lzo flags: " << flags;
+        return Status::InternalError(ss.str());
+    }
+    _header_info.header_checksum_type = header_type(flags);
+    _header_info.input_checksum_type = input_type(flags);
+    _header_info.output_checksum_type = output_type(flags);
+
+    // 8. skip mode and mtime
+    ptr += 3 * sizeof(int32_t);
+
+    // 9. filename
+    uint8_t filename_len;
+    ptr = get_uint8(ptr, &filename_len);
+
+    // here we already consume (MIN_HEADER_SIZE)
+    // from now we have to check left input is enough for each step
+    size_t left = input_len - (ptr - input);
+    if (left < filename_len) {
+        *more_input_bytes = filename_len - left;
+        return Status::OK();
+    }
+
+    _header_info.filename = std::string((char*)ptr, (size_t)filename_len);
+    ptr += filename_len;
+    left -= filename_len;
+
+    // 10. checksum
+    if (left < sizeof(uint32_t)) {
+        *more_input_bytes = sizeof(uint32_t) - left;
+        return Status::OK();
+    }
+    uint32_t expected_checksum;
+    uint8_t* cur = ptr;
+    ptr = get_uint32(ptr, &expected_checksum);
+    uint32_t computed_checksum;
+    if (_header_info.header_checksum_type == CHECK_CRC32) {
+        computed_checksum = CRC32_INIT_VALUE;
+        computed_checksum = lzo_crc32(computed_checksum, header, cur - header);
+    } else {
+        computed_checksum = ADLER32_INIT_VALUE;
+        computed_checksum = lzo_adler32(computed_checksum, header, cur - header);
+    }
+
+    if (computed_checksum != expected_checksum) {
+        std::stringstream ss;
+        ss << "invalid header checksum: " << computed_checksum
+           << " expected: " << expected_checksum;
+        return Status::InternalError(ss.str());
+    }
+    left -= sizeof(uint32_t);
+
+    // 11. skip extra
+    if (flags & F_H_EXTRA_FIELD) {
+        if (left < sizeof(uint32_t)) {
+            *more_input_bytes = sizeof(uint32_t) - left;
+            return Status::OK();
+        }
+        uint32_t extra_len;
+        ptr = get_uint32(ptr, &extra_len);
+        left -= sizeof(uint32_t);
+
+        // add the checksum and the len to the total ptr size.
+        if (left < sizeof(int32_t) + extra_len) {
+            *more_input_bytes = sizeof(int32_t) + extra_len - left;
+            return Status::OK();
+        }
+        left -= sizeof(int32_t) + extra_len;
+        ptr += sizeof(int32_t) + extra_len;
+    }
+
+    _header_info.header_size = ptr - input;
+    *input_bytes_read = _header_info.header_size;
+
+    _is_header_loaded = true;
+    LOG(INFO) << debug_info();
+
+    return Status::OK();
+}
+
+Status LzoStreamCompression::checksum(LzoChecksum type, const std::string& source, uint32_t expected,
+                                      uint8_t* ptr, size_t len) {
+    uint32_t computed_checksum;
+    switch (type) {
+    case CHECK_NONE:
+        return Status::OK();
+    case CHECK_CRC32:
+        computed_checksum = lzo_crc32(CRC32_INIT_VALUE, ptr, len);
+        break;
+    case CHECK_ADLER:
+        computed_checksum = lzo_adler32(ADLER32_INIT_VALUE, ptr, len);
+        break;
+    default:
+        std::stringstream ss;
+        ss << "Invalid checksum type: " << type;
+        return Status::InternalError(ss.str());
+    }
+
+    if (computed_checksum != expected) {
+        std::stringstream ss;
+        ss << "checksum of " << source << " block failed."
+           << " computed checksum: " << computed_checksum << " expected: " << expected;
+        return Status::InternalError(ss.str());
+    }
+
+    return Status::OK();
+}
+
+std::string LzoStreamCompression::debug_info() {
+    std::stringstream ss;
+    ss << "LzoStreamCompression."
+       << " version: " << _header_info.version << " lib version: " << _header_info.lib_version
+       << " version needed: " << _header_info.version_needed
+       << " method: " << (uint16_t)_header_info.method << " filename: " << _header_info.filename
+       << " header size: " << _header_info.header_size
+       << " header checksum type: " << _header_info.header_checksum_type
+       << " input checksum type: " << _header_info.input_checksum_type
+       << " output checksum type: " << _header_info.output_checksum_type;
+    return ss.str();
 }
 
 
