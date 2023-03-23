@@ -45,8 +45,6 @@ public class DecommissionTest {
         PseudoCluster.getInstance().shutdown(false);
     }
 
-    //TODO: this ut will fail when the system load is high.
-    @Ignore
     @Test
     public void testDecommission() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
