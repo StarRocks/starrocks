@@ -929,7 +929,6 @@ public class ExpressionAnalyzer {
                     argumentTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
                 }
                 fn.setArgsType(argumentTypes); // as accepting various types
-                fn.setIsNullable(false);
                 ArrayList<Type> structTypes = new ArrayList<>(argumentTypes.length);
                 for (Type t : argumentTypes) {
                     structTypes.add(new ArrayType(t));
@@ -937,7 +936,7 @@ public class ExpressionAnalyzer {
                 ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
                 ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
                 ((AggregateFunction) fn).setNullsFirst(nullsFirst);
-                fn.setRetType(new ArrayType(argumentTypes[0]));
+                fn.setRetType(new ArrayType(argumentTypes[0])); // return null if scalar agg with empty input
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(fnName, argumentTypes)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
                 // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always

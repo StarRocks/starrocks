@@ -492,7 +492,6 @@ public class FunctionSet {
                     .add(FunctionSet.HLL_EMPTY)
                     .add(FunctionSet.EXCHANGE_BYTES)
                     .add(FunctionSet.EXCHANGE_SPEED)
-                    .add(FunctionSet.ARRAY_AGG)
                     .build();
 
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =
@@ -740,7 +739,7 @@ public class FunctionSet {
 
         addBuiltin(AggregateFunction.createBuiltin(ARRAY_AGG,
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.ANY_ARRAY, Type.ANY_STRUCT, true,
-                true, false, true));
+                true, false, false));
 
         for (Type t : Type.getSupportedTypes()) {
             if (t.isFunctionType()) {
