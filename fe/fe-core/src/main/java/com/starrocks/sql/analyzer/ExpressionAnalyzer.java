@@ -477,7 +477,8 @@ public class ExpressionAnalyzer {
             Expr item = node.getChild(0);
             Expr key = node.getChild(1);
             if (!key.isLiteral() || !key.getType().isStringType()) {
-                throw new SemanticException("right operand of -> should be string literal, but got " + key, key.getPos());
+                throw new SemanticException("right operand of -> should be string literal, but got " + key,
+                        key.getPos());
             }
             if (!item.getType().isJsonType()) {
                 throw new SemanticException(
@@ -490,7 +491,8 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitLambdaFunctionExpr(LambdaFunctionExpr node, Scope scope) { // (x,y) -> x+y or (k,v) -> (k1,v1)
             if (scope.getLambdaInputs().size() == 0) {
-                throw new SemanticException("Lambda Functions can only be used in high-order functions with arrays/maps",
+                throw new SemanticException(
+                        "Lambda Functions can only be used in high-order functions with arrays/maps",
                         node.getPos());
             }
             if (scope.getLambdaInputs().size() != node.getChildren().size() - 1) {
@@ -504,7 +506,8 @@ public class ExpressionAnalyzer {
                 args.add((LambdaArgument) node.getChild(i));
                 String name = ((LambdaArgument) node.getChild(i)).getName();
                 if (set.contains(name)) {
-                    throw new SemanticException("Lambda argument: " + name + " is duplicated", node.getChild(i).getPos());
+                    throw new SemanticException("Lambda argument: " + name + " is duplicated",
+                            node.getChild(i).getPos());
                 }
                 set.add(name);
                 // bind argument with input arrays' data type and nullable info
@@ -644,7 +647,8 @@ public class ExpressionAnalyzer {
                         break;
                     default:
                         // the programmer forgot to deal with a case
-                        throw new SemanticException("Unknown arithmetic operation " + op + " in: " + node, node.getPos());
+                        throw new SemanticException("Unknown arithmetic operation " + op + " in: " + node,
+                                node.getPos());
                 }
 
                 if (node.getChild(0).getType().equals(Type.NULL) && node.getChild(1).getType().equals(Type.NULL)) {
@@ -782,7 +786,8 @@ public class ExpressionAnalyzer {
                             collect(Collectors.toList());
             if (leftTypes.size() != rightTypes.size()) {
                 throw new SemanticException(
-                        "subquery must return the same number of columns as provided by the IN predicate", node.getPos());
+                        "subquery must return the same number of columns as provided by the IN predicate",
+                        node.getPos());
             }
 
             for (int i = 0; i < rightTypes.size(); ++i) {
@@ -922,6 +927,9 @@ public class ExpressionAnalyzer {
                 }
             } else if (FunctionSet.STR_TO_DATE.equals(fnName)) {
                 fn = getStrToDateFunction(node, argumentTypes);
+            } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
+                fn = getArrayGenerateFunction(node);
+                argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
@@ -986,7 +994,8 @@ public class ExpressionAnalyzer {
                     break;
                 case FunctionSet.ARRAY_FILTER:
                     if (node.getChildren().size() != 2) {
-                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions", node.getPos());
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions",
+                                node.getPos());
                     }
                     if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
                         throw new SemanticException("The first input of " + fnName +
@@ -1004,7 +1013,8 @@ public class ExpressionAnalyzer {
                     break;
                 case FunctionSet.ARRAY_SORTBY:
                     if (node.getChildren().size() != 2) {
-                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions", node.getPos());
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions",
+                                node.getPos());
                     }
                     if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
                         throw new SemanticException("The first input of " + fnName +
@@ -1018,6 +1028,20 @@ public class ExpressionAnalyzer {
                 case FunctionSet.ARRAY_CONCAT:
                     if (node.getChildren().size() < 2) {
                         throw new SemanticException(fnName + " should have at least two inputs", node.getPos());
+                    }
+                    break;
+                case FunctionSet.ARRAY_GENERATE:
+                    if (node.getChildren().size() < 1 || node.getChildren().size() > 3) {
+                        throw new SemanticException(fnName + " has wrong input numbers");
+                    }
+                    for (Expr expr : node.getChildren()) {
+                        if ((expr instanceof SlotRef) && node.getChildren().size() != 3) {
+                            throw new SemanticException(fnName + " with IntColumn doesn't support default parameters");
+                        }
+                        if (!(expr instanceof IntLiteral) && !(expr instanceof LargeIntLiteral) &&
+                                !(expr instanceof SlotRef) && !(expr instanceof NullLiteral)) {
+                            throw new SemanticException(fnName + "'s parameter only support Integer");
+                        }
                     }
                     break;
                 case FunctionSet.MAP_FILTER:
@@ -1078,6 +1102,38 @@ public class ExpressionAnalyzer {
             }
 
             return fn;
+        }
+
+        private Function getArrayGenerateFunction(FunctionCallExpr node) {
+            // add the default parameters for array_generate
+            if (node.getChildren().size() == 1) {
+                LiteralExpr secondParam = (LiteralExpr) node.getChild(0);
+                node.clearChildren();
+                node.addChild(new IntLiteral(1));
+                node.addChild(secondParam);
+            }
+            if (node.getChildren().size() == 2) {
+                int idx = 0;
+                BigInteger[] childValues = new BigInteger[2];
+                Boolean hasNUll = false;
+                for (Expr expr : node.getChildren()) {
+                    if (expr instanceof NullLiteral) {
+                        hasNUll = true;
+                    } else if (expr instanceof IntLiteral) {
+                        childValues[idx++] = BigInteger.valueOf(((IntLiteral) expr).getValue());
+                    } else {
+                        childValues[idx++] = ((LargeIntLiteral) expr).getValue();
+                    }
+                }
+
+                if (hasNUll || childValues[0].compareTo(childValues[1]) < 0) {
+                    node.addChild(new IntLiteral(1));
+                } else {
+                    node.addChild(new IntLiteral(-1));
+                }
+            }
+            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+            return Expr.getBuiltinFunction(FunctionSet.ARRAY_GENERATE, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
         }
 
         @Override

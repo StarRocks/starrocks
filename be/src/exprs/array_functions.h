@@ -92,6 +92,11 @@ public:
         return ArrayArithmetic::template array_max<type>(context, columns);
     }
 
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_generate(FunctionContext* context, const Columns& columns) {
+        return ArrayGenerate<type>::process(context, columns);
+    }
+
     DEFINE_VECTORIZED_FN(concat);
 
     DEFINE_VECTORIZED_FN(array_cum_sum_bigint);
