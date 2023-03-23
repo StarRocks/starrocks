@@ -2475,7 +2475,6 @@ int OrcChunkReader::get_column_id_by_slot_name(const std::string& slot_name) con
     return -1;
 }
 
-<<<<<<< HEAD
 // ======================================================================================
 
 ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length)
@@ -2504,16 +2503,11 @@ void ORCHdfsFileStream::prepareCache(orc::InputStream::PrepareCacheScope scope, 
 bool ORCHdfsFileStream::canUseCacheBuffer(uint64_t offset, uint64_t length) {
     if ((_cache_buffer.size() != 0) && (offset >= _cache_offset) &&
         ((offset + length) <= (_cache_offset + _cache_buffer.size()))) {
-=======
-bool OrcChunkReader::is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type) {
-    if (starrocks_type.is_decimal_type() && orc_type.is_decimal_type()) {
->>>>>>> 84ea988df ([BugFix]Fix starrocks can not query hive external table when hive decimal type change (#19978))
         return true;
     }
     return false;
 }
 
-<<<<<<< HEAD
 void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
     if (canUseCacheBuffer(offset, length)) {
         size_t idx = offset - _cache_offset;
@@ -2569,7 +2563,10 @@ void ORCHdfsFileStream::setIORanges(std::vector<orc::InputStream::IORange>& io_r
     }
 }
 
+bool OrcChunkReader::is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type) {
+    if (starrocks_type.is_decimal_type() && orc_type.is_decimal_type()) {
+        return true;
+    }
+    return false;
+}
 } // namespace starrocks::vectorized
-=======
-} // namespace starrocks
->>>>>>> 84ea988df ([BugFix]Fix starrocks can not query hive external table when hive decimal type change (#19978))
