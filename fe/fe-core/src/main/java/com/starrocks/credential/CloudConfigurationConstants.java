@@ -75,4 +75,13 @@ public class CloudConfigurationConstants {
     public static final String AZURE_ADLS2_SHARED_KEY = "azure.adls2.shared_key";
     public static final String AZURE_ADLS2_OAUTH2_CLIENT_SECRET = "azure.adls2.oauth2_client_secret";
     public static final String AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT = "azure.adls2.oauth2_client_endpoint";
+
+    // Credential for Google Cloud Platform (GCP)
+    // For Google Cloud Storage (GCS)
+    public static final String GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT = "gcp.gcs.use_compute_engine_service_account";
+    public static final String GCP_GCS_SERVICE_ACCOUNT_EMAIL = "gcp.gcs.service_account_email";
+    public static final String GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY = "gcp.gcs.service_account_private_key";
+    public static final String GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID = "gcp.gcs.service_account_private_key_id";
+    public static final String GCP_GCS_SERVICE_ACCOUNT_IMPERSONATION_SERVICE_ACCOUNT =
+            "gcp.gcs.impersonation_service_account";
 }
