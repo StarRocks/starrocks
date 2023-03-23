@@ -278,6 +278,17 @@ public class ResourceGroupStmtTest {
     }
 
     @Test
+    public void testDropResourceGroupIfExists() throws Exception {
+        starRocksAssert.executeResourceGroupDdlSql(createRg1Sql);
+        try {
+            starRocksAssert.executeResourceGroupDdlSql(createRg1Sql);
+            Assert.fail("should throw error");
+        } catch (Exception ignored) {
+        }
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP IF EXISTS rg2");
+    }
+
+    @Test
     public void testCreateDResourceGroupWithIllegalProperty() throws Exception {
         String unknownPropertySql = "create resource group rg_unknown\n" +
                 "to\n" +
