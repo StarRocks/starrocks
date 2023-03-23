@@ -50,6 +50,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private Map<String, String> properties;
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
+    private List<String> sortKeys;
     private KeysType keysType = KeysType.DUP_KEYS;
     protected String inlineViewDef;
 
@@ -67,16 +68,20 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private Expr partitionRefTableExpr;
 
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
-                                           RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
-                                           DistributionDesc distributionDesc, Map<String, String> properties,
+                                           RefreshSchemeDesc refreshSchemeDesc,
+                                           ExpressionPartitionDesc expressionPartitionDesc,
+                                           DistributionDesc distributionDesc, List<String> sortKeys,
+                                           Map<String, String> properties,
                                            QueryStatement queryStatement) {
-        this(tableName, ifNotExists, comment, refreshSchemeDesc, expressionPartitionDesc, distributionDesc,
+        this(tableName, ifNotExists, comment, refreshSchemeDesc, expressionPartitionDesc, distributionDesc, sortKeys,
                 properties, queryStatement, NodePosition.ZERO);
     }
 
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
-                                           RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
-                                           DistributionDesc distributionDesc, Map<String, String> properties,
+                                           RefreshSchemeDesc refreshSchemeDesc,
+                                           ExpressionPartitionDesc expressionPartitionDesc,
+                                           DistributionDesc distributionDesc, List<String> sortKeys,
+                                           Map<String, String> properties,
                                            QueryStatement queryStatement, NodePosition pos) {
         super(pos);
         this.tableName = tableName;
@@ -85,6 +90,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.refreshSchemeDesc = refreshSchemeDesc;
         this.expressionPartitionDesc = expressionPartitionDesc;
         this.distributionDesc = distributionDesc;
+        this.sortKeys = sortKeys;
         this.properties = properties;
         this.queryStatement = queryStatement;
     }
@@ -139,6 +145,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public DistributionDesc getDistributionDesc() {
         return distributionDesc;
+    }
+
+    public List<String> getSortKeys() {
+        return sortKeys;
     }
 
     public void setDistributionDesc(DistributionDesc distributionDesc) {

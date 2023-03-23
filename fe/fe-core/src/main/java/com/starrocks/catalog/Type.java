@@ -773,11 +773,6 @@ public abstract class Type implements Cloneable {
                 && !isFunctionType() && !isBinaryType();
     }
 
-    public boolean isKeyType() {
-        // TODO(zhuming): support define a key column of type array.
-        return !(isFloatingPointType() || isComplexType() || isOnlyMetricType() || isJsonType() || isBinaryType());
-    }
-
     public boolean canBeWindowFunctionArgumentTypes() {
         return !(isNull() || isChar() || isTime() || isComplexType()
                 || isPseudoType() || isFunctionType() || isBinaryType());

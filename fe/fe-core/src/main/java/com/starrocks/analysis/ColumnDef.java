@@ -276,7 +276,7 @@ public class ColumnDef implements ParseNode {
 
         Type type = typeDef.getType();
 
-        if (isKey && isOlap && !type.isKeyType()) {
+        if (isKey && isOlap && !type.canDistributedBy()) {
             if (type.isFloatingPointType()) {
                 throw new AnalysisException(
                         String.format("Invalid data type of key column '%s': '%s', use decimal instead", name, type));
