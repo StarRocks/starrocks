@@ -223,13 +223,6 @@ struct TypeDescriptor {
         }
     }
 
-    bool is_implicit_castable(const TypeDescriptor& from) const {
-        if (is_decimal_type()) {
-            return true;
-        }
-        return false;
-    }
-
     bool operator==(const TypeDescriptor& o) const {
         if (type != o.type) {
             return false;

@@ -1227,4 +1227,11 @@ int OrcChunkReader::get_column_id_by_slot_name(const std::string& slot_name) con
     return -1;
 }
 
+bool is_implicit_castable(const TypeDescriptor& from) const {
+    if (is_decimal_type()) {
+        return true;
+    }
+    return false;
+}
+
 } // namespace starrocks
