@@ -586,7 +586,7 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY), upper(r.P_MFGR),r.P_MFGR " +
                 "from supplier l join part_v2 r on l.s_suppkey = r.P_PARTKEY";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  5:Decode\n" +
+        Assert.assertTrue(plan, plan.contains("  5:Decode\n" +
                 "  |  <dict id 21> : <string id 11>\n" +
                 "  |  <dict id 22> : <string id 20>\n" +
                 "  |  string functions:\n" +

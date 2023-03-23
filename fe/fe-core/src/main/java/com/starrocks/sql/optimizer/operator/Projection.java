@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class Projection {
     private final Map<ColumnRefOperator, ScalarOperator> columnRefMap;
@@ -111,19 +110,6 @@ public class Projection {
         return false;
     }
 
-    // exist any scalarOperator if used encoded string cols and cannot apply dict optimize
-    // means we cannot optimize this projection and need add a decodeNode before this projection
-    public boolean couldApplyStringDict(ColumnRefSet encodedStringCols) {
-        Set<Integer> sids = encodedStringCols.getStream().collect(Collectors.toSet());
-        for (ScalarOperator operator : columnRefMap.values()) {
-            if (operator.getUsedColumns().isIntersect(encodedStringCols) && !couldApplyDictOptimize(operator, sids)) {
-                return false;
-            }
-        }
-        return true;
-
-    }
-
     public static boolean couldApplyDictOptimize(ScalarOperator operator, Set<Integer> sids) {
         return AddDecodeNodeForDictStringRule.DecodeVisitor.couldApplyDictOptimize(operator, sids);
     }
@@ -148,17 +134,6 @@ public class Projection {
                 fillDisableDictOptimizeColumns(v, columnRefSet, sids);
             }
         });
-    }
-
-    public boolean hasUnsupportedDictOperator(Set<Integer> stringColumnIds, Set<Integer> sids) {
-        ColumnRefSet stringColumnRefSet = new ColumnRefSet();
-        for (Integer stringColumnId : stringColumnIds) {
-            stringColumnRefSet.union(stringColumnId);
-        }
-
-        ColumnRefSet columnRefSet = new ColumnRefSet();
-        this.fillDisableDictOptimizeColumns(columnRefSet, sids);
-        return columnRefSet.isIntersect(stringColumnRefSet);
     }
 
     private void fillDisableDictOptimizeColumns(ScalarOperator operator, ColumnRefSet columnRefSet, Set<Integer> sids) {
