@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.operator;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -90,11 +89,7 @@ public class Projection {
     // For sql: select *, to_bitmap(S_SUPPKEY) from table, we needn't apply global dict optimization
     // This method differ from `couldApplyStringDict` method is for ColumnRefOperator, we return false.
     public boolean needApplyStringDict(Set<Integer> childDictColumns) {
-        Preconditions.checkState(!childDictColumns.isEmpty());
-        ColumnRefSet dictSet = new ColumnRefSet();
-        for (Integer id : childDictColumns) {
-            dictSet.union(id);
-        }
+        ColumnRefSet dictSet = ColumnRefSet.createByIds(childDictColumns);
 
         for (ScalarOperator operator : columnRefMap.values()) {
             if (!operator.isColumnRef() && couldApplyStringDict(operator, dictSet, childDictColumns)) {
@@ -102,11 +97,6 @@ public class Projection {
             }
         }
 
-        for (ScalarOperator operator : commonSubOperatorMap.values()) {
-            if (!operator.isColumnRef() && couldApplyStringDict(operator, dictSet, childDictColumns)) {
-                return true;
-            }
-        }
         return false;
     }
 
