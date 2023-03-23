@@ -45,6 +45,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "common/statusor.h"
 #include "config.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"
@@ -247,7 +248,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         open_closure->cntl.http_request().set_content_type("application/proto");
         auto res = BrpcStubCache::create_http_stub(brpc_addr);
         if (!res.ok()) {
-            LOG(ERROR) << res.get_error_msg();
+            LOG(ERROR) << res.status().get_error_msg();
             return;
         }
         res.value()->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
