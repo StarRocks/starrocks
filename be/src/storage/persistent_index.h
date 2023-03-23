@@ -24,8 +24,14 @@ class Column;
 // Add version for persistent index file to support future upgrade compatibility
 // There is only one version for now
 enum PersistentIndexFileVersion {
+<<<<<<< HEAD
     UNKNOWN = 0,
     PERSISTENT_INDEX_VERSION_1,
+=======
+    PERSISTENT_INDEX_VERSION_UNKNOWN = 0,
+    PERSISTENT_INDEX_VERSION_1,
+    PERSISTENT_INDEX_VERSION_2
+>>>>>>> 3a624f43a ([Enhancement] Add primary index cache memory limitation (#18392))
 };
 
 static constexpr uint64_t NullIndexValue = -1;

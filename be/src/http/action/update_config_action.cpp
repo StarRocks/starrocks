@@ -38,12 +38,82 @@
 #include "http/http_request.h"
 #include "http/http_response.h"
 #include "http/http_status.h"
+<<<<<<< HEAD
+=======
+#include "storage/compaction_manager.h"
+#include "storage/memtable_flush_executor.h"
+#include "storage/page_cache.h"
+#include "storage/segment_flush_executor.h"
+#include "storage/segment_replicate_executor.h"
+#include "storage/storage_engine.h"
+#include "storage/update_manager.h"
+>>>>>>> 3a624f43a ([Enhancement] Add primary index cache memory limitation (#18392))
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 
 const static std::string HEADER_JSON = "application/json";
 
+<<<<<<< HEAD
+=======
+std::atomic<UpdateConfigAction*> UpdateConfigAction::_instance(nullptr);
+
+Status UpdateConfigAction::update_config(const std::string& name, const std::string& value) {
+    std::call_once(_once_flag, [&]() {
+        _config_callback.emplace("scanner_thread_pool_thread_num", [&]() {
+            LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;
+            _exec_env->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
+        });
+        _config_callback.emplace("storage_page_cache_limit", [&]() {
+            int64_t cache_limit = _exec_env->get_storage_page_cache_size();
+            cache_limit = _exec_env->check_storage_page_cache_size(cache_limit);
+            StoragePageCache::instance()->set_capacity(cache_limit);
+        });
+        _config_callback.emplace("disable_storage_page_cache", [&]() {
+            if (config::disable_storage_page_cache) {
+                StoragePageCache::instance()->set_capacity(0);
+            } else {
+                int64_t cache_limit = _exec_env->get_storage_page_cache_size();
+                cache_limit = _exec_env->check_storage_page_cache_size(cache_limit);
+                StoragePageCache::instance()->set_capacity(cache_limit);
+            }
+        });
+        _config_callback.emplace("max_compaction_concurrency", [&]() {
+            StorageEngine::instance()->compaction_manager()->update_max_threads(config::max_compaction_concurrency);
+        });
+        _config_callback.emplace("flush_thread_num_per_store", [&]() {
+            const size_t dir_cnt = StorageEngine::instance()->get_stores().size();
+            StorageEngine::instance()->memtable_flush_executor()->update_max_threads(
+                    config::flush_thread_num_per_store * dir_cnt);
+            StorageEngine::instance()->segment_replicate_executor()->update_max_threads(
+                    config::flush_thread_num_per_store * dir_cnt);
+            StorageEngine::instance()->segment_flush_executor()->update_max_threads(config::flush_thread_num_per_store *
+                                                                                    dir_cnt);
+        });
+        _config_callback.emplace("update_compaction_num_threads_per_disk", [&]() {
+            StorageEngine::instance()->increase_update_compaction_thread(
+                    config::update_compaction_num_threads_per_disk);
+        });
+        _config_callback.emplace("update_memory_limit_percent", [&]() {
+            StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
+                    config::update_memory_limit_percent);
+#if defined(USE_STAROS) && !defined(BE_TEST)
+            _exec_env->lake_update_manager()->update_primary_index_memory_limit(config::update_memory_limit_percent);
+#endif
+        });
+    });
+
+    Status s = config::set_config(name, value);
+    if (s.ok()) {
+        LOG(INFO) << "set_config " << name << "=" << value << " success";
+        if (_config_callback.count(name)) {
+            _config_callback[name]();
+        }
+    }
+    return s;
+}
+
+>>>>>>> 3a624f43a ([Enhancement] Add primary index cache memory limitation (#18392))
 void UpdateConfigAction::handle(HttpRequest* req) {
     LOG(INFO) << req->debug_string();
 
