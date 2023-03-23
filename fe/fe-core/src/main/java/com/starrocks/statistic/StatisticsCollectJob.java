@@ -17,7 +17,6 @@ package com.starrocks.statistic;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -124,36 +123,15 @@ public abstract class StatisticsCollectJob {
         throw new DdlException(context.getState().getErrorMessage());
     }
 
-    protected String getDataSize(Column column, boolean isSample) {
-        if (column.getPrimitiveType().isCharFamily() || column.getPrimitiveType().isJsonType()) {
-            if (isSample) {
-                return "IFNULL(SUM(CHAR_LENGTH(`column_key`) * t1.count), 0)";
-            } else {
-                return "IFNULL(SUM(CHAR_LENGTH(" + StatisticUtils.quoting(column.getName()) + ")), 0)";
-            }
-        }
-
-        long typeSize = column.getType().getTypeSize();
-
-        if (isSample && column.getType().canStatistic()) {
-            return "IFNULL(SUM(t1.count), 0) * " + typeSize;
-        }
-        return "COUNT(1) * " + typeSize;
-    }
-
-    protected int splitColumns(long rowCount) {
-        long splitSize;
-        if (rowCount == 0) {
-            splitSize = columns.size();
+    protected String getMinMaxFunction(Column column, String name, boolean isMax) {
+        String fn = isMax ? "MAX" : "MIN";
+        if (column.getPrimitiveType().isCharFamily()) {
+            fn = fn + "(LEFT(" + name + ", 200))";
         } else {
-            splitSize = Config.statistic_collect_max_row_count_per_query / rowCount + 1;
-            if (splitSize > columns.size()) {
-                splitSize = columns.size();
-            }
+            fn = fn + "(" + name + ")";
         }
-        // Supports a maximum of 1024 tasks for a union,
-        // preventing unexpected situations caused by too many tasks being executed at one time
-        return (int) Math.min(1024, splitSize);
+        fn = "IFNULL(" + fn + ", '')";
+        return fn;
     }
 
     protected String build(VelocityContext context, String template) {
