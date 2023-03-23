@@ -373,36 +373,64 @@ public class MaterializedViewAnalyzer {
                 mvColumns.add(column);
                 columnExprMap.put(column, outputExpression.get(i));
             }
-            // set duplicate key
-            int theBeginIndexOfValue = 0;
-            int keySizeByte = 0;
-            for (; theBeginIndexOfValue < mvColumns.size(); theBeginIndexOfValue++) {
-                Column column = mvColumns.get(theBeginIndexOfValue);
-                keySizeByte += column.getType().getIndexSize();
-                if (theBeginIndexOfValue + 1 > FeConstants.SHORTKEY_MAX_COLUMN_COUNT ||
-                        keySizeByte > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
-                    if (theBeginIndexOfValue == 0 && column.getType().getPrimitiveType().isCharFamily()) {
-                        column.setIsKey(true);
-                        column.setAggregationType(null, false);
-                        theBeginIndexOfValue++;
+
+            // set duplicate key, when sort key is set, it is dup key col.
+            List<String> keyCols = statement.getSortKeys();
+            if (keyCols == null) {
+                keyCols = Lists.newArrayList();
+                int theBeginIndexOfValue = 0;
+                int keySizeByte = 0;
+                for (; theBeginIndexOfValue < mvColumns.size(); theBeginIndexOfValue++) {
+                    Column column = mvColumns.get(theBeginIndexOfValue);
+                    keySizeByte += column.getType().getIndexSize();
+                    if (theBeginIndexOfValue + 1 > FeConstants.SHORTKEY_MAX_COLUMN_COUNT ||
+                            keySizeByte > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
+                        if (theBeginIndexOfValue == 0 && column.getType().getPrimitiveType().isCharFamily()) {
+                            keyCols.add(column.getName());
+                            theBeginIndexOfValue++;
+                        }
+                        break;
                     }
-                    break;
+                    if (!column.getType().canBeMVKey()) {
+                        break;
+                    }
+                    if (column.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
+                        keyCols.add(column.getName());
+                        theBeginIndexOfValue++;
+                        break;
+                    }
+                    keyCols.add(column.getName());
                 }
+                if (theBeginIndexOfValue == 0) {
+                    throw new SemanticException("Data type of first column cannot be " + mvColumns.get(0).getType());
+                }
+            }
+
+            if (keyCols.isEmpty()) {
+                throw new SemanticException("The number of sort key is 0");
+            }
+
+            if (keyCols.size() > mvColumns.size()) {
+                throw new SemanticException("The number of sort key should be less than the number of columns.");
+            }
+
+            for (int i = 0; i < keyCols.size(); i++) {
+                Column column = mvColumns.get(i);
+                if (!column.getName().equalsIgnoreCase(keyCols.get(i))) {
+                    String keyName = keyCols.get(i);
+                    if (!mvColumns.stream().anyMatch(col -> col.getName().equalsIgnoreCase(keyName))) {
+                        throw new SemanticException("Sort key(%s) doesn't exist.", keyCols.get(i));
+                    }
+                    throw new SemanticException("Sort key should be a ordered prefix of select cols.");
+                }
+
                 if (!column.getType().canBeMVKey()) {
-                    break;
-                }
-                if (column.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
-                    column.setIsKey(true);
-                    column.setAggregationType(null, false);
-                    theBeginIndexOfValue++;
-                    break;
+                    throw new SemanticException("This col(%s) can't be mv sort key", keyCols.get(i));
                 }
                 column.setIsKey(true);
                 column.setAggregationType(null, false);
             }
-            if (theBeginIndexOfValue == 0) {
-                throw new SemanticException("Data type of first column cannot be " + mvColumns.get(0).getType());
-            }
+
             statement.setMvColumnItems(mvColumns);
         }
 

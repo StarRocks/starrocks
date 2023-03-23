@@ -565,7 +565,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("Can not assign aggregation method on key column: " + newColName);
             } else if (null == newColumn.getAggregationType()) {
                 Type type = newColumn.getType();
-                if (!type.isKeyType()) {
+                if (!type.canDistributedBy()) {
                     throw new DdlException(
                             "column without agg function will be treated as key column for aggregate table, " + type +
                                     " type can not be key column");
