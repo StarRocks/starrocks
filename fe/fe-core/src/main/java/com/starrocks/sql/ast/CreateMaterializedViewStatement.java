@@ -72,20 +72,6 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            DistributionDesc distributionDesc, List<String> sortKeys,
                                            Map<String, String> properties,
                                            QueryStatement queryStatement) {
-<<<<<<< HEAD
-=======
-        this(tableName, ifNotExists, comment, refreshSchemeDesc, expressionPartitionDesc, distributionDesc, sortKeys,
-                properties, queryStatement, NodePosition.ZERO);
-    }
-
-    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
-                                           RefreshSchemeDesc refreshSchemeDesc,
-                                           ExpressionPartitionDesc expressionPartitionDesc,
-                                           DistributionDesc distributionDesc, List<String> sortKeys,
-                                           Map<String, String> properties,
-                                           QueryStatement queryStatement, NodePosition pos) {
-        super(pos);
->>>>>>> 750ebdd9c ([Feature] specify sort col for materialized view (#19920))
         this.tableName = tableName;
         this.ifNotExists = ifNotExists;
         this.comment = comment;

@@ -1395,13 +1395,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     "you can set FE config enable_experimental_mv=true to enable it.");
         }
 
-<<<<<<< HEAD
         return new CreateMaterializedViewStatement(tableName, ifNotExist, comment,
-                refreshSchemeDesc, expressionPartitionDesc, distributionDesc, properties, queryStatement);
-=======
-        return new CreateMaterializedViewStatement(tableName, ifNotExist, comment, refreshSchemeDesc,
-                expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
->>>>>>> 750ebdd9c ([Feature] specify sort col for materialized view (#19920))
+                refreshSchemeDesc, expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement);
     }
 
     @Override
