@@ -33,7 +33,11 @@ class Column;
 
 // Add version for persistent index file to support future upgrade compatibility
 // There is only one version for now
-enum PersistentIndexFileVersion { UNKNOWN = 0, PERSISTENT_INDEX_VERSION_1, PERSISTENT_INDEX_VERSION_2 };
+enum PersistentIndexFileVersion {
+    PERSISTENT_INDEX_VERSION_UNKNOWN = 0,
+    PERSISTENT_INDEX_VERSION_1,
+    PERSISTENT_INDEX_VERSION_2
+};
 
 static constexpr uint64_t NullIndexValue = -1;
 
