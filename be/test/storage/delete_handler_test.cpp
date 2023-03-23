@@ -46,9 +46,12 @@ namespace starrocks {
 static StorageEngine* k_engine = nullptr;
 static MemTracker* k_metadata_mem_tracker = nullptr;
 static MemTracker* k_schema_change_mem_tracker = nullptr;
+static std::string k_default_storage_root_path = "";
 
-void set_up() {
+static void set_up() {
+    config::mem_limit = "10g";
     ExecEnv::GetInstance()->init_mem_tracker();
+    k_default_storage_root_path = config::storage_root_path;
     config::storage_root_path = std::filesystem::current_path().string() + "/data_test";
     fs::remove_all(config::storage_root_path);
     fs::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
@@ -68,14 +71,20 @@ void set_up() {
     ASSERT_TRUE(s.ok()) << s.to_string();
 }
 
-void tear_down() {
+static void tear_down() {
     config::storage_root_path = std::filesystem::current_path().string() + "/data_test";
     fs::remove_all(config::storage_root_path);
     fs::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
     k_metadata_mem_tracker->release(k_metadata_mem_tracker->consumption());
     k_schema_change_mem_tracker->release(k_schema_change_mem_tracker->consumption());
+    if (k_engine != nullptr) {
+        k_engine->stop();
+        delete k_engine;
+        k_engine = nullptr;
+    }
     delete k_metadata_mem_tracker;
     delete k_schema_change_mem_tracker;
+    config::storage_root_path = k_default_storage_root_path;
 }
 
 void set_default_create_tablet_request(TCreateTabletReq* request) {
@@ -239,6 +248,10 @@ void set_create_duplicate_tablet_request(TCreateTabletReq* request) {
 }
 
 class TestDeleteConditionHandler : public testing::Test {
+public:
+    static void SetUpTestSuite() { set_up(); }
+    static void TearDownTestSuite() { tear_down(); }
+
 protected:
     void SetUp() override {
         config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
@@ -394,6 +407,10 @@ TEST_F(TestDeleteConditionHandler, StoreCondNonexistentColumn) {
 
 // delete condition does not match
 class TestDeleteConditionHandler2 : public testing::Test {
+public:
+    static void SetUpTestSuite() { set_up(); }
+    static void TearDownTestSuite() { tear_down(); }
+
 protected:
     void SetUp() override {
         config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
@@ -722,18 +739,3 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
 }
 
 } // namespace starrocks
-
-int main(int argc, char** argv) {
-    starrocks::init_glog("be-test");
-    starrocks::MemInfo::init();
-    int ret = 0;
-    testing::InitGoogleTest(&argc, argv);
-    config::mem_limit = "10g";
-
-    starrocks::set_up();
-    ret = RUN_ALL_TESTS();
-    starrocks::tear_down();
-
-    google::protobuf::ShutdownProtobufLibrary();
-    return ret;
-}

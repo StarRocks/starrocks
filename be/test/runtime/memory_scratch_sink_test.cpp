@@ -93,6 +93,7 @@ public:
 
     void SetUp() override {
         config::periodic_counter_update_period_ms = 500;
+        _default_storage_root_path = config::storage_root_path;
         config::storage_root_path = "./data";
 
         system("mkdir -p ./test_run/output/");
@@ -105,6 +106,7 @@ public:
     void TearDown() override {
         _obj_pool.clear();
         system("rm -rf ./test_run");
+        config::storage_root_path = _default_storage_root_path;
     }
 
     std::unique_ptr<vectorized::CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
@@ -178,6 +180,7 @@ private:
     TMemoryScratchSink _tsink;
     DescriptorTbl* _desc_tbl = nullptr;
     std::vector<TExpr> _exprs;
+    std::string _default_storage_root_path;
 };
 
 void MemoryScratchSinkTest::init() {

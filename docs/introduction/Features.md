@@ -48,7 +48,7 @@ StarRocks uses intelligent materialized views to accelerate queries and data war
 
  StarRocks' MV can replace the traditional ETL data modeling process: Instead of transforming data in the upstream applications, you now have the option to transform data with MV within StarRocks, simplifying the data processing pipeline.
 
-For example, in the figure, raw data on data lake can be used to create a normalized table based on an external MV. A denormalized table can be created from normalized tables through multi-table MVs. Another MV can be created from normalized tables to support high-concurrency queries and better query performance.
+For example, in the figure, raw data on data lake can be used to create a normalized table based on an external MV. A denormalized table can be created from normalized tables through asynchronous materialized views. Another MV can be created from normalized tables to support high-concurrency queries and better query performance.
 
 ![MV](../assets/1.1-7-mv.png)
 

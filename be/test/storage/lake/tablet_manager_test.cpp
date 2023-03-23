@@ -29,7 +29,7 @@ public:
 
     void SetUp() override {
         std::vector<starrocks::StorePath> paths;
-        starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
+        CHECK_OK(starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths));
         _test_dir = paths[0].path + "/lake";
         _location_provider = new lake::FixedLocationProvider(_test_dir);
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->metadata_root_location(1)));

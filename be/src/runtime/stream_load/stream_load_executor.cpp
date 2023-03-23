@@ -39,7 +39,6 @@
 namespace starrocks {
 
 #ifdef BE_TEST
-std::string k_response_str;
 TLoadTxnBeginResult k_stream_load_begin_result;
 TLoadTxnCommitResult k_stream_load_commit_result;
 TLoadTxnRollbackResult k_stream_load_rollback_result;

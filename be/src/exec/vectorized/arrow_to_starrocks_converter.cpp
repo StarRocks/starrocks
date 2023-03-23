@@ -73,11 +73,16 @@ size_t fill_null_column(const arrow::Array* array, size_t array_start_idx, size_
 }
 
 void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column::Filter* filter,
-                 size_t column_start_idx) {
+                 size_t column_start_idx, ArrowConvertContext* ctx) {
     DCHECK_EQ(filter->size(), column_start_idx + num_elements);
     auto* filter_data = (&filter->front()) + column_start_idx;
+    bool all_invalid = true;
     for (size_t i = 0; i < num_elements; ++i) {
         filter_data[i] = array->IsValid(array_start_idx + i);
+        all_invalid &= filter_data[i];
+    }
+    if (UNLIKELY(!all_invalid)) {
+        ctx->report_error_message("column type is not null but data is null", "");
     }
 }
 // A general arrow converter for fixed length type
@@ -923,7 +928,7 @@ struct ArrowListConverter {
                 null_data = nullptr;
                 // Fill nullable array into not-nullable column, positions of NULLs is marked as 1
                 fill_filter(child_array, child_array_start_idx, child_array_num_elements, column_filter,
-                            column_start_idx);
+                            column_start_idx, ctx);
                 data_column = col_elements;
             }
             auto* filter_data = (&column_filter->front()) + column_start_idx;

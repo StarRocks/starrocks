@@ -2,7 +2,7 @@
 
 ## Description
 
-Shows all or one specific materialized view.
+Shows all or one specific asynchronous materialized view.
 
 ## Syntax
 

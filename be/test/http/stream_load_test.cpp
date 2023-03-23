@@ -40,20 +40,14 @@ class mg_connection;
 
 namespace starrocks {
 
-extern std::string k_response_str;
+extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, const std::string&);
 
-// Send Unauthorized status with basic challenge
-void HttpChannel::send_basic_challenge(HttpRequest* req, const std::string& realm) {}
-
-void HttpChannel::send_error(HttpRequest* request, HttpStatus status) {}
-
-void HttpChannel::send_reply(HttpRequest* request, HttpStatus status) {}
-
-void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, const std::string& content) {
+namespace {
+static std::string k_response_str;
+static void inject_send_reply(HttpRequest* request, HttpStatus status, const std::string& content) {
     k_response_str = content;
 }
-
-void HttpChannel::send_file(HttpRequest* request, int fd, size_t off, size_t size) {}
+} // namespace
 
 extern TLoadTxnBeginResult k_stream_load_begin_result;
 extern TLoadTxnCommitResult k_stream_load_commit_result;
@@ -65,6 +59,9 @@ class StreamLoadActionTest : public testing::Test {
 public:
     StreamLoadActionTest() = default;
     ~StreamLoadActionTest() override = default;
+    static void SetUpTestSuite() { s_injected_send_reply = inject_send_reply; }
+    static void TearDownTestSuite() { s_injected_send_reply = nullptr; }
+
     void SetUp() override {
         k_stream_load_begin_result = TLoadTxnBeginResult();
         k_stream_load_commit_result = TLoadTxnCommitResult();
