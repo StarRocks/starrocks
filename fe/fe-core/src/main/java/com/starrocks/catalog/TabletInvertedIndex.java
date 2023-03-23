@@ -163,6 +163,9 @@ public class TabletInvertedIndex {
                         TTablet backendTablet = backendTablets.get(tabletId);
                         Replica replica = entry.getValue();
                         for (TTabletInfo backendTabletInfo : backendTablet.getTablet_infos()) {
+                            if (backendTabletInfo.isSetIs_error_state()) {
+                                replica.setIsErrorState(backendTabletInfo.is_error_state);
+                            }
                             if (tabletMeta.containsSchemaHash(backendTabletInfo.getSchema_hash())) {
                                 foundTabletsWithValidSchema.add(tabletId);
                                 // 1. (intersection)

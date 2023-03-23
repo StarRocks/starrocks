@@ -171,6 +171,18 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         addReplica(replica, true);
     }
 
+    public int getErrorStateReplicaNum() {
+        int num = 0;
+        Iterator<Replica> iterator = replicas.iterator();
+        while (iterator.hasNext()) {
+            Replica replica = iterator.next();
+            if (replica.isErrorState()) {
+                num++;
+            }
+        }
+        return num;
+    }
+
     /**
      * @return Immutable list of replicas
      * notice: the list is immutable, not replica

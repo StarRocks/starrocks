@@ -29,19 +29,23 @@ import java.util.List;
 public class IncompleteTabletsProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("UnhealthyTablets").add("InconsistentTablets").add("CloningTablets")
+            .add("ErrorStateTablets")
             .build();
     private static final Joiner JOINER = Joiner.on(",");
 
     Collection<Long> unhealthyTabletIds;
     Collection<Long> inconsistentTabletIds;
     Collection<Long> cloningTabletIds;
+    Collection<Long> errorStateTabletIds;
 
     public IncompleteTabletsProcNode(Collection<Long> unhealthyTabletIds,
                                      Collection<Long> inconsistentTabletIds,
-                                     Collection<Long> cloningTabletIds) {
+                                     Collection<Long> cloningTabletIds,
+                                     Collection<Long> errorStateTabletIds) {
         this.unhealthyTabletIds = unhealthyTabletIds;
         this.inconsistentTabletIds = inconsistentTabletIds;
         this.cloningTabletIds = cloningTabletIds;
+        this.errorStateTabletIds = errorStateTabletIds;
     }
 
     @Override
@@ -55,9 +59,11 @@ public class IncompleteTabletsProcNode implements ProcNodeInterface {
         String incompleteTablets = JOINER.join(Arrays.asList(unhealthyTabletIds));
         String inconsistentTablets = JOINER.join(Arrays.asList(inconsistentTabletIds));
         String cloningTablets = JOINER.join(Arrays.asList(cloningTabletIds));
+        String errorStateTablets = JOINER.join(Arrays.asList(errorStateTabletIds));
         row.add(incompleteTablets);
         row.add(inconsistentTablets);
         row.add(cloningTablets);
+        row.add(errorStateTablets);
 
         result.addRow(row);
 
