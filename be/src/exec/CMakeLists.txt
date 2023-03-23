@@ -62,6 +62,7 @@ set(EXEC_FILES
     lake_meta_scan_node.cpp
     hash_joiner.cpp
     hash_join_node.cpp
+    hash_join_components.cpp
     join_hash_map.cpp
     topn_node.cpp
     chunks_sorter.cpp
