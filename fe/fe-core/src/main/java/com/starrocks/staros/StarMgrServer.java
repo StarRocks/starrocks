@@ -123,14 +123,14 @@ public class StarMgrServer {
 
         // Storage fs type
         com.staros.util.Config.DEFAULT_FS_TYPE = Config.cloud_native_storage_type;
-        if (com.staros.util.Config.DEFAULT_FS_TYPE.equals("HDFS")) {
+        if (com.staros.util.Config.DEFAULT_FS_TYPE.equalsIgnoreCase("HDFS")) {
             // HDFS related configuration
             com.staros.util.Config.HDFS_URL = Config.cloud_native_hdfs_url;
             if (com.staros.util.Config.HDFS_URL.isEmpty()) {
-                LOG.error("HDFS url is empty.");
+                LOG.error("The configuration item \"cloud_native_hdfs_url\" is empty.");
                 System.exit(-1);
             }
-        } else if (com.staros.util.Config.DEFAULT_FS_TYPE.equals("S3")) {
+        } else if (com.staros.util.Config.DEFAULT_FS_TYPE.equalsIgnoreCase("S3")) {
             // AWS related configuration
             String[] bucketAndPrefix = getBucketAndPrefix();
             com.staros.util.Config.S3_BUCKET = bucketAndPrefix[0];
@@ -138,13 +138,13 @@ public class StarMgrServer {
             com.staros.util.Config.S3_REGION = Config.aws_s3_region;
             com.staros.util.Config.S3_ENDPOINT = Config.aws_s3_endpoint;
             if (com.staros.util.Config.S3_BUCKET.isEmpty()) {
-                LOG.error("S3 bucket is empty.");
+                LOG.error("The configuration item \"aws_s3_path = {}\" is invalid, s3 bucket is empty.", Config.aws_s3_path);
                 System.exit(-1);
             }
             // aws credential related configuration
             String credentialType = getAwsCredentialType();
             if (credentialType == null) {
-                LOG.error("invalid aws credential configuration.");
+                LOG.error("Invalid aws credential configuration.");
                 System.exit(-1);
             }
             com.staros.util.Config.AWS_CREDENTIAL_TYPE = credentialType;
@@ -153,7 +153,8 @@ public class StarMgrServer {
             com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_ARN = Config.aws_s3_iam_role_arn;
             com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_EXTERNAL_ID = Config.aws_s3_external_id;
         } else {
-            LOG.error("invalid cloud native storage type: {}, must be HDFS or S3", com.staros.util.Config.DEFAULT_FS_TYPE);
+            LOG.error("The configuration item \"cloud_native_storage_type = {}\" is invalid, must be HDFS or S3.", 
+                    Config.cloud_native_storage_type);
             System.exit(-1);
         }
 
