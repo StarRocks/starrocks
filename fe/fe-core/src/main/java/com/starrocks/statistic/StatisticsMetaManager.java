@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> be1bfc959 ([BugFix] Fix json column & large string column collect bug (#20123))
 
 package com.starrocks.statistic;
 
@@ -168,7 +184,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 properties,
                 null,
                 "");
-   
+
         Analyzer.analyze(stmt, context);
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
@@ -201,7 +217,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 properties,
                 null,
                 "");
-        
+
         Analyzer.analyze(stmt, context);
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
@@ -292,7 +308,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
         }
     }
 
-
     @Override
     protected void runAfterCatalogReady() {
         // To make UT pass, some UT will create database and table
@@ -310,5 +325,28 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
         GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedTable();
         GlobalStateMgr.getCurrentAnalyzeMgr().clearExpiredAnalyzeStatus();
+    }
+
+    public void createStatisticsTablesForTest() {
+        while (!checkDatabaseExist()) {
+            if (createDatabase()) {
+                break;
+            }
+            trySleep(1);
+        }
+
+        boolean existsSample = false;
+        boolean existsFull = false;
+        while (!existsSample || !existsFull) {
+            existsSample = checkTableExist(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
+            existsFull = checkTableExist(StatsConstants.FULL_STATISTICS_TABLE_NAME);
+            if (!existsSample) {
+                createTable(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
+            }
+            if (!existsFull) {
+                createTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
+            }
+            trySleep(1);
+        }
     }
 }

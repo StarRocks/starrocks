@@ -4,7 +4,6 @@ package com.starrocks.statistic;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -111,6 +110,7 @@ public abstract class StatisticsCollectJob {
         throw new DdlException(context.getState().getErrorMessage());
     }
 
+<<<<<<< HEAD
     protected String getDataSize(Column column, boolean isSample) {
         if (column.getPrimitiveType().isCharFamily() || column.getPrimitiveType().isJsonType()) {
             if (isSample) {
@@ -132,13 +132,21 @@ public abstract class StatisticsCollectJob {
         long splitSize;
         if (rowCount == 0) {
             splitSize = columns.size();
+=======
+    protected String getMinMaxFunction(Column column, String name, boolean isMax) {
+        String fn = isMax ? "MAX" : "MIN";
+        if (column.getPrimitiveType().isCharFamily()) {
+            fn = fn + "(LEFT(" + name + ", 200))";
+>>>>>>> be1bfc959 ([BugFix] Fix json column & large string column collect bug (#20123))
         } else {
-            splitSize = Config.statistic_collect_max_row_count_per_query / rowCount + 1;
-            if (splitSize > columns.size()) {
-                splitSize = columns.size();
-            }
+            fn = fn + "(" + name + ")";
         }
+<<<<<<< HEAD
         return (int) splitSize;
+=======
+        fn = "IFNULL(" + fn + ", '')";
+        return fn;
+>>>>>>> be1bfc959 ([BugFix] Fix json column & large string column collect bug (#20123))
     }
 
     protected String build(VelocityContext context, String template) {
