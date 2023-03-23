@@ -722,19 +722,22 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return true;
     }
 
-    protected void appendBaseProperties(StringBuilder sb) {
+    protected void appendUniqueProperties(StringBuilder sb) {
         Preconditions.checkNotNull(sb);
 
-        // replicationNum
-        Short replicationNum = this.getDefaultReplicationNum();
-        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
-        sb.append(replicationNum).append("\"");
-
         // storageMedium
-        String storageMedium = this.getStorageMedium();
-        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
-                .append("\" = \"");
-        sb.append(storageMedium).append("\"");
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                .append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM).append("\" = \"");
+        sb.append(getStorageMedium()).append("\"");
+
+        // storageCooldownTime
+        Map<String, String> properties = this.getTableProperty().getProperties();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
+                    .append("\" = \"");
+            sb.append(TimeUtils.longToTimeString(
+                    Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)))).append("\"");
+        }
     }
 
     public String getMaterializedViewDdlStmt(boolean simple) {
@@ -780,17 +783,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         // properties
         sb.append("\nPROPERTIES (\n");
-        appendBaseProperties(sb);
 
-        // storageCooldownTime
+        // replicationNum
+        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
+        sb.append(getDefaultReplicationNum()).append("\"");
+
         Map<String, String> properties = this.getTableProperty().getProperties();
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
-                    .append("\" = \"");
-            sb.append(TimeUtils.longToTimeString(
-                    Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)))).append("\"");
-        }
-
         // partition TTL
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
@@ -828,6 +826,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                     PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE).append("\" = \"");
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)).append("\"");
         }
+
+        appendUniqueProperties(sb);
 
         sb.append("\n)");
         String define = this.getSimpleDefineSql();
