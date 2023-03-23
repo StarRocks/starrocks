@@ -374,7 +374,7 @@ public class MaterializedViewAnalyzer {
                 columnExprMap.put(column, outputExpression.get(i));
             }
 
-            // set duplicate key
+            // set duplicate key, when sort key is set, it is dup key col.
             List<String> keyCols = statement.getSortKeys();
             if (keyCols == null) {
                 keyCols = Lists.newArrayList();
@@ -407,11 +407,11 @@ public class MaterializedViewAnalyzer {
             }
 
             if (keyCols.isEmpty()) {
-                throw new SemanticException("The number of Sort columns is 0");
+                throw new SemanticException("The number of sort key is 0");
             }
 
             if (keyCols.size() > mvColumns.size()) {
-                throw new SemanticException("The number of Sort columns should be less than the number of columns.");
+                throw new SemanticException("The number of sort key should be less than the number of columns.");
             }
 
             for (int i = 0; i < keyCols.size(); i++) {
@@ -419,13 +419,13 @@ public class MaterializedViewAnalyzer {
                 if (!column.getName().equalsIgnoreCase(keyCols.get(i))) {
                     String keyName = keyCols.get(i);
                     if (!mvColumns.stream().anyMatch(col -> col.getName().equalsIgnoreCase(keyName))) {
-                        throw new SemanticException("Sort column(%s) doesn't exist.", keyCols.get(i));
+                        throw new SemanticException("Sort key(%s) doesn't exist.", keyCols.get(i));
                     }
-                    throw new SemanticException("Sort columns should be a ordered prefix of select cols.");
+                    throw new SemanticException("Sort key should be a ordered prefix of select cols.");
                 }
 
                 if (!column.getType().canBeMVKey()) {
-                    throw new SemanticException("this col(%s) can't be mv Sort col", keyCols.get(i));
+                    throw new SemanticException("This col(%s) can't be mv sort key", keyCols.get(i));
                 }
                 column.setIsKey(true);
                 column.setAggregationType(null, false);
