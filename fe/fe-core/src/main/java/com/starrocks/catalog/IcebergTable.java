@@ -143,7 +143,11 @@ public class IcebergTable extends Table {
 
     @Override
     public String getTableIdentifier() {
+<<<<<<< HEAD
         return Joiner.on(":").join(table, ((BaseTable) getIcebergTable()).operations().current().uuid());
+=======
+        return Joiner.on(":").join(name, ((BaseTable) getNativeTable()).operations().current().uuid());
+>>>>>>> f5afc0f26 ([Enhancement] use table name as table identifier part (#20163))
     }
 
     public IcebergCatalogType getCatalogType() {
