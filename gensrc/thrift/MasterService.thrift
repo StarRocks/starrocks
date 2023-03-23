@@ -46,6 +46,11 @@ struct TTabletInfo {
     14: optional bool is_in_memory
     15: optional bool enable_persistent_index
     16: optional Types.TVersion min_readable_version
+<<<<<<< HEAD
+=======
+    17: optional i64 binlog_config_version
+    18: optional bool is_error_state
+>>>>>>> eecda11ad ([Enhancement] Report error state tablet to FE and show error state tablet in statistic (#19517))
 }
 
 struct TTabletVersionPair {
