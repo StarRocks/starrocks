@@ -28,13 +28,9 @@ public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
 
     private IntervalLiteral intervalLiteral;
 
-    public AsyncRefreshSchemeDesc(boolean defineStartTime, LocalDateTime startTime, IntervalLiteral intervalLiteral) {
-        this(defineStartTime, startTime, intervalLiteral, NodePosition.ZERO);
-    }
-
     public AsyncRefreshSchemeDesc(boolean defineStartTime, LocalDateTime startTime, IntervalLiteral intervalLiteral,
-                                  NodePosition pos) {
-        super(MaterializedView.RefreshType.ASYNC, pos);
+                                  MaterializedView.RefreshMoment moment, NodePosition pos) {
+        super(MaterializedView.RefreshType.ASYNC, pos, moment);
         this.defineStartTime = defineStartTime;
         this.startTime = startTime;
         this.intervalLiteral = intervalLiteral;
