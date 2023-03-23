@@ -40,7 +40,6 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
@@ -230,7 +229,7 @@ public class MvRewritePreprocessor {
         // Construct partition/distribution key column refs to filter conjunctions which need to retain.
         Set<String> mvPruneKeyColNames = Sets.newHashSet();
         distributedColumns.stream().forEach(distKey -> mvPruneKeyColNames.add(distKey.getName()));
-        mv.getPartitionNames().stream().forEach(partName -> mvPruneKeyColNames.add(partName));
+        mv.getPartitionColumnNames().stream().forEach(partName -> mvPruneKeyColNames.add(partName));
         final Set<Integer> mvPruneColumnIdSet = mvOutputColumnRefSet.getStream().map(
                         id -> mvContext.getMvColumnRefFactory().getColumnRef(id))
                 .filter(colRef -> mvPruneKeyColNames.contains(colRef.getName()))
@@ -250,13 +249,6 @@ public class MvRewritePreprocessor {
             if (mvPruneColumnIdSet.containsAll(conjColumnRefOperators)) {
                 mvConjuncts.add(conj);
             }
-        }
-        // Case2: compensated partition predicates which are pruned after mv's partition pruning.
-        // Compensate partition predicates and add them into mv predicate.
-        final ScalarOperator mvPartitionPredicate =
-                MvUtils.compensatePartitionPredicate(mvExpression, mvContext.getMvColumnRefFactory());
-        if (!ConstantOperator.TRUE.equals(mvPartitionPredicate)) {
-            mvConjuncts.add(mvPartitionPredicate);
         }
 
         return new LogicalOlapScanOperator(mv,

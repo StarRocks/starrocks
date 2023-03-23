@@ -397,12 +397,14 @@ public class MvUtils {
         // Ignore aggregation predicates, because aggregation predicates should be rewritten after
         // aggregation functions' rewrite and should not be pushed down into mv scan operator.
         if (operator.getPredicate() != null && !(operator instanceof LogicalAggregationOperator)) {
-            predicates.add(operator.getPredicate());
+            List<ScalarOperator> conjuncts = Utils.extractConjuncts(operator.getPredicate());
+            predicates.addAll(conjuncts);
         }
         if (operator instanceof LogicalJoinOperator) {
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
             if (joinOperator.getOnPredicate() != null) {
-                predicates.add(joinOperator.getOnPredicate());
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(joinOperator.getOnPredicate());
+                predicates.addAll(conjuncts);
             }
         }
         for (OptExpression child : root.getInputs()) {

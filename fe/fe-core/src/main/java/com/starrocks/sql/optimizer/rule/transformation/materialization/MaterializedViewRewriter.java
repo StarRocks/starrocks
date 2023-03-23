@@ -155,22 +155,9 @@ public class MaterializedViewRewriter {
         final ColumnRefFactory mvColumnRefFactory = materializationContext.getMvColumnRefFactory();
         final ReplaceColumnRefRewriter mvColumnRefRewriter =
                 MvUtils.getReplaceColumnRefWriter(mvExpression, mvColumnRefFactory);
-        // Compensate partition predicates and add them into mv predicate,
-        // eg: c3 is partition column
-        // MV    : select c1, c3, c2 from test_base_part where c3 < 2000
-        // Query : select c1, c3, c2 from test_base_part
-        // `c3 < 2000` is missed after partition pruning, so `mvPredicate` must add `mvPartitionPredicate`,
-        // otherwise query above may be rewritten by mv.
-        final ScalarOperator mvPartitionPredicate =
-                MvUtils.compensatePartitionPredicate(mvExpression, mvColumnRefFactory);
-        if (mvPartitionPredicate == null) {
-            return null;
-        }
+
         ScalarOperator mvPredicate = MvUtils.rewriteOptExprCompoundPredicate(mvExpression, mvColumnRefRewriter);
 
-        if (!ConstantOperator.TRUE.equals(mvPartitionPredicate)) {
-            mvPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(mvPredicate, mvPartitionPredicate));
-        }
         if (materializationContext.getMvPartialPartitionPredicate() != null) {
             // add latest partition predicate to mv predicate
             ScalarOperator rewritten = mvColumnRefRewriter.rewrite(materializationContext.getMvPartialPartitionPredicate());
