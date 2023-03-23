@@ -5,8 +5,8 @@ commands_restrictions:
       - sender-permission>=read
     actions:
       assign:
-        add_users: 
-          - "{{author}}"
+        add_users:
+          - {{author}}
 
 pull_request_rules:
   - name: assign PRs with the pr author
@@ -14,7 +14,7 @@ pull_request_rules:
       - -merged
     actions:
       assign:
-        add_users: 
+        add_users:
           - "{{author}}"
   - name: close pr when conflict
     conditions:
