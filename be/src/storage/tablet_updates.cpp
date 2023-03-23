@@ -1441,6 +1441,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
 }
 
 void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info) {
+    DeferOp defer([&]() { _compaction_running = false; });
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace_tablet("apply_compaction", _tablet.tablet_id()));
     // NOTE: after commit, apply must success or fatal crash
     auto info = version_info.compaction.get();
@@ -1838,7 +1839,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
         return Status::InternalError("illegal state: another compaction is running");
     }
-    DeferOp defer([&]() { _compaction_running = false; });
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     vector<uint32_t> rowsets;
     {
@@ -1949,7 +1949,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
         return Status::InternalError("illegal state: another compaction is running");
     }
-    DeferOp defer([&]() { _compaction_running = false; });
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     std::unordered_set<uint32_t> all_rowsets;
     {
@@ -2202,6 +2201,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     info->__set_version_count(rowsets.size());
     info->__set_row_count(total_row);
     info->__set_data_size(total_size);
+    info->__set_is_error_state(_error);
 }
 
 int64_t TabletUpdates::get_average_row_size() {
@@ -3446,6 +3446,12 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         for (const auto& rowset : _rowsets) {
             rssid_to_rowsets.insert(rowset);
         }
+    }
+    if (rssid_to_rowsets.empty() && !rowids_by_rssid.empty()) {
+        std::string msg =
+                strings::Substitute("tablet deleted when call get_column_values() tablet:", _tablet.tablet_id());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
     }
     if (with_default && state == nullptr) {
         for (auto i = 0; i < column_ids.size(); ++i) {

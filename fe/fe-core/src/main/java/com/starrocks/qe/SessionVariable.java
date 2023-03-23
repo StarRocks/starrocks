@@ -755,8 +755,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "NO_COMPRESSION";
 
-    @VariableMgr.VarAttr(name = RPC_HTTP_MIN_SIZE)
-    private long rpcHttpMinSize = ((1L << 31) - (1L << 20));
+    // if a packet's size is larger than RPC_HTTP_MIN_SIZE, it will use RPC via http, as the std rpc has 2GB size limit.
+    // the setting size is a bit smaller than 2GB, as the pre-computed serialization size of packets may not accurate.
+    // no need to change it in general.
+    @VariableMgr.VarAttr(name = RPC_HTTP_MIN_SIZE, flag = VariableMgr.INVISIBLE)
+    private long rpcHttpMinSize = ((1L << 31) - (1L << 10));
 
     @VariableMgr.VarAttr(name = TRANSMISSION_ENCODE_LEVEL)
     private int transmissionEncodeLevel = 7;
@@ -978,7 +981,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int distinctColumnBuckets = 1024;
 
     @VariableMgr.VarAttr(name = ENABLE_DISTINCT_COLUMN_BUCKETIZATION)
-    private boolean enableDistinctColumnBucketization = true;
+    private boolean enableDistinctColumnBucketization = false;
 
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorScanRangeShuffle = false;
