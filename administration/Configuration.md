@@ -369,6 +369,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | tablet_max_pending_versions                           | 1000        | N/A    | PrimaryKey 表允许 committed 未 apply 的最大版本数。                 |
 | max_hdfs_file_handle                                  | 1000        | N/A    | 最多可以打开的 HDFS 文件句柄数量。                             |
 | parquet_buffer_stream_reserve_size                    | 1048576     | Byte   | Parquet reader在读取时为每个列预留的内存空间。               |
+| storage_page_cache_limit | 20% | N/A | PageCache 的容量，STRING，可写为容量大小，例如： `20G`、`20480M`、`20971520K` 或 `21474836480B`。也可以写为 PageCache 占系统内存的比例，例如，`20%`。该参数仅在 `disable_storage_page_cache` 为 `false` 时生效。|
 
 ### 配置 BE 静态参数
 
@@ -415,8 +416,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |file_descriptor_cache_capacity|16384|文件句柄缓存的容量。|
 |min_file_descriptor_number|60000|BE 进程的文件句柄 limit 要求的下线。|
 |index_stream_cache_capacity|10737418240|BloomFilter/Min/Max 等统计信息缓存的容量。|
-|storage_page_cache_limit|0|PageCache 的容量，string，可写为 “20G”。|
-|disable_storage_page_cache|TRUE|是否开启 PageCache。|
+|disable_storage_page_cache|TRUE|是否开启 PageCache。开启 PageCache 后，查询结果会缓存在 Cache 中，对于查询重复性高的场景，会大幅提升查询效率。`true` 表示不开启。|
 |base_compaction_num_threads_per_disk|1|每个磁盘 BaseCompaction 线程的数目。|
 |base_cumulative_delta_ratio|0.3|BaseCompaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例。|
 |max_compaction_concurrency|-1|BaseCompaction + CumulativeCompaction 的最大并发， -1 代表没有限制。|
