@@ -728,9 +728,22 @@ public class MvUtils {
         return partitionPredicates;
     }
 
+    private static boolean supportCompensatePartitionPredicateForHiveScan(List<PartitionKey> partitionKeys) {
+        for (PartitionKey partitionKey : partitionKeys) {
+            // only support one partition column now.
+            if (partitionKey.getKeys().size() != 1) {
+                return false;
+            }
+            LiteralExpr e = partitionKey.getKeys().get(0);
+            // Only support date/int type
+            if (!(e instanceof DateLiteral || e instanceof IntLiteral)) {
+                return false;
+            }
+        }
+        return true;
+    }
 
-    public static List<ScalarOperator> compensatePartitionPredicateForHiveScan(LogicalHiveScanOperator scanOperator,
-                                                                               ColumnRefFactory columnRefFactory) {
+    public static List<ScalarOperator> compensatePartitionPredicateForHiveScan(LogicalHiveScanOperator scanOperator) {
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
         Preconditions.checkState(scanOperator.getTable().isHiveTable());
         HiveTable hiveTable = (HiveTable) scanOperator.getTable();
@@ -745,18 +758,7 @@ public class MvUtils {
             return partitionPredicates;
         }
 
-        if (scanOperatorPredicates.getSelectedPartitionKeys().stream().anyMatch(partitionKey -> {
-            // only support one partition column now.
-            if (partitionKey.getKeys().size() != 1) {
-                return true;
-            }
-            LiteralExpr e = partitionKey.getKeys().get(0);
-            // Only support date/int type
-            if (!(e instanceof DateLiteral || e instanceof IntLiteral)) {
-                return true;
-            }
-            return false;
-        })) {
+        if (!supportCompensatePartitionPredicateForHiveScan(scanOperatorPredicates.getSelectedPartitionKeys())) {
             return partitionPredicates;
         }
 
@@ -796,8 +798,7 @@ public class MvUtils {
                 partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
                         columnRefFactory);
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
-                partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator,
-                        columnRefFactory);
+                partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);
             }
             if (partitionPredicate == null) {
                 return null;
