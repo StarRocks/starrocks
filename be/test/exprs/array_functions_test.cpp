@@ -4996,4 +4996,26 @@ TEST_F(ArrayFunctionsTest, array_generate_with_integer_columns) {
     ASSERT_TRUE(dest_column->get(5).get_array().empty());
 }
 
+TEST_F(ArrayFunctionsTest, array_generate_when_overflow) {
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+
+    start_column->append_datum(Datum((int8_t)9));
+    stop_column->append_datum(Datum((int8_t)100));
+    step_column->append_datum(Datum((int8_t)88));
+
+    start_column->append_datum(Datum((int8_t)-9));
+    stop_column->append_datum(Datum((int8_t)-100));
+    step_column->append_datum(Datum((int8_t)-88));
+
+    auto dest_column = ArrayGenerate<TYPE_TINYINT>::process(nullptr, {start_column, stop_column, step_column}).value();
+
+    ASSERT_TRUE(!dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 2);
+
+    _check_array<int8_t>({(int8_t)(9), (int8_t)(97)}, dest_column->get(0).get_array());
+    _check_array<int8_t>({(int8_t)(-9), (int8_t)(-97)}, dest_column->get(1).get_array());
+}
+
 } // namespace starrocks

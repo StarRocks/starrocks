@@ -1437,6 +1437,7 @@ public:
         if (nulls == nullptr) {
             return std::move(dst);
         } else {
+            // if any of input column has null value, then output column is nullable
             return NullableColumn::create(std::move(dst), std::move(nulls));
         }
     }
