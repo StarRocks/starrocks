@@ -1,7 +1,7 @@
 -- partsupp_mv
 create materialized view partsupp_mv
 distributed by hash(ps_partkey, ps_suppkey) buckets 24
-refresh manual
+refresh deferred manual
 properties (
     "replication_num" = "1"
 )
@@ -28,7 +28,7 @@ as select
 create materialized view lineitem_mv
 distributed by hash(l_shipdate, l_orderkey, l_linenumber) buckets 96
 partition by l_shipdate
-refresh manual
+refresh deferred manual
 properties (
     "replication_num" = "1",
     "partition_refresh_number" = "1"

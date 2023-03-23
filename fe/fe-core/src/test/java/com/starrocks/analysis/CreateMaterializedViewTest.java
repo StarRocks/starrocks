@@ -53,8 +53,10 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -2445,7 +2447,7 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(mv.getFullSchema().get(0).isKey());
             Assert.assertFalse(mv.getFullSchema().get(1).isKey());
         } catch (Exception e) {
-            Assert.assertTrue(false);
+            Assert.fail();
         }
 
         String sql2 = "create materialized view async_mv_1 distributed by hash(c_1_4) as" +
@@ -2509,7 +2511,8 @@ public class CreateMaterializedViewTest {
                     "distributed by hash(k1) " +
                     "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
             CreateMaterializedViewStatement stmt =
-                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            newStarRocksAssert.getCtx());
             Assert.assertEquals(stmt.getTableName().getDb(), "test");
             Assert.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
 
@@ -2520,6 +2523,35 @@ public class CreateMaterializedViewTest {
         } catch (Exception e) {
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testCreateImmediateDeferred() throws Exception {
+        UtFrameUtils.parseStmtWithNewParser(
+                "create materialized view immediate_mv refresh deferred async distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1", connectContext);
+        UtFrameUtils.parseStmtWithNewParser(
+                "create materialized view immediate_mv refresh immediate async distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1", connectContext);
+    }
+
+    @Test
+    public void testCreateImmediateDeferred(@Mocked TaskManager taskManager) throws Exception {
+        new Expectations() {
+            {
+                taskManager.executeTask((String) any);
+                times = 1;
+            }
+        };
+        String createImmediate =
+                "create materialized view immediate_mv refresh deferred manual distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1";
+        starRocksAssert.withMaterializedView(createImmediate);
+
+        String createDeferred =
+                "create materialized view deferred_mv refresh immediate manual distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1";
+        starRocksAssert.withMaterializedView(createDeferred);
     }
 }
 

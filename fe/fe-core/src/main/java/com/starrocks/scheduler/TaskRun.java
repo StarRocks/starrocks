@@ -30,6 +30,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -143,7 +144,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
         taskRunContext.setDefinition(status.getDefinition());
-
+        taskRunContext.setPostRun(status.getPostRun());
         runCtx = new ConnectContext(null);
         runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         runCtx.setDatabase(task.getDbName());
@@ -174,6 +175,7 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setPriority(status.getPriority());
         taskRunContext.setTaskType(type);
         taskRunContext.setStatus(status);
+
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
         if (runCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
@@ -184,6 +186,15 @@ public class TaskRun implements Comparable<TaskRun> {
             }
             status.setErrorCode(errorCode);
             return false;
+        }
+
+        // Execute post task action, but ignore any exception
+        if (StringUtils.isNotEmpty(taskRunContext.getPostRun())) {
+            try {
+                processor.postTaskRun(taskRunContext);
+            } catch (Exception ignored) {
+                LOG.warn("Execute post taskRun failed {} ", status, ignored);
+            }
         }
         return true;
     }
@@ -235,6 +246,7 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setUser(task.getCreateUser());
         status.setDbName(task.getDbName());
         status.setDefinition(task.getDefinition());
+        status.setPostRun(task.getPostRun());
         status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
         this.status = status;
         return status;

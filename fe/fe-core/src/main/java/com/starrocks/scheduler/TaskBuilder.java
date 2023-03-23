@@ -52,18 +52,37 @@ public class TaskBuilder {
         return task;
     }
 
+    public static String getAnalyzeMVStmt(String tableName) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx == null) {
+            return "";
+        }
+        String stmt;
+        String analyze = ctx.getSessionVariable().getAnalyzeForMV();
+        if ("sample".equalsIgnoreCase(analyze)) {
+            stmt = "ANALYZE SAMPLE TABLE " + tableName + " WITH ASYNC MODE";
+        } else if ("full".equalsIgnoreCase(analyze)) {
+            stmt = "ANALYZE TABLE " + tableName + " WITH ASYNC MODE";
+        } else {
+            stmt = "";
+        }
+        return stmt;
+    }
+
     public static Task buildMvTask(MaterializedView materializedView, String dbName) {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
         Map<String, String> taskProperties = Maps.newHashMap();
-        taskProperties.put(PartitionBasedMaterializedViewRefreshProcessor.MV_ID, String.valueOf(materializedView.getId()));
+        taskProperties.put(PartitionBasedMaterializedViewRefreshProcessor.MV_ID,
+                String.valueOf(materializedView.getId()));
         taskProperties.put(SessionVariable.ENABLE_INSERT_STRICT, "false");
         taskProperties.putAll(materializedView.getProperties());
 
         task.setProperties(taskProperties);
         task.setDefinition(
                 "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
+        task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         return task;
     }
@@ -78,6 +97,7 @@ public class TaskBuilder {
         task.setProperties(previousTaskProperties);
         task.setDefinition(
                 "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
+        task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         return task;
     }
