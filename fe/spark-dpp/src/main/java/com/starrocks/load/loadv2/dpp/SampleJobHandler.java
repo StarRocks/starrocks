@@ -72,7 +72,7 @@ public class SampleJobHandler {
         bucketSampleMap = new HashMap<>();
         LOG.info("init sample");
         for (Map.Entry<String, Integer> entry : bucketDivideMap.entrySet()) {
-            double sampleSize = Math.min(sampPointPerPartitionHint * entry.getValue(), 1e6);
+            double sampleSize = Math.min((double) sampPointPerPartitionHint * entry.getValue(), 1e6);
             double sampleSizePerPatition = Math.ceil(3.0 * sampleSize / javaPairRDD.getNumPartitions());
             bucketSampleMap.put(entry.getKey(), new Tuple3<>(entry.getValue(), sampleSize, sampleSizePerPatition));
         }
@@ -142,7 +142,7 @@ public class SampleJobHandler {
                 // imbalanced partition
                 LOG.warn("has imbalanced partition");
             } else {
-                double weight = reservoir.getL() / reservoir.getKeysList().size();
+                double weight = ((double) reservoir.getL()) / reservoir.getKeysList().size();
                 reservoir.getKeysList().forEach(starrocksKeys -> {
                     candidates.add(new Tuple2<>(weight, starrocksKeys.getKeys()));
                 });

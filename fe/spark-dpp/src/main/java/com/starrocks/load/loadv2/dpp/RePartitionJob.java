@@ -47,6 +47,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
@@ -77,25 +78,23 @@ public class RePartitionJob implements Serializable {
                             String oldBucketKey = String.valueOf(next._1.get(0));
                             List<Object> oldkeyColumns = next._1.subList(1, next._1.size());
                             Object[] oldvalueColumns = next._2;
-                            int[] subPartition = {0};
+                            int subPartition = 0;
                             if (boundsMap.containsKey(oldBucketKey)) {
                                 List<List<Object>> bounds = boundsMap.get(oldBucketKey);
                                 BucketComparator bucketComparator = new BucketComparator();
-                                Stream.iterate(0, i -> i + 1).limit(bounds.size()).anyMatch(i -> {
-                                    int res = bucketComparator.compare(oldkeyColumns, bounds.get(i));
-                                    if (res <= 0) {
-                                        subPartition[0] = i;
-                                        return true;
-                                    } else if (res > 0 && i == bounds.size() - 1) {
-                                        subPartition[0] = i + 1;
-                                        return true;
-                                    } else {
-                                        return false;
-                                    }
-                                });
+                                int[] res = {0};
+                                Optional<Integer> bound = Stream.iterate(0, i -> i + 1).limit(bounds.size())
+                                        .filter(i -> {
+                                            res[0] = bucketComparator.compare(oldkeyColumns, bounds.get(i));
+                                            return res[0] <= 0 || (res[0] > 0 && i == bounds.size() - 1);
+                                        })
+                                        .findAny();
+                                if (bound.isPresent()) {
+                                    subPartition = res[0] > 0 ? (bound.get() + 1) : bound.get();
+                                }
                             }
                             List<Object> tuple = new ArrayList<>();
-                            tuple.add(oldBucketKey + "_" + subPartition[0]);
+                            tuple.add(oldBucketKey + "_" + subPartition);
                             tuple.addAll(oldkeyColumns);
                             result.add(new Tuple2<>(tuple, oldvalueColumns));
                         }

@@ -138,8 +138,8 @@ public class ParquetMergeJob extends AbstractFunction1<Iterator<Map.Entry<String
                 if (parquetWriter != null) {
                     parquetWriter.close();
                 }
-                if (parquetReader != null) {
-                    parquetReader.close();
+                if (parquetFileReader != null) {
+                    parquetFileReader.close();
                 }
                 try {
                     fs.rename(new Path(tmpPath), new Path(dstPath));

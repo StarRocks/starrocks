@@ -92,7 +92,7 @@ public class SampleJob extends AbstractFunction1<Iterator<Tuple2<List<Object>, O
                         XORShiftRandom random = new XORShiftRandom();
                         random.setSeed(seed);
                         l++;
-                        Long replacementIndex = Double.valueOf(random.nextDouble() * l).longValue();
+                        Long replacementIndex = (long) random.nextDouble() * l;
                         if (replacementIndex < sampleSizePerPatition) {
                             List<StarrocksKeys> keysList = reservoir.getKeysList();
                             keysList.set(replacementIndex.intValue(), new StarrocksKeys(keys));
