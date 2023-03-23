@@ -245,9 +245,13 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         brpc_addr.hostname = _node_info->host;
         brpc_addr.port = _node_info->brpc_port;
         open_closure->cntl.http_request().set_content_type("application/proto");
-        auto http_stub = BrpcStubCache::create_http_stub(brpc_addr);
-        http_stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
-        LOG(WARNING) << "NodeChannel::_open() issue a http rpc, request size = " << request.ByteSizeLong();
+        auto res = BrpcStubCache::create_http_stub(brpc_addr);
+        if (!res.ok()) {
+            LOG(ERROR) << res.get_error_msg();
+            return;
+        }
+        res.value()->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
+        VLOG(2) << "NodeChannel::_open() issue a http rpc, request size = " << request.ByteSizeLong();
     } else {
         _stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
     }
@@ -571,11 +575,14 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
             brpc_addr.hostname = _node_info->host;
             brpc_addr.port = _node_info->brpc_port;
             _add_batch_closures[_current_request_index]->cntl.http_request().set_content_type("application/proto");
-            auto http_stub = BrpcStubCache::create_http_stub(brpc_addr);
-            http_stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
-                                                &_add_batch_closures[_current_request_index]->result,
-                                                _add_batch_closures[_current_request_index]);
-            LOG(WARNING) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
+            auto res = BrpcStubCache::create_http_stub(brpc_addr);
+            if (!res.ok()) {
+                return res.status();
+            }
+            res.value()->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
+                                                  &_add_batch_closures[_current_request_index]->result,
+                                                  _add_batch_closures[_current_request_index]);
+            VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
             _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
                                             &_add_batch_closures[_current_request_index]->result,
@@ -588,11 +595,14 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
             brpc_addr.hostname = _node_info->host;
             brpc_addr.port = _node_info->brpc_port;
             _add_batch_closures[_current_request_index]->cntl.http_request().set_content_type("application/proto");
-            auto http_stub = BrpcStubCache::create_http_stub(brpc_addr);
-            http_stub->tablet_writer_add_chunk(
+            auto res = BrpcStubCache::create_http_stub(brpc_addr);
+            if (!res.ok()) {
+                return res.status();
+            }
+            res.value()->tablet_writer_add_chunk(
                     &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
                     &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
-            LOG(WARNING) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
+            VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
             _stub->tablet_writer_add_chunk(
                     &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
