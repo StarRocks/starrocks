@@ -242,12 +242,12 @@ public class QueryQueueManagerTest {
 
         new MockUp<SystemInfoService>() {
             @Mock
-            public Stream<ComputeNode> backendAndComputeNodeStream() {
+            public Stream<ComputeNode> computeNodeStream() {
                 return ImmutableList.of(be1, be2).stream();
             }
 
             @Mock
-            public ComputeNode getBackendOrComputeNode(long idx) {
+            public ComputeNode getComputeNode(long idx) {
                 if (idx == be2.getId()) {
                     return be2;
                 }

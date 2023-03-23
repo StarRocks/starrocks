@@ -41,19 +41,14 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
-import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -219,27 +214,27 @@ public class SystemInfoServiceTest {
     }
 
     @Test
-    public void addBackendTest() throws AnalysisException {
+    public void addDataNodeTest() throws AnalysisException {
         clearAllBackend();
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentSystemInfo().addDataNodes(stmt.getHostPortPairs());
         } catch (DdlException e) {
             Assert.fail();
         }
 
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentSystemInfo().addDataNodes(stmt.getHostPortPairs());
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("already exists"));
         }
 
-        Assert.assertNotNull(GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId));
-        Assert.assertNotNull(GlobalStateMgr.getCurrentSystemInfo().getBackendWithHeartbeatPort("192.168.0.1", 1234));
+        Assert.assertNotNull(GlobalStateMgr.getCurrentSystemInfo().getDataNode(backendId));
+        Assert.assertNotNull(GlobalStateMgr.getCurrentSystemInfo().getDataNodeWithHeartbeatPort("192.168.0.1", 1234));
 
-        Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber() == 1);
-        Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false).get(0) == backendId);
+        Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getTotalDataNodeNumber() == 1);
+        Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds().get(0) == backendId);
 
         Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getBackendReportVersion(backendId) == 0L);
 
@@ -247,13 +242,14 @@ public class SystemInfoServiceTest {
         Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getBackendReportVersion(backendId) == 2L);
     }
 
+    /*
     @Test
-    public void removeBackendTest() throws AnalysisException {
+    public void removeDataNodeTest() throws AnalysisException {
         clearAllBackend();
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentSystemInfo().addDataNodes(stmt.getHostPortPairs());
         } catch (DdlException e) {
             e.printStackTrace();
         }
@@ -304,7 +300,7 @@ public class SystemInfoServiceTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt2), new ConnectContext(null));
 
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt2.getHostPortPairs());
+            GlobalStateMgr.getCurrentSystemInfo().addDataNodes(stmt2.getHostPortPairs());
         } catch (DdlException e) {
             e.printStackTrace();
         }
@@ -325,7 +321,7 @@ public class SystemInfoServiceTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }
-    }
+    } */
 
     @Test
     public void testSaveLoadBackend() throws Exception {

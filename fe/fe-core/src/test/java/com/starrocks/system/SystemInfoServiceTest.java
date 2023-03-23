@@ -126,11 +126,11 @@ public class SystemInfoServiceTest {
         ComputeNode cn = new ComputeNode(10002, "host2", 1000);
         service.addComputeNode(cn);
 
-        Assert.assertEquals(be, service.getBackendOrComputeNode(be.getId()));
-        Assert.assertEquals(cn, service.getBackendOrComputeNode(cn.getId()));
-        Assert.assertNull(service.getBackendOrComputeNode(/* Not Exist */ 100));
+        Assert.assertEquals(be, service.getComputeNode(be.getId()));
+        Assert.assertEquals(cn, service.getComputeNode(cn.getId()));
+        Assert.assertNull(service.getComputeNode(/* Not Exist */ 100));
 
-        List<ComputeNode> nodes = service.backendAndComputeNodeStream().collect(Collectors.toList());
+        List<ComputeNode> nodes = service.computeNodeStream().collect(Collectors.toList());
         Assert.assertEquals(2, nodes.size());
         Assert.assertEquals(be, nodes.get(0));
         Assert.assertEquals(cn, nodes.get(1));

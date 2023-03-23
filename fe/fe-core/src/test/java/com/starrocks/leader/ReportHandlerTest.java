@@ -150,7 +150,7 @@ public class ReportHandlerTest {
 
         new MockUp<SystemInfoService>() {
             @Mock
-            public ComputeNode getBackendOrComputeNode(long id) {
+            public ComputeNode getComputeNode(long id) {
                 if (id == backend.getId()) {
                     return backend;
                 }
