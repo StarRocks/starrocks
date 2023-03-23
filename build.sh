@@ -142,7 +142,7 @@ if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     # force turn off block cache on arm platform
     WITH_BLOCK_CACHE=OFF
 elif [[ -z ${WITH_BLOCK_CACHE} ]]; then
-    WITH_BLOCK_CACHE=OFF
+    WITH_BLOCK_CACHE=ON
 fi
 
 if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then

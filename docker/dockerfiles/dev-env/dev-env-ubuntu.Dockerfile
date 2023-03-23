@@ -45,7 +45,7 @@ RUN if test "x$predownload_thirdparty" = "xtrue" ; then \
         mkdir -p starrocks/thirdparty/src && tar -xf thirdparty.tar -C starrocks/thirdparty/src ; \
     fi
 RUN mkdir -p $STARROCKS_THIRDPARTY/installed && cd starrocks/thirdparty && \
-     ./build-thirdparty.sh && cp -r installed $STARROCKS_THIRDPARTY/
+     PARALLEL=`nproc` ./build-thirdparty.sh && cp -r installed $STARROCKS_THIRDPARTY/
 RUN if test "x$prebuild_maven" = "xtrue" ; then \
         export MAVEN_OPTS='-Dmaven.artifact.threads=128' ; cd /root/starrocks ; ./build.sh --fe || true ; \
         cd java-extensions ; mvn package -DskipTests || true ;  \
