@@ -59,7 +59,7 @@ Query Cache 支持全部数据分区策略，包括 Unpartitioned、Multi-Column
 
 | **参数**             | **必填** | **描述**                                                     |
 | -------------------- | -------- | ------------------------------------------------------------ |
-| query_cache_capacity | 否       | 指定 Query Cache 的大小。单位：字节。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。<br>每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。 |
+| query_cache_capacity | 否       | 指定 Query Cache 的大小。单位：字节。默认为 512 MB。<br>每个 BE 都有自己的 Query Cache，并且只填充 (Populate) 和检查 (Probe) 自己的 Query Cache。Query Cache 占用的是所在 BE 的内存。<br>注意 Query Cache 大小不能不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。 |
 
 ## 原理解释
 
