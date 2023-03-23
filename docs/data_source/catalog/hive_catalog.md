@@ -119,7 +119,13 @@ The parameter description is as follows:
 
 ## Use catalog to query Hive data
 
+<<<<<<< HEAD
 After the catalog is created, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
+=======
+| Parameter           | Required | Description                                                  |
+| ------------------- | -------- | ------------------------------------------------------------ |
+| hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+>>>>>>> f7fbd44c7 ([Doc] fix bug in analyze table to Branch 3.0 (#20097))
 
 ## Caching strategy of Hive metadata
 

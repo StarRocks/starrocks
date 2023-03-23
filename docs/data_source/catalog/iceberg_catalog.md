@@ -53,7 +53,80 @@ If you use Hive metastore for your Iceberg cluster, configure the following prop
 
 #### Custom metadata service
 
+<<<<<<< HEAD
 If you use a custom metadata service for your Iceberg cluster, you need to create a custom catalog class (The class name of the custom catalog cannot be duplicated with the name of the class that already exists in StarRocks) and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog class needs to inherit the abstract class BaseMetastoreCatalog. For information about how to create a custom catalog in StarRocks, see [IcebergHiveCatalog](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/external/iceberg/IcebergHiveCatalog.java). After the custom catalog is created, package the catalog and its related files, and then place them under the **fe/lib** path of each FE. Then restart each FE.
+=======
+The type of your data source. Set the value to `iceberg`.
+
+#### `MetastoreParams`
+
+A set of parameters about how StarRocks integrates with the metastore of your data source.
+
+###### Hive metastore
+
+If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
+
+```SQL
+"iceberg.catalog.hive.metastore.uris" = "<hive_metastore_uri>"
+```
+
+> **NOTE**
+>
+> Before querying Iceberg data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the `/etc/hosts` path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
+
+The following table describes the parameter you need to configure in `MetastoreParams`.
+
+| Parameter                           | Required | Description                                                  |
+| ----------------------------------- | -------- | ------------------------------------------------------------ |
+| iceberg.catalog.hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+
+###### AWS Glue
+
+If you choose AWS Glue as the metastore of your data source, take one of the following actions:
+
+- To choose instance profile as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
+
+  ```SQL
+  "hive.metastore.type" = "glue",
+  "aws.glue.use_instance_profile" = "true",
+  "aws.glue.region" = "<aws_glue_region>"
+  ```
+
+- To choose assumed role as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
+
+  ```SQL
+  "hive.metastore.type" = "glue",
+  "aws.glue.use_instance_profile" = "true",
+  "aws.glue.iam_role_arn" = "<iam_role_arn>",
+  "aws.glue.region" = "<aws_glue_region>"
+  ```
+
+- To choose IAM user as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
+
+  ```SQL
+  "aws.glue.use_instance_profile" = 'false',
+  "aws.glue.access_key" = "<iam_user_access_key>",
+  "aws.glue.secret_key" = "<iam_user_secret_key>",
+  "aws.glue.region" = "<aws_s3_region>"
+  ```
+
+The following table describes the parameters you need to configure in `MetastoreParams`.
+
+| Parameter                     | Required | Description                                                  |
+| ----------------------------- | -------- | ------------------------------------------------------------ |
+| hive.metastore.type           | Yes      | The type of metastore that you use for your Iceberg cluster. Set the value to `glue`. |
+| aws.glue.use_instance_profile | Yes      | Specifies whether to enable the credential methods instance profile and assumed role. Valid values: `true` and `false`. Default value: `false`. |
+| aws.glue.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you choose assumed role as the credential method for accessing AWS Glue, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Iceberg data by using an Iceberg catalog. |
+| aws.glue.region               | Yes      | The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. |
+| aws.glue.access_key           | No       | The access key of your AWS IAM user. If choose IAM user as the credential method for accessing AWS Glue, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Iceberg data by using an Iceberg catalog. |
+| aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS Glue, you must specify this parameter. Then, StarRocks will assume this user when it accesses your Iceberg data by using an Iceberg catalog. |
+
+For information about how to choose a credential method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+
+##### Custom metadata service
+
+If you use a custom metadata service for your Iceberg cluster, you need to create a custom catalog class (the class name of the custom catalog cannot be the same as the name of any class that already exists in StarRocks) and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog class needs to inherit the abstract class `BaseMetastoreCatalog`. After the custom catalog is created, package the catalog and its related files, place them under the **fe/lib** path of each FE, and then restart each FE.
+>>>>>>> f7fbd44c7 ([Doc] fix bug in analyze table to Branch 3.0 (#20097))
 
 After you complete the preceding operations, you can create an Iceberg catalog and configure its properties.
 

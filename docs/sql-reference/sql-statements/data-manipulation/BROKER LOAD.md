@@ -210,12 +210,31 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
   The following table describes the parameters in the HA configuration.
 
+<<<<<<< HEAD
   | Parameter                          | Description                                                  |
   | ---------------------------------- | ------------------------------------------------------------ |
   | dfs.nameservices                   | The name of the HDFS cluster.                                |
   | dfs.ha.namenodes.XXX               | The name of the NameNode in the HDFS cluster. If you specify multiple NameNode names, separate them with commas (,). `xxx` is the HDFS cluster name that you have specified in `dfs.nameservices`. |
   | dfs.namenode.rpc-address.XXX.NN    | The RPC address of the NameNode in the HDFS cluster. `NN` is the NameNode name that you have specified in `dfs.ha.namenodes.XXX`. |
   | dfs.client.failover.proxy.provider | The provider of the NameNode to which the client will connect. Default value: `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`. |
+=======
+      ```Plain
+      "dfs.nameservices" = "ha_cluster",
+      "dfs.ha.namenodes.ha_cluster" = "ha_n1,ha_n2",
+      "dfs.namenode.rpc-address.ha_cluster.ha_n1" = "<hdfs_host>:<hdfs_port>",
+      "dfs.namenode.rpc-address.ha_cluster.ha_n2" = "<hdfs_host>:<hdfs_port>",
+      "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
+      ```
+
+      The following table describes the parameters in the HA configuration.
+
+      | Parameter                          | Description                                                  |
+      | ---------------------------------- | ------------------------------------------------------------ |
+      | dfs.nameservices                   | The name of the HDFS cluster.                                |
+      | dfs.ha.namenodes.XXX               | The name of the NameNode in the HDFS cluster. If you specify multiple NameNode names, separate them with commas (`,`). `xxx` is the HDFS cluster name that you have specified in `dfs.nameservices`. |
+      | dfs.namenode.rpc-address.XXX.NN    | The RPC address of the NameNode in the HDFS cluster. `NN` is the NameNode name that you have specified in `dfs.ha.namenodes.XXX`. |
+      | dfs.client.failover.proxy.provider | The provider of the NameNode to which the client will connect. Default value: `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`. |
+>>>>>>> f7fbd44c7 ([Doc] fix bug in analyze table to Branch 3.0 (#20097))
 
 #### Amazon S3
 

@@ -45,7 +45,13 @@ The parameter description is as follows:
 
 ## Caching strategy of Hudi metadata
 
+<<<<<<< HEAD
 StarRocks develops a query execution plan based on the metadata of Hudi tables. Therefore, the response time of Hive metastore directly affects the time consumed by a query. To reduce the impact, StarRocks provides caching strategies, based on which StarRocks can cache and update the metadata of Hudi tables, such as partition statistics and file information of partitions. Currently, StarRocks only supports the asynchronous update strategy.
+=======
+| Parameter           | Required | Description                                                  |
+| ------------------- | -------- | ------------------------------------------------------------ |
+| hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+>>>>>>> f7fbd44c7 ([Doc] fix bug in analyze table to Branch 3.0 (#20097))
 
 ### How it works
 
