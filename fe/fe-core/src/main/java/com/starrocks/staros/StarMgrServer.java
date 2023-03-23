@@ -123,37 +123,41 @@ public class StarMgrServer {
 
         // Storage fs type
         com.staros.util.Config.DEFAULT_FS_TYPE = Config.cloud_native_storage_type;
-        if (!com.staros.util.Config.DEFAULT_FS_TYPE.equals("HDFS") && !com.staros.util.Config.DEFAULT_FS_TYPE.equals("S3")) {
-            LOG.error("invalid cloud native storage type: {}, must be HDFS or S3", com.staros.util.Config.DEFAULT_FS_TYPE);
+        if (com.staros.util.Config.DEFAULT_FS_TYPE.equalsIgnoreCase("HDFS")) {
+            // HDFS related configuration
+            com.staros.util.Config.HDFS_URL = Config.cloud_native_hdfs_url;
+            if (com.staros.util.Config.HDFS_URL.isEmpty()) {
+                LOG.error("The configuration item \"cloud_native_hdfs_url\" is empty.");
+                System.exit(-1);
+            }
+        } else if (com.staros.util.Config.DEFAULT_FS_TYPE.equalsIgnoreCase("S3")) {
+            // AWS related configuration
+            String[] bucketAndPrefix = getBucketAndPrefix();
+            com.staros.util.Config.S3_BUCKET = bucketAndPrefix[0];
+            com.staros.util.Config.S3_PATH_PREFIX = bucketAndPrefix[1];
+            com.staros.util.Config.S3_REGION = Config.aws_s3_region;
+            com.staros.util.Config.S3_ENDPOINT = Config.aws_s3_endpoint;
+            if (com.staros.util.Config.S3_BUCKET.isEmpty()) {
+                LOG.error("The configuration item \"aws_s3_path = {}\" is invalid, s3 bucket is empty.", Config.aws_s3_path);
+                System.exit(-1);
+            }
+            // aws credential related configuration
+            String credentialType = getAwsCredentialType();
+            if (credentialType == null) {
+                LOG.error("Invalid aws credential configuration.");
+                System.exit(-1);
+            }
+            com.staros.util.Config.AWS_CREDENTIAL_TYPE = credentialType;
+            com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_ID = Config.aws_s3_access_key;
+            com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_SECRET = Config.aws_s3_secret_key;
+            com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_ARN = Config.aws_s3_iam_role_arn;
+            com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_EXTERNAL_ID = Config.aws_s3_external_id;
+        } else {
+            LOG.error("The configuration item \"cloud_native_storage_type = {}\" is invalid, must be HDFS or S3.", 
+                    Config.cloud_native_storage_type);
             System.exit(-1);
         }
-        // HDFS related configuration
-        com.staros.util.Config.HDFS_URL = Config.cloud_native_hdfs_url;
-        if (com.staros.util.Config.DEFAULT_FS_TYPE.equals("HDFS") && com.staros.util.Config.HDFS_URL.isEmpty()) {
-            LOG.error("HDFS url is empty.");
-            System.exit(-1);
-        }
-        // AWS related configuration
-        String[] bucketAndPrefix = getBucketAndPrefix();
-        com.staros.util.Config.S3_BUCKET = bucketAndPrefix[0];
-        com.staros.util.Config.S3_PATH_PREFIX = bucketAndPrefix[1];
-        com.staros.util.Config.S3_REGION = Config.aws_s3_region;
-        com.staros.util.Config.S3_ENDPOINT = Config.aws_s3_endpoint;
-        if (com.staros.util.Config.DEFAULT_FS_TYPE.equals("S3") && com.staros.util.Config.S3_BUCKET.isEmpty()) {
-            LOG.error("S3 bucket is empty.");
-            System.exit(-1);
-        }
-        // aws credential related configuration
-        String credentialType = getAwsCredentialType();
-        if (credentialType == null) {
-            LOG.error("invalid aws credential configuration.");
-            System.exit(-1);
-        }
-        com.staros.util.Config.AWS_CREDENTIAL_TYPE = credentialType;
-        com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_ID = Config.aws_s3_access_key;
-        com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_SECRET = Config.aws_s3_secret_key;
-        com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_ARN = Config.aws_s3_iam_role_arn;
-        com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_EXTERNAL_ID = Config.aws_s3_external_id;
+
         // use tablet_sched_disable_balance
         com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
         // turn on 0 as default worker group id, to be compatible with add/drop backend in FE
