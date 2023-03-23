@@ -126,6 +126,8 @@ public:
     void lazy_filter_on_cvb(Filter* filter);
     StatusOr<ChunkPtr> get_lazy_chunk();
 
+    bool is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type);
+
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
     Status _fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
