@@ -403,6 +403,21 @@ import static java.util.stream.Collectors.toList;
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private final long sqlMode;
 
+<<<<<<< HEAD
+=======
+    private static final BigInteger LONG_MAX = new BigInteger("9223372036854775807"); // 2^63 - 1
+
+    private static final BigInteger LARGEINT_MAX_ABS =
+            new BigInteger("170141183460469231731687303715884105728"); // 2^127
+
+    private static final List<String> DATE_FUNCTIONS =
+            Lists.newArrayList(FunctionSet.DATE_ADD,
+                    FunctionSet.ADDDATE,
+                    FunctionSet.DATE_ADD, FunctionSet.DATE_SUB,
+                    FunctionSet.SUBDATE,
+                    FunctionSet.DAYS_SUB);
+
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
     public AstBuilder(long sqlMode) {
         this.sqlMode = sqlMode;
     }
@@ -608,7 +623,87 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return partitionDesc;
     }
 
+<<<<<<< HEAD
     private void checkPartitionColumnTypeValid(List<ColumnDef> columnDefs, String partitionColumnName, String fmt) {
+=======
+    // check the partition expr is legal and extract partition columns
+    private List<String> checkAndExtractPartitionCol(FunctionCallExpr expr, List<ColumnDef> columnDefs) {
+        String functionName = expr.getFnName().getFunction();
+        NodePosition pos = expr.getPos();
+        List<String> columnList = Lists.newArrayList();
+        List<Expr> paramsExpr = expr.getParams().exprs();
+        if (FunctionSet.DATE_TRUNC.equals(functionName)) {
+            if (paramsExpr.size() != 2) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr firstExpr = paramsExpr.get(0);
+            Expr secondExpr = paramsExpr.get(1);
+            String partitionColumnName;
+            if (secondExpr instanceof SlotRef) {
+                partitionColumnName = ((SlotRef) secondExpr).getColumnName();
+                columnList.add(partitionColumnName);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+
+            if (firstExpr instanceof StringLiteral) {
+                StringLiteral stringLiteral = (StringLiteral) firstExpr;
+                String fmt = stringLiteral.getValue();
+                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
+                }
+                checkPartitionColumnTypeValid(expr, columnDefs, pos, partitionColumnName, fmt);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+
+        } else if (FunctionSet.TIME_SLICE.equals(functionName)) {
+            if (paramsExpr.size() != 4) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr firstExpr = paramsExpr.get(0);
+            String partitionColumnName;
+            if (firstExpr instanceof SlotRef) {
+                partitionColumnName = ((SlotRef) firstExpr).getColumnName();
+                columnList.add(partitionColumnName);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr secondExpr = paramsExpr.get(1);
+            Expr thirdExpr = paramsExpr.get(2);
+            if (secondExpr instanceof IntLiteral && thirdExpr instanceof StringLiteral) {
+                StringLiteral stringLiteral = (StringLiteral) thirdExpr;
+                String fmt = stringLiteral.getValue();
+                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
+                }
+                // For materialized views currently columnDefs == null
+                checkPartitionColumnTypeValid(expr, columnDefs, pos, partitionColumnName, fmt);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr fourthExpr = paramsExpr.get(3);
+            if (fourthExpr instanceof StringLiteral) {
+                StringLiteral boundaryLiteral = (StringLiteral) fourthExpr;
+                String boundary = boundaryLiteral.getValue();
+                if (!"floor".equalsIgnoreCase(boundary)) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(expr.toSql(),
+                            "PARTITION BY", "Automatic partitioning does not support the ceil parameter"), pos);
+                }
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+        }
+        return columnList;
+    }
+
+    private void checkPartitionColumnTypeValid(FunctionCallExpr expr, List<ColumnDef> columnDefs,
+                                               NodePosition pos, String partitionColumnName, String fmt) {
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
         // For materialized views currently columnDefs == null
         if (columnDefs != null && "hour".equalsIgnoreCase(fmt)) {
             ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionColumnName);
@@ -707,8 +802,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.AUTO_INCREMENT() != null) {
             isAutoIncrement = true;
         }
+<<<<<<< HEAD
         if (isAutoIncrement != null && isAllowNull != null && isAllowNull == true) {
             throw new ParsingException("AUTO_INCREMENT column %s must be NOT NULL ", columnName);
+=======
+        if (isAutoIncrement != null && isAllowNull != null && isAllowNull) {
+            throw new ParsingException(PARSER_ERROR_MSG.nullColFoundInPK(columnName), colIdentifier.getPos());
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
         }
         if (isAutoIncrement != null) {
             isAllowNull = false;
@@ -733,6 +833,32 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 ((StringLiteral) visit(context.comment().string())).getStringValue();
         return new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef,
                 isAutoIncrement, comment);
+    }
+
+    @Override
+    public ParseNode visitCreateTemporaryTableStatement(StarRocksParser.CreateTemporaryTableStatementContext context) {
+        if (!Config.enable_experimental_temporary_table) {
+            throw new SemanticException(
+                    "Temporary table feature is experimental and disabled by default, could be enabled through " +
+                            ": admin set frontend config('enable_experimental_temporary_table' = 'true')");
+        }
+        CreateTableStmt createTableStmt = new CreateTableStmt(
+                false,
+                false,
+                qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
+                null,
+                EngineType.defaultEngine().name(),
+                null,
+                null,
+                null,
+                new HashMap<>(),
+                null,
+                null);
+
+        return new CreateTableAsSelectStmt(
+                createTableStmt,
+                null,
+                (QueryStatement) visit(context.queryStatement()));
     }
 
     @Override
@@ -1368,7 +1494,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowMaterializedViewsStatement(StarRocksParser.ShowMaterializedViewsStatementContext context) {
+    public ParseNode visitShowMaterializedViewsStatement(
+            StarRocksParser.ShowMaterializedViewsStatementContext context) {
         String database = null;
         if (context.qualifiedName() != null) {
             database = getQualifiedName(context.qualifiedName()).toString();
@@ -1468,7 +1595,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowCreateExternalCatalogStatement(StarRocksParser.ShowCreateExternalCatalogStatementContext context) {
+    public ParseNode visitShowCreateExternalCatalogStatement(
+            StarRocksParser.ShowCreateExternalCatalogStatementContext context) {
         Identifier identifier = (Identifier) visit(context.catalogName);
         String catalogName = identifier.getValue();
         return new ShowCreateExternalCatalogStmt(catalogName);
@@ -1653,7 +1781,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.withClause() != null) {
             ctes = visit(context.withClause().commonTableExpression(), CTERelation.class);
         }
+<<<<<<< HEAD
         DeleteStmt ret = new DeleteStmt(targetTableName, partitionNames, usingRelations, where, ctes);
+=======
+        DeleteStmt ret =
+                new DeleteStmt(targetTableName, partitionNames, usingRelations, where, ctes, createPos(context));
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
         if (context.explainDesc() != null) {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
         }
@@ -1703,9 +1836,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Map<String, String> dataSourceProperties =
                     getDataSourceProperties(context.dataSource().dataSourceProperties());
             RoutineLoadDataSourceProperties dataSource =
+<<<<<<< HEAD
                     new RoutineLoadDataSourceProperties(typeName, dataSourceProperties);
             return new AlterRoutineLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
                     loadPropertyList, jobProperties, dataSource);
+=======
+                    new RoutineLoadDataSourceProperties(typeName, dataSourceProperties,
+                            createPos(context.dataSource()));
+            return new AlterRoutineLoadStmt(createLabelName(context.db, context.name),
+                    loadPropertyList, jobProperties, dataSource, pos);
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
         }
 
         return new AlterRoutineLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
@@ -2946,7 +3086,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new SetStmt(propertyList);
     }
 
-
     @Override
     public ParseNode visitSetNames(StarRocksParser.SetNamesContext context) {
         if (context.CHAR() != null || context.CHARSET() != null) {
@@ -3985,7 +4124,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QueryRelation query = (QueryRelation) visit(context.queryRelation());
         List<Expr> tupleExpressions = visit(context.expression(), Expr.class);
 
+<<<<<<< HEAD
         return new MultiInPredicate(tupleExpressions, new Subquery(new QueryStatement(query)), isNotIn);
+=======
+        return new MultiInPredicate(tupleExpressions, new Subquery(new QueryStatement(query)), isNotIn,
+                createPos(context));
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
     }
 
     @Override
@@ -4089,7 +4233,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (authOption == null) {
             userDesc = new UserDesc(user);
         } else if (authOption.getAuthPlugin() == null) {
+<<<<<<< HEAD
             userDesc = new UserDesc(user, authOption.getPassword(), authOption.isPasswordPlain());
+=======
+            stop = context.authOption().stop;
+            userDesc =
+                    new UserDesc(user, authOption.getPassword(), authOption.isPasswordPlain(), createPos(start, stop));
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
         } else {
             userDesc = new UserDesc(user, authOption.getAuthPlugin(), authOption.getAuthString(),
                     authOption.isPasswordPlain());
@@ -4137,7 +4287,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         UserAuthOption authOption = (UserAuthOption) visit(context.authOption());
         if (authOption.getAuthPlugin() == null) {
+<<<<<<< HEAD
             userDesc = new UserDesc(user, authOption.getPassword(), authOption.isPasswordPlain());
+=======
+            userDesc =
+                    new UserDesc(user, authOption.getPassword(), authOption.isPasswordPlain(), createPos(start, stop));
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
         } else {
             userDesc = new UserDesc(user, authOption.getAuthPlugin(), authOption.getAuthString(),
                     authOption.isPasswordPlain());
@@ -4199,7 +4354,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitGrantRoleToUser(StarRocksParser.GrantRoleToUserContext context) {
         List<String> roleNameList = new ArrayList<>();
-        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList().identifierOrString()) {
+        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
+                .identifierOrString()) {
             roleNameList.add(((Identifier) visit(oneContext)).getValue());
         }
 
@@ -4209,17 +4365,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitGrantRoleToRole(StarRocksParser.GrantRoleToRoleContext context) {
         List<String> roleNameList = new ArrayList<>();
-        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList().identifierOrString()) {
+        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
+                .identifierOrString()) {
             roleNameList.add(((Identifier) visit(oneContext)).getValue());
         }
 
+<<<<<<< HEAD
         return new GrantRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue());
+=======
+        return new GrantRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue(),
+                createPos(context));
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
     }
 
     @Override
     public ParseNode visitRevokeRoleFromUser(StarRocksParser.RevokeRoleFromUserContext context) {
         List<String> roleNameList = new ArrayList<>();
-        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList().identifierOrString()) {
+        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
+                .identifierOrString()) {
             roleNameList.add(((Identifier) visit(oneContext)).getValue());
         }
 
@@ -4229,11 +4392,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitRevokeRoleFromRole(StarRocksParser.RevokeRoleFromRoleContext context) {
         List<String> roleNameList = new ArrayList<>();
-        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList().identifierOrString()) {
+        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
+                .identifierOrString()) {
             roleNameList.add(((Identifier) visit(oneContext)).getValue());
         }
 
+<<<<<<< HEAD
         return new RevokeRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue());
+=======
+        return new RevokeRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue(),
+                createPos(context));
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
     }
 
     @Override
@@ -4538,7 +4707,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new Identifier(Joiner.on(" ").join(ps));
     }
 
-    private GrantRevokePrivilegeObjects parsePrivilegeObjectNameList(StarRocksParser.PrivObjectNameListContext context) {
+    private GrantRevokePrivilegeObjects parsePrivilegeObjectNameList(
+            StarRocksParser.PrivObjectNameListContext context) {
         if (context == null) {
             return null;
         }
@@ -4547,8 +4717,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         List<List<String>> objectNameList = new ArrayList<>();
         for (StarRocksParser.PrivObjectNameContext privObjectNameContext : context.privObjectName()) {
-            objectNameList.add(privObjectNameContext.identifierOrStringOrStar().stream().map(
-                    c -> ((Identifier) visit(c)).getValue()).collect(toList()));
+            objectNameList.add(privObjectNameContext.identifierOrStringOrStar().stream()
+                    .map(c -> ((Identifier) visit(c)).getValue()).collect(toList()));
         }
         grantRevokePrivilegeObjects.setPrivilegeObjectNameTokensList(objectNameList);
         return grantRevokePrivilegeObjects;
@@ -4953,10 +5123,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return buildOverClause(functionCallExpr, context.over());
     }
 
+<<<<<<< HEAD
     public static final ImmutableSet<String> WINDOW_FUNCTION_SET = ImmutableSet.of(
             FunctionSet.ROW_NUMBER, FunctionSet.RANK, FunctionSet.DENSE_RANK, FunctionSet.NTILE, FunctionSet.LEAD,
             FunctionSet.LAG, FunctionSet.FIRST_VALUE, FunctionSet.LAST_VALUE);
 
+=======
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
         if (WINDOW_FUNCTION_SET.contains(context.name.getText().toLowerCase())) {
@@ -4990,12 +5163,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCast(StarRocksParser.CastContext context) {
+<<<<<<< HEAD
         return new CastExpr(new TypeDef(getType(context.type())), (Expr) visit(context.expression()));
+=======
+        return new CastExpr(new TypeDef(getType(context.type())), (Expr) visit(context.expression()),
+                createPos(context));
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
     }
 
     @Override
     public ParseNode visitConvert(StarRocksParser.ConvertContext context) {
+<<<<<<< HEAD
         return new CastExpr(new TypeDef(getType(context.type())), (Expr) visit(context.expression()));
+=======
+        return new CastExpr(new TypeDef(getType(context.type())), (Expr) visit(context.expression()),
+                createPos(context));
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
     }
 
     @Override
@@ -5299,7 +5482,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitInterval(StarRocksParser.IntervalContext context) {
+<<<<<<< HEAD
         return new IntervalLiteral((Expr) visit(context.value), (UnitIdentifier) visit(context.from));
+=======
+        return new IntervalLiteral((Expr) visit(context.value), (UnitIdentifier) visit(context.from),
+                createPos(context));
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
     }
 
     @Override
@@ -6028,7 +6216,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return jobProperties;
     }
 
-
     private Map<String, String> getDataSourceProperties(
             StarRocksParser.DataSourcePropertiesContext dataSourcePropertiesContext) {
         Map<String, String> dataSourceProperties = new HashMap<>();
@@ -6056,5 +6243,47 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return null;
         }
     }
+<<<<<<< HEAD
+=======
+
+    private NodePosition createPos(ParserRuleContext context) {
+        return createPos(context.start, context.stop);
+    }
+
+    private NodePosition createPos(Token start, Token stop) {
+        if (start == null) {
+            return NodePosition.ZERO;
+        }
+
+        if (stop == null) {
+            return new NodePosition(start.getLine(), start.getCharPositionInLine());
+        }
+
+        return new NodePosition(start, stop);
+    }
+
+    // labelName can be null or (db.)name format
+    private LabelName createLabelName(StarRocksParser.QualifiedNameContext dbCtx,
+                                      StarRocksParser.IdentifierContext nameCtx) {
+
+        Token start = null;
+        Token stop = null;
+
+        String name = null;
+        if (nameCtx != null) {
+            name = getIdentifierName(nameCtx);
+            start = nameCtx.start;
+            stop = nameCtx.stop;
+        }
+
+        String dbName = null;
+        if (dbCtx != null) {
+            dbName = getQualifiedName(dbCtx).toString();
+            start = dbCtx.start;
+        }
+
+        return new LabelName(dbName, name, createPos(start, stop));
+    }
+>>>>>>> 5ea018c8e ([Feature] experimental temporary table feature (#20069))
 }
 
