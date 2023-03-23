@@ -1303,6 +1303,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Map<String, String> properties = new HashMap<>();
         ExpressionPartitionDesc expressionPartitionDesc = null;
         DistributionDesc distributionDesc = null;
+        List<String> sortKeys = null;
 
         for (StarRocksParser.MaterializedViewDescContext desc : ListUtils.emptyIfNull(context.materializedViewDesc())) {
             // process properties
@@ -1354,6 +1355,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
                 distributionDesc = (DistributionDesc) visit(desc.distributionDesc());
             }
+
+            if (desc.orderByDesc() != null) {
+                sortKeys = visit(desc.orderByDesc().identifierList().identifier(), Identifier.class)
+                        .stream().map(Identifier::getValue).collect(toList());
+            }
         }
 
         if (refreshSchemeDesc == null) {
@@ -1389,8 +1395,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     "you can set FE config enable_experimental_mv=true to enable it.");
         }
 
+<<<<<<< HEAD
         return new CreateMaterializedViewStatement(tableName, ifNotExist, comment,
                 refreshSchemeDesc, expressionPartitionDesc, distributionDesc, properties, queryStatement);
+=======
+        return new CreateMaterializedViewStatement(tableName, ifNotExist, comment, refreshSchemeDesc,
+                expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
+>>>>>>> 750ebdd9c ([Feature] specify sort col for materialized view (#19920))
     }
 
     @Override
