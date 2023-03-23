@@ -1553,7 +1553,7 @@ Status OrcChunkReader::_init_cast_exprs() {
         // For example, if we assume column A is an integer column, but it's stored as string in orc file
         // then min/max of A is almost unusable. Think that there are values ["10", "10000", "100001", "11"]
         // min/max will be "10" and "11", and we expect min/max is 10/100001
-        if (!_broker_load_mode && !starrocks_type.is_implicit_castable(orc_type)) {
+        if (!_broker_load_mode && !is_implicit_castable(starrocks_type, orc_type)) {
             return Status::NotSupported(strings::Substitute("Type mismatch: orc $0 to native $1. file = $2",
                                                             orc_type.debug_string(), starrocks_type.debug_string(),
                                                             _current_file_name));
@@ -2475,6 +2475,7 @@ int OrcChunkReader::get_column_id_by_slot_name(const std::string& slot_name) con
     return -1;
 }
 
+<<<<<<< HEAD
 // ======================================================================================
 
 ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length)
@@ -2503,11 +2504,16 @@ void ORCHdfsFileStream::prepareCache(orc::InputStream::PrepareCacheScope scope, 
 bool ORCHdfsFileStream::canUseCacheBuffer(uint64_t offset, uint64_t length) {
     if ((_cache_buffer.size() != 0) && (offset >= _cache_offset) &&
         ((offset + length) <= (_cache_offset + _cache_buffer.size()))) {
+=======
+bool OrcChunkReader::is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type) {
+    if (starrocks_type.is_decimal_type() && orc_type.is_decimal_type()) {
+>>>>>>> 84ea988df ([BugFix]Fix starrocks can not query hive external table when hive decimal type change (#19978))
         return true;
     }
     return false;
 }
 
+<<<<<<< HEAD
 void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
     if (canUseCacheBuffer(offset, length)) {
         size_t idx = offset - _cache_offset;
@@ -2564,3 +2570,6 @@ void ORCHdfsFileStream::setIORanges(std::vector<orc::InputStream::IORange>& io_r
 }
 
 } // namespace starrocks::vectorized
+=======
+} // namespace starrocks
+>>>>>>> 84ea988df ([BugFix]Fix starrocks can not query hive external table when hive decimal type change (#19978))
