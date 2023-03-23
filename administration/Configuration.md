@@ -376,6 +376,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | size_tiered_level_num                                 | 7           | N/A    | Size-tiered Compaction 策略的 level 数量。每个 level 最多保留一个 rowset，因此稳定状态下最多会有和 level 数相同的 rowset。 |
 | size_tiered_level_multiple                            | 5           | N/A    | Size-tiered Compaction 策略中，相邻两个 level 之间相差的数据量的倍数。 |
 | size_tiered_min_level_size                            | 131072      | Byte   | Size-tiered Compaction 策略中，最小 level 的大小，小于此数值的 rowset 会直接触发 compaction。 |
+| storage_page_cache_limit | 20% | N/A | PageCache 的容量，string，可写为 “20G / 20480M / 20971520K / 21474836480B”, 或者写为系统内存的比例。|
+
 
 ### 配置 BE 静态参数
 
@@ -422,7 +424,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |file_descriptor_cache_capacity|16384|文件句柄缓存的容量。|
 |min_file_descriptor_number|60000|BE 进程的文件句柄 limit 要求的下线。|
 |index_stream_cache_capacity|10737418240|BloomFilter/Min/Max 等统计信息缓存的容量。|
-|storage_page_cache_limit|0|PageCache 的容量，string，可写为 “20G”。|
 |disable_storage_page_cache|TRUE|是否开启 PageCache。|
 |base_compaction_num_threads_per_disk|1|每个磁盘 BaseCompaction 线程的数目。|
 |base_cumulative_delta_ratio|0.3|BaseCompaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例。|
