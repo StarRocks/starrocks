@@ -141,7 +141,6 @@ When a query is executed with a materialized view, the original query statement 
 Several variables could control the bevavior of materialized view:
 - `analyze_mv`: Whether analyze the materialized view after refresh. Default value if `sample`, available values are empty, `sample`, `full`. 
 - `enable_materialized_view_rewrite`: Whether enable the automatic rewrite for materialized view. Default value is `true` since version `2.5`.
-- `enable_rule_based_materialized_view_rewrite`: Whether enable the rule based rewrite for materialized. Default value is `true` since version `2.5`.
 
 
 
