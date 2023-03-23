@@ -21,9 +21,9 @@
 
 namespace starrocks {
 
-// Try to get azure cloud properties from FSOptions, if azure credentials not existed, return nullptr.
-// TODO(SmithCruise): Should remove when using azure cpp sdk
-static const std::vector<TCloudProperty>* get_azure_cloud_properties(const FSOptions& options) {
+// Try to get cloud properties from FSOptions, if cloud configuration not existed, return nullptr.
+// TODO(SmithCruise): Should remove when using cpp sdk
+static const std::vector<TCloudProperty>* get_cloud_properties(const FSOptions& options) {
     const TCloudConfiguration* cloud_configuration = nullptr;
     if (options.cloud_configuration != nullptr) {
         // This branch is used by data lake
@@ -32,7 +32,7 @@ static const std::vector<TCloudProperty>* get_azure_cloud_properties(const FSOpt
         // This branch is used by broker load
         cloud_configuration = &options.hdfs_properties()->cloud_configuration;
     }
-    if (cloud_configuration != nullptr && cloud_configuration->cloud_type == TCloudType::AZURE) {
+    if (cloud_configuration != nullptr) {
         return &cloud_configuration->cloud_properties;
     }
     return nullptr;
@@ -52,11 +52,11 @@ static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr
         }
     }
 
-    // Insert azure cloud credential into Hadoop configuration
-    // TODO(SmithCruise): Should remove when using azure cpp sdk
-    const std::vector<TCloudProperty>* azure_cloud_properties = get_azure_cloud_properties(options);
-    if (azure_cloud_properties != nullptr) {
-        for (const auto& cloud_property : *azure_cloud_properties) {
+    // Insert cloud properties(key-value paired) into Hadoop configuration
+    // TODO(SmithCruise): Should remove when using cpp sdk
+    const std::vector<TCloudProperty>* cloud_properties = get_cloud_properties(options);
+    if (cloud_properties != nullptr) {
+        for (const auto& cloud_property : *cloud_properties) {
             hdfsBuilderConfSetStr(hdfs_builder, cloud_property.key.data(), cloud_property.value.data());
         }
     }
@@ -77,10 +77,10 @@ Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<
         cache_key += properties->hdfs_username;
     }
 
-    // Insert azure cloud credential into cache key
-    const std::vector<TCloudProperty>* azure_cloud_properties = get_azure_cloud_properties(options);
-    if (azure_cloud_properties != nullptr) {
-        for (const auto& cloud_property : *azure_cloud_properties) {
+    // Insert cloud properties into cache key
+    const std::vector<TCloudProperty>* cloud_properties = get_cloud_properties(options);
+    if (cloud_properties != nullptr) {
+        for (const auto& cloud_property : *cloud_properties) {
             cache_key += cloud_property.key;
             cache_key += cloud_property.value;
         }
