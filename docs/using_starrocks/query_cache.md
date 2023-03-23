@@ -59,7 +59,7 @@ You need to configure the following parameter in the BE configuration file **be.
 
 | **Parameter**        | **Required** | **Description**                                              |
 | -------------------- | ------------ | ------------------------------------------------------------ |
-| query_cache_capacity | No           | Specifies the size of the query cache. Unit: bytes. The default size is 512 MB. The size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE.<br>Each BE has its own storage for the query cache and populates or probes only its own query cache storage. |
+| query_cache_capacity | No           | Specifies the size of the query cache. Unit: bytes. The default size is 512 MB.<br>Each BE has its own local query cache in memory, and it populates and probes only its own query cache.<br>Note that the query cache size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE. |
 
 ## Concepts
 
