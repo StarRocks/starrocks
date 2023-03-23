@@ -3,6 +3,13 @@ commands_restrictions:
   backport:
     conditions:
       - sender-permission>=read
+<<<<<<< HEAD
+=======
+    actions:
+      assign:
+        add_users:
+          - {{author}}
+>>>>>>> e213fb6be (fixup .mergify.yml (#20109))
 
 pull_request_rules:
   - name: assign PRs with the pr author
@@ -10,7 +17,7 @@ pull_request_rules:
       - -merged
     actions:
       assign:
-        add_users: 
+        add_users:
           - "{{author}}"
   - name: close pr when conflict
     conditions:
