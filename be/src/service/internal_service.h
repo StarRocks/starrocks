@@ -68,6 +68,10 @@ public:
     void transmit_chunk(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitChunkParams* request,
                         ::starrocks::PTransmitChunkResult* response, ::google::protobuf::Closure* done) override;
 
+    void transmit_chunk_via_http(::google::protobuf::RpcController* controller,
+                                 const ::starrocks::PHttpRequest* request, ::starrocks::PTransmitChunkResult* response,
+                                 ::google::protobuf::Closure* done) override;
+
     void transmit_runtime_filter(::google::protobuf::RpcController* controller,
                                  const ::starrocks::PTransmitRuntimeFilterParams* request,
                                  ::starrocks::PTransmitRuntimeFilterResult* response,

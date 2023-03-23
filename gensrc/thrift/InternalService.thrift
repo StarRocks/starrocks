@@ -178,6 +178,7 @@ struct TQueryOptions {
   74: optional double spill_mem_limit_threshold;
   75: optional i64 spill_operator_min_bytes;
   76: optional TSpillMode spill_mode;
+  77: optional i64 rpc_http_min_size;
 
 }
 

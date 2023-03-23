@@ -63,6 +63,9 @@ message PTransmitDataParams {
     optional PQueryStatistics query_statistics = 8;
 };
 
+message PHttpRequest {
+};
+
 // Transmit vectorized data chunks between Backends.
 // Try to batch enough chunk in one request to reduce each RPC call overhead.
 message PTransmitChunkParams {
@@ -525,6 +528,7 @@ service PInternalService {
 
     // Transmit vectorized data between backends.
     rpc transmit_chunk(PTransmitChunkParams) returns (PTransmitChunkResult);
+    rpc transmit_chunk_via_http(PHttpRequest) returns (PTransmitChunkResult);
     rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
