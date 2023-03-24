@@ -2446,7 +2446,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testAutoPartitionTableUnsupported2() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE site_access_time_slice\n" +
@@ -2455,7 +2455,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testAutoPartitionTableUnsupported3() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE site_access_date_trunc\n" +
