@@ -81,6 +81,7 @@ import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
@@ -891,6 +892,18 @@ public class ShowExecutorTest {
     }
 
     @Test
+    public void testShowCharset() throws DdlException, AnalysisException {
+        // Dbeaver 23 Use
+        ShowCharsetStmt stmt = new ShowCharsetStmt();
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertTrue(resultSet.next());
+        List<List<String>> resultRows = resultSet.getResultRows();
+        Assert.assertTrue(resultRows.size() >= 1);
+        Assert.assertEquals(resultRows.get(0).get(0), "utf8");
+    }
+
+    @Test
     public void testShowEmpty() throws AnalysisException, DdlException {
         ShowProcedureStmt stmt = new ShowProcedureStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -1023,8 +1036,8 @@ public class ShowExecutorTest {
         for (int i = 6; i < mvSchemaTable.size() - 2; i++) {
             Assert.assertEquals("", resultSet.getString(6));
         }
-        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 2));
-        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 1));
+        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 2));
+        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 1));
         Assert.assertFalse(resultSet.next());
     }
 

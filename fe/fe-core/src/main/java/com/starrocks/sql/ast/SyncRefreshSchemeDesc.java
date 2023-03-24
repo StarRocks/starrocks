@@ -20,7 +20,7 @@ import com.starrocks.catalog.MaterializedView;
 public class SyncRefreshSchemeDesc extends RefreshSchemeDesc {
 
     public SyncRefreshSchemeDesc() {
-        super(MaterializedView.RefreshType.SYNC);
+        super(MaterializedView.RefreshType.SYNC, MaterializedView.RefreshMoment.IMMEDIATE);
     }
 
 }

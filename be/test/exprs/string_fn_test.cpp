@@ -2126,7 +2126,6 @@ PARALLEL_TEST(VecStringFunctionsTest, replaceConstColumn2) {
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(" ", 1);
     auto replace = ColumnHelper::create_const_column<TYPE_VARCHAR>("+", 1);
 
-
     columns.emplace_back(str);
     columns.emplace_back(pattern);
     columns.emplace_back(replace);

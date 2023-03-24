@@ -21,13 +21,24 @@ import com.starrocks.catalog.MaterializedView;
 public class RefreshSchemeDesc implements ParseNode {
 
     protected MaterializedView.RefreshType type;
+    protected MaterializedView.RefreshMoment moment;
 
     public RefreshSchemeDesc(MaterializedView.RefreshType type) {
         this.type = type;
+        this.moment = MaterializedView.RefreshMoment.IMMEDIATE;
+    }
+
+    public RefreshSchemeDesc(MaterializedView.RefreshType type, MaterializedView.RefreshMoment moment) {
+        this.type = type;
+        this.moment = moment;
     }
 
     public MaterializedView.RefreshType getType() {
         return type;
+    }
+
+    public MaterializedView.RefreshMoment getMoment() {
+        return moment;
     }
 
 }

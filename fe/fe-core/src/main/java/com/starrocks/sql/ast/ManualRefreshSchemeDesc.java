@@ -24,5 +24,9 @@ public class ManualRefreshSchemeDesc extends RefreshSchemeDesc {
         super(MaterializedView.RefreshType.MANUAL);
     }
 
+    public ManualRefreshSchemeDesc(MaterializedView.RefreshMoment moment) {
+        super(MaterializedView.RefreshType.MANUAL, moment);
+    }
+
 }
 

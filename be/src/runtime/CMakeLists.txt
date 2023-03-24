@@ -73,7 +73,6 @@ set(RUNTIME_FILES
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     time_types.cpp
-    hdfs/hdfs_fs_cache.cpp
     runtime_filter_worker.cpp
     global_dict/decoder.cpp
     global_dict/parser.cpp
