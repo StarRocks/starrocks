@@ -77,6 +77,9 @@ Status StorageEngine::start_bg_threads() {
     _update_cache_expire_thread = std::thread([this] { _update_cache_expire_thread_callback(nullptr); });
     Thread::set_thread_name(_update_cache_expire_thread, "cache_expire");
 
+    _update_cache_evict_thread = std::thread([this] { _update_cache_evict_thread_callback(nullptr); });
+    Thread::set_thread_name(_update_cache_expire_thread, "evict_update_cache");
+
     _unused_rowset_monitor_thread = std::thread([this] { _unused_rowset_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_unused_rowset_monitor_thread, "rowset_monitor");
 
@@ -639,6 +642,33 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
 #endif
     }
 
+    return nullptr;
+}
+
+void* StorageEngine::_update_cache_evict_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        SLEEP_IN_BG_WORKER(config::update_cache_evict_internal_sec);
+        if (!config::enable_auto_evict_update_cache) {
+            continue;
+        }
+
+        // Check config valid
+        int64_t memory_urgent_level = config::memory_urgent_level;
+        int64_t memory_high_level = config::memory_high_level;
+        if (UNLIKELY(!(memory_urgent_level > memory_high_level && memory_high_level >= 1 &&
+                       memory_urgent_level <= 100))) {
+            LOG(ERROR) << "memory water level config is illegal: memory_urgent_level=" << memory_urgent_level
+                       << " memory_high_level=" << memory_high_level;
+            continue;
+        }
+        _update_manager->evict_cache(memory_urgent_level, memory_high_level);
+#if defined(USE_STAROS) && !defined(BE_TEST)
+        ExecEnv::GetInstance()->lake_update_manager()->evict_cache(memory_urgent_level, memory_high_level);
+#endif
+    }
     return nullptr;
 }
 

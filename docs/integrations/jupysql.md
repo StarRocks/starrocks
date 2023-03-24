@@ -16,7 +16,6 @@ Before getting started, you must have the following software installed locally:
 - Python
 - pymysql: `pip install pymysql`
 
-
 > **NOTE**
 >
 > Once we have our requirements we can open jupyter lab simply by calling `jupyterlab` - this will open the notebook interface.
@@ -27,7 +26,7 @@ Before getting started, you must have the following software installed locally:
 %pip install --quiet jupysql sklearn-evaluation pymysql
 ```
 
-* Note: you may need to restart the kernel to use updated packages.
+Note: you may need to restart the kernel to use updated packages.
 
 ```python
 import pandas as pd
@@ -40,9 +39,10 @@ from sklearn_evaluation import plot
 
 **You'd need to make sure your StarRocks instance is up and reachable for the next stages.**
 
-**Note:** you will need to adjust the connection string according to the instance type you're trying to connect to (url, user, password). In the example below we've used a local instance. To learn more about it, check out the [introduction guide](https://docs.starrocks.io/en-us/latest/introduction/StarRocks_intro).
+**Note:** You will need to adjust the connection string according to the instance type you're trying to connect to (url, user, password). In the example below we've used a local instance. To learn more about it, check out the [introduction guide](https://docs.starrocks.io/en-us/latest/introduction/StarRocks_intro).
 
 ## Connecting to StarRocks via Jupysql
+
 In this example, we've used a docker instance and that's reflecting the data in the connection string.
 We'll use root to connect to our local StarRocks instance.
 We can then create a database and check we can actually read and write data into it.
@@ -70,8 +70,8 @@ INSERT INTO tbl VALUES (1, 10), (2, 20), (3, 30);
 SELECT * FROM tbl;
 ```
 
-
 ## Saving and loading queries
+
 Now once we've created a database, we can write some sample data into it and query it.
 JupySQL allows you to break queries into multiple cells, simplifying the process of building large queries.
 It allows us to write complex queries, save them and execute them when needed, in a similar manner to CTEs in SQL.
@@ -84,10 +84,9 @@ INSERT INTO tbl VALUES (1, 1), (2, 2), (3, 3);
 SELECT * FROM tbl;
 ```
 
-* Note: `--save` stores the query, not the data
+Note: `--save` stores the query, not the data.
 
-* Note that we are using --with; this will retrieve previously saved queries, and preprend them (using CTEs), then, we save the query in track_fav .
-
+Note that we are using `--with;` this will retrieve previously saved queries, and prepend them (using CTEs), then, we save the query in track_fav.
 
 ## Plotting directly on StarRocks
 
@@ -103,4 +102,4 @@ We can note we now have a new bar plot without any extra code.
 
 We hope you enjoyed this guide, now you can run SQL directly from your notebook via Jupysql (by ploomber).
 This adds lots of possibilities around StarRocks for Data scientists and Engineers.
-In case you got stuck or need any support, please reach out to us via slack. 
+In case you got stuck or need any support, please reach out to us via slack.

@@ -55,6 +55,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("definition")
     private String definition;
 
+    @SerializedName("postRun")
+    private String postRun;
+
     @SerializedName("user")
     private String user;
 
@@ -163,6 +166,14 @@ public class TaskRunStatus implements Writable {
         this.definition = definition;
     }
 
+    public String getPostRun() {
+        return postRun;
+    }
+
+    public void setPostRun(String postRun) {
+        this.postRun = postRun;
+    }
+
     public int getErrorCode() {
         return errorCode;
     }
@@ -249,6 +260,7 @@ public class TaskRunStatus implements Writable {
                 ", progress=" + progress + "%" +
                 ", dbName='" + getDbName() + '\'' +
                 ", definition='" + definition + '\'' +
+                ", postRun='" + postRun + '\'' +
                 ", user='" + user + '\'' +
                 ", errorCode=" + errorCode +
                 ", errorMessage='" + errorMessage + '\'' +
