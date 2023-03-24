@@ -385,4 +385,44 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
     return Status::OK();
 }
+<<<<<<< HEAD
+=======
+
+Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure,
+                             const TransmitChunkInfo& request) {
+    auto expected_iobuf_size = request.attachment.size() + request.params->ByteSizeLong() + sizeof(size_t) * 2;
+    if (UNLIKELY(expected_iobuf_size > _rpc_http_min_size)) {
+        butil::IOBuf iobuf;
+        butil::IOBufAsZeroCopyOutputStream wrapper(&iobuf);
+        request.params->SerializeToZeroCopyStream(&wrapper);
+        // append params to iobuf
+        size_t params_size = iobuf.size();
+        closure->cntl.request_attachment().append(&params_size, sizeof(params_size));
+        closure->cntl.request_attachment().append(iobuf);
+        // append attachment
+        size_t attachment_size = request.attachment.size();
+        closure->cntl.request_attachment().append(&attachment_size, sizeof(attachment_size));
+        closure->cntl.request_attachment().append(request.attachment);
+        VLOG_ROW << "issue a http rpc, attachment's size = " << attachment_size
+                 << " , total size = " << closure->cntl.request_attachment().size();
+
+        if (UNLIKELY(expected_iobuf_size != closure->cntl.request_attachment().size())) {
+            LOG(WARNING) << "http rpc expected iobuf size " << expected_iobuf_size << " != "
+                         << " real iobuf size " << closure->cntl.request_attachment().size();
+        }
+        closure->cntl.http_request().set_content_type("application/proto");
+        // create http_stub as needed
+        auto res = BrpcStubCache::create_http_stub(request.brpc_addr);
+        if (!res.ok()) {
+            return res.status();
+        }
+        res.value()->transmit_chunk_via_http(&closure->cntl, NULL, &closure->result, closure);
+    } else {
+        closure->cntl.request_attachment().append(request.attachment);
+        request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+    }
+    return Status::OK();
+}
+
+>>>>>>> b07ae3aaf ([Enhancement] Write >2GB large chunk (#19473))
 } // namespace starrocks::pipeline
