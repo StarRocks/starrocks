@@ -141,6 +141,15 @@ Status SchemaHelper::get_loads(const std::string& ip, const int32_t port, const 
             timeout_ms);
 }
 
+Status SchemaHelper::get_tablet_schedules(const std::string& ip, const int32_t port,
+                                          const TGetTabletScheduleRequest& request,
+                                          TGetTabletScheduleResponse* response) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(ip, port,
+                                                       [&request, &response](FrontendServiceConnection& client) {
+                                                           client->getTabletSchedule(*response, request);
+                                                       });
+}
+
 void fill_data_column_with_null(Column* data_column) {
     auto* nullable_column = down_cast<NullableColumn*>(data_column);
     nullable_column->append_nulls(1);

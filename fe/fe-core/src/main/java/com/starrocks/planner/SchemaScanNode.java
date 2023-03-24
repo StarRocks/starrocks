@@ -73,6 +73,8 @@ public class SchemaScanNode extends ScanNode {
     private Long partitionId = null;
     private Long tabletId = null;
     private Long txnId = null;
+    private String type = null;
+    private String state = null;
     private List<TScanRangeLocations> beScanRanges = null;
 
     public void setSchemaDb(String schemaDb) {
@@ -181,6 +183,20 @@ public class SchemaScanNode extends ScanNode {
         if (label != null) {
             msg.schema_scan_node.setLabel(label);
         }
+        if (txnId != null) {
+            msg.schema_scan_node.setTxn_id(txnId);
+        }
+        if (type != null) {
+            msg.schema_scan_node.setType(type);
+        }
+        if (state != null) {
+            msg.schema_scan_node.setState(state);
+        }
+        // setting limit for the scanner may cause query to return less rows than expected
+        // but this is for the purpose of protect FE resource usage, so it's acceptable
+        if (getLimit() > 0) {
+            msg.schema_scan_node.setLimit(getLimit());
+        }
     }
 
     public void setBeId(long beId) {
@@ -201,6 +217,14 @@ public class SchemaScanNode extends ScanNode {
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public void setState(String state) {
+        this.state = state;
     }
 
     public boolean isBeSchemaTable() {

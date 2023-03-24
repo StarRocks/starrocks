@@ -68,6 +68,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletInfo;
+import com.starrocks.thrift.TTabletSchedule;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1177,6 +1178,26 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         result.add(String.valueOf(committedVersion));
         result.add(String.valueOf(0));
         result.add(Strings.nullToEmpty(errMsg));
+        return result;
+    }
+
+    public TTabletSchedule toTabletScheduleThrift() {
+        TTabletSchedule result = new TTabletSchedule();
+        result.setTablet_id(tblId);
+        result.setPartition_id(partitionId);
+        result.setTablet_id(tabletId);
+        result.setType(type.name());
+        result.setPriority(dynamicPriority != null ? dynamicPriority.name() : "");
+        result.setState(state != null ? state.name() : "");
+        result.setTablet_status(tabletStatus != null ? tabletStatus.name() : "");
+        result.setCreate_time(createTime / 1000.0);
+        result.setSchedule_time(lastSchedTime / 1000.0);
+        result.setFinish_time(finishedTime / 1000.0);
+        result.setClone_src(srcReplica == null ? -1 : srcReplica.getBackendId());
+        result.setClone_dest(destBackendId);
+        result.setClone_bytes(copySize);
+        result.setClone_duration(copyTimeMs / 1000.0);
+        result.setError_msg(errMsg);
         return result;
     }
 
