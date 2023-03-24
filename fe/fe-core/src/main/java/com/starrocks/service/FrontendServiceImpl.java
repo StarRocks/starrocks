@@ -116,6 +116,8 @@ import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TGetTabletScheduleRequest;
+import com.starrocks.thrift.TGetTabletScheduleResponse;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTaskRunInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
@@ -1406,6 +1408,247 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public TAllocateAutoIncrementIdResult allocAutoIncrementId(TAllocateAutoIncrementIdParam request) throws TException {
+        TAllocateAutoIncrementIdResult result = new TAllocateAutoIncrementIdResult();
+        long rows = Math.max(request.rows, Config.auto_increment_cache_size);
+        Long nextId = GlobalStateMgr.getCurrentState().allocateAutoIncrementId(request.table_id, rows);
+        try {
+            // log the delta result.
+            ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
+            deltaMap.put(request.table_id, nextId + rows);
+            AutoIncrementInfo info = new AutoIncrementInfo(deltaMap);
+            GlobalStateMgr.getCurrentState().getEditLog().logSaveAutoIncrementId(info);
+        } catch (Exception e) {
+            result.setAuto_increment_id(0);
+            result.setAllocated_rows(0);
+
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            result.setStatus(status);
+            return result;
+        }
+
+        result.setAuto_increment_id(nextId);
+        result.setAllocated_rows(rows);
+
+        TStatus status = new TStatus(TStatusCode.OK);
+        result.setStatus(status);
+
+        return result;
+    }
+
+    @Override
+    public TCreatePartitionResult createPartition(TCreatePartitionRequest request) throws TException {
+
+        LOG.info("Receive create partition: {}", request);
+
+        long dbId = request.getDb_id();
+        long tableId = request.getTable_id();
+        TCreatePartitionResult result = new TCreatePartitionResult();
+        TStatus errorStatus = new TStatus(RUNTIME_ERROR);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d is not exists", dbId)));
+            result.setStatus(errorStatus);
+            return result;
+        }
+        Table table = db.getTable(tableId);
+        if (table == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d tableId=%d is not exists", dbId, tableId)));
+            result.setStatus(errorStatus);
+            return result;
+        }
+        if (!(table instanceof OlapTable)) {
+            errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d tableId=%d is not olap table", dbId, tableId)));
+            result.setStatus(errorStatus);
+            return result;
+        }
+        OlapTable olapTable = (OlapTable) table;
+
+        if (request.partition_values == null) {
+            errorStatus.setError_msgs(Lists.newArrayList("partition_values should not null."));
+            result.setStatus(errorStatus);
+            return result;
+        }
+        // Now only supports the case of automatically creating single partition
+        if (request.partition_values.size() != 1) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    "automatic partition only support single column partition."));
+            result.setStatus(errorStatus);
+            return result;
+        }
+        List<String> partitionValues = request.partition_values.get(0);
+
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support expression range partition."));
+            result.setStatus(errorStatus);
+            return result;
+        }
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs();
+        if (partitionExprs.size() != 1) {
+            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support one expression partitionExpr."));
+            result.setStatus(errorStatus);
+            return result;
+        }
+        Expr expr = partitionExprs.get(0);
+        if (!(expr instanceof FunctionCallExpr)) {
+            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support FunctionCallExpr"));
+            result.setStatus(errorStatus);
+            return result;
+        }
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+        String fnName = functionCallExpr.getFnName().getFunction();
+        long interval = 1;
+        String granularity;
+        if (fnName.equals(FunctionSet.DATE_TRUNC)) {
+            List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
+            if (paramsExprs.size() != 2) {
+                errorStatus.setError_msgs(Lists.newArrayList("date_trunc params exprs size should be 2."));
+                result.setStatus(errorStatus);
+                return result;
+            }
+            Expr granularityExpr = paramsExprs.get(0);
+            if (!(granularityExpr instanceof StringLiteral)) {
+                errorStatus.setError_msgs(Lists.newArrayList("date_trunc granularity is not string literal."));
+                result.setStatus(errorStatus);
+                return result;
+            }
+            StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
+            granularity = granularityLiteral.getStringValue();
+        } else if (fnName.equals(FunctionSet.TIME_SLICE)) {
+            List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
+            if (paramsExprs.size() != 4) {
+                errorStatus.setError_msgs(Lists.newArrayList("time_slice params exprs size should be 4."));
+                result.setStatus(errorStatus);
+                return result;
+            }
+            Expr intervalExpr = paramsExprs.get(1);
+            if (!(intervalExpr instanceof IntLiteral)) {
+                errorStatus.setError_msgs(Lists.newArrayList("time_slice interval is not int literal."));
+                result.setStatus(errorStatus);
+                return result;
+            }
+            Expr granularityExpr = paramsExprs.get(2);
+            if (!(granularityExpr instanceof StringLiteral)) {
+                errorStatus.setError_msgs(Lists.newArrayList("time_slice granularity is not string literal."));
+                result.setStatus(errorStatus);
+                return result;
+            }
+            StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
+            IntLiteral intervalLiteral = (IntLiteral) intervalExpr;
+            granularity = granularityLiteral.getStringValue();
+            interval = intervalLiteral.getLongValue();
+        } else {
+            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support data_trunc function."));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
+        Map<String, AddPartitionClause> addPartitionClauseMap;
+        try {
+            Column firstPartitionColumn = expressionRangePartitionInfo.getPartitionColumns().get(0);
+            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
+                    partitionValues, interval, granularity, firstPartitionColumn.getType());
+        } catch (AnalysisException ex) {
+            errorStatus.setError_msgs(Lists.newArrayList(ex.getMessage()));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        for (AddPartitionClause addPartitionClause : addPartitionClauseMap.values()) {
+            try {
+                if (olapTable.getNumberOfPartitions() > Config.max_automatic_partition_number) {
+                    throw new AnalysisException(" Automatically created partitions exceeded the maximum limit: " +
+                            Config.max_automatic_partition_number + ". You can modify this restriction on by setting" +
+                            " max_automatic_partition_number larger.");
+                }
+                state.addPartitions(db, olapTable.getName(), addPartitionClause);
+            } catch (Exception e) {
+                LOG.warn(e);
+                errorStatus.setError_msgs(Lists.newArrayList(
+                        String.format("automatic create partition failed. error:%s", e.getMessage())));
+                result.setStatus(errorStatus);
+                return result;
+            }
+        }
+
+        // build partition & tablets
+        List<TOlapTablePartition> partitions = Lists.newArrayList();
+        List<TTabletLocation> tablets = Lists.newArrayList();
+        for (String partitionName : addPartitionClauseMap.keySet()) {
+            Partition partition = table.getPartition(partitionName);
+            TOlapTablePartition tPartition = new TOlapTablePartition();
+            tPartition.setId(partition.getId());
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+            Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
+            int partColNum = rangePartitionInfo.getPartitionColumns().size();
+            // set start keys
+            if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
+                for (int i = 0; i < partColNum; i++) {
+                    tPartition.addToStart_keys(
+                            range.lowerEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                }
+            }
+            // set end keys
+            if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
+                for (int i = 0; i < partColNum; i++) {
+                    tPartition.addToEnd_keys(
+                            range.upperEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                }
+            }
+            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
+                        index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
+                tPartition.setNum_buckets(index.getTablets().size());
+            }
+            partitions.add(tPartition);
+            // tablet
+            int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), ((OlapTable) table).writeQuorum());
+            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    // we should ensure the replica backend is alive
+                    // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
+                    LocalTablet localTablet = (LocalTablet) tablet;
+                    Multimap<Replica, Long> bePathsMap =
+                            localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
+                    if (bePathsMap.keySet().size() < quorum) {
+                        errorStatus.setError_msgs(Lists.newArrayList(
+                                "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
+                                        + tablet.getId() + ", backends: " +
+                                        Joiner.on(",").join(localTablet.getBackends())));
+                        result.setStatus(errorStatus);
+                        return result;
+                    }
+                    // replicas[0] will be the primary replica
+                    // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable 
+                    List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
+                    tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
+                            .collect(Collectors.toList())));
+                }
+            }
+        }
+        result.setPartitions(partitions);
+        result.setTablets(tablets);
+
+        // build nodes
+        List<TNodeInfo> nodeInfos = Lists.newArrayList();
+        TNodesInfo nodesInfo = new TNodesInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(olapTable.getClusterId());
+        for (Long id : systemInfoService.getBackendIds(false)) {
+            Backend backend = systemInfoService.getBackend(id);
+            nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+        }
+        result.setNodes(nodeInfos);
+        result.setStatus(new TStatus(OK));
+        return result;
+    }
+
+>>>>>>> 62315fb79 ([Enhancement] Add FE tablet schedule to information_schema (#18954))
     @Override
     public TGetTablesConfigResponse getTablesConfig(TGetTablesConfigRequest request) throws TException {
         return InformationSchemaDataSource.generateTablesConfigResponse(request);
@@ -1429,4 +1672,60 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         res.setStatus(status);
         return res;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public TMVReportEpochResponse mvReport(TMVMaintenanceTasks request) throws TException {
+        LOG.info("Recieve mvReport: {}", request);
+        if (!request.getTask_type().equals(MVTaskType.REPORT_EPOCH)) {
+            throw new TException("Only support report_epoch task");
+        }
+        MVManager.getInstance().onReportEpoch(request);
+        return new TMVReportEpochResponse();
+    }
+
+    @Override
+    public TGetLoadsResult getLoads(TGetLoadsParams request) throws TException {
+        LOG.debug("Recieve getLoads: {}", request);
+
+        TGetLoadsResult result = new TGetLoadsResult();
+        List<TLoadInfo> loads = Lists.newArrayList();
+        try {
+            if (request.isSetJob_id()) {
+                LoadJob job = GlobalStateMgr.getCurrentState().getLoadManager().getLoadJob(request.getJob_id());
+                loads.add(job.toThrift());
+            } else if (request.isSetDb()) {
+                long dbId = GlobalStateMgr.getCurrentState().getDb(request.getDb()).getId();
+                if (request.isSetLabel()) {
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobsByDb(
+                            dbId, request.getLabel(), true).stream().map(LoadJob::toThrift).collect(Collectors.toList()));
+                } else {
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobsByDb(
+                            dbId, null, false).stream().map(LoadJob::toThrift).collect(Collectors.toList()));
+                }
+            } else {
+                if (request.isSetLabel()) {
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobs(request.getLabel())
+                            .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
+                } else {
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobs(null)
+                            .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
+                }
+            }
+            result.setLoads(loads);
+        } catch (Exception e) {
+            LOG.warn("Failed to getLoads", e);
+            throw e;
+        }
+        return result;
+    }
+
+    @Override
+    public TGetTabletScheduleResponse getTabletSchedule(TGetTabletScheduleRequest request) throws TException {
+        TGetTabletScheduleResponse response = GlobalStateMgr.getCurrentState().getTabletScheduler().getTabletSchedule(request);
+        LOG.info("getTabletSchedule: {} return {} TabletSchedule", request, response.getTablet_schedulesSize());
+        return response;
+    }
+>>>>>>> 62315fb79 ([Enhancement] Add FE tablet schedule to information_schema (#18954))
 }

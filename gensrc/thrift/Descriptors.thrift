@@ -118,7 +118,14 @@ enum TSchemaTableType {
     SCH_BE_TABLETS,
     SCH_BE_METRICS,
     SCH_BE_TXNS,
+<<<<<<< HEAD
     SCH_BE_CONFIGS
+=======
+    SCH_BE_CONFIGS,
+    SCH_LOADS,
+    SCH_LOAD_TRACKING_LOGS,
+    SCH_FE_TABLET_SCHEDULES
+>>>>>>> 62315fb79 ([Enhancement] Add FE tablet schedule to information_schema (#18954))
 }
 
 enum THdfsCompression {

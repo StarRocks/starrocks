@@ -110,8 +110,32 @@ Status SchemaHelper::get_task_runs(const std::string& ip, const int32_t port, co
                                                        });
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_helper.cpp
 void fill_data_column_with_null(vectorized::Column* data_column) {
     auto* nullable_column = down_cast<vectorized::NullableColumn*>(data_column);
+=======
+Status SchemaHelper::get_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
+                               TGetLoadsResult* var_result, int timeout_ms) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port,
+            [&var_params, &var_result](FrontendServiceConnection& client) {
+                client->getLoads(*var_result, var_params);
+            },
+            timeout_ms);
+}
+
+Status SchemaHelper::get_tablet_schedules(const std::string& ip, const int32_t port,
+                                          const TGetTabletScheduleRequest& request,
+                                          TGetTabletScheduleResponse* response) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(ip, port,
+                                                       [&request, &response](FrontendServiceConnection& client) {
+                                                           client->getTabletSchedule(*response, request);
+                                                       });
+}
+
+void fill_data_column_with_null(Column* data_column) {
+    auto* nullable_column = down_cast<NullableColumn*>(data_column);
+>>>>>>> 62315fb79 ([Enhancement] Add FE tablet schedule to information_schema (#18954)):be/src/exec/schema_scanner/schema_helper.cpp
     nullable_column->append_nulls(1);
 }
 

@@ -3,6 +3,7 @@
 #include "exec/vectorized/schema_scanner.h"
 
 #include "column/type_traits.h"
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner.cpp
 #include "exec/vectorized/schema_scanner/schema_be_configs_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_be_metrics_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_be_tablets_scanner.h"
@@ -22,6 +23,30 @@
 #include "exec/vectorized/schema_scanner/schema_user_privileges_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_variables_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_views_scanner.h"
+=======
+#include "exec/schema_scanner/schema_be_configs_scanner.h"
+#include "exec/schema_scanner/schema_be_metrics_scanner.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
+#include "exec/schema_scanner/schema_be_txns_scanner.h"
+#include "exec/schema_scanner/schema_charsets_scanner.h"
+#include "exec/schema_scanner/schema_collations_scanner.h"
+#include "exec/schema_scanner/schema_columns_scanner.h"
+#include "exec/schema_scanner/schema_dummy_scanner.h"
+#include "exec/schema_scanner/schema_fe_tablet_schedules_scanner.h"
+#include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
+#include "exec/schema_scanner/schema_loads_scanner.h"
+#include "exec/schema_scanner/schema_materialized_views_scanner.h"
+#include "exec/schema_scanner/schema_schema_privileges_scanner.h"
+#include "exec/schema_scanner/schema_schemata_scanner.h"
+#include "exec/schema_scanner/schema_table_privileges_scanner.h"
+#include "exec/schema_scanner/schema_tables_config_scanner.h"
+#include "exec/schema_scanner/schema_tables_scanner.h"
+#include "exec/schema_scanner/schema_task_runs_scanner.h"
+#include "exec/schema_scanner/schema_tasks_scanner.h"
+#include "exec/schema_scanner/schema_user_privileges_scanner.h"
+#include "exec/schema_scanner/schema_variables_scanner.h"
+#include "exec/schema_scanner/schema_views_scanner.h"
+>>>>>>> 62315fb79 ([Enhancement] Add FE tablet schedule to information_schema (#18954)):be/src/exec/schema_scanner.cpp
 
 namespace starrocks::vectorized {
 
@@ -112,6 +137,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaBeTxnsScanner>();
     case TSchemaTableType::SCH_BE_CONFIGS:
         return std::make_unique<SchemaBeConfigsScanner>();
+    case TSchemaTableType::SCH_FE_TABLET_SCHEDULES:
+        return std::make_unique<SchemaFeTabletSchedulesScanner>();
     default:
         return std::make_unique<vectorized::SchemaDummyScanner>();
     }

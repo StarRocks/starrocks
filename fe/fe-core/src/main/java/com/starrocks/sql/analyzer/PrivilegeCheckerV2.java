@@ -167,12 +167,40 @@ public class PrivilegeCheckerV2 {
                 return visit(node.getQueryStatement());
             }
 
+<<<<<<< HEAD
             @Override
             public Void visitView(ViewRelation node, Void context) {
                 // if user has select privilege for the view, then there's no need to check base table
                 if (PrivilegeManager.checkViewAction(
                         session, node.getName().getDb(), node.getName().getTbl(), PrivilegeType.ViewAction.SELECT)) {
                     return null;
+=======
+        @Override
+        public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getTableName(), PrivilegeType.UPDATE);
+            Map<TableName, Table> allTouchedTables = AnalyzerUtils.collectAllTableAndView(statement);
+            allTouchedTables.remove(statement.getTableName());
+            checkSelectTableAction(context, allTouchedTables);
+            return null;
+        }
+
+        static void checkSelectTableAction(ConnectContext context, Map<TableName, Table> allTouchedTables) {
+            for (Map.Entry<TableName, Table> tableToBeChecked : allTouchedTables.entrySet()) {
+                TableName tableName = tableToBeChecked.getKey();
+                Table table = tableToBeChecked.getValue();
+
+                if (table instanceof View) {
+                    if (!PrivilegeActions.checkViewAction(context, tableName.getDb(), tableName.getTbl(), PrivilegeType.SELECT)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_TABLE_DENIED,
+                                context.getQualifiedUser(), tableName);
+                    }
+                } else if (table instanceof SchemaTable && ((SchemaTable) table).requireOperatePrivilege()) {
+                    checkStmtOperatePrivilege(context);
+                } else if (table.isMaterializedView()) {
+                    checkMvAction(context, tableName, PrivilegeType.SELECT);
+                } else {
+                    checkTableAction(context, tableName, PrivilegeType.SELECT);
+>>>>>>> 62315fb79 ([Enhancement] Add FE tablet schedule to information_schema (#18954))
                 }
                 return visit(node.getQueryStatement());
             }
@@ -501,7 +529,24 @@ public class PrivilegeCheckerV2 {
             if (catalog == null) {
                 catalog = session.getCurrentCatalog();
             }
+<<<<<<< HEAD
             checkDbAction(session, catalog, tableName.getDb(), PrivilegeType.DbAction.CREATE_TABLE);
+=======
+            String dbName = tableName.getDb() == null ? context.getDatabase() : tableName.getDb();
+            checkDbAction(context, catalog, dbName, PrivilegeType.CREATE_TABLE);
+
+            if (statement.getProperties() != null && statement.getProperties().containsKey("resource")) {
+                String resourceProp = statement.getProperties().get("resource");
+                Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceProp);
+                if (resource != null) {
+                    if (!PrivilegeActions.checkResourceAction(context, resource.getName(), PrivilegeType.USAGE)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_RESOURCE_DENIED,
+                                PrivilegeType.USAGE, context.getQualifiedUser(), context.getRemoteIP(), resource.getName());
+                    }
+                }
+            }
+
+>>>>>>> 62315fb79 ([Enhancement] Add FE tablet schedule to information_schema (#18954))
             return null;
         }
 
