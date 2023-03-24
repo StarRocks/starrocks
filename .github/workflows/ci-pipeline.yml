@@ -163,6 +163,20 @@ jobs:
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
+      - name: Upload log
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: BE UT LOG
+          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          retention-days: 1
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f ${{ steps.run_ut.outputs.RES_FILE }}
+          rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+
   fe-checker:
     runs-on: ubuntu-latest
     name: FE FILTER
@@ -269,9 +283,20 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/*.xml
 
-      - name: Clean Report
+      - name: Upload log
         if: always()
-        run: rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: FE UT LOG
+          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          retention-days: 1
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
+          rm -f ${{ steps.run_ut.outputs.RES_FILE }}
+          rm -f ${{ steps.run_ut.outputs.RES_LOG }}
 
   build:
     runs-on: self-hosted
