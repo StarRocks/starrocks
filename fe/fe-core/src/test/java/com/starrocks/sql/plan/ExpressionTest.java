@@ -1243,6 +1243,11 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select tc from tall qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "predicates: 11: dense_rank() > 1");
+
+        // for alias
+        sql = "select ta as col1 from tall qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: dense_rank() > 1");
     }
 
     @Test
