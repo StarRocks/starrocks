@@ -788,8 +788,9 @@ Status TabletMetaManager::rowset_iterate(DataDir* store, TTabletId tablet_id, co
 
     return store->get_meta()->iterate(META_COLUMN_FAMILY_INDEX, prefix,
                                       [&](std::string_view key, std::string_view value) -> bool {
-                                          RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
-                                          CHECK(rowset_meta->init(value)) << "Corrupted rowset meta";
+                                          bool parse_ok = false;
+                                          auto rowset_meta = std::make_shared<RowsetMeta>(value, &parse_ok);
+                                          CHECK(parse_ok) << "Corrupted rowset meta";
                                           return func(std::move(rowset_meta));
                                       });
 }
