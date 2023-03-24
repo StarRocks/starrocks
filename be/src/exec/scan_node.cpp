@@ -50,6 +50,7 @@ const std::string ScanNode::_s_scanner_thread_total_wallclock_time = "ScannerThr
 const string ScanNode::_s_num_scanner_threads_started = "NumScannerThreadsStarted";
 
 Status ScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    RETURN_IF_ERROR(ExecNode::init(tnode, state));
     const TQueryOptions& options = state->query_options();
     if (options.__isset.io_tasks_per_scan_operator) {
         _io_tasks_per_scan_operator = options.io_tasks_per_scan_operator;
