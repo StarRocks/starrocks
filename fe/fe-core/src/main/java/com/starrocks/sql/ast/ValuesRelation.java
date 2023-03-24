@@ -14,10 +14,14 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.NullLiteral;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class ValuesRelation extends QueryRelation {
@@ -31,11 +35,25 @@ public class ValuesRelation extends QueryRelation {
     */
     private boolean isNullValues;
 
-    public ValuesRelation(List<ArrayList<Expr>> rows, List<String> explicitColumnNames) {
+    public static ValuesRelation newDualRelation() {
+        return newDualRelation(NodePosition.ZERO);
+    }
+
+    public static ValuesRelation newDualRelation(NodePosition pos) {
+        ImmutableList.Builder<Expr> row = ImmutableList.builder();
+        row.add(NullLiteral.create(Type.NULL));
+        ImmutableList.Builder<List<Expr>> rows = ImmutableList.builder();
+        rows.add(row.build());
+        ValuesRelation valuesRelation = new ValuesRelation(rows.build(), Collections.singletonList(""), pos);
+        valuesRelation.setNullValues(true);
+        return valuesRelation;
+    }
+
+    public ValuesRelation(List<List<Expr>> rows, List<String> explicitColumnNames) {
         this(rows, explicitColumnNames, NodePosition.ZERO);
     }
 
-    public ValuesRelation(List<ArrayList<Expr>> rows, List<String> explicitColumnNames, NodePosition pos) {
+    public ValuesRelation(List<List<Expr>> rows, List<String> explicitColumnNames, NodePosition pos) {
         super(pos);
         this.rows = new ArrayList<>(rows);
         this.explicitColumnNames = explicitColumnNames;
@@ -69,5 +87,10 @@ public class ValuesRelation extends QueryRelation {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitValues(this, context);
+    }
+
+    @Override
+    public boolean isDualRelation() {
+        return isNullValues;
     }
 }

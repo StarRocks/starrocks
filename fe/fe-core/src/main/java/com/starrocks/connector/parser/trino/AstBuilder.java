@@ -296,15 +296,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
         // from == null means a statement without from or from dual, add a single row of null values here
         if (from == null) {
-            ArrayList<Expr> row = new ArrayList<>();
-            List<String> columnNames = new ArrayList<>();
-            row.add(NullLiteral.create(Type.NULL));
-            columnNames.add("");
-            List<ArrayList<Expr>> rows = new ArrayList<>();
-            rows.add(row);
-            ValuesRelation valuesRelation = new ValuesRelation(rows, columnNames);
-            valuesRelation.setNullValues(true);
-            from = valuesRelation;
+            from = ValuesRelation.newDualRelation();
         }
 
         SelectRelation resultSelectRelation = new SelectRelation(

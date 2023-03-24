@@ -227,8 +227,8 @@ public class SetStmtAnalyzer {
                 SelectList selectList = new SelectList(Lists.newArrayList(
                         new SelectListItem(var.getUnevaluatedExpression(), null)), false);
 
-                ArrayList<Expr> row = Lists.newArrayList(NullLiteral.create(Type.NULL));
-                List<ArrayList<Expr>> rows = new ArrayList<>();
+                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.NULL));
+                List<List<Expr>> rows = new ArrayList<>();
                 rows.add(row);
                 ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));
                 valuesRelation.setNullValues(true);
