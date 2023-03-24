@@ -415,8 +415,6 @@ public:
         RETURN_IF_UNLIKELY_NULL(res, (void)0);
         LOCAL_REF_GUARD_ENV(env, res);
         PrimitiveType type = udf_ctxs->finalize->method_desc[0].type;
-
-        LogicalType type = udf_ctxs->finalize->method_desc[0].type;
         // For nullable inputs, our UDAF does not produce nullable results
         if (!to->is_nullable()) {
             ColumnPtr wrapper(const_cast<Column*>(to), [](auto p) {});
