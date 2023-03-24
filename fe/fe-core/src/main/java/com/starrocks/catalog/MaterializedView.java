@@ -830,6 +830,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return false;
     }
 
+    private boolean supportPartialPartitionQueryRewrite(Table table) {
+        return table.isNativeTable() || table.isHiveTable();
+    }
+
     public Set<String> getPartitionNamesToRefreshForMv() {
         PartitionInfo partitionInfo = getPartitionInfo();
 
@@ -841,7 +845,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
                 // we can not judge whether mv based on external table is update-to-date,
                 // because we do not know that any changes in external table.
-                if (!table.isLocalTable()) {
+                if (!supportPartialPartitionQueryRewrite(table)) {
                     if (forceExternalTableQueryRewrite) {
                         // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
                         continue;
@@ -881,7 +885,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         boolean forceExternalTableQueryRewrite = isForceExternalTableQueryRewrite();
         for (BaseTableInfo tableInfo : baseTableInfos) {
             Table table = tableInfo.getTable();
-            if (!table.isLocalTable()) {
+            if (!supportPartialPartitionQueryRewrite(table)) {
                 if (forceExternalTableQueryRewrite) {
                     // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
                     continue;
