@@ -13,7 +13,7 @@ Contributing to StarRocks is cordially welcome from everyone. Contributing to St
 
 > **NOTE**
 >
-> To contribute documentation, remember to **sign off** your commit using `git commit -s`. Otherwise, the Developer Certificate of Origin (DCO) check cannot pass. In addition, prefix `[Doc]` to your PR title and select the **Doc** check box.
+> To contribute documentation, remember to **sign off** your commit using `git commit -s`. Otherwise, the Developer Certificate of Origin (DCO) check will fail and the PR may be blocked. In addition, prefix `[Doc]` to your PR title and select the **Doc** check box.
 > ![Doc title](../assets/doctitle.png)
 
 ## Community resources
