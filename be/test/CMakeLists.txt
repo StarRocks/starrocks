@@ -345,14 +345,12 @@ set(EXEC_FILES
         ./util/cpu_usage_info_test.cpp
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
+        ./block_cache/block_cache_test.cpp
+        ./io/cache_input_stream_test.cpp
         )
 
 if ("${USE_STAROS}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
-endif ()
-if ("${WITH_BLOCK_CACHE}" STREQUAL "ON")
-    list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
-    list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 
 if (USE_AVX2)

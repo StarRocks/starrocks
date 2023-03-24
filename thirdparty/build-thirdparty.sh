@@ -1045,6 +1045,14 @@ build_serdes() {
     export CFLAGS=$OLD_CFLAGS
 }
 
+# starcache
+build_starcache() {
+    check_if_source_exist $STARCACHE_SOURCE
+
+    cd $TP_SOURCE_DIR/$STARCACHE_SOURCE
+    STARCACHE_THIRDPARTY=${TP_INSTALL_DIR} STARCACHE_INSTALL_DIR=${TP_INSTALL_DIR} GCC_INSTALL_DIR=${STARROCKS_GCC_HOME} ./build-scripts/build.sh
+}
+
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
 export CPPFLAGS="-I ${TP_INCLUDE_DIR}"
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
@@ -1099,6 +1107,7 @@ build_streamvbyte
 build_jansson
 build_avro_c
 build_serdes
+build_starcache
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

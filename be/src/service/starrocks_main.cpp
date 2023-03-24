@@ -207,7 +207,6 @@ int main(int argc, char** argv) {
     }
 #endif
 
-#ifdef WITH_BLOCK_CACHE
     if (starrocks::config::block_cache_enable) {
         starrocks::BlockCache* cache = starrocks::BlockCache::instance();
         starrocks::CacheOptions cache_options;
@@ -231,9 +230,9 @@ int main(int argc, char** argv) {
         cache_options.checksum = starrocks::config::block_cache_checksum_enable;
         cache_options.max_parcel_memory_mb = starrocks::config::block_cache_max_parcel_memory_mb;
         cache_options.max_concurrent_inserts = starrocks::config::block_cache_max_concurrent_inserts;
+        cache_options.engine = starrocks::config::block_cache_engine;
         cache->init(cache_options);
     }
-#endif
 
     Aws::SDKOptions aws_sdk_options;
     if (starrocks::config::aws_sdk_logging_trace_enabled) {
@@ -350,9 +349,9 @@ int main(int argc, char** argv) {
         start_be();
     }
 
-#ifdef WITH_BLOCK_CACHE
-    starrocks::BlockCache::instance()->shutdown();
-#endif
+    if (starrocks::config::block_cache_enable) {
+        starrocks::BlockCache::instance()->shutdown();
+    }
 
     daemon->stop();
     daemon.reset();
