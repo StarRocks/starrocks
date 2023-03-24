@@ -39,6 +39,7 @@
 #include "http/http_response.h"
 #include "http/http_status.h"
 #include "storage/compaction_manager.h"
+#include "storage/lake/update_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"

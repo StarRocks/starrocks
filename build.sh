@@ -180,7 +180,6 @@ fi
 make
 cd ${STARROCKS_HOME}
 
-
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
 else
