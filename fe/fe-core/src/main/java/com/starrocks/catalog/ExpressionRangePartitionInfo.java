@@ -17,7 +17,6 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Range;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
@@ -25,9 +24,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.io.Text;
-import com.starrocks.common.util.RangeUtils;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.ast.AstVisitor;
@@ -35,10 +32,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 
 import static java.util.stream.Collectors.toList;
 
@@ -107,60 +101,6 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
             return sb.toString();
         }
         sb.append(Joiner.on(", ").join(partitionExprs.stream().map(Expr::toSql).collect(toList())));
-
-        Collection<Partition> partitions = table.getPartitions();
-
-        if (partitions.size() == 1 && partitions.iterator().next().getName()
-                .equals(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME)) {
-            return sb.toString();
-        }
-
-        sb.append("\n(");
-        // sort range
-        List<Map.Entry<Long, Range<PartitionKey>>> entries = new ArrayList<>(getIdToRange(false).entrySet());
-        entries.sort(RangeUtils.RANGE_MAP_ENTRY_COMPARATOR);
-
-        int idx = 0;
-        PartitionInfo tblPartitionInfo = table.getPartitionInfo();
-
-        String replicationNumStr = table.getTableProperty().getProperties().get("replication_num");
-        short replicationNum;
-        if (replicationNumStr == null) {
-            replicationNum = RunMode.defaultReplicationNum();
-        } else {
-            replicationNum = Short.parseShort(replicationNumStr);
-        }
-
-        for (Map.Entry<Long, Range<PartitionKey>> entry : entries) {
-            Partition partition = table.getPartition(entry.getKey());
-            String partitionName = partition.getName();
-            // show create table does not show hidden partitions
-            if (partitionName.startsWith(SHADOW_PARTITION_PREFIX)) {
-                idx++;
-                continue;
-            }
-
-            Range<PartitionKey> range = entry.getValue();
-
-            // print all partitions' range is fixed range, even if some of them is created by less than range
-            sb.append("PARTITION ").append(partitionName).append(" VALUES [");
-            sb.append(range.lowerEndpoint().toSql());
-            sb.append(", ").append(range.upperEndpoint().toSql()).append(")");
-
-            if (partitionId != null) {
-                partitionId.add(entry.getKey());
-                break;
-            }
-            short curPartitionReplicationNum = tblPartitionInfo.getReplicationNum(entry.getKey());
-            if (curPartitionReplicationNum != replicationNum) {
-                sb.append("(").append("\"replication_num\" = \"").append(curPartitionReplicationNum).append("\")");
-            }
-            if (idx != entries.size() - 1) {
-                sb.append(",\n");
-            }
-            idx++;
-        }
-        sb.append(")");
         return sb.toString();
     }
 

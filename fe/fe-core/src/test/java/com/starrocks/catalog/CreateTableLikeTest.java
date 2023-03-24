@@ -252,7 +252,6 @@ public class CreateTableLikeTest {
                 "DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
                 "COMMENT \"OLAP\"\n" +
                 "PARTITION BY date_trunc('day', k1)\n" +
-                "(PARTITION p20200101 VALUES [(\"2020-01-01\"), (\"2020-01-02\")))\n" +
                 "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 2 \n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
