@@ -2848,7 +2848,7 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
     }
     if (rssid_to_rowsets.empty() && !rowids_by_rssid.empty()) {
         std::string msg =
-                strings::Substitute("tablet deleted when call get_column_values() tablet:", _tablet.tablet_id());
+                strings::Substitute("tablet deleted when call get_column_values() tablet: ", _tablet.tablet_id());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
