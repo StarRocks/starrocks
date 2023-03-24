@@ -184,6 +184,9 @@ public:
     template <LogicalType LT>
     static AggregateFunctionPtr MakePercentileContAggregateFunction();
 
+    template <LogicalType PT>
+    static AggregateFunctionPtr MakePercentileDiscAggregateFunction();
+
     // Windows functions:
     static AggregateFunctionPtr MakeDenseRankWindowFunction();
 
@@ -362,6 +365,11 @@ AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeBitmapAggAggregateFunction() {
     return std::make_shared<BitmapAggAggregateFunction<LT>>();
+}
+
+template <LogicalType PT>
+AggregateFunctionPtr AggregateFactory::MakePercentileDiscAggregateFunction() {
+    return std::make_shared<PercentileDiscAggregateFunction<PT>>();
 }
 
 // Stream MV Retractable Aggregate Functions
