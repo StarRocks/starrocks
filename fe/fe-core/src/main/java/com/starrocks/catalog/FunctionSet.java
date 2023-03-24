@@ -436,6 +436,7 @@ public class FunctionSet {
                     .add(Type.DECIMALV2)
                     .build();
 
+<<<<<<< HEAD
     private static final Map<Type, Type> ARRAY_AGG_TYPES = ImmutableMap.<Type, Type>builder()
             .put(Type.BOOLEAN, Type.ARRAY_BOOLEAN)
             .put(Type.TINYINT, Type.ARRAY_TINYINT)
@@ -453,6 +454,8 @@ public class FunctionSet {
             .put(Type.TIME, Type.ARRAY_DATETIME) // ??
             .put(Type.JSON, Type.ARRAY_JSON)
             .build();
+=======
+>>>>>>> bd3b3d398 ([Feature] support array_agg(a order by b, c...) (#18761))
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
      * need to check whether the expression tree can use vectorized function from bottom to
@@ -716,6 +719,10 @@ public class FunctionSet {
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.BIGINT, true,
                 true, false, true));
 
+        addBuiltin(AggregateFunction.createBuiltin(ARRAY_AGG,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.ANY_ARRAY, Type.ANY_STRUCT, true,
+                true, false, false));
+
         for (Type t : Type.getSupportedTypes()) {
             if (t.isFunctionType()) {
                 continue;
@@ -803,8 +810,6 @@ public class FunctionSet {
         // Percentile
         registerBuiltinPercentileAggFunction();
 
-        // ArrayAgg
-        registerBuiltinArrayAggFunction();
 
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin(HLL_UNION_AGG,
@@ -1055,6 +1060,7 @@ public class FunctionSet {
                 false, false, false));
     }
 
+<<<<<<< HEAD
     private void registerBuiltinArrayAggFunction() {
         for (Map.Entry<Type, Type>  entry: ARRAY_AGG_TYPES.entrySet()) {
          addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
@@ -1063,6 +1069,8 @@ public class FunctionSet {
         }
     }
 
+=======
+>>>>>>> bd3b3d398 ([Feature] support array_agg(a order by b, c...) (#18761))
     public List<Function> getBuiltinFunctions() {
         List<Function> builtinFunctions = Lists.newArrayList();
         for (Map.Entry<String, List<Function>> entry : vectorizedFunctions.entrySet()) {

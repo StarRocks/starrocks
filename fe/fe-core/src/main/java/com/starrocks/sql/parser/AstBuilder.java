@@ -4992,11 +4992,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             functionName = FunctionSet.SUM;
         } else if (context.aggregationFunction().MIN() != null) {
             functionName = FunctionSet.MIN;
+<<<<<<< HEAD
         } else if (context.aggregationFunction().MAX() != null) {
+=======
+        } else if (context.aggregationFunction().ARRAY_AGG() != null) {
+            functionName = FunctionSet.ARRAY_AGG;
+        } else {
+>>>>>>> bd3b3d398 ([Feature] support array_agg(a order by b, c...) (#18761))
             functionName = FunctionSet.MAX;
         } else {
             throw new StarRocksPlannerException("Aggregate functions are not being parsed correctly",
                     ErrorType.INTERNAL_ERROR);
+        }
+        List<OrderByElement> orderByElements = new ArrayList<>();
+        if (context.aggregationFunction().ORDER() != null) {
+            orderByElements = visit(context.aggregationFunction().sortItem(), OrderByElement.class);
         }
 
         List<String> hints = Lists.newArrayList();
@@ -5008,8 +5018,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 context.aggregationFunction().ASTERISK_SYMBOL() == null ?
                         new FunctionParams(context.aggregationFunction().DISTINCT() != null,
+<<<<<<< HEAD
                                 visit(context.aggregationFunction().expression(), Expr.class)) :
                         FunctionParams.createStarParam());
+=======
+                                visit(context.aggregationFunction().expression(), Expr.class), orderByElements) :
+                        FunctionParams.createStarParam(), pos);
+>>>>>>> bd3b3d398 ([Feature] support array_agg(a order by b, c...) (#18761))
 
         functionCallExpr.setHints(hints);
         if (context.over() != null) {
