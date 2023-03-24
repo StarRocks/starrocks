@@ -41,6 +41,10 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
 
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
+
+    int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
+    int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
+    _index_cache.set_capacity(byte_limits * update_mem_percent);
 }
 
 Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
@@ -374,6 +378,24 @@ void UpdateManager::expire_cache() {
         _index_cache.clear_expired();
         _last_clear_expired_cache_millis = MonotonicMillis();
     }
+}
+
+void UpdateManager::evict_cache(int64_t memory_urgent_level, int64_t memory_high_level) {
+    int64_t capacity = _index_cache.capacity();
+    int64_t size = _index_cache.size();
+    int64_t memory_urgent = capacity * memory_urgent_level / 100;
+    int64_t memory_high = capacity * memory_high_level / 100;
+
+    if (size > memory_urgent) {
+        _index_cache.try_evict(memory_urgent);
+    }
+
+    size = _index_cache.size();
+    if (size > memory_high) {
+        int64_t target_memory = std::max((size * 9 / 10), memory_high);
+        _index_cache.try_evict(target_memory);
+    }
+    return;
 }
 
 size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta) {
