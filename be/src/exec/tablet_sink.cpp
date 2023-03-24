@@ -834,8 +834,7 @@ bool IndexChannel::has_intolerable_failure() {
     }
 }
 
-OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status, RuntimeState* state)
-        : _pool(pool), _rpc_http_min_size(state->get_rpc_http_min_size()) {
+OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status) : _pool(pool) {
     if (!texprs.empty()) {
         *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs);
     }
@@ -969,7 +968,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     }
 
     _load_mem_limit = state->get_load_mem_limit();
-
+    _rpc_http_min_size = state->get_rpc_http_min_size();
     // open all channels
     return _init_node_channels(state);
 }
