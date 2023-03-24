@@ -16,7 +16,6 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 
-#include "common/status.h"
 #include "fmt/format.h"
 #include "http/http_client.h"
 #include "util/defer_op.h"
@@ -28,11 +27,11 @@ namespace starrocks {
 
 Status DownloadUtil::download(const std::string& url, const std::string& tmp_file, const std::string& target_file,
                               const std::string& expected_checksum) {
-    auto directory = path_util::dir_name(tmp_file);
-    auto create_directory_status = FileSystemUtil::create_directory(directory);
+    const std::string directory{path_util::dir_name(tmp_file)};
+    Status create_directory_status = FileSystemUtil::create_directory(directory);
 
     if (!create_directory_status.ok()) {
-        std::string error_msg = create_directory_status.get_error_msg();
+        std::string_view error_msg = create_directory_status.get_error_msg();
         LOG(ERROR) << fmt::format("fail to create directory {}, error_msg {}.", directory, error_msg);
         return create_directory_status;
     }
