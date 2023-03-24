@@ -345,8 +345,6 @@ BROKER_THIRDPARTY_JARS_NAME="broker_thirdparty_jars.tar.gz"
 BROKER_THIRDPARTY_JARS_SOURCE="broker_thirdparty_jars"
 BROKER_THIRDPARTY_JARS_MD5SUM="8e9a8c2ef3b19709dd0cc37e26a60c83"
 
-<<<<<<< HEAD
-=======
 # jansson
 JANSSON_DOWNLOAD="https://github.com/akheron/jansson/releases/download/v2.14/jansson-2.14.tar.gz"
 JANSSON_NAME="jansson-2.14.tar.gz"
@@ -371,13 +369,8 @@ LZO2_NAME=lzo-2.10.tar.gz
 LZO2_SOURCE=lzo-2.10
 LZO2_MD5SUM="39d3f3f9c55c87b1e5d6888e1420f4b5"
 
->>>>>>> f9ed50d6c ([BugFix] Fix hive catalog can't read hive table with textfile lzo format bug (part 1: add thirdparty) (#20191))
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
-<<<<<<< HEAD
-            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS"
-=======
             BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS JANSSON AVRO SERDES GCS_CONNECTOR LZO2"
->>>>>>> f9ed50d6c ([BugFix] Fix hive catalog can't read hive table with textfile lzo format bug (part 1: add thirdparty) (#20191))
