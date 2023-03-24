@@ -43,36 +43,6 @@ WHERE
 
   指定允许返回的导出作业记录最大数量。取值范围：正整数。如果不指定该参数，则默认返回符合指定条件的所有导出作业。
 
-## 示例
-
-1. 查询当前数据库下所有导出作业：
-
-   ```SQL
-   SHOW EXPORT;
-   ```
-
-2. 查询指定数据库 `example_db` 下 ID 为 `921d8f80-7c9d-11eb-9342-acde48001122` 的导出作业：
-
-   ```SQL
-   SHOW EXPORT FROM example_db
-   WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
-   ```
-
-3. 查询指定数据库 `example_db` 下状态为 `exporting` 的导出作业，并按 `StartTime` 对返回的导出作业记录进行升序排序：
-
-   ```SQL
-   SHOW EXPORT FROM example_db
-   WHERE STATE = "exporting"
-   ORDER BY StartTime ASC;
-   ```
-
-4. 查询指定数据库 `example_db` 下所有导出作业，并按 `StartTime` 对返回的导出作业记录进行降序排序：
-
-   ```SQL
-   SHOW EXPORT FROM example_db
-   ORDER BY StartTime DESC;
-   ```
-
 ## 返回结果说明
 
 例如查看一个 ID 为 `edee47f0-abe1-11ec-b9d1-00163e1e238f` 的导出作业的执行情况：
@@ -124,3 +94,33 @@ FinishTime: 2023-03-20 11:16:26
 - `FinishTime`：导出作业的结束时间。
 - `Timeout`：导出作业的超时时间。单位是秒。该时间从 `CreateTime` 开始计算。
 - `ErrorMsg`：导出作业的错误原因。该参数仅当导出作业出现错误时才会返回。
+
+## 示例
+
+- 查询当前数据库下所有导出作业：
+
+  ```SQL
+  SHOW EXPORT;
+  ```
+
+- 查询指定数据库 `example_db` 下 ID 为 `921d8f80-7c9d-11eb-9342-acde48001122` 的导出作业：
+
+  ```SQL
+  SHOW EXPORT FROM example_db
+  WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
+  ```
+
+- 查询指定数据库 `example_db` 下状态为 `exporting` 的导出作业，并按 `StartTime` 对返回的导出作业记录进行升序排序：
+
+  ```SQL
+  SHOW EXPORT FROM example_db
+  WHERE STATE = "exporting"
+  ORDER BY StartTime ASC;
+  ```
+
+- 查询指定数据库 `example_db` 下所有导出作业，并按 `StartTime` 对返回的导出作业记录进行降序排序：
+
+  ```SQL
+  SHOW EXPORT FROM example_db
+  ORDER BY StartTime DESC;
+  ```
