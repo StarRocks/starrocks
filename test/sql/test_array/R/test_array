@@ -1,0 +1,5 @@
+
+select ARRAY<INT>[], [], ARRAY<STRING>['abc'], [123, NULL, 1.0], ['abc', NULL];
+-- result:
+[]	[]	["abc"]	[123.0,null,1.0]	["abc",null]
+-- !result

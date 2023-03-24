@@ -5341,10 +5341,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitArrayConstructor(StarRocksParser.ArrayConstructorContext context) {
         NodePosition pos = createPos(context);
+        Type type = null;
         if (context.arrayType() != null) {
-            return new ArrayExpr(
-                    new ArrayType(getType(context.arrayType().type())),
-                    visit(context.expressionList().expression(), Expr.class), pos);
+            type = new ArrayType(getType(context.arrayType().type()));
         }
 
         List<Expr> exprs;
@@ -5353,7 +5352,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             exprs = Collections.emptyList();
         }
-        return new ArrayExpr(null, exprs, pos);
+        return new ArrayExpr(type, exprs, pos);
     }
 
     @Override
