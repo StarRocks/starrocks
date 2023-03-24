@@ -86,6 +86,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public Table getTable(String dbName, String tblName) {
         try {
+<<<<<<< HEAD
             org.apache.iceberg.Table icebergTable
                     = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
             // Submit a future task for refreshing
@@ -100,6 +101,18 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         } catch (DdlException e) {
             LOG.error("Failed to get iceberg table " + IcebergUtil.getIcebergTableIdentifier(dbName, tblName), e);
+=======
+            org.apache.iceberg.Table icebergTable = icebergCatalog.loadTable(identifier);
+            if (icebergTable == null) {
+                return null;
+            }
+            Table table = IcebergApiConverter.toIcebergTable(
+                    icebergTable, catalogName, dbName, tblName, icebergCatalog.getIcebergCatalogType().name());
+            tables.put(identifier, table);
+            return table;
+        } catch (StarRocksConnectorException e) {
+            LOG.error("Failed to get iceberg table {}", identifier, e);
+>>>>>>> 4b0ff5192 ([BugFix] return null when loadtable() get null to avoid npe (#20188))
             return null;
         }
     }
