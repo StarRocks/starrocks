@@ -105,9 +105,6 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         try {
             org.apache.iceberg.Table icebergTable = icebergCatalog.loadTable(identifier);
-            if (icebergTable == null) {
-                return null;
-            }
             Table table = IcebergApiConverter.toIcebergTable(
                     icebergTable, catalogName, dbName, tblName, icebergCatalog.getIcebergCatalogType().name());
             tables.put(identifier, table);
