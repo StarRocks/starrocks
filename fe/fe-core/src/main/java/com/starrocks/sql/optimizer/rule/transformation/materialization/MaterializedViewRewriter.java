@@ -212,7 +212,12 @@ public class MaterializedViewRewriter {
                 materializationContext.getMvColumnRefFactory(), mvColumnRefRewriter,
                 materializationContext.getOutputMapping(), queryColumnSet);
 
+        // collect partition and distribution related predicates in mv
+        // used to prune partition and buckets after mv rewrite
+        ScalarOperator mvPrunePredicate = collectMvPrunePredicate(materializationContext);
+
         for (BiMap<Integer, Integer> relationIdMapping : relationIdMappings) {
+            mvRewriteContext.setMvPruneConjunct(mvPrunePredicate);
             rewriteContext.setQueryToMvRelationIdMapping(relationIdMapping);
 
             // for view delta, should add compensation join columns to query ec
@@ -490,7 +495,7 @@ public class MaterializedViewRewriter {
         }
     }
 
-    private void collectMvPrunePredicate(MaterializationContext mvContext) {
+    private ScalarOperator collectMvPrunePredicate(MaterializationContext mvContext) {
         final OptExpression mvExpression = mvContext.getMvExpression();
         final List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(mvExpression);
         final ColumnRefSet mvOutputColumnRefSet = mvExpression.getOutputColumns();
@@ -526,7 +531,7 @@ public class MaterializedViewRewriter {
                 mvPrunePredicates.add(conj);
             }
         }
-        mvRewriteContext.setMvPruneConjunct(Utils.compoundAnd(mvPrunePredicates));
+        return Utils.compoundAnd(mvPrunePredicates);
     }
 
     private OptExpression tryRewriteForRelationMapping(RewriteContext rewriteContext) {
@@ -535,10 +540,6 @@ public class MaterializedViewRewriter {
         final LogicalOlapScanOperator mvScanOperator = materializationContext.getScanMvOperator();
         final Operator.Builder mvScanBuilder = OperatorBuilderFactory.build(mvScanOperator);
         mvScanBuilder.withOperator(mvScanOperator);
-
-        // collect partition and distribution related predicates in mv
-        // used to prune partition and buckets after mv rewrite
-        collectMvPrunePredicate(materializationContext);
 
         // Rewrite original mv's predicates into query if needed.
         final ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
