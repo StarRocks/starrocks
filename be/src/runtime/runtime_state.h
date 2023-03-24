@@ -321,8 +321,6 @@ public:
     std::shared_ptr<QueryStatistics> intermediate_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
-    Status reset_epoch();
-
     int64_t get_rpc_http_min_size() {
         return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
     }

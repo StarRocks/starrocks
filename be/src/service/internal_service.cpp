@@ -114,7 +114,7 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
     }
     Status st;
     st.to_protobuf(response->mutable_status());
-    TRY_CATCH_ALL(st, _exec_env->stream_mgr()->transmit_chunk(*request, &done));
+    st = _exec_env->stream_mgr()->transmit_chunk(*request, &done);
     if (!st.ok()) {
         LOG(WARNING) << "transmit_data failed, message=" << st.get_error_msg()
                      << ", fragment_instance_id=" << print_id(request->finst_id()) << ", node=" << request->node_id();
@@ -124,8 +124,6 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
         st.to_protobuf(response->mutable_status());
         done->Run();
     }
-
-    st = _exec_env->stream_mgr()->transmit_chunk(*request, &done);
 }
 
 template <typename T>
