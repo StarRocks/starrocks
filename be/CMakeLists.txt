@@ -193,6 +193,9 @@ set_target_properties(curl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/li
 add_library(lz4 STATIC IMPORTED)
 set_target_properties(lz4 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/liblz4.a)
 
+add_library(lzo STATIC IMPORTED)
+set_target_properties(lzo PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/liblzo2.a)
+
 add_library(thrift STATIC IMPORTED)
 set_target_properties(thrift PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libthrift.a)
 
@@ -661,6 +664,7 @@ set(STARROCKS_DEPENDENCIES
     # Put lz4 in front of librdkafka to make sure that segment use the native lz4 library to compress/decompress page
     # Otherwise, he will use the lz4 Library in librdkafka
     lz4
+    lzo
     libevent
     curl
     ${LIBZ}
