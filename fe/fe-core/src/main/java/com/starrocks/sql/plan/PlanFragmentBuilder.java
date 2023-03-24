@@ -1032,6 +1032,12 @@ public class PlanFragmentBuilder {
                                 case "TXN_ID":
                                     scanNode.setTxnId(constantOperator.getBigint());
                                     break;
+                                case "TYPE":
+                                    scanNode.setType(constantOperator.getVarchar());
+                                    break;
+                                case "STATE":
+                                    scanNode.setState(constantOperator.getVarchar());
+                                    break;
                                 default:
                                     break;
                             }
