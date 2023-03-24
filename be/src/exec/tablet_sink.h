@@ -341,6 +341,7 @@ private:
     friend class IndexChannel;
 
     ObjectPool* _pool;
+    int64_t _rpc_http_min_size = 0;
 
     // unique load id
     PUniqueId _load_id;
