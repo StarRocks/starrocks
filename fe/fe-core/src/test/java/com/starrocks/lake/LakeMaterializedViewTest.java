@@ -170,7 +170,7 @@ public class LakeMaterializedViewTest {
         builder.setFsInfo(fsInfo);
         builder.setFullPath("s3://test-bucket/1/");
         FilePathInfo pathInfo = builder.build();
-        mv.setStorageInfo(pathInfo, true, 3600, true);
+        mv.setStorageInfo(pathInfo, new StorageCacheInfo(true, 3600, true));
 
         // Test serialize and deserialize
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
