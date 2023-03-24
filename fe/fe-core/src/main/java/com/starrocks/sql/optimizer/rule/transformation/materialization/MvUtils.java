@@ -16,19 +16,23 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
@@ -37,6 +41,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.RangeUtils;
@@ -60,8 +65,10 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -653,70 +660,150 @@ public class MvUtils {
         return mergedRanges;
     }
 
-    public static ScalarOperator compensatePartitionPredicate(OptExpression plan, ColumnRefFactory columnRefFactory) {
-        List<LogicalOlapScanOperator> olapScanOperators = MvUtils.getOlapScanNode(plan);
-        if (olapScanOperators.isEmpty()) {
-            return ConstantOperator.createBoolean(true);
-        }
+    private static List<ScalarOperator> compensatePartitionPredicateForOlapScan(LogicalOlapScanOperator olapScanOperator,
+                                                                                ColumnRefFactory columnRefFactory) {
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
-        for (LogicalOlapScanOperator olapScanOperator : olapScanOperators) {
-            Preconditions.checkState(olapScanOperator.getTable().isNativeTable());
-            OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
+        Preconditions.checkState(olapScanOperator.getTable().isNativeTable());
+        OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
 
-            if (olapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
-                continue;
-            }
+        if (olapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
+            return partitionPredicates;
+        }
 
-            if (olapScanOperator.getSelectedPartitionId() != null
-                    && olapScanOperator.getSelectedPartitionId().size() == olapTable.getPartitions().size()) {
-                continue;
-            }
+        if (olapScanOperator.getSelectedPartitionId() != null
+                && olapScanOperator.getSelectedPartitionId().size() == olapTable.getPartitions().size()) {
+            return partitionPredicates;
+        }
 
-            if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
-                ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
-                Expr partitionExpr = partitionInfo.getPartitionExprs().get(0);
-                List<SlotRef> slotRefs = Lists.newArrayList();
-                partitionExpr.collect(SlotRef.class, slotRefs);
-                Preconditions.checkState(slotRefs.size() == 1);
-                Optional<ColumnRefOperator> partitionColumn = olapScanOperator.getColRefToColumnMetaMap().keySet().stream()
-                        .filter(columnRefOperator -> columnRefOperator.getName().equals(slotRefs.get(0).getColumnName()))
-                        .findFirst();
-                if (!partitionColumn.isPresent()) {
-                    return null;
-                }
-                ExpressionMapping mapping = new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()));
-                mapping.put(slotRefs.get(0), partitionColumn.get());
-                ScalarOperator partitionScalarOperator =
-                        SqlToScalarOperatorTranslator.translate(partitionExpr, mapping, columnRefFactory);
-                List<Range<PartitionKey>> selectedRanges = Lists.newArrayList();
-                for (long pid : olapScanOperator.getSelectedPartitionId()) {
-                    selectedRanges.add(partitionInfo.getRange(pid));
-                }
-                List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
-                List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionScalarOperator, mergedRanges);
-                ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
-                partitionPredicates.add(partitionPredicate);
-            } else if (olapTable.getPartitionInfo() instanceof RangePartitionInfo) {
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
-                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-                if (partitionColumns.size() != 1) {
-                    // now do not support more than one partition columns
-                    return null;
-                }
-                List<Range<PartitionKey>> selectedRanges = Lists.newArrayList();
-                for (long pid : olapScanOperator.getSelectedPartitionId()) {
-                    selectedRanges.add(rangePartitionInfo.getRange(pid));
-                }
-                List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
-                ColumnRefOperator partitionColumnRef = olapScanOperator.getColumnReference(partitionColumns.get(0));
-                List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionColumnRef, mergedRanges);
-                ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
-                if (partitionPredicate != null) {
-                    partitionPredicates.add(partitionPredicate);
-                }
-            } else {
+        if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo partitionInfo =
+                    (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
+            Expr partitionExpr = partitionInfo.getPartitionExprs().get(0);
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            partitionExpr.collect(SlotRef.class, slotRefs);
+            Preconditions.checkState(slotRefs.size() == 1);
+            Optional<ColumnRefOperator> partitionColumn =
+                    olapScanOperator.getColRefToColumnMetaMap().keySet().stream()
+                            .filter(columnRefOperator -> columnRefOperator.getName()
+                                    .equals(slotRefs.get(0).getColumnName()))
+                            .findFirst();
+            if (!partitionColumn.isPresent()) {
                 return null;
             }
+            ExpressionMapping mapping =
+                    new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()));
+            mapping.put(slotRefs.get(0), partitionColumn.get());
+            ScalarOperator partitionScalarOperator =
+                    SqlToScalarOperatorTranslator.translate(partitionExpr, mapping, columnRefFactory);
+            List<Range<PartitionKey>> selectedRanges = Lists.newArrayList();
+            for (long pid : olapScanOperator.getSelectedPartitionId()) {
+                selectedRanges.add(partitionInfo.getRange(pid));
+            }
+            List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
+            List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionScalarOperator, mergedRanges);
+            ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+            partitionPredicates.add(partitionPredicate);
+        } else if (olapTable.getPartitionInfo() instanceof RangePartitionInfo) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+            if (partitionColumns.size() != 1) {
+                // now do not support more than one partition columns
+                return null;
+            }
+            List<Range<PartitionKey>> selectedRanges = Lists.newArrayList();
+            for (long pid : olapScanOperator.getSelectedPartitionId()) {
+                selectedRanges.add(rangePartitionInfo.getRange(pid));
+            }
+            List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
+            ColumnRefOperator partitionColumnRef = olapScanOperator.getColumnReference(partitionColumns.get(0));
+            List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionColumnRef, mergedRanges);
+            ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+            if (partitionPredicate != null) {
+                partitionPredicates.add(partitionPredicate);
+            }
+        } else {
+            return null;
+        }
+
+        return partitionPredicates;
+    }
+
+    private static boolean supportCompensatePartitionPredicateForHiveScan(List<PartitionKey> partitionKeys) {
+        for (PartitionKey partitionKey : partitionKeys) {
+            // only support one partition column now.
+            if (partitionKey.getKeys().size() != 1) {
+                return false;
+            }
+            LiteralExpr e = partitionKey.getKeys().get(0);
+            // Only support date/int type
+            if (!(e instanceof DateLiteral || e instanceof IntLiteral)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static List<ScalarOperator> compensatePartitionPredicateForHiveScan(LogicalHiveScanOperator scanOperator) {
+        List<ScalarOperator> partitionPredicates = Lists.newArrayList();
+        Preconditions.checkState(scanOperator.getTable().isHiveTable());
+        HiveTable hiveTable = (HiveTable) scanOperator.getTable();
+
+        if (hiveTable.isUnPartitioned()) {
+            return partitionPredicates;
+        }
+
+        ScanOperatorPredicates scanOperatorPredicates = scanOperator.getScanOperatorPredicates();
+        if (scanOperatorPredicates.getSelectedPartitionIds().size() ==
+                scanOperatorPredicates.getIdToPartitionKey().size()) {
+            return partitionPredicates;
+        }
+
+        if (!supportCompensatePartitionPredicateForHiveScan(scanOperatorPredicates.getSelectedPartitionKeys())) {
+            return partitionPredicates;
+        }
+
+        List<Range<PartitionKey>> ranges = Lists.newArrayList();
+        for (PartitionKey selectedPartitionKey : scanOperatorPredicates.getSelectedPartitionKeys()) {
+            try {
+                LiteralExpr expr = PartitionUtil.addOffsetForLiteral(selectedPartitionKey.getKeys().get(0), 1);
+                PartitionKey partitionKey = new PartitionKey(ImmutableList.of(expr), selectedPartitionKey.getTypes());
+                ranges.add(Range.closedOpen(selectedPartitionKey, partitionKey));
+            } catch (AnalysisException e) {
+                LOG.warn("Compute partition key range failed. ", e);
+                return partitionPredicates;
+            }
+        }
+
+        List<Range<PartitionKey>> mergedRanges = mergeRanges(ranges);
+        ColumnRefOperator partitionColumnRef = scanOperator.getColumnReference(hiveTable.getPartitionColumns().get(0));
+        List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionColumnRef, mergedRanges);
+        ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+        if (partitionPredicate != null) {
+            partitionPredicates.add(partitionPredicate);
+        }
+
+        return partitionPredicates;
+    }
+
+    public static ScalarOperator compensatePartitionPredicate(OptExpression plan, ColumnRefFactory columnRefFactory) {
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
+        if (scanOperators.isEmpty()) {
+            return ConstantOperator.createBoolean(true);
+        }
+
+        List<ScalarOperator> partitionPredicates = Lists.newArrayList();
+        for (LogicalScanOperator scanOperator : scanOperators) {
+            List<ScalarOperator> partitionPredicate = null;
+            if (scanOperator instanceof LogicalOlapScanOperator) {
+                partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
+                        columnRefFactory);
+            } else if (scanOperator instanceof LogicalHiveScanOperator) {
+                partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);
+            }
+            if (partitionPredicate == null) {
+                return null;
+            }
+            partitionPredicates.addAll(partitionPredicate);
         }
         return partitionPredicates.isEmpty() ? ConstantOperator.createBoolean(true) :
                 Utils.compoundAnd(partitionPredicates);
