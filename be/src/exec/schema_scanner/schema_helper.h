@@ -70,6 +70,9 @@ public:
 
     static Status get_tables_config(const std::string& ip, const int32_t port,
                                     const TGetTablesConfigRequest& var_params, TGetTablesConfigResponse* var_result);
+
+    static Status get_tablet_schedules(const std::string& ip, const int32_t port,
+                                       const TGetTabletScheduleRequest& request, TGetTabletScheduleResponse* response);
 };
 
 template <LogicalType SlotType>

@@ -425,6 +425,9 @@ struct TSchemaScanNode {
   15: optional i64 txn_id
   16: optional i64 job_id
   17: optional string label
+  18: optional string type
+  19: optional string state
+  20: optional i64 limit
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode

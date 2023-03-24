@@ -76,6 +76,8 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CloneTask;
 import com.starrocks.task.DropReplicaTask;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TGetTabletScheduleRequest;
+import com.starrocks.thrift.TGetTabletScheduleResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -339,7 +341,7 @@ public class TabletScheduler extends LeaderDaemon {
      * 4. every pending task should have a max scheduled time, if schedule fails too many times, it should be removed.
      * 5. every running task should have a timeout, to avoid running forever.
      * 6. every running task should also have a max failure time,if clone task fails too many times,
-     *    it should be removed.
+     * it should be removed.
      */
     @Override
     protected void runAfterCatalogReady() {
@@ -562,6 +564,7 @@ public class TabletScheduler extends LeaderDaemon {
 
     /**
      * Only for test.
+     *
      * @param tabletCtx
      */
     private synchronized void addToPendingTablets(TabletSchedCtx tabletCtx) {
@@ -1594,6 +1597,50 @@ public class TabletScheduler extends LeaderDaemon {
     public synchronized long getBalanceTabletsNumber() {
         return pendingTablets.stream().filter(t -> t.getType() == Type.BALANCE).count()
                 + runningTablets.values().stream().filter(t -> t.getType() == Type.BALANCE).count();
+    }
+
+    public TGetTabletScheduleResponse getTabletSchedule(TGetTabletScheduleRequest request) {
+        long tableId = request.isSetTable_id() ? request.table_id : -1;
+        long partitionId = request.isSetPartition_id() ? request.partition_id : -1;
+        long tabletId = request.isSetTablet_id() ? request.tablet_id : -1;
+        String type = request.isSetType() ? request.type : null;
+        String state = request.isSetState() ? request.state : null;
+        long limit = request.isSetLimit() ? request.limit : -1;
+        List<TabletSchedCtx> tabletCtxs;
+        synchronized (this) {
+            Stream<TabletSchedCtx> all;
+            if (TabletSchedCtx.State.PENDING.name().equals(state)) {
+                all = pendingTablets.stream();
+            } else if (TabletSchedCtx.State.RUNNING.name().equals(state)) {
+                all = runningTablets.values().stream();
+            } else if (TabletSchedCtx.State.FINISHED.name().equals(state)) {
+                all = schedHistory.stream();
+            } else {
+                // running first, then history, then pending
+                all = Stream.concat(Stream.concat(runningTablets.values().stream(), schedHistory.stream()),
+                        pendingTablets.stream());
+                if (state != null) {
+                    all = all.filter(t -> t.getState().name().equals(state));
+                }
+            }
+            if (type != null) {
+                all = all.filter(t -> t.getType().name().equals(type));
+            }
+            if (tabletId != -1) {
+                all = all.filter(t -> t.getTabletId() == tabletId);
+            } else if (partitionId != -1) {
+                all = all.filter(t -> t.getPartitionId() == partitionId);
+            } else if (tableId != -1) {
+                all = all.filter(t -> t.getTblId() == tableId);
+            }
+            if (limit > 0) {
+                all = all.limit((int) limit);
+            }
+            tabletCtxs = all.collect(Collectors.toList());
+        }
+        TGetTabletScheduleResponse response = new TGetTabletScheduleResponse();
+        response.setTablet_schedules(tabletCtxs.stream().map(t -> t.toTabletScheduleThrift()).collect(Collectors.toList()));
+        return response;
     }
 
     /**

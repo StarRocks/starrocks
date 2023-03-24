@@ -23,6 +23,7 @@
 #include "exec/schema_scanner/schema_collations_scanner.h"
 #include "exec/schema_scanner/schema_columns_scanner.h"
 #include "exec/schema_scanner/schema_dummy_scanner.h"
+#include "exec/schema_scanner/schema_fe_tablet_schedules_scanner.h"
 #include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
 #include "exec/schema_scanner/schema_loads_scanner.h"
 #include "exec/schema_scanner/schema_materialized_views_scanner.h"
@@ -132,6 +133,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaBeTxnsScanner>();
     case TSchemaTableType::SCH_BE_CONFIGS:
         return std::make_unique<SchemaBeConfigsScanner>();
+    case TSchemaTableType::SCH_FE_TABLET_SCHEDULES:
+        return std::make_unique<SchemaFeTabletSchedulesScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
