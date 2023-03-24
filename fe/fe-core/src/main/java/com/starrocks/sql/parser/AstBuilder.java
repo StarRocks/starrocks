@@ -233,6 +233,7 @@ import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -1686,7 +1687,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QueryStatement queryStatement;
         if (context.VALUES() != null) {
             List<ValueList> rowValues = visit(context.expressionsWithDefault(), ValueList.class);
-            List<ArrayList<Expr>> rows = rowValues.stream().map(ValueList::getRow).collect(toList());
+            List<List<Expr>> rows = rowValues.stream().map(ValueList::getRow).collect(toList());
 
             List<String> colNames = new ArrayList<>();
             for (int i = 0; i < rows.get(0).size(); ++i) {
@@ -1716,14 +1717,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<ColumnAssignment> assignments = visit(context.assignmentList().assignment(), ColumnAssignment.class);
         List<Relation> fromRelations = null;
         if (context.fromClause() instanceof StarRocksParser.DualContext) {
-            ArrayList<Expr> row = new ArrayList<>();
-            List<String> columnNames = new ArrayList<>();
-            row.add(NullLiteral.create(Type.NULL));
-            columnNames.add("");
-            List<ArrayList<Expr>> rows = new ArrayList<>();
-            rows.add(row);
-            ValuesRelation valuesRelation = new ValuesRelation(rows, columnNames, createPos(context.fromClause()));
-            valuesRelation.setNullValues(true);
+            ValuesRelation valuesRelation = ValuesRelation.newDualRelation(createPos(context.fromClause()));
             fromRelations = Lists.newArrayList(valuesRelation);
         } else {
             StarRocksParser.FromContext fromContext = (StarRocksParser.FromContext) context.fromClause();
@@ -3606,15 +3600,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
           This can share the same logic as select sum(1) from table
          */
         if (from == null) {
-            ArrayList<Expr> row = new ArrayList<>();
-            List<String> columnNames = new ArrayList<>();
-            row.add(NullLiteral.create(Type.NULL));
-            columnNames.add("");
-            List<ArrayList<Expr>> rows = new ArrayList<>();
-            rows.add(row);
-            ValuesRelation valuesRelation = new ValuesRelation(rows, columnNames, NodePosition.ZERO);
-            valuesRelation.setNullValues(true);
-            from = valuesRelation;
+            from = ValuesRelation.newDualRelation();
         }
 
         boolean isDistinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
@@ -3971,7 +3957,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitInlineTable(StarRocksParser.InlineTableContext context) {
         List<ValueList> rowValues = visit(context.rowConstructor(), ValueList.class);
-        List<ArrayList<Expr>> rows = rowValues.stream().map(ValueList::getRow).collect(toList());
+        List<List<Expr>> rows = rowValues.stream().map(ValueList::getRow).collect(toList());
 
         List<String> colNames = getColumnNames(context.columnAliases());
         if (colNames == null) {
@@ -3993,18 +3979,35 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitTableFunction(StarRocksParser.TableFunctionContext context) {
-        TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(
-                getQualifiedName(context.qualifiedName()).toString(),
-                new FunctionParams(false, visit(context.expressionList().expression(), Expr.class)),
-                createPos(context));
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.tableFunctionCall());
+        TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(functionCallExpr);
 
         if (context.alias != null) {
             Identifier identifier = (Identifier) visit(context.alias);
             tableFunctionRelation.setAlias(new TableName(null, identifier.getValue()));
         }
         tableFunctionRelation.setColumnOutputNames(getColumnNames(context.columnAliases()));
-
         return tableFunctionRelation;
+    }
+
+    @Override
+    public ParseNode visitTableFunctionTable(StarRocksParser.TableFunctionTableContext context) {
+        TableFunctionRelation relation = new TableFunctionRelation((FunctionCallExpr) visit(context.tableFunctionCall()));
+
+        if (context.alias != null) {
+            Identifier identifier = (Identifier) visit(context.alias);
+            relation.setAlias(new TableName(null, identifier.getValue()));
+        }
+        relation.setColumnOutputNames(getColumnNames(context.columnAliases()));
+
+        return new NormalizedTableFunctionRelation(relation);
+    }
+
+    @Override
+    public ParseNode visitTableFunctionCall(StarRocksParser.TableFunctionCallContext context) {
+        QualifiedName functionName = getQualifiedName(context.qualifiedName());
+        List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
+        return new FunctionCallExpr(FunctionName.createFnName(functionName.toString().toLowerCase()), parameters);
     }
 
     @Override

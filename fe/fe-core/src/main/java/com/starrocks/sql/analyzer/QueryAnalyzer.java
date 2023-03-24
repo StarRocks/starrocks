@@ -49,6 +49,7 @@ import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -778,6 +779,14 @@ public class QueryAnalyzer {
             Scope outputScope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
             node.setScope(outputScope);
             return outputScope;
+        }
+
+        @Override
+        public Scope visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Scope scope) {
+            Scope ignored = visitJoin(node, scope);
+            // Only the scope of the table function is visible outside.
+            node.setScope(node.getRight().getScope());
+            return node.getScope();
         }
     }
 

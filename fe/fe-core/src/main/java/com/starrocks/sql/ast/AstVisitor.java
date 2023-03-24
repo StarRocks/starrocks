@@ -920,6 +920,10 @@ public abstract class AstVisitor<R, C> {
         return visitRelation(node, context);
     }
 
+    public R visitNormalizedTableFunction(NormalizedTableFunctionRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
     public R visitCTE(CTERelation node, C context) {
         return visitRelation(node, context);
     }
