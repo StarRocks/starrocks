@@ -77,7 +77,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -85,6 +87,7 @@ import javax.validation.constraints.NotNull;
 
 public class LakeTableSchemaChangeJob extends AlterJobV2 {
     private static final Logger LOG = LogManager.getLogger(LakeTableSchemaChangeJob.class);
+    private static final ScheduledExecutorService CLEAN_SHARD_SERVICE = Executors.newSingleThreadScheduledExecutor();
 
     // partition id -> (shadow index id -> (shadow tablet id -> origin tablet id))
     @SerializedName(value = "partitionIndexTabletMap")
@@ -495,13 +498,17 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         EditLog.waitInfinity(startWriteTs, editLogFuture);
 
         // Delete tablet and shards
-        List<Long> unusedShards = new ArrayList<>();
+        List<Long> replacedShards = new ArrayList<>();
         for (MaterializedIndex droppedIndex : droppedIndexes) {
             List<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
-            unusedShards.addAll(shards);
+            replacedShards.addAll(shards);
         }
-        // TODO: what if unusedShards deletion is partially successful?
-        ShardDeleter.dropTabletAndDeleteShard(unusedShards, GlobalStateMgr.getCurrentStarOSAgent());
+
+        // replaced shards may be being accessed, delaying deletion to avoid causing ongoing access failures.
+        // todo: if the process exists before timeout expires, the shards will not be deleted after restarting.
+        CLEAN_SHARD_SERVICE.schedule(
+                () -> ShardDeleter.dropTabletAndDeleteShard(replacedShards, GlobalStateMgr.getCurrentStarOSAgent()),
+                30, TimeUnit.MINUTES);
 
         if (span != null) {
             span.end();
