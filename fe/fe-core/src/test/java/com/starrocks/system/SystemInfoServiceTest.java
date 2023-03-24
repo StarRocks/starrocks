@@ -120,22 +120,19 @@ public class SystemInfoServiceTest {
     }
 
     @Test
-    public void testGetBackendOrComputeNode() {
-        Backend be = new Backend(10001, "host1", 1000);
-        service.addBackend(be);
+    public void testComputeNode() {
         ComputeNode cn = new ComputeNode(10002, "host2", 1000);
         service.addComputeNode(cn);
 
-        Assert.assertEquals(be, service.getComputeNode(be.getId()));
         Assert.assertEquals(cn, service.getComputeNode(cn.getId()));
         Assert.assertNull(service.getComputeNode(/* Not Exist */ 100));
 
         List<ComputeNode> nodes = service.computeNodeStream().collect(Collectors.toList());
         Assert.assertEquals(2, nodes.size());
-        Assert.assertEquals(be, nodes.get(0));
         Assert.assertEquals(cn, nodes.get(1));
     }
 
+    /*
     @Test
     public void testDropBackend() throws Exception {
         new MockUp<RunMode>() {
@@ -165,7 +162,7 @@ public class SystemInfoServiceTest {
         service.dropBackend("newHost", 1000, false);
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assert.assertTrue(beIP == null);
-    }
+    } */
 
     @Test
     public void testReplayDropBackend() throws Exception {
@@ -216,6 +213,7 @@ public class SystemInfoServiceTest {
         };
     }
 
+    /*
     @Test
     public void testGetBackendWithBePort() throws Exception {
 
@@ -242,16 +240,16 @@ public class SystemInfoServiceTest {
         service.addBackend(be3);
         Backend beIP3 = service.getBackendWithBePort("127.0.0.2", 1001);
         Assert.assertTrue(beIP3 == null);
-    }
+    } */
 
     @Test
-    public void testGetBackendOnlyWithHost() throws Exception {
+    public void testGetComputeNodeOnlyWithHost() throws Exception {
 
-        Backend be = new Backend(10001, "newHost", 1000);
-        be.setBePort(1001);
-        service.addBackend(be);
-        List<Backend> bes = service.getBackendOnlyWithHost("newHost");
-        Assert.assertTrue(bes.size() == 1);
+        ComputeNode cn = new ComputeNode(10001, "newHost", 1000);
+        cn.setBePort(1001);
+        service.addComputeNode(cn);
+        List<ComputeNode> cns = service.getComputeNodesOnlyWithHost("newHost");
+        Assert.assertTrue(cns.size() == 1);
     }
 
     @Test

@@ -191,10 +191,6 @@ public class SystemInfoServiceTest {
         }
     }
 
-    public void clearAllBackend() {
-        GlobalStateMgr.getCurrentSystemInfo().dropAllBackend();
-    }
-
     @Test(expected = AnalysisException.class)
     public void validHostAndPortTest1() throws Exception {
         createHostAndPort(1);
@@ -215,7 +211,6 @@ public class SystemInfoServiceTest {
 
     @Test
     public void addDataNodeTest() throws AnalysisException {
-        clearAllBackend();
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
         try {
@@ -325,7 +320,6 @@ public class SystemInfoServiceTest {
 
     @Test
     public void testSaveLoadBackend() throws Exception {
-        clearAllBackend();
         String dir = "testLoadBackend";
         mkdir(dir);
         File file = new File(dir, "image");
