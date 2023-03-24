@@ -1136,6 +1136,11 @@ public class PlanFragmentBuilder {
                                     break;
                                 case "JOB_ID":
                                     scanNode.setJobId(constantOperator.getBigint());
+                                case "TYPE":
+                                    scanNode.setType(constantOperator.getVarchar());
+                                    break;
+                                case "STATE":
+                                    scanNode.setState(constantOperator.getVarchar());
                                     break;
                                 default:
                                     break;
@@ -2573,7 +2578,7 @@ public class PlanFragmentBuilder {
                             .collect(Collectors.toList()),
                     physicalTableFunction.getFnResultColRefs().stream().map(ColumnRefOperator::getId)
                             .collect(Collectors.toList())
-                    );
+            );
             tableFunctionNode.computeStatistics(optExpression.getStatistics());
             tableFunctionNode.setLimit(physicalTableFunction.getLimit());
             inputFragment.setPlanRoot(tableFunctionNode);
