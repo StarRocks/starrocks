@@ -37,6 +37,7 @@ fs_brokers/apache_hdfs_broker/src/main/resources/
 fs_brokers/apache_hdfs_broker/src/main/thrift/
 fs_brokers/apache_hdfs_broker/jindosdk-4.6.2
 dependency-reduced-pom.xml
+test/conf/
 tags
 .tags
 .cache

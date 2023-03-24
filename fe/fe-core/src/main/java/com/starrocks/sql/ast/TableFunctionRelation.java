@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.catalog.TableFunction;
@@ -39,8 +40,8 @@ public class TableFunctionRelation extends Relation {
     private TableFunction tableFunction;
     private List<Expr> childExpressions;
 
-    public TableFunctionRelation(String functionName, FunctionParams functionParams) {
-        this(functionName, functionParams, NodePosition.ZERO);
+    public TableFunctionRelation(FunctionCallExpr functionCallExpr) {
+        this(functionCallExpr.getFnName().toString().toLowerCase(), functionCallExpr.getParams(), functionCallExpr.getPos());
     }
 
     public TableFunctionRelation(String functionName, FunctionParams functionParams, NodePosition pos) {
