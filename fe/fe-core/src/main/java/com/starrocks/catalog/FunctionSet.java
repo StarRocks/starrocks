@@ -232,6 +232,7 @@ public class FunctionSet {
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_CONT = "percentile_cont";
+    public static final String PERCENTILE_DISC = "percentile_disc";
     public static final String RETENTION = "retention";
     public static final String STDDEV = "stddev";
     public static final String STDDEV_POP = "stddev_pop";
@@ -448,6 +449,18 @@ public class FunctionSet {
                     .add(Type.DATETIME)
                     .add(Type.DECIMALV2)
                     .build();
+
+    private static final Set<Type> SORTABLE_TYPES =
+            ImmutableSet.<Type>builder()
+                    .addAll(Type.INTEGER_TYPES)
+                    .addAll(Type.DECIMAL_TYPES)
+                    .addAll(Type.STRING_TYPES)
+                    .add(Type.DATE)
+                    .add(Type.DATETIME)
+                    .add(Type.DECIMALV2)
+                    .addAll(Type.FLOAT_TYPES)
+                    .build();
+
 
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
@@ -1090,6 +1103,12 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
                 Lists.newArrayList(Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
                 false, false, false));
+
+        for (Type type : SORTABLE_TYPES) {
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_DISC,
+                    Lists.newArrayList(type, Type.DOUBLE), type, Type.VARBINARY,
+                    false, false, false));
+        }
     }
 
     public List<Function> getBuiltinFunctions() {
