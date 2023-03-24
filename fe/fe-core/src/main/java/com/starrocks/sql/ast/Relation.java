@@ -67,6 +67,10 @@ public abstract class Relation implements ParseNode {
         return explicitColumnNames;
     }
 
+    public boolean isDualRelation() {
+        return false;
+    }
+
     @Override
     public NodePosition getPos() {
         return pos;
