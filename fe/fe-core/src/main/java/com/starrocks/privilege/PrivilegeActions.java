@@ -314,20 +314,23 @@ public class PrivilegeActions {
 
     public static boolean checkAnyActionOnOrInDb(UserIdentity userIdentity, Set<Long> roleIds,
                                                  String catalogName, String db) {
-
-        Database database = GlobalStateMgr.getCurrentState().getDb(db);
-        if (database == null) {
+        if (checkAnyActionOnDb(userIdentity, roleIds, catalogName, db)
+                || checkAnyActionOnTable(userIdentity, roleIds, catalogName, db, "*")) {
             return true;
         }
 
-        // check for any action on db or table/view/mv/function
-        return checkAnyActionOnDb(userIdentity, roleIds, catalogName, db)
-                || checkAnyActionOnTable(userIdentity, roleIds, catalogName, db, "*")
-                || (CatalogMgr.isInternalCatalog(catalogName) &&
-                (checkAnyActionOnView(userIdentity, roleIds, db, "*")
-                        || checkAnyActionOnMaterializedView(userIdentity, roleIds, db, "*")
-                        || checkAnyActionOnFunction(userIdentity, roleIds, database.getId(),
-                        PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID)));
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            Database database = GlobalStateMgr.getCurrentState().getDb(db);
+            if (database == null) {
+                return true;
+            }
+
+            return checkAnyActionOnView(userIdentity, roleIds, db, "*")
+                    || checkAnyActionOnMaterializedView(userIdentity, roleIds, db, "*")
+                    || checkAnyActionOnFunction(userIdentity, roleIds, database.getId(),
+                    PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID);
+        }
+        return false;
     }
 
     /**
