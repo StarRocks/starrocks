@@ -942,6 +942,26 @@ public class ExpressionAnalyzer {
                 ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
                 ((AggregateFunction) fn).setNullsFirst(nullsFirst);
                 fn.setRetType(new ArrayType(argumentTypes[0])); // return null if scalar agg with empty input
+            } else if (FunctionSet.PERCENTILE_DISC.equals(fnName)) {
+                argumentTypes[1] = Type.DOUBLE;
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+                // correct decimal's precision and scale
+                if (fn.getArgs()[0].isDecimalV3()) {
+                    List<Type> argTypes = Arrays.asList(argumentTypes[0], fn.getArgs()[1]);
+
+                    AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), argTypes, argumentTypes[0],
+                            ((AggregateFunction) fn).getIntermediateType(), fn.hasVarArgs());
+
+                    newFn.setFunctionId(fn.getFunctionId());
+                    newFn.setChecksum(fn.getChecksum());
+                    newFn.setBinaryType(fn.getBinaryType());
+                    newFn.setHasVarArgs(fn.hasVarArgs());
+                    newFn.setId(fn.getId());
+                    newFn.setUserVisible(fn.isUserVisible());
+                    newFn.setisAnalyticFn(((AggregateFunction) fn).isAnalyticFn());
+
+                    fn = newFn;
+                }
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(fnName, argumentTypes)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
                 // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
