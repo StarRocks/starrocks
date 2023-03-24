@@ -141,6 +141,9 @@ public class UpdateAnalyzer {
 
         List<Expr> outputExpression = queryStatement.getQueryRelation().getOutputExpression();
         Preconditions.checkState(outputExpression.size() == assignColumnList.size());
+        if (!updateStmt.usePartialUpdate()) {
+            Preconditions.checkState(table.getBaseSchema().size() == assignColumnList.size());   
+        }
         List<Expr> castOutputExpressions = Lists.newArrayList();
         for (int i = 0; i < assignColumnList.size(); ++i) {
             Expr e = outputExpression.get(i);

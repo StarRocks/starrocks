@@ -241,7 +241,7 @@ private:
 
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
 
-    Status _init_column_iterator_by_cid(const ColumnId cid, bool check_dict_enc);
+    Status _init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc);
 
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
@@ -416,7 +416,7 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
             _opts.stats->raw_rows_read);
 }
 
-Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, bool check_dict_enc) {
+Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc) {
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
     iter_opts.use_page_cache = _opts.use_page_cache;
@@ -426,8 +426,9 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, bool ch
     if (_dcgs.size() == 0) {
         ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid));
     } else {
+        CHECK(ucid >= 0);
         std::string dcg_filename;
-        ASSIGN_OR_RETURN(auto col_iter, _segment->new_dcg_column_iterator(_dcgs, cid, &dcg_filename));
+        ASSIGN_OR_RETURN(auto col_iter, _segment->new_dcg_column_iterator(_dcgs, (uint32_t)ucid, &dcg_filename));
         if (col_iter == nullptr) {
             // not found in delta column group
             ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid));
@@ -471,7 +472,7 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
                 check_dict_enc = has_predicate;
             }
 
-            RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, check_dict_enc));
+            RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
 
             if constexpr (check_global_dict) {
                 _column_decoders[cid].set_iterator(_column_iterators[cid].get());

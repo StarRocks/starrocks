@@ -269,6 +269,7 @@ struct OlapReaderStatistics {
 };
 
 typedef uint32_t ColumnId;
+typedef int32_t ColumnUID;
 // Column unique id set
 typedef std::set<uint32_t> UniqueIdSet;
 // Column unique Id -> column id map

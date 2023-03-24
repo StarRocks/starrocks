@@ -164,7 +164,11 @@ Status RowsetColumnUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
         RETURN_IF_ERROR(_load_upserts(rowset, i));
     }
 
-    return _prepare_partial_update_states(tablet, rowset, 0, true);
+    for (size_t i = 0; i < rowset->num_update_files(); i++) {
+        RETURN_IF_ERROR(_prepare_partial_update_states(tablet, rowset, i, true));
+    }
+
+    return Status::OK();
 }
 
 Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx,
@@ -395,9 +399,13 @@ Status RowsetColumnUpdateState::finalize(Rowset* rowset, Tablet* tablet, int64_t
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
 
     std::vector<uint32_t> update_column_ids;
+    std::vector<uint32_t> unique_update_column_ids;
     const auto& tschema = rowset->schema();
     for (uint32_t cid : txn_meta.partial_update_column_ids()) {
         update_column_ids.push_back(cid);
+    }
+    for (uint32_t cid : txn_meta.partial_update_column_unique_ids()) {
+        unique_update_column_ids.push_back(cid);
     }
     auto partial_tschema = TabletSchema::create(tschema, update_column_ids);
     Schema partial_schema = ChunkHelper::convert_schema(tschema, update_column_ids);
@@ -474,7 +482,8 @@ Status RowsetColumnUpdateState::finalize(Rowset* rowset, Tablet* tablet, int64_t
         _total_write_chunk_bytes += source_chunk_ptr->bytes_usage();
         // 3.5 generate delta columngroup
         _rssid_to_delta_column_group[each.first] = std::make_shared<DeltaColumnGroup>();
-        _rssid_to_delta_column_group[each.first]->init(version + 1, update_column_ids,
+        // must record unique column id in delta column group
+        _rssid_to_delta_column_group[each.first]->init(version + 1, unique_update_column_ids,
                                                        delta_column_group_writer[each.first]->segment_path());
     }
     cost_str << " [generate delta column group] " << watch.elapsed_time();
@@ -484,15 +493,16 @@ Status RowsetColumnUpdateState::finalize(Rowset* rowset, Tablet* tablet, int64_t
             " rss_cnt/column_cnt/update_rss_cnt/write_bytes/read_bytes/write_io/read_io:$0/$1/$2/$3/$4/$5/$6", rss_cnt,
             column_cnt, update_seg_cnt, _total_write_chunk_bytes, _total_read_chunk_bytes, _write_io_cnt, _read_io_cnt);
     cost_str << strings::Substitute(" avg_seek_source_segment/total_seek_source_segment(ms):$0/$1",
-                                    total_seek_source_segment_time / (rss_cnt * column_cnt),
+                                    total_seek_source_segment_time / (rss_cnt * column_cnt + 1),
                                     total_seek_source_segment_time);
     cost_str << strings::Substitute(" avg_read_column_from_update/total_read_column_from_update(ms):$0/$1",
-                                    total_read_column_from_update_time / (update_seg_cnt * column_cnt),
+                                    total_read_column_from_update_time / (update_seg_cnt * column_cnt + 1),
                                     total_read_column_from_update_time);
     cost_str << strings::Substitute(" avg_merge_column_time/total_merge_column_time(ms):$0/$1",
-                                    total_merge_column_time / (update_seg_cnt * column_cnt), total_merge_column_time);
+                                    total_merge_column_time / (update_seg_cnt * column_cnt + 1),
+                                    total_merge_column_time);
     cost_str << strings::Substitute(" avg_finalize_dcg_time/total_finalize_dcg_time(ms):$0/$1",
-                                    total_finalize_dcg_time / rss_cnt, total_finalize_dcg_time);
+                                    total_finalize_dcg_time / (rss_cnt + 1), total_finalize_dcg_time);
 
     LOG(INFO) << "RowsetColumnUpdateState status: " << cost_str.str();
     _finalize_finished = true;

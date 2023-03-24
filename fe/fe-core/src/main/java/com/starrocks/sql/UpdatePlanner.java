@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
@@ -109,6 +110,10 @@ public class UpdatePlanner {
                 DataSink dataSink =
                         new OlapTableSink(((OlapTable) table), olapTuple, partitionIds, ((OlapTable) table).writeQuorum(),
                                 ((OlapTable) table).enableReplicatedStorage(), updateStmt.nullExprInAutoIncrement());
+                if (updateStmt.usePartialUpdate()) {
+                    // only support column mode partial update in UPDATE stmt
+                    ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_MODE);
+                }
                 execPlan.getFragments().get(0).setSink(dataSink);
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             } else if (table instanceof SchemaTable) {

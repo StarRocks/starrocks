@@ -301,9 +301,21 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& tablet_sc
                                                    const std::vector<uint32_t>& column_indexes) {
     std::vector<int32_t> column_indexes2;
     for (uint32_t ci : column_indexes) {
-        column_indexes2.push_back((int)ci);
+        column_indexes2.push_back((int32_t)ci);
     }
     return TabletSchema::create(tablet_schema, column_indexes2);
+}
+
+std::shared_ptr<TabletSchema> TabletSchema::create_with_uid(const TabletSchema& tablet_schema,
+                                                            const std::vector<uint32_t>& unique_column_ids) {
+    std::unordered_set<int32_t> unique_cid_filter(unique_column_ids.begin(), unique_column_ids.end());
+    std::vector<int32_t> column_indexes;
+    for (int cid = 0; cid < tablet_schema.columns().size(); cid++) {
+        if (unique_cid_filter.count(tablet_schema.column(cid).unique_id()) > 0) {
+            column_indexes.push_back(cid);
+        }
+    }
+    return TabletSchema::create(tablet_schema, column_indexes);
 }
 
 void TabletSchema::_init_schema() const {

@@ -370,16 +370,16 @@ Status Segment::new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** it
     return Status::OK();
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_dcg_column_iterator(DeltaColumnGroupList dcgs, uint32_t cid,
+StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_dcg_column_iterator(DeltaColumnGroupList dcgs, uint32_t ucid,
                                                                            std::string* filename) {
     // build column iter from delta column group
     // iterate dcg from new ver to old ver
     for (const auto& dcg : dcgs) {
-        int idx = dcg->get_column_idx(cid);
+        int idx = dcg->get_column_idx(ucid);
         if (idx >= 0) {
             ASSIGN_OR_RETURN(auto dcg_segment,
                              Segment::open(_fs, dcg->column_file(), 0,
-                                           TabletSchema::create(*_tablet_schema, dcg->column_ids()), nullptr));
+                                           TabletSchema::create_with_uid(*_tablet_schema, dcg->column_ids()), nullptr));
             _dcg_segments.push_back(dcg_segment);
             if (filename != nullptr) {
                 *filename = dcg->column_file();

@@ -164,7 +164,7 @@ public:
 
     int64_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage(); }
 
-    StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(DeltaColumnGroupList dcgs, uint32_t cid,
+    StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(DeltaColumnGroupList dcgs, uint32_t ucid,
                                                                       std::string* filename);
 
     DISALLOW_COPY_AND_MOVE(Segment);

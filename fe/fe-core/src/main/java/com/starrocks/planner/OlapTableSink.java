@@ -122,6 +122,7 @@ public class OlapTableSink extends DataSink {
     private boolean missAutoIncrementColumn;
     private boolean abortDelete;
     private int autoIncrementSlotId;
+    private TPartialUpdateMode partialUpdateMode;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage, boolean nullExprInAutoIncrement) {
@@ -153,6 +154,7 @@ public class OlapTableSink extends DataSink {
                 }
             }
         }
+        this.partialUpdateMode = TPartialUpdateMode.ROW_MODE;
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS)
@@ -197,8 +199,7 @@ public class OlapTableSink extends DataSink {
     }
 
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
-        TOlapTableSink tSink = tDataSink.getOlap_table_sink();
-        tSink.setPartial_update_mode(mode);
+        this.partialUpdateMode = mode;
     }
 
     public void complete(String mergeCondition) throws UserException {
@@ -228,7 +229,7 @@ public class OlapTableSink extends DataSink {
         tSink.setPartition(createPartition(tSink.getDb_id(), dstTable));
         tSink.setLocation(createLocation(dstTable));
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(clusterId));
-        tSink.setPartial_update_mode(TPartialUpdateMode.COLUMN_MODE);
+        tSink.setPartial_update_mode(this.partialUpdateMode);
     }
 
     @Override
