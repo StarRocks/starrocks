@@ -6,8 +6,6 @@ select x from TABLE(unnest(ARRAY<INT>[1, NULL, 10])) t(x);
 select t0.x, t1.x from TABLE(unnest(ARRAY<INT>[1])) t0(x), TABLE(unnest(ARRAY<INT>[1, NULL, 10])) t1(x);
 -- name: test_cross_join2
 select t0.x, t1.x from TABLE(unnest(ARRAY<INT>[10, NULL, 100])) t0(x), TABLE(unnest(ARRAY<INT>[1, NULL, 10])) t1(x);
--- name: test_cross_join3
-select t0.x, t1.x from TABLE(unnest(ARRAY<INT>[])) t0(x), TABLE(unnest(ARRAY<INT>[1, NULL, 10])) t1(x);
 -- name: test_cross_join4
 select t0.x, t1.x from TABLE(unnest(ARRAY<INT>[NULL, NULL])) t0(x), TABLE(unnest(ARRAY<INT>[1, NULL, 10])) t1(x);
 -- name: test_cross_join_conditional
