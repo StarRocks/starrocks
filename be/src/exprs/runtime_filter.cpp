@@ -156,7 +156,7 @@ size_t JoinRuntimeFilter::max_serialized_size() const {
     return size;
 }
 
-size_t JoinRuntimeFilter::serialize(uint8_t* data) const {
+size_t JoinRuntimeFilter::serialize(int serialize_version, uint8_t* data) const {
     size_t offset = 0;
 #define JRF_COPY_FIELD(field)                     \
     memcpy(data + offset, &field, sizeof(field)); \
@@ -178,7 +178,7 @@ size_t JoinRuntimeFilter::serialize(uint8_t* data) const {
     return offset;
 }
 
-size_t JoinRuntimeFilter::deserialize(const uint8_t* data) {
+size_t JoinRuntimeFilter::deserialize(int serialize_version, const uint8_t* data) {
     size_t offset = 0;
 #define JRF_COPY_FIELD(field)                     \
     memcpy(&field, data + offset, sizeof(field)); \

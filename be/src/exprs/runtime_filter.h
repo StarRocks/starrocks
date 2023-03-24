@@ -23,9 +23,18 @@
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/Types_types.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
+// 0x1. initial global runtime filter impl
+// 0x2. change simd-block-filter hash function.
+// 0x3. Fix serialize problem
+inline const constexpr uint8_t RF_VERSION = 0x2;
+inline const constexpr uint8_t RF_VERSION_V2 = 0x3;
+static_assert(sizeof(RF_VERSION_V2) == sizeof(RF_VERSION));
+inline const constexpr int32_t RF_VERSION_SZ = sizeof(RF_VERSION_V2);
+
 // compatible code from 2.5 to 3.0
 // TODO: remove it
 class RuntimeFilterSerializeType {
@@ -68,6 +77,8 @@ public:
     };
 
     static_assert(sizeof(PrimitiveType) == sizeof(int32_t));
+    static_assert(sizeof(PrimitiveType) == sizeof(LogicalType));
+    static_assert(sizeof(TPrimitiveType::type) == sizeof(LogicalType));
 
     static PrimitiveType to_serialize_type(LogicalType type);
 
@@ -259,8 +270,8 @@ public:
     size_t rf_version() const { return _rf_version; }
 
     virtual size_t max_serialized_size() const;
-    virtual size_t serialize(uint8_t* data) const;
-    virtual size_t deserialize(const uint8_t* data);
+    virtual size_t serialize(int serialize_version, uint8_t* data) const;
+    virtual size_t deserialize(int serialize_version, const uint8_t* data);
 
     virtual void intersect(const JoinRuntimeFilter* rf) = 0;
 
@@ -448,12 +459,19 @@ public:
         return size;
     }
 
-    size_t serialize(uint8_t* data) const override {
-        auto ltype = RuntimeFilterSerializeType::to_serialize_type(Type);
+    size_t serialize(int serialize_version, uint8_t* data) const override {
         size_t offset = 0;
-        memcpy(data + offset, &ltype, sizeof(ltype));
-        offset += sizeof(ltype);
-        offset += JoinRuntimeFilter::serialize(data + offset);
+        if (serialize_version == RF_VERSION) {
+            auto ltype = RuntimeFilterSerializeType::to_serialize_type(Type);
+            memcpy(data + offset, &ltype, sizeof(ltype));
+            offset += sizeof(ltype);
+        } else {
+            auto ltype = to_thrift(Type);
+            memcpy(data + offset, &ltype, sizeof(ltype));
+            offset += sizeof(ltype);
+        }
+
+        offset += JoinRuntimeFilter::serialize(serialize_version, data + offset);
         memcpy(data + offset, &_has_min_max, sizeof(_has_min_max));
         offset += sizeof(_has_min_max);
 
@@ -481,12 +499,19 @@ public:
         return offset;
     }
 
-    size_t deserialize(const uint8_t* data) override {
-        RuntimeFilterSerializeType::PrimitiveType ltype = RuntimeFilterSerializeType::to_serialize_type(Type);
+    size_t deserialize(int serialize_version, const uint8_t* data) override {
         size_t offset = 0;
-        memcpy(&ltype, data + offset, sizeof(ltype));
-        offset += sizeof(ltype);
-        offset += JoinRuntimeFilter::deserialize(data + offset);
+        if (serialize_version == RF_VERSION) {
+            RuntimeFilterSerializeType::PrimitiveType ltype = RuntimeFilterSerializeType::to_serialize_type(Type);
+            memcpy(&ltype, data + offset, sizeof(ltype));
+            offset += sizeof(ltype);
+        } else {
+            auto ltype = to_thrift(Type);
+            memcpy(&ltype, data + offset, sizeof(ltype));
+            offset += sizeof(ltype);
+        }
+
+        offset += JoinRuntimeFilter::deserialize(serialize_version, data + offset);
 
         bool has_min_max = false;
         memcpy(&has_min_max, data + offset, sizeof(has_min_max));
