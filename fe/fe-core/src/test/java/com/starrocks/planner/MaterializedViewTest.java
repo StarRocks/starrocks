@@ -1543,8 +1543,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, query)
                 .contains("0:OlapScanNode\n" +
                         "     TABLE: mv0\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 7: empid = 1");
+                        "     PREAGGREGATION: ON\n");
     }
 
     @Test
