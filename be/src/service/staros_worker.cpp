@@ -31,6 +31,8 @@
 
 // cachemgr thread pool size
 DECLARE_int32(cachemgr_threadpool_size);
+// buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
+DECLARE_int32(fs_stream_buffer_size_bytes);
 
 namespace starrocks {
 
@@ -293,7 +295,9 @@ void init_staros_worker() {
     if (g_starlet.get() != nullptr) {
         return;
     }
+
     FLAGS_cachemgr_threadpool_size = config::starlet_cache_thread_num;
+    FLAGS_fs_stream_buffer_size_bytes = config::starlet_fs_stream_buffer_size_bytes;
 
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;

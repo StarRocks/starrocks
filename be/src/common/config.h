@@ -804,6 +804,9 @@ CONF_Int32(starlet_port, "9070");
 CONF_Int32(starlet_cache_thread_num, "64");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
+// Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
+// Only support in S3/HDFS currently.
+CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 #endif
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
