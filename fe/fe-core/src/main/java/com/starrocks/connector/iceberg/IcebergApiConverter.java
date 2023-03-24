@@ -61,7 +61,14 @@ public class IcebergApiConverter {
 
     public static List<Column> toFullSchemas(Table nativeTbl) {
         List<Column> fullSchema = Lists.newArrayList();
-        for (Types.NestedField field : nativeTbl.schema().columns()) {
+        List<Types.NestedField> columns;
+        try {
+            columns = nativeTbl.schema().columns();
+        } catch (NullPointerException e) {
+            throw new StarRocksConnectorException(e.getMessage());
+        }
+
+        for (Types.NestedField field : columns) {
             Type srType;
             try {
                 srType = fromIcebergType(field.type());
