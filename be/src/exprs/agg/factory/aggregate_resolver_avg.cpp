@@ -33,24 +33,10 @@ struct AvgDispatcher {
     }
 };
 
-struct ArrayAggDispatcher {
-    template <LogicalType lt>
-    void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_aggregate<lt> || lt_is_json<lt>) {
-            auto func = std::make_shared<ArrayAggAggregateFunction<lt>>();
-            using AggState = ArrayAggAggregateState<lt>;
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg", false,
-                                                                                                   func);
-        }
-    }
-};
-
 void AggregateFuncResolver::register_avg() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, AvgDispatcher(), this);
-        type_dispatch_all(type, ArrayAggDispatcher(), this);
     }
-    type_dispatch_all(TYPE_JSON, ArrayAggDispatcher(), this);
     add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128, true>("decimal_avg");
     add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128, true>("decimal_avg");
     add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, true>("decimal_avg");

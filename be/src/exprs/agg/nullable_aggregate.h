@@ -70,6 +70,7 @@ class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State>
 public:
     explicit NullableAggregateFunctionBase(NestedAggregateFunctionPtr nested_function_)
             : nested_function(std::move(nested_function_)) {}
+    // as array_agg is not nullable, so it needn't create() here.
 
     std::string get_name() const override { return "nullable " + nested_function->get_name(); }
 

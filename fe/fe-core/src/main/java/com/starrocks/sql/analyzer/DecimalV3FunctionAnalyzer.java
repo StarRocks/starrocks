@@ -455,13 +455,6 @@ public class DecimalV3FunctionAnalyzer {
                 newFn.setArgsType(argumentTypes);
                 return newFn;
             }
-            case FunctionSet.ARRAY_AGG: {
-                Type returnType = new ArrayType(argumentTypes[0]);
-                newFn.setArgsType(argumentTypes);
-                newFn.setRetType(returnType);
-                ((AggregateFunction) newFn).setIntermediateType(returnType);
-                return newFn;
-            }
             default:
                 return fn;
         }

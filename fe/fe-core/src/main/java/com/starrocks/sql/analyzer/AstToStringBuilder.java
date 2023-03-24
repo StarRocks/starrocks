@@ -886,6 +886,13 @@ public class AstToStringBuilder {
                 StringLiteral boundary = (StringLiteral) node.getChild(3);
                 sb.append(", ").append(boundary.getValue());
                 sb.append(")");
+            } else if (functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+                sb.append(visit(node.getChild(0)));
+                List<OrderByElement> sortClause = fnParams.getOrderByElements();
+                if (sortClause != null) {
+                    sb.append(" ORDER BY ").append(visitAstList(sortClause));
+                }
+                sb.append(")");
             } else {
                 List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
                 sb.append(Joiner.on(", ").join(p)).append(")");
