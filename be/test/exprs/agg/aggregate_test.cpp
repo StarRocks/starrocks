@@ -1692,11 +1692,13 @@ TEST_F(AggregateTest, test_array_agg) {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
 
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY));
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
-    std::vector<bool>is_asc_order{0};
-    std::vector<bool>nulls_first{1};
+    std::vector<bool> is_asc_order{0};
+    std::vector<bool> nulls_first{1};
     local_ctx->set_is_asc_order(is_asc_order);
     local_ctx->set_nulls_first(nulls_first);
+    local_ctx->set_runtime_state(runtime_state.get());
 
     const AggregateFunction* array_agg_func = get_aggregate_function("array_agg", TYPE_BIGINT, TYPE_ARRAY, false);
     auto state = ManagedAggrState::create(local_ctx.get(), array_agg_func);

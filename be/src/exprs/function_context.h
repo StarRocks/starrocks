@@ -117,6 +117,7 @@ public:
     // for tests
     void set_is_asc_order(const std::vector<bool>& order) { _is_asc_order = order; }
     void set_nulls_first(const std::vector<bool>& nulls) { _nulls_first = nulls; }
+    void set_runtime_state(RuntimeState* const state) { _state = state; }
 
     // Returns _constant_columns size
     int get_num_constant_columns() const;

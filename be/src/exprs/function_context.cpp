@@ -53,7 +53,7 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
 
 FunctionContext* FunctionContext::create_test_context() {
     auto* context = new FunctionContext();
-    context->_state = new RuntimeState();
+    context->_state = nullptr;
     return context;
 }
 
