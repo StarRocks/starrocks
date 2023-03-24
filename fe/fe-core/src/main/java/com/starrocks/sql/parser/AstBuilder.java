@@ -3649,7 +3649,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             for (SelectListItem item : selectItemsVirtual) {
                 if (item.getExpr() instanceof SlotRef) {
                     SlotRef exprRef = (SlotRef) item.getExpr();
-                    String columnName = exprRef.getColumnName();
+                    String columnName = item.getAlias() == null ? exprRef.getColumnName() : item.getAlias();
                     SlotRef resultSlotRef = new SlotRef(qualifyTableName, columnName);
                     selectItemsOuter.add(new SelectListItem(resultSlotRef, null));
                 } else {
