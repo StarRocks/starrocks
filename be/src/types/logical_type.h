@@ -295,6 +295,9 @@ LogicalType scalar_field_type_to_logical_type(LogicalType field_type);
 // Return length of fixed-length type, return 0 for dynamic length type
 size_t get_size_of_fixed_length_type(LogicalType ltype);
 
+// return types that can be sorted
+const std::vector<LogicalType>& sortable_types();
+
 } // namespace starrocks
 
 inline std::ostream& operator<<(std::ostream& os, starrocks::LogicalType type) {
