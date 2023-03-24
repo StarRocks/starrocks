@@ -311,7 +311,7 @@ public class ConnectContext {
     public void setCurrentRoleIds(UserIdentity user) {
         try {
             Set<Long> defaultRoleIds;
-            if (this.getSessionVariable().isActivateAllRolesOnLogin()) {
+            if (GlobalVariable.isActivateAllRolesOnLogin()) {
                 defaultRoleIds = this.getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(user);
             } else {
                 defaultRoleIds = this.getGlobalStateMgr().getAuthorizationManager().getDefaultRoleIdsByUser(user);

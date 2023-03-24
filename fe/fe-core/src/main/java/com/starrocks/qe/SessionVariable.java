@@ -363,8 +363,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
 
-    public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
-
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
     public static final String SPILL_MEM_TABLE_SIZE = "spill_mem_table_size";
@@ -967,9 +965,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SQL_QUOTE_SHOW_CREATE)
     private boolean quoteShowCreate = true; // Defined but unused now, for compatibility with MySQL
 
-    @VariableMgr.VarAttr(name = ACTIVATE_ALL_ROLES_ON_LOGIN)
-    private String activateAllRolesOnLogin = "OFF";
-
     @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
     private long groupConcatMaxLen = 65535;
 
@@ -1032,18 +1027,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableDistinctColumnBucketization() {
         return enableDistinctColumnBucketization;
-    }
-
-    public boolean isActivateAllRolesOnLogin() {
-        return activateAllRolesOnLogin.equals("ON");
-    }
-
-    public void setActivateAllRolesOnLogin(boolean activateAll) {
-        if (activateAll) {
-            activateAllRolesOnLogin = "ON";
-        } else {
-            activateAllRolesOnLogin = "OFF";
-        }
     }
 
     public boolean getEnablePopulateBlockCache() {
