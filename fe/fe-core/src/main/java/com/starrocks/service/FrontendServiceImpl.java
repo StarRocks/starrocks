@@ -158,6 +158,8 @@ import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TGetTabletScheduleRequest;
+import com.starrocks.thrift.TGetTabletScheduleResponse;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTaskRunInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
@@ -1713,7 +1715,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-
         Map<String, AddPartitionClause> addPartitionClauseMap;
         try {
             Column firstPartitionColumn = expressionRangePartitionInfo.getPartitionColumns().get(0);
@@ -1785,8 +1786,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     if (bePathsMap.keySet().size() < quorum) {
                         errorStatus.setError_msgs(Lists.newArrayList(
                                 "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                + tablet.getId() + ", backends: " +
-                                Joiner.on(",").join(localTablet.getBackends())));
+                                        + tablet.getId() + ", backends: " +
+                                        Joiner.on(",").join(localTablet.getBackends())));
                         result.setStatus(errorStatus);
                         return result;
                     }
@@ -1849,5 +1850,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         MVManager.getInstance().onReportEpoch(request);
         return new TMVReportEpochResponse();
+    }
+
+    @Override
+    public TGetTabletScheduleResponse getTabletSchedule(TGetTabletScheduleRequest request) throws TException {
+        TGetTabletScheduleResponse response = GlobalStateMgr.getCurrentState().getTabletScheduler().getTabletSchedule(request);
+        LOG.info("getTabletSchedule: {} return {} TabletSchedule", request, response.getTablet_schedulesSize());
+        return response;
     }
 }
