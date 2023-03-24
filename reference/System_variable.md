@@ -55,6 +55,7 @@ SET GLOBAL query_mem_limit = 137438953472;
 * use_compute_nodes
 * vectorized_engine_enable
 * wait_timeout
+* sql_dialect
 
 只支持全局生效的变量包括：
 
@@ -467,3 +468,7 @@ SELECT /*+ SET_VAR
 * runtime_join_filter_push_down_limit
 
   生成 Bloomfilter 类型的 Local RF 的 Hash Table 的行数阈值。超过该阈值, 则不产生 Local RF。该变量避免产生过大 Local RF。取值为整数，表示行数。默认值：1024000。
+
+* sql_dialect
+
+  设置生效的 SQL 语法。例如，执行 `set sql_dialect = 'trino';` 命令可以切换为 Trino 语法，这样您就可以在查询中使用 Trino 特有的 SQL 语法和函数。
