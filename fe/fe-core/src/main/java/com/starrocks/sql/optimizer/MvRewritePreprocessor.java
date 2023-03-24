@@ -33,12 +33,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -188,7 +186,6 @@ public class MvRewritePreprocessor {
         final Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
 
         // construct distribution
-        final Set<Integer>  mvPartitionDistributionColumnRef = Sets.newHashSet();
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
         // only hash distribution is supported
         Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
@@ -216,47 +213,12 @@ public class MvRewritePreprocessor {
         }
         final PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
 
-        // NOTE:
-        // - To partition/distribution prune, need filter predicates that belong to MV.
-        // - Those predicates are only used for partition/distribution pruning and don't affect the real
-        // query compute.
-        // - after partition/distribution pruning, those predicates should be removed from mv rewrite result.
-        final OptExpression mvExpression = mvContext.getMvExpression();
-        final List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(mvExpression);
-        final ColumnRefSet mvOutputColumnRefSet = mvExpression.getOutputColumns();
-        final List<ScalarOperator> mvConjuncts = Lists.newArrayList();
-
-        // Construct partition/distribution key column refs to filter conjunctions which need to retain.
-        Set<String> mvPruneKeyColNames = Sets.newHashSet();
-        distributedColumns.stream().forEach(distKey -> mvPruneKeyColNames.add(distKey.getName()));
-        mv.getPartitionColumnNames().stream().forEach(partName -> mvPruneKeyColNames.add(partName));
-        final Set<Integer> mvPruneColumnIdSet = mvOutputColumnRefSet.getStream().map(
-                        id -> mvContext.getMvColumnRefFactory().getColumnRef(id))
-                .filter(colRef -> mvPruneKeyColNames.contains(colRef.getName()))
-                .map(colRef -> colRef.getId())
-                .collect(Collectors.toSet());
-        // Case1: keeps original predicates which belong to MV table(which are not pruned after mv's partition pruning)
-        for (ScalarOperator conj : conjuncts) {
-            // ignore binary predicates which cannot be used for pruning.
-            if (conj instanceof BinaryPredicateOperator) {
-                BinaryPredicateOperator conjOp = (BinaryPredicateOperator) conj;
-                if (conjOp.getChild(0).isColumnRef() && conjOp.getChild(1).isColumnRef()) {
-                    continue;
-                }
-            }
-            final List<Integer> conjColumnRefOperators =
-                    Utils.extractColumnRef(conj).stream().map(ref -> ref.getId()).collect(Collectors.toList());
-            if (mvPruneColumnIdSet.containsAll(conjColumnRefOperators)) {
-                mvConjuncts.add(conj);
-            }
-        }
-
         return new LogicalOlapScanOperator(mv,
                 colRefToColumnMetaMapBuilder.build(),
                 columnMetaToColRefMap,
                 DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
                 Operator.DEFAULT_LIMIT,
-                Utils.compoundAnd(mvConjuncts),
+                null,
                 mv.getBaseIndexId(),
                 selectPartitionIds,
                 partitionNames,

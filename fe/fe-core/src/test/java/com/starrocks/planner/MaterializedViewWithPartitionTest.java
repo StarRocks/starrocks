@@ -419,7 +419,6 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                 .contains("UNION")
                 .contains("TABLE: partial_mv_7\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: c1 = 1\n" +
                         "     partitions=4/5\n" +
                         "     rollup: partial_mv_7\n" +
                         "     tabletRatio=4/8")
@@ -429,7 +428,6 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         testRewriteOK("select c1, c3, c2 from test_base_part where c3 < 2000 and c1 = 1")
                 .contains("TABLE: partial_mv_7\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: c1 = 1\n" +
                         "     partitions=4/5\n" +
                         "     rollup: partial_mv_7\n" +
                         "     tabletRatio=4/8");
@@ -438,7 +436,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         testRewriteOK("select c1, c3, c2 from test_base_part where c3 < 1000 and c1 = 1")
                 .contains("TABLE: partial_mv_7\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 6: c3 <= 999, 5: c1 = 1\n" +
+                        "     PREDICATES: 6: c3 <= 999\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_7\n" +
                         "     tabletRatio=3/6");
