@@ -127,6 +127,10 @@ public class DataNode implements Writable {
         return this.isAlive.get();
     }
 
+    public boolean isAvailable() {
+        return this.isAlive.get() && !this.isDecommissioned.get();
+    }
+
     public void setHost(String host) {
         this.host = host;
     }

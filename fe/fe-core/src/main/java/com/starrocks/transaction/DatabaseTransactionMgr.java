@@ -856,7 +856,7 @@ public class DatabaseTransactionMgr {
 
                                 // if all unfinished backends already down through heartbeat detect, we don't need to wait anymore
                                 for (Long backendID : unfinishedBackends) {
-                                    if (globalStateMgr.getCurrentSystemInfo().checkBackendAlive(backendID)) {
+                                    if (globalStateMgr.getCurrentSystemInfo().checkDataNodeAlive(backendID)) {
                                         return false;
                                     }
                                 }

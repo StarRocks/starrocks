@@ -47,6 +47,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TxnFinishState;
 import org.apache.logging.log4j.LogManager;
@@ -192,17 +193,17 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return beIds;
     }
 
-    public List<String> getBackends() {
-        List<String> backends = new ArrayList<String>();
+    public List<String> getDataNodes() {
+        List<String> dataNodes = new ArrayList<String>();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
-            Backend backend = infoService.getBackend(replica.getBackendId());
-            if (backend == null) {
+            DataNode dataNode = infoService.getDataNode(replica.getBackendId());
+            if (dataNode == null) {
                 continue;
             }
-            backends.add(backend.getHost());
+            dataNodes.add(dataNode.getHost());
         }
-        return backends;
+        return dataNodes;
     }
 
     // for loading data
@@ -215,7 +216,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
 
             ReplicaState state = replica.getState();
-            if (infoService.checkBackendAlive(replica.getBackendId()) && state.canLoad()) {
+            if (infoService.checkDataNodeAlive(replica.getBackendId()) && state.canLoad()) {
                 beIds.add(replica.getBackendId());
             }
         }
@@ -232,7 +233,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
 
             ReplicaState state = replica.getState();
-            if (infoService.checkBackendAlive(replica.getBackendId())
+            if (infoService.checkDataNodeAlive(replica.getBackendId())
                     && (state == ReplicaState.NORMAL || state == ReplicaState.ALTER)) {
                 map.put(replica, replica.getPathHash());
             }
@@ -582,7 +583,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             List<Long> replicaBeIds = replicas.stream()
                     .map(Replica::getBackendId).collect(Collectors.toList());
             List<Long> availableBeIds = aliveBeIdsInCluster.stream()
-                    .filter(systemInfoService::checkBackendAvailable)
+                    .filter(systemInfoService::checkDataNodeAvailable)
                     .collect(Collectors.toList());
             if (replicaBeIds.containsAll(availableBeIds)
                     && availableBeIds.size() >= replicationNum

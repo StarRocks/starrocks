@@ -589,7 +589,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         for (BackendLoadStatistic beStat : unbalancedBeStats) {
             long beId = beStat.getBeId();
-            if (!infoService.checkBackendAvailable(beId)) {
+            if (!infoService.checkDataNodeAvailable(beId)) {
                 continue;
             }
 
@@ -795,7 +795,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     private List<BackendLoadStatistic> getValidBeStats(ClusterLoadStatistic clusterStat, TStorageMedium medium) {
         List<BackendLoadStatistic> validBeStats = Lists.newArrayList();
         for (BackendLoadStatistic beStat : clusterStat.getAllBackendLoadStatistic()) {
-            if (infoService.checkBackendAvailable(beStat.getBeId()) && beStat.getTotalCapacityB(medium) > 0) {
+            if (infoService.checkDataNodeAvailable(beStat.getBeId()) && beStat.getTotalCapacityB(medium) > 0) {
                 validBeStats.add(beStat);
             }
         }
@@ -977,7 +977,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         List<TabletSchedCtx> alternativeTablets = Lists.newArrayList();
         for (BackendLoadStatistic beStat : getValidBeStats(clusterStat, medium)) {
             long beId = beStat.getBeId();
-            if (!infoService.checkBackendAvailable(beId)) {
+            if (!infoService.checkDataNodeAvailable(beId)) {
                 continue;
             }
 

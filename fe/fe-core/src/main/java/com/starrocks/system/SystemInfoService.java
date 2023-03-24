@@ -303,105 +303,6 @@ public class SystemInfoService {
         LOG.info("finished to drop {}", dropComputeNode);
     }
 
-    // for decommission
-    public void dropBackend(long backendId) throws DdlException {
-        Backend backend = getBackend(backendId);
-        if (backend == null) {
-            throw new DdlException("Backend[" + backendId + "] does not exist");
-        }
-
-        dropBackend(backend.getHost(), backend.getHeartbeatPort(), false);
-    }
-
-    private void checkUnforce(Backend droppedBackend) {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(droppedBackend.getId());
-        List<Long> dbs = globalStateMgr.getDbIds();
-
-        dbs.stream().map(globalStateMgr::getDb).forEach(db -> {
-            db.readLock();
-            try {
-                db.getTables().stream()
-                        .filter(table -> table.isLocalTable())
-                        .map(table -> (OlapTable) table)
-                        .filter(table -> table.getTableProperty().getReplicationNum() == 1)
-                        .forEach(table -> {
-                            table.getAllPartitions().forEach(partition -> {
-                                String errMsg = String.format("Tables such as [%s.%s] on the backend[%s:%d]" +
-                                                " have only one replica. To avoid data loss," +
-                                                " please change the replication_num of [%s.%s] to three." +
-                                                " ALTER SYSTEM DROP BACKEND <backends> FORCE" +
-                                                " can be used to forcibly drop the backend. ",
-                                        db.getOriginName(), table.getName(), droppedBackend.getHost(),
-                                        droppedBackend.getHeartbeatPort(), db.getOriginName(), table.getName());
-
-                                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
-                                        .forEach(rollupIdx -> {
-                                            boolean existIntersection = rollupIdx.getTablets().stream()
-                                                    .map(Tablet::getId).anyMatch(tabletIds::contains);
-
-                                            if (existIntersection) {
-                                                throw new RuntimeException(errMsg);
-                                            }
-                                        });
-                            });
-                        });
-            } finally {
-                db.readUnlock();
-            }
-        });
-    }
-
-    // final entry of dropping backend
-    public void dropBackend(String host, int heartbeatPort, boolean needCheckUnforce) throws DdlException {
-        if (getBackendWithHeartbeatPort(host, heartbeatPort) == null) {
-            throw new DdlException("backend does not exists[" + host + ":" + heartbeatPort + "]");
-        }
-
-        Backend droppedBackend = getBackendWithHeartbeatPort(host, heartbeatPort);
-        if (needCheckUnforce) {
-            try {
-                checkUnforce(droppedBackend);
-            } catch (RuntimeException e) {
-                throw new DdlException(e.getMessage());
-            }
-        }
-
-        // update idToBackend
-        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
-        copiedBackends.remove(droppedBackend.getId());
-        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
-
-        // update idToReportVersion
-        Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
-        copiedReportVerions.remove(droppedBackend.getId());
-        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
-
-        // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
-        if (null != cluster) {
-            // remove worker
-            if (RunMode.allowCreateLakeTable()) {
-                long starletPort = droppedBackend.getStarletPort();
-                // only need to remove worker after be reported its starletPort
-                if (starletPort != 0) {
-                    String workerAddr = droppedBackend.getHost() + ":" + starletPort;
-                    GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
-                }
-            }
-
-            cluster.removeBackend(droppedBackend.getId());
-        } else {
-            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
-        }
-        // log
-        GlobalStateMgr.getCurrentState().getEditLog().logDropBackend(droppedBackend);
-        LOG.info("finished to drop {}", droppedBackend);
-
-        // backends is changed, regenerated tablet number metrics
-        MetricRepo.generateBackendsTabletMetrics();
-    }
-
     public Backend getBackend(long backendId) {
         return idToBackendRef.get(backendId);
     }
@@ -410,14 +311,14 @@ public class SystemInfoService {
         return idToComputeNodeRef.get(computeNodeId);
     }
 
-    public boolean checkBackendAvailable(long backendId) {
-        Backend backend = idToBackendRef.get(backendId);
-        return backend != null && backend.isAvailable();
+    public boolean checkDataNodeAvailable(long dataNodeId) {
+        DataNode dataNode = idToDataNodeRef.get(dataNodeId);
+        return dataNode != null && dataNode.isAvailable();
     }
 
-    public boolean checkBackendAlive(long backendId) {
-        Backend backend = idToBackendRef.get(backendId);
-        return backend != null && backend.isAlive();
+    public boolean checkDataNodeAlive(long dataNodeId) {
+        DataNode dataNode = idToDataNodeRef.get(dataNodeId);
+        return dataNode != null && dataNode.isAlive();
     }
 
     public ComputeNode getComputeNodeWithHeartbeatPort(String host, int heartPort) {

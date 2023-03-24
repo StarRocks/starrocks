@@ -129,7 +129,7 @@ public class ExportPendingTask extends PriorityLeaderTask {
                     return Status.CANCELLED;
                 }
                 long backendId = backend.getId();
-                if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
+                if (!GlobalStateMgr.getCurrentSystemInfo().checkDataNodeAvailable(backendId)) {
                     return Status.CANCELLED;
                 }
                 this.job.setBeStartTime(backendId, backend.getLastStartTime());
