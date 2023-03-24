@@ -292,6 +292,7 @@ jobs:
           retention-days: 1
 
       - name: Clean ENV
+        if: always()
         run: |
           rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
