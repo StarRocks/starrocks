@@ -34,7 +34,7 @@ public class CachingHiveMetastoreConf {
         this.cacheRefreshIntervalSec = Long.parseLong(conf.getOrDefault("metastore_cache_refresh_interval_sec",
                 String.valueOf(Config.hive_meta_cache_refresh_interval_s)));
         this.enableListNamesCache = Boolean.parseBoolean(conf.getOrDefault("enable_cache_list_names",
-                "true"));
+                "false"));
         this.cacheMaxNum = Long.parseLong(conf.getOrDefault("metastore_cache_max_num", String.valueOf(cacheMaxNum)));
     }
 

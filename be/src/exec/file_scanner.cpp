@@ -22,7 +22,6 @@
 #include "column/vectorized_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
-#include "fs/fs_hdfs.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
 #include "runtime/descriptors.h"

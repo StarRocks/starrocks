@@ -799,6 +799,9 @@ CONF_Int32(starlet_port, "9070");
 CONF_Int32(starlet_cache_thread_num, "64");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
+// Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
+// Only support in S3/HDFS currently.
+CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 #endif
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -906,5 +909,8 @@ CONF_mInt64(wait_apply_time, "6000")                                 // 6s
 CONF_Int32(binlog_page_max_size, "1048576");
 
 CONF_mInt64(txn_info_history_size, "20000");
+
+CONF_mInt32(update_cache_evict_internal_sec, "11");
+CONF_mBool(enable_auto_evict_update_cache, "true");
 
 } // namespace starrocks::config
