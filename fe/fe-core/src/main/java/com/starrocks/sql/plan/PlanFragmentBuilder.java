@@ -931,6 +931,20 @@ public class PlanFragmentBuilder {
                                 case "TXN_ID":
                                     scanNode.setTxnId(constantOperator.getBigint());
                                     break;
+<<<<<<< HEAD
+=======
+                                case "LABEL":
+                                    scanNode.setLabel(constantOperator.getVarchar());
+                                    break;
+                                case "JOB_ID":
+                                    scanNode.setJobId(constantOperator.getBigint());
+                                case "TYPE":
+                                    scanNode.setType(constantOperator.getVarchar());
+                                    break;
+                                case "STATE":
+                                    scanNode.setState(constantOperator.getVarchar());
+                                    break;
+>>>>>>> 62315fb79 ([Enhancement] Add FE tablet schedule to information_schema (#18954))
                                 default:
                                     break;
                             }
@@ -2389,8 +2403,14 @@ public class PlanFragmentBuilder {
                             .collect(Collectors.toList()),
                     Arrays.stream(physicalTableFunction.getOuterColumnRefSet().getColumnIds()).boxed()
                             .collect(Collectors.toList()),
+<<<<<<< HEAD
                     Arrays.stream(physicalTableFunction.getFnResultColumnRefSet().getColumnIds()).boxed()
                             .collect(Collectors.toList()));
+=======
+                    physicalTableFunction.getFnResultColRefs().stream().map(ColumnRefOperator::getId)
+                            .collect(Collectors.toList())
+            );
+>>>>>>> 62315fb79 ([Enhancement] Add FE tablet schedule to information_schema (#18954))
             tableFunctionNode.computeStatistics(optExpression.getStatistics());
             tableFunctionNode.setLimit(physicalTableFunction.getLimit());
             inputFragment.setPlanRoot(tableFunctionNode);

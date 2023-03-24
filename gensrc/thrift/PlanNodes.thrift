@@ -345,6 +345,14 @@ struct TSchemaScanNode {
   13: optional i64 partition_id
   14: optional i64 tablet_id
   15: optional i64 txn_id
+<<<<<<< HEAD
+=======
+  16: optional i64 job_id
+  17: optional string label
+  18: optional string type
+  19: optional string state
+  20: optional i64 limit
+>>>>>>> 62315fb79 ([Enhancement] Add FE tablet schedule to information_schema (#18954))
 }
 
 struct TOlapScanNode {

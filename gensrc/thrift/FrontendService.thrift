@@ -962,6 +962,137 @@ struct TSetConfigResponse {
     1: required Status.TStatus status
 }
 
+<<<<<<< HEAD
+=======
+struct TCreatePartitionRequest {
+    1: optional i64 txn_id
+    2: optional i64 db_id
+    3: optional i64 table_id
+    // for each partition column's partition values
+    4: optional list<list<string>> partition_values
+}
+
+struct TCreatePartitionResult {
+    1: optional Status.TStatus status
+    2: optional list<Descriptors.TOlapTablePartition> partitions
+    3: optional list<Descriptors.TTabletLocation> tablets
+    4: optional list<Descriptors.TNodeInfo> nodes
+}
+
+struct TAuthInfo {
+    // If not set, match every database
+    1: optional string pattern
+    2: optional string user   // deprecated
+    3: optional string user_ip    // deprecated
+    4: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
+}
+
+struct TGetTablesConfigRequest {
+    1: optional TAuthInfo auth_info
+}
+
+struct TGetTablesConfigResponse {
+    1: optional list<TTableConfigInfo> tables_config_infos
+}
+
+struct TTableConfigInfo {
+    1: optional string table_schema
+    2: optional string table_name
+    3: optional string table_engine
+    4: optional string table_model
+    5: optional string primary_key
+    6: optional string partition_key
+    7: optional string distribute_key
+    8: optional string distribute_type
+    9: optional i32 distribute_bucket
+    10: optional string sort_key
+    11: optional string properties
+}
+
+struct TGetTablesInfoRequest {
+    1: optional TAuthInfo auth_info
+}
+
+struct TGetTablesInfoResponse {
+    1: optional list<TTableInfo> tables_infos
+}
+
+struct TTabletSchedule {
+    1: optional i64 table_id
+    2: optional i64 partition_id
+    3: optional i64 tablet_id
+    4: optional string type
+    5: optional string priority
+    6: optional string state
+    7: optional string tablet_status
+    8: optional double create_time
+    9: optional double schedule_time
+    10: optional double finish_time
+    11: optional i64 clone_src
+    12: optional i64 clone_dest
+    13: optional i64 clone_bytes
+    14: optional double clone_duration
+    15: optional string error_msg
+}
+
+struct TGetTabletScheduleRequest {
+    1: optional i64 table_id
+    2: optional i64 partition_id
+    3: optional i64 tablet_id
+    4: optional string type
+    5: optional string state
+    6: optional i64 limit
+}
+
+struct TGetTabletScheduleResponse {
+    1: optional list<TTabletSchedule> tablet_schedules
+}
+
+struct TUpdateResourceUsageRequest {
+    1: optional i64 backend_id 
+    2: optional ResourceUsage.TResourceUsage resource_usage
+}
+
+struct TUpdateResourceUsageResponse {
+    1: optional Status.TStatus status
+}
+
+struct TTableInfo {
+    1: optional string table_catalog
+    2: optional string table_schema
+    3: optional string table_name
+    4: optional string table_type
+    5: optional string engine
+    6: optional i64 version
+    7: optional string row_format
+    8: optional i64 table_rows
+    9: optional i64 avg_row_length
+    10: optional i64 data_length
+    11: optional i64 max_data_length
+    12: optional i64 index_length
+    13: optional i64 data_free
+    14: optional i64 auto_increment
+    15: optional i64 create_time
+    16: optional i64 update_time
+    17: optional i64 check_time
+    18: optional string table_collation
+    19: optional i64 checksum
+    20: optional string create_options
+    21: optional string table_comment
+}
+
+struct TAllocateAutoIncrementIdParam {
+    1: optional i64 table_id
+    2: optional i64 rows
+}
+
+struct TAllocateAutoIncrementIdResult {
+    1: optional i64 auto_increment_id
+    2: optional i64 allocated_rows
+    3: optional Status.TStatus status
+}
+
+>>>>>>> 62315fb79 ([Enhancement] Add FE tablet schedule to information_schema (#18954))
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1011,5 +1142,18 @@ service FrontendService {
     TAbortRemoteTxnResponse  abortRemoteTxn(1: TAbortRemoteTxnRequest request)
 
     TSetConfigResponse setConfig(1: TSetConfigRequest request)
+<<<<<<< HEAD
+=======
+    TCreatePartitionResult createPartition(1: TCreatePartitionRequest request)
+
+    TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
+    
+    // For Materialized View
+    MVMaintenance.TMVReportEpochResponse mvReport(1: MVMaintenance.TMVMaintenanceTasks request)
+
+    TAllocateAutoIncrementIdResult allocAutoIncrementId (1:TAllocateAutoIncrementIdParam params)
+
+    TGetTabletScheduleResponse getTabletSchedule(1: TGetTabletScheduleRequest request)
+>>>>>>> 62315fb79 ([Enhancement] Add FE tablet schedule to information_schema (#18954))
 }
 
