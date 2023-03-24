@@ -11,6 +11,11 @@ Contributing to StarRocks is cordially welcome from everyone. Contributing to St
 | **Help StarRocks users**            | You can help newcomers who meet difficulties in our community. |
 | **Spread the word about StarRocks** | You can author an article or give a talk about us to help spread our technology to the world. |
 
+> **NOTE**
+>
+> To contribute documentation, remember to **sign off** your commit using `git commit -s`. Otherwise, the Developer Certificate of Origin (DCO) check will fail and the PR may be blocked. In addition, prefix `[Doc]` to your PR title and select the **Doc** check box.
+> ![Doc title](../assets/doctitle.png)
+
 ## Community resources
 
 The best place to get a wide variety of help about StarRocks is via StarRocks's [Slack Channel](https://join.slack.com/t/starrocks/shared_invite/zt-1d0cs3cs2-7eL5Q0cGoBofhyIOx7pLfQ). For contribution-related discussions, please go to the **#contributing-to-starrocks** channel.

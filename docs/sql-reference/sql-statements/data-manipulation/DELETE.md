@@ -41,10 +41,6 @@ column_name1 op { value | value_list } [ AND column_name2 op { value | value_lis
 
 - For Duplicate Key, Aggregate Key, and Unique Key tables, the DELETE statement does not support using subquery results as conditions.
 
-- If a table uses any data model except the Duplicate Key model, you can specify only the primary key columns of the table as conditions.
-
-- If a primary key column that you specify as a condition for data deletion from a table cannot be found in the associated materialized view, the DELETE statement cannot be executed on the table.
-
 ### Impacts
 
 After you execute the DELETE statement, the query performance of your cluster may deteriorate for a period of time (before compaction is completed). The degree of deterioration varies based on the number of conditions that you specify. A larger number of conditions indicates a higher degree of deterioration.
@@ -168,11 +164,11 @@ DELETE FROM <table_name> WHERE <condition>;
 
 ### Limits
 
-- The following comparison operators are supported: `=`, `>`, `<`, `>=`, `<=`, `!=`, `IN`, and `NOT IN`.
+- The following comparison operators are supported: `=`, `>`, `<`, `>=`, `<=`, `!=`, `IN`, `NOT IN`.
 
 - The following logical operators are supported: `AND` and `OR`.
 
-- You cannot use the DELETE statement to concurrently run delete operations or to delete data at data loading. If you perform these operations, the atomicity, consistency, isolation, and durability (ACID) of transactions may not be ensured.
+- You cannot use the DELETE statement to run concurrent DELETE operations or to delete data at data loading. If you perform such operations, the atomicity, consistency, isolation, and durability (ACID) of transactions may not be ensured.
 
 ### Examples
 
