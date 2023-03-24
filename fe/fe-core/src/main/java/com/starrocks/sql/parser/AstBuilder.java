@@ -642,17 +642,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return;
         }
         String functionName = functionCallExpr.getFnName().getFunction();
-        if (FunctionSet.DATE_TRUNC.equals(functionName)) {
+        if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)) {
             Expr expr = functionCallExpr.getParams().exprs().get(0);
             String functionGranularity = ((StringLiteral) expr).getStringValue();
-            if (!prePartitionGranularity.equals(functionGranularity)) {
+            if (!prePartitionGranularity.equalsIgnoreCase(functionGranularity)) {
                 throw new ParsingException("The partition granularity of automatic partition table " +
                         "batch creation in advance should be consistent", functionCallExpr.getPos());
             }
-        } else if (FunctionSet.TIME_SLICE.equals(functionName)) {
+        } else if (FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName)) {
             Expr expr = functionCallExpr.getParams().exprs().get(2);
             String functionGranularity = ((StringLiteral) expr).getStringValue();
-            if (!prePartitionGranularity.equals(functionGranularity)) {
+            if (!prePartitionGranularity.equalsIgnoreCase(functionGranularity)) {
                 throw new ParsingException("The partition granularity of automatic partition table " +
                         "batch creation in advance should be consistent", functionCallExpr.getPos());
             }
