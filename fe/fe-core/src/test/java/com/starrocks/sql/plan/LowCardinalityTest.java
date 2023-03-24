@@ -1790,6 +1790,6 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <slot 38> : if(30: S_NAME = '', 31: S_ADDRESS, NULL)\n" +
                 "  |  \n" +
                 "  5:Decode\n" +
-                "  |  <dict id 41> : <string id 22>");
+                "  |  <dict id 40> : <string id 22>");
     }
 }
