@@ -101,7 +101,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
             OptExpression candidate = mvRewriter.rewrite();
             if (candidate != null) {
-                candidate = postRewriteMV(context, candidate);
+                candidate = postRewriteMV(context, mvRewriteContext, candidate);
                 if (queryExpression.getGroupExpression() != null) {
                     int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
                     mvContext.addMatchedGroup(currentRootGroupId);
@@ -119,12 +119,13 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
      * 2. partition prune
      * 3. bucket prune
      */
-    private OptExpression postRewriteMV(OptimizerContext context, OptExpression candidate) {
+    private OptExpression postRewriteMV(
+            OptimizerContext optimizerContext, MvRewriteContext mvRewriteContext, OptExpression candidate) {
         if (candidate == null) {
             return null;
         }
         candidate = new MVColumnPruner().pruneColumns(candidate);
-        candidate = new MVPartitionPruner().prunePartition(context, candidate);
+        candidate = new MVPartitionPruner(optimizerContext, mvRewriteContext).prunePartition(candidate);
         return candidate;
     }
 
