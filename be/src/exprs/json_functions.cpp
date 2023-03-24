@@ -125,17 +125,17 @@ Status JsonFunctions::json_path_close(FunctionContext* context, FunctionContext:
 
 Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
                                           simdjson::ondemand::value* value) noexcept {
-#define HANDLE_SIMDJSON_ERROR(err, msg)                                                           \
-    do {                                                                                          \
-        const simdjson::error_code& _err = err;                                                   \
-        const std::string& _msg = msg;                                                            \
-        if (UNLIKELY(_err)) {                                                                     \
+#define HANDLE_SIMDJSON_ERROR(err, msg)                                                          \
+    do {                                                                                         \
+        const simdjson::error_code& _err = err;                                                  \
+        const std::string& _msg = msg;                                                           \
+        if (UNLIKELY(_err)) {                                                                    \
             auto err_msg = fmt::format("err: {}, msg: {}", simdjson::error_message(_err), _msg); \
-            VLOG(2) << err_msg;                                                                   \
-            if (_err == simdjson::NO_SUCH_FIELD || _err == simdjson::INDEX_OUT_OF_BOUNDS)         \
-                return Status::NotFound(err_msg);                                                 \
-            return Status::DataQualityError(err_msg);                                             \
-        }                                                                                         \
+            VLOG(2) << err_msg;                                                                  \
+            if (_err == simdjson::NO_SUCH_FIELD || _err == simdjson::INDEX_OUT_OF_BOUNDS)        \
+                return Status::NotFound(err_msg);                                                \
+            return Status::DataQualityError(err_msg);                                            \
+        }                                                                                        \
     } while (false);
 
     if (jsonpath.size() <= 1) {
