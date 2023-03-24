@@ -27,8 +27,11 @@ import com.google.common.graph.GraphBuilder;
 import com.google.common.graph.MutableGraph;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ForeignKeyConstraint;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
@@ -155,22 +158,9 @@ public class MaterializedViewRewriter {
         final ColumnRefFactory mvColumnRefFactory = materializationContext.getMvColumnRefFactory();
         final ReplaceColumnRefRewriter mvColumnRefRewriter =
                 MvUtils.getReplaceColumnRefWriter(mvExpression, mvColumnRefFactory);
-        // Compensate partition predicates and add them into mv predicate,
-        // eg: c3 is partition column
-        // MV    : select c1, c3, c2 from test_base_part where c3 < 2000
-        // Query : select c1, c3, c2 from test_base_part
-        // `c3 < 2000` is missed after partition pruning, so `mvPredicate` must add `mvPartitionPredicate`,
-        // otherwise query above may be rewritten by mv.
-        final ScalarOperator mvPartitionPredicate =
-                MvUtils.compensatePartitionPredicate(mvExpression, mvColumnRefFactory);
-        if (mvPartitionPredicate == null) {
-            return null;
-        }
+
         ScalarOperator mvPredicate = MvUtils.rewriteOptExprCompoundPredicate(mvExpression, mvColumnRefRewriter);
 
-        if (!ConstantOperator.TRUE.equals(mvPartitionPredicate)) {
-            mvPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(mvPredicate, mvPartitionPredicate));
-        }
         if (materializationContext.getMvPartialPartitionPredicate() != null) {
             // add latest partition predicate to mv predicate
             ScalarOperator rewritten = mvColumnRefRewriter.rewrite(materializationContext.getMvPartialPartitionPredicate());
@@ -222,7 +212,12 @@ public class MaterializedViewRewriter {
                 materializationContext.getMvColumnRefFactory(), mvColumnRefRewriter,
                 materializationContext.getOutputMapping(), queryColumnSet);
 
+        // collect partition and distribution related predicates in mv
+        // used to prune partition and buckets after mv rewrite
+        ScalarOperator mvPrunePredicate = collectMvPrunePredicate(materializationContext);
+
         for (BiMap<Integer, Integer> relationIdMapping : relationIdMappings) {
+            mvRewriteContext.setMvPruneConjunct(mvPrunePredicate);
             rewriteContext.setQueryToMvRelationIdMapping(relationIdMapping);
 
             // for view delta, should add compensation join columns to query ec
@@ -500,6 +495,45 @@ public class MaterializedViewRewriter {
         }
     }
 
+    private ScalarOperator collectMvPrunePredicate(MaterializationContext mvContext) {
+        final OptExpression mvExpression = mvContext.getMvExpression();
+        final List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(mvExpression);
+        final ColumnRefSet mvOutputColumnRefSet = mvExpression.getOutputColumns();
+        // conjuncts related to partition and distribution
+        final List<ScalarOperator> mvPrunePredicates = Lists.newArrayList();
+
+        // Construct partition/distribution key column refs to filter conjunctions which need to retain.
+        Set<String> mvPruneKeyColNames = Sets.newHashSet();
+        MaterializedView mv = mvContext.getMv();
+        DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
+        // only hash distribution is supported
+        Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
+        HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+        List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
+        distributedColumns.stream().forEach(distKey -> mvPruneKeyColNames.add(distKey.getName()));
+        mv.getPartitionColumnNames().stream().forEach(partName -> mvPruneKeyColNames.add(partName));
+        final Set<Integer> mvPruneColumnIdSet = mvOutputColumnRefSet.getStream().map(
+                id -> mvContext.getMvColumnRefFactory().getColumnRef(id))
+                .filter(colRef -> mvPruneKeyColNames.contains(colRef.getName()))
+                .map(colRef -> colRef.getId())
+                .collect(Collectors.toSet());
+        for (ScalarOperator conj : conjuncts) {
+            // ignore binary predicates which cannot be used for pruning.
+            if (conj instanceof BinaryPredicateOperator) {
+                BinaryPredicateOperator conjOp = (BinaryPredicateOperator) conj;
+                if (conjOp.getChild(0).isVariable() && conjOp.getChild(1).isVariable()) {
+                    continue;
+                }
+            }
+            final List<Integer> conjColumnRefOperators =
+                    Utils.extractColumnRef(conj).stream().map(ref -> ref.getId()).collect(Collectors.toList());
+            if (mvPruneColumnIdSet.containsAll(conjColumnRefOperators)) {
+                mvPrunePredicates.add(conj);
+            }
+        }
+        return Utils.compoundAnd(mvPrunePredicates);
+    }
+
     private OptExpression tryRewriteForRelationMapping(RewriteContext rewriteContext) {
         // the rewritten expression to replace query
         // should copy the op because the op will be modified and reused
@@ -510,13 +544,11 @@ public class MaterializedViewRewriter {
         // Rewrite original mv's predicates into query if needed.
         final ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
         final Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp = rewriteContext.getMVColumnRefToScalarOp();
-        ScalarOperator mvOriginalPredicates = mvScanOperator.getPredicate();
-        if (mvOriginalPredicates != null && !ConstantOperator.TRUE.equals(mvOriginalPredicates)) {
-            mvOriginalPredicates = rewriteMVCompensationExpression(rewriteContext, columnRewriter,
-                    mvColumnRefToScalarOp, mvOriginalPredicates, false);
-            if (!ConstantOperator.TRUE.equals(mvOriginalPredicates)) {
-                mvScanBuilder.setPredicate(mvOriginalPredicates);
-            }
+        if (mvRewriteContext.getMvPruneConjunct() != null
+                && !ConstantOperator.TRUE.equals(mvRewriteContext.getMvPruneConjunct())) {
+            ScalarOperator rewrittenPrunePredicate = rewriteMVCompensationExpression(rewriteContext, columnRewriter,
+                    mvColumnRefToScalarOp, mvRewriteContext.getMvPruneConjunct(), false);
+            mvRewriteContext.setMvPruneConjunct(MvUtils.canonizePredicate(rewrittenPrunePredicate));
         }
         OptExpression mvScanOptExpression = OptExpression.create(mvScanBuilder.build());
         deriveLogicalProperty(mvScanOptExpression);
