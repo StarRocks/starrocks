@@ -59,7 +59,8 @@ enum TResultSinkType {
     MYSQL_PROTOCAL,
     FILE,
     STATISTIC,
-    VARIABLE
+    VARIABLE,
+    HTTP_PROTOCAL
 }
 
 struct TParquetOptions {

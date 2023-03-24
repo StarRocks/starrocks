@@ -99,7 +99,6 @@ public abstract class StarRocksHttpTestCase {
 
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
-    public static final String EXPECTED_DESC = "[{\"Field\":\"k1\",\"Type\":\"BIGINT\",\"Null\":\"No\",\"Extra\":\"\",\"Default\":\"\\\\N\",\"Key\":\"false\"},{\"Field\":\"k2\",\"Type\":\"DOUBLE\",\"Null\":\"No\",\"Extra\":\"\",\"Default\":\"\\\\N\",\"Key\":\"false\"}]";
 
     private static long testBackendId1 = 1000;
     private static long testBackendId2 = 1001;
@@ -468,7 +467,7 @@ public abstract class StarRocksHttpTestCase {
                 };
 
                 return new GlobalTransactionMgr(null);
-            } 
+            }
         };
         assignBackends();
         doSetUp();

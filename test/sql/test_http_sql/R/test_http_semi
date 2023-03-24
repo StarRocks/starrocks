@@ -1,0 +1,60 @@
+-- name: test_http_output_map_struct
+CREATE TABLE `sc2` (
+  `v1` bigint(20) NULL COMMENT "",
+  `map1` MAP<int(11),MAP<int(11),MAP<int(11),int(11)>>> NULL COMMENT "",
+  `st1` STRUCT<s1 int(11), sm2 MAP<int(11),int(11)>, sm3 MAP<int(11),MAP<int(11),int(11)>>> NULL COMMENT "",
+  `st2` STRUCT<s1 int(11), sa2 ARRAY<int(11)>, ss3 STRUCT<sss1 int(11), sss2 STRUCT<ssss1 int(11), ssss2 int(11)>>> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into sc2 values (1, {1: {10:{100: 101}}}, row(1, {10: 101}, {10: {100: 101}}), row(1, [1,10,101], row(1, row(10, 11))));
+-- result:
+-- !result
+insert into sc2 values (2, {2: {20:{200: 202}}}, row(2, {20: 202}, {20: {200: 202}}), row(2, [2,20,202], row(2, row(20, 22))));
+-- result:
+-- !result
+insert into sc2 values (3, {3: {30:{300: 303}}}, row(3, {30: 303}, {30: {300: 303}}), row(3, [3,30,303], row(3, row(30, 33))));
+-- result:
+-- !result
+insert into sc2 values (4, {4: {40:{400: 404}}}, row(4, {40: 404}, {40: {400: 404}}), row(4, [4,40,404], row(4, row(40, 44))));
+-- result:
+-- !result
+insert into sc2 values (5, {5: {50:{500: 505}}}, row(5, {50: 505}, {50: {500: 505}}), row(5, [5,50,505], row(5, row(50, 55))));
+-- result:
+-- !result
+insert into sc2 values (5, {5: {50:{500: 506}}}, row(5, {50: 506}, {50: {500: 506}}), row(5, [5,50,506], row(5, row(50, 56))));
+-- result:
+-- !result
+insert into sc2 values (5, {5: {50:{500: 507}}}, row(5, {50: 507}, {50: {500: 507}}), row(5, [5,50,507], row(5, row(50, 57))));
+-- result:
+-- !result
+insert into sc2 values (5, {5: {50:{500: 508}}}, row(5, {50: 508}, {50: {500: 508}}), row(5, [5,50,508], row(5, row(50, 58))));
+-- result:
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select * from sc2 order by v1;", "disablePrintConnectionId":true}' --header "Content-Type: application/json"
+-- result:
+0
+{"meta":[{"name":"v1","type":"bigint(20)"},{"name":"map1","type":"map<int(11),map<int(11),map<int(11),int(11)>>>"},{"name":"st1","type":"struct<s1 int(11), sm2 map<int(11),int(11)>, sm3 map<int(11),map<int(11),int(11)>>>"},{"name":"st2","type":"struct<s1 int(11), sa2 array<int(11)>, ss3 struct<sss1 int(11), sss2 struct<ssss1 int(11), ssss2 int(11)>>>"}]}
+{"data":[1,{"1": {"10": {"100": 101}}},{"s1": 1, "sm2": {"10": 101}, "sm3": {"10": {"100": 101}}},{"s1": 1, "sa2": [1, 10, 101], "ss3": {"sss1": 1, "sss2": {"ssss1": 10, "ssss2": 11}}}]}
+{"data":[2,{"2": {"20": {"200": 202}}},{"s1": 2, "sm2": {"20": 202}, "sm3": {"20": {"200": 202}}},{"s1": 2, "sa2": [2, 20, 202], "ss3": {"sss1": 2, "sss2": {"ssss1": 20, "ssss2": 22}}}]}
+{"data":[3,{"3": {"30": {"300": 303}}},{"s1": 3, "sm2": {"30": 303}, "sm3": {"30": {"300": 303}}},{"s1": 3, "sa2": [3, 30, 303], "ss3": {"sss1": 3, "sss2": {"ssss1": 30, "ssss2": 33}}}]}
+{"data":[4,{"4": {"40": {"400": 404}}},{"s1": 4, "sm2": {"40": 404}, "sm3": {"40": {"400": 404}}},{"s1": 4, "sa2": [4, 40, 404], "ss3": {"sss1": 4, "sss2": {"ssss1": 40, "ssss2": 44}}}]}
+{"data":[5,{"5": {"50": {"500": 505}}},{"s1": 5, "sm2": {"50": 505}, "sm3": {"50": {"500": 505}}},{"s1": 5, "sa2": [5, 50, 505], "ss3": {"sss1": 5, "sss2": {"ssss1": 50, "ssss2": 55}}}]}
+{"data":[5,{"5": {"50": {"500": 506}}},{"s1": 5, "sm2": {"50": 506}, "sm3": {"50": {"500": 506}}},{"s1": 5, "sa2": [5, 50, 506], "ss3": {"sss1": 5, "sss2": {"ssss1": 50, "ssss2": 56}}}]}
+{"data":[5,{"5": {"50": {"500": 507}}},{"s1": 5, "sm2": {"50": 507}, "sm3": {"50": {"500": 507}}},{"s1": 5, "sa2": [5, 50, 507], "ss3": {"sss1": 5, "sss2": {"ssss1": 50, "ssss2": 57}}}]}
+{"data":[5,{"5": {"50": {"500": 508}}},{"s1": 5, "sm2": {"50": 508}, "sm3": {"50": {"500": 508}}},{"s1": 5, "sa2": [5, 50, 508], "ss3": {"sss1": 5, "sss2": {"ssss1": 50, "ssss2": 58}}}]}
+{"statistics":{"scanRows":0,"scanBytes":0,"returnRows":8}}
+-- !result
+sync;
+-- result:
+-- !result

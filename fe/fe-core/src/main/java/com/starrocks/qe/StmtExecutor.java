@@ -39,9 +39,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.google.gson.Gson;
-import com.starrocks.analysis.AddSqlBlackListStmt;
-import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
@@ -76,7 +73,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
-import com.starrocks.http.JsonSerializer;
+import com.starrocks.http.HttpConnectContext;
+import com.starrocks.http.HttpResultSender;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
@@ -173,16 +171,6 @@ import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.http.DefaultHttpResponse;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.HttpUtil;
-import io.netty.handler.codec.http.HttpVersion;
-import io.netty.handler.codec.http.LastHttpContent;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -191,7 +179,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -204,7 +191,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.OPTIMIZER;
-import static com.starrocks.http.BaseResponse.HEADER_QUERY_ID;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 // Do one COM_QUERY process.
@@ -228,6 +214,8 @@ public class StmtExecutor {
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
     private List<StmtExecutor> subStmtExecutors;
+
+    private HttpResultSender httpResultSender;
 
     // this constructor is mainly for proxy
     public StmtExecutor(ConnectContext context, OriginStatement originStmt, boolean isProxy) {
@@ -316,7 +304,8 @@ public class StmtExecutor {
         profile = buildTopLevelProfile();
         if (coord != null) {
             if (coord.getQueryProfile() != null) {
-                coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
+                coord.getQueryProfile().getCounterTotalTime()
+                        .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 coord.endProfile();
                 profile.addChild(coord.buildMergedQueryProfile(getQueryStatisticsForAuditLog()));
             }
@@ -386,6 +375,12 @@ public class StmtExecutor {
         UUID uuid = context.getQueryId();
         context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
         SessionVariable sessionVariableBackup = context.getSessionVariable();
+
+        // if use http protocal, use httpResultSender to send result to netty channel
+        if (context instanceof HttpConnectContext) {
+            httpResultSender = new HttpResultSender((HttpConnectContext) context);
+        }
+
         try {
             // parsedStmt may already by set when constructing this StmtExecutor();
             resolveParseStmtForForward();
@@ -548,7 +543,8 @@ public class StmtExecutor {
                         // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
                         // and hence there is no need to log it here.
                         if (i == 0 && context.getQueryDetail() == null && Config.log_plan_cancelled_by_crash_be) {
-                            LOG.warn("Query cancelled by crash of backends or RpcException, [QueryId={}] [SQL={}] [Plan={}]",
+                            LOG.warn(
+                                    "Query cancelled by crash of backends or RpcException, [QueryId={}] [SQL={}] [Plan={}]",
                                     DebugUtil.printId(context.getExecutionId()),
                                     originStmt == null ? "" : originStmt.originStmt,
                                     execPlan.getExplainString(TExplainLevel.COSTS),
@@ -861,35 +857,13 @@ public class StmtExecutor {
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
 
         RowBatch batch;
-        boolean isOutfileQuery;
-        if (queryStmt instanceof QueryStmt) {
-            isOutfileQuery = ((QueryStmt) queryStmt).hasOutFileClause();
-        } else {
+        boolean isOutfileQuery = false;
+        if (queryStmt instanceof QueryStatement) {
             isOutfileQuery = ((QueryStatement) queryStmt).hasOutFileClause();
         }
 
-        batch = coord.getNext();
-        if (context.isHttpQuery()) {
-            // send json response
-            JsonSerializer jsonSerializer = JsonSerializer.newInstance();
-            ChannelHandlerContext nettyChannel = context.getNettyChannel();
-            sendHeader(nettyChannel);
-            jsonSerializer.writeMetaData(colNames, outputExprs);
-            while (true) {
-                if (batch.getBatch() != null) {
-                    jsonSerializer.writeResultBatch(batch.getBatch(), colNames, outputExprs);
-                    nettyChannel.write(jsonSerializer.getChunkedBytes());
-                    jsonSerializer.reset();
-                    context.updateReturnRows(batch.getBatch().getRows().size());
-                }
-                if (batch.isEos()) {
-                    jsonSerializer.writeStatistic(batch.getQueryStatistics());
-                    nettyChannel.writeAndFlush(jsonSerializer.end());
-                    nettyChannel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-                    break;
-                }
-                batch = coord.getNext();
-            }
+        if (context instanceof HttpConnectContext) {
+            batch = httpResultSender.sendQueryResult(coord, execPlan);
         } else {
             // send mysql result
             // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
@@ -902,6 +876,7 @@ public class StmtExecutor {
             MysqlChannel channel = context.getMysqlChannel();
             boolean isSendFields = false;
             while (true) {
+                batch = coord.getNext();
                 // for outfile query, there will be only one empty batch send back with eos flag
                 if (batch.getBatch() != null && !isOutfileQuery) {
                     // For some language driver, getting error packet after fields packet will be recognized as a success result
@@ -910,7 +885,7 @@ public class StmtExecutor {
                         sendFields(colNames, outputExprs);
                         isSendFields = true;
                     }
-                    if (channel.isSendBufferNull()) {
+                    if (!isProxy && channel.isSendBufferNull()) {
                         int bufferSize = 0;
                         for (ByteBuffer row : batch.getBatch().getRows()) {
                             bufferSize += (row.position() - row.limit());
@@ -920,14 +895,17 @@ public class StmtExecutor {
                     }
 
                     for (ByteBuffer row : batch.getBatch().getRows()) {
-                        channel.sendOnePacket(row);
+                        if (isProxy) {
+                            proxyResultBuffer.add(row);
+                        } else {
+                            channel.sendOnePacket(row);
+                        }
                     }
                     context.updateReturnRows(batch.getBatch().getRows().size());
                 }
                 if (batch.isEos()) {
                     break;
                 }
-                batch = coord.getNext();
             }
             if (!isSendFields && !isOutfileQuery) {
                 sendFields(colNames, outputExprs);
@@ -1271,10 +1249,8 @@ public class StmtExecutor {
     public void sendShowResult(ShowResultSet resultSet) throws IOException {
         context.updateReturnRows(resultSet.getResultRows().size());
         // Send result set for http.
-        if (context.isHttpQuery()) {
-            sendHeader(context.getNettyChannel());
-            sendFinalChunk(context.getNettyChannel(), JsonSerializer.getChunkedBytes(resultSet));
-            context.getState().setEof();
+        if (context instanceof HttpConnectContext) {
+            httpResultSender.sendShowResult(resultSet);
             return;
         }
 
@@ -1297,20 +1273,6 @@ public class StmtExecutor {
         context.getState().setEof();
     }
 
-    private void sendHeader(ChannelHandlerContext nettyChannel) {
-        HttpResponse responseObj = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
-        responseObj.headers().set(HttpHeaderNames.CONTENT_TYPE.toString(), "application/json");
-        responseObj.headers().set(HEADER_QUERY_ID, context.queryId);
-        HttpUtil.setTransferEncodingChunked(responseObj, true);
-
-        nettyChannel.write(responseObj);
-    }
-
-    private void sendFinalChunk(ChannelHandlerContext nettyChannel, ByteBuf json) {
-        nettyChannel.writeAndFlush(json);
-        nettyChannel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-    }
-
     // Process show statement
     private void handleShow() throws IOException, AnalysisException, DdlException {
         ShowExecutor executor = new ShowExecutor(context, (ShowStmt) parsedStmt);
@@ -1328,17 +1290,15 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
-    private void handleExplainStmt(String result) throws IOException {
-        if (context.isHttpQuery()) {
-            String res = new Gson().toJson(Collections.singletonList(Collections.singletonMap("Explain String", result)));
-            sendHeader(context.getNettyChannel());
-            sendFinalChunk(context.getNettyChannel(), Unpooled.wrappedBuffer(res.getBytes()));
-            context.getState().setEof();
+    private void handleExplainStmt(String explainString) throws IOException {
+        if (context instanceof HttpConnectContext) {
+            httpResultSender.sendExplainResult(explainString);
             return;
         }
 
         if (context.getQueryDetail() != null) {
             context.getQueryDetail().setExplain(explainString);
+        }
 
         ShowResultSetMetaData metaData =
                 ShowResultSetMetaData.builder()
@@ -1713,7 +1673,8 @@ public class StmtExecutor {
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql
                         );
                     } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
                         // schema table does not need txn
@@ -1721,7 +1682,8 @@ public class StmtExecutor {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(),
                                 transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql,
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql,
                                 TabletFailInfo.fromThrift(coord.getFailInfos())
                         );
                     }

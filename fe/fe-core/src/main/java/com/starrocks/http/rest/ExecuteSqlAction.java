@@ -1,172 +1,312 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
 
 package com.starrocks.http.rest;
 
 /* Usage:
    eg:
-        POST  /api/sql
-        post_data={"query": "select count(*) from information_schema.engines, "context": {"sqlTimeZone": "Asia/Shanghai"}}
- return:
-{
-    "meta": [
-        {
-            "name": "count(*)",
-            "type": "bigint(20)"
-        }
-    ],
-    "data": [
-        {
-            "count(*)": 0
-        }
-    ],
-    "statistics": {
-        "scanRows": 0,
-        "scanBytes": 0,
-        "returnRows": 1
-    }
-}
+     curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:'
+     -d '{"query": "select * from duplicate_table_with_null order by k6;"}'
+     --header "Content-Type: application/json"
+
+   response is in form of ndjson, which means json objects Separated by newlines：
+
+    {"connectionId":70}
+    {"meta":[{"name":"k1","type":"date"},{"name":"k2","type":"datetime"},{"name":"k3","type":"varchar"}]}
+    {"data":[null,null,null]}
+    {"data":["2020-01-25","2022-12-26 09:06:09","anhui"]}
+    {"data":["2020-01-26","2022-12-26 09:06:10","beijin"]}
+    {"data":["2020-01-27","2022-12-26 09:06:11","chengdu"]}
+    {"statistics":{"scanRows":0,"scanBytes":0,"returnRows":4}}
+
  */
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
-import com.starrocks.analysis.QueryStmt;
-import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksHttpException;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
+import com.starrocks.http.HttpConnectContext;
+import com.starrocks.http.HttpConnectProcessor;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.StmtExecutor;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.qe.VariableMgr;
+import com.starrocks.service.ExecuteEnv;
+import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.parser.ParsingException;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.lang.reflect.Type;
 import java.util.List;
+import java.util.Map;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
 import static io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
 
 public class ExecuteSqlAction extends RestBaseAction {
+
     private static final Logger LOG = LogManager.getLogger(ExecuteSqlAction.class);
+    private HttpConnectContext context;
+
+    private HttpConnectProcessor connectProcessor = null;
 
     public ExecuteSqlAction(ActionController controller) {
         super(controller);
+        context = (HttpConnectContext) HttpConnectContext.get();
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
-        controller.registerHandler(HttpMethod.POST, "/api/sql", new ExecuteSqlAction(controller));
+        controller.registerHandler(HttpMethod.POST, "/api/v2/{" + CATALOG_KEY + "}/{" + DB_KEY + "}/sql",
+                new ExecuteSqlAction(controller));
+        controller.registerHandler(HttpMethod.POST, "/api/v2/{" + CATALOG_KEY + "}/sql",
+                new ExecuteSqlAction(controller));
     }
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
-        response.setContentType("application/json");
+        StatementBase parsedStmt;
 
-        String postContent = request.getContent();
-        ConnectContext context = ConnectContext.get();
+        response.setContentType("application/x-ndjson; charset=utf-8");
+
+        context = (HttpConnectContext) ConnectContext.get();
+        String catalogName = request.getSingleParameter(CATALOG_KEY);
+        String databaseName = request.getSingleParameter(DB_KEY);
+
+        try {
+            changeCatalogAndDB(catalogName, databaseName);
+            SqlRequest requestBody = validatePostBody(request.getContent());
+            checkSessionVariable(requestBody.sessionVariables);
+            // parse the sql here, for the convenience of verification of http request
+            parsedStmt = parse(requestBody.query, context.getSessionVariable());
+            context.setStatement(parsedStmt);
+
+            // only register connectContext once for one channel
+            if (!context.isInitialized()) {
+                registerContext(requestBody.query);
+                context.setInitialized(true);
+            }
+
+            // process this request
+            try {
+                connectProcessor.processOnce();
+            } catch (Exception e) {
+                // just for safe. most Exception is handled in execute(), and set error code in context
+                throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            }
+
+            // finalize just send 200 for kill, and throw StarRocksHttpException if context's error is set
+            finalize(request, response, parsedStmt);
+
+            if (context.isKilled()) {
+                context.getNettyChannel().close();
+                LOG.info("connection is killed!");
+            }
+
+        } catch (StarRocksHttpException e) {
+            // send {"exception","error message"}
+            JsonObject jsonObject = new JsonObject();
+            jsonObject.addProperty("exception", e.getMessage());
+            String exceptionInfo = jsonObject.toString();
+            response.getContent().append(exceptionInfo);
+            sendResult(request, response, HttpResponseStatus.valueOf(e.getCode().code()));
+        }
+    }
+
+    private void changeCatalogAndDB(String catalogName, String databaseName) throws StarRocksHttpException {
+        if (!catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "only support default_catalog right now");
+        }
+
+        try {
+            context.getGlobalStateMgr().changeCatalog(context, catalogName);
+            if (databaseName != null) {
+                context.getGlobalStateMgr().changeCatalogDb(context, databaseName);
+            }
+        } catch (Exception e) {
+            // 403 Forbidden DdlException
+            throw new StarRocksHttpException(HttpResponseStatus.FORBIDDEN, "set catalog or db failed");
+        }
+    }
+
+    private SqlRequest validatePostBody(String postContent) throws StarRocksHttpException {
         SqlRequest requestBody;
         StatementBase parsedStmt;
         try {
             Type type = new TypeToken<SqlRequest>() {
             }.getType();
             requestBody = new Gson().fromJson(postContent, type);
-            if (Strings.isNullOrEmpty(requestBody.query) || Strings.isNullOrEmpty(requestBody.query.trim())) {
-                response.appendContent(new RestBaseResult("query can not be empty").toJson());
-                writeResponse(request, response, BAD_REQUEST);
-                return;
-            }
-
-            checkSessionVariable(context, requestBody.context);
-
-            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser
-                    .parse(requestBody.query, context.getSessionVariable().getSqlMode());
-            if (stmts.size() > 1) {
-                response.appendContent(new RestBaseResult("/api/sql not support execute multiple query").toJson());
-                writeResponse(request, response, BAD_REQUEST);
-                return;
-            }
-
-            parsedStmt = stmts.get(0);
-            if (!(parsedStmt instanceof QueryStmt
-                    || parsedStmt instanceof QueryStatement
-                    || parsedStmt instanceof ShowStmt)) {
-                response.appendContent(
-                        new RestBaseResult("/api/sql only support SELECT, SHOW, EXPLAIN, DESC statement").toJson());
-                writeResponse(request, response, BAD_REQUEST);
-                return;
-            }
-
-            if (((parsedStmt instanceof QueryStmt) && ((QueryStmt) parsedStmt).hasOutFileClause())
-                    || ((parsedStmt instanceof QueryStatement) && ((QueryStatement) parsedStmt).hasOutFileClause())) {
-                response.appendContent(
-                        new RestBaseResult("/api/sql does not support a query with OUTFILE clause").toJson());
-                writeResponse(request, response, BAD_REQUEST);
-                return;
-            }
-
-            PrivilegeChecker.check(parsedStmt, context);
         } catch (JsonSyntaxException e) {
-            response.appendContent(new RestBaseResult("malformed json [ " + postContent + " ]").toJson());
-            writeResponse(request, response, BAD_REQUEST);
-            return;
-        } catch (ParsingException parsingException) {
-            response.appendContent(new RestBaseResult(parsingException.getErrorMessage()).toJson());
-            writeResponse(request, response, BAD_REQUEST);
-            return;
-        } catch (Throwable e) {
-            response.appendContent(new RestBaseResult(e.getMessage() + "\n " + e.getCause()).toJson());
-            writeResponse(request, response, INTERNAL_SERVER_ERROR);
-            return;
+            throw new StarRocksHttpException(BAD_REQUEST, "malformed json [ " + postContent + " ]");
         }
 
-        parsedStmt.setOrigStmt(new OriginStatement(requestBody.query));
+        if (Strings.isNullOrEmpty(requestBody.query) || Strings.isNullOrEmpty(requestBody.query.trim())) {
+            throw new StarRocksHttpException(BAD_REQUEST, "\"query can not be empty\"");
+        }
 
-        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        if (requestBody.disablePrintConnectionId) {
+            context.set_disable_print_connection_id(true);
+        }
+
+        return requestBody;
+    }
+
+    private StatementBase parse(String sql, SessionVariable sessionVariables) throws StarRocksHttpException {
+        StatementBase parsedStmt;
+        List<StatementBase> stmts;
         try {
-            executor.execute();
-        } catch (Exception e) {
-            response.appendContent(new RestBaseResult(e.getMessage()).toJson());
-            writeResponse(request, response, INTERNAL_SERVER_ERROR);
-            return;
+            stmts = com.starrocks.sql.parser.SqlParser
+                    .parse(sql, sessionVariables);
+        } catch (ParsingException parsingException) {
+            throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR, parsingException.getMessage());
         }
 
-        if (context.getState().getErrType() != null) {
-            response.appendContent(new RestBaseResult(context.getState().getErrorMessage()).toJson());
-            writeResponse(request, response, INTERNAL_SERVER_ERROR);
+        if (stmts.size() > 1) {
+            throw new StarRocksHttpException(BAD_REQUEST,
+                    "/api/v2/<catalog_name>/<database_name>/query does not support execute multiple query");
+        }
+
+        parsedStmt = stmts.get(0);
+        if (!(parsedStmt instanceof QueryStatement
+                || parsedStmt instanceof ShowStmt || parsedStmt instanceof KillStmt)) {
+            throw new StarRocksHttpException(BAD_REQUEST,
+                    "/api/v2/<catalog_name>/<database_name>/query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement");
+        }
+
+        if (((parsedStmt instanceof QueryStatement) && ((QueryStatement) parsedStmt).hasOutFileClause())) {
+            throw new StarRocksHttpException(BAD_REQUEST,
+                    "/api/v2/<catalog_name>/<database_name>/query does not support a query with OUTFILE clause");
+        }
+
+        parsedStmt.setOrigStmt(new OriginStatement(sql));
+        return parsedStmt;
+    }
+
+    // refer to AcceptListener.handleEvent
+    private void registerContext(String sql) throws StarRocksHttpException {
+        // now register this request in connectScheduler
+        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+        connectScheduler.submit(context);
+
+        context.setConnectScheduler(connectScheduler);
+        // mark as registered
+        boolean registered = connectScheduler.registerConnection(context);
+        if (!registered) {
+            throw new StarRocksHttpException(HttpResponseStatus.SERVICE_UNAVAILABLE, "Reach limit of connections");
+        }
+        context.setStartTime();
+        connectProcessor = new HttpConnectProcessor(context);
+        LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, null);
+    }
+
+    // when connect is closed, this function will be called
+    protected void handleChannelInactive(ChannelHandlerContext ctx) {
+        LOG.info("ExecuteSql:channel closed");
+        ConnectContext context = ConnectContext.get();
+        context.setKilled();
+        context.getConnectScheduler().unregisterConnection(context);
+    }
+
+    private void checkSessionVariable(Map<String, String> customVariable) {
+        if (customVariable != null) {
+            try {
+                for (String key : customVariable.keySet()) {
+                    VariableMgr.setSystemVariable(context.getSessionVariable(),
+                            new SystemVariable(key, new StringLiteral(customVariable.get(key))), true);
+                }
+            } catch (DdlException e) {
+                throw new StarRocksHttpException(INTERNAL_SERVER_ERROR, context.getState().getErrorMessage());
+            }
         }
     }
 
-    private void checkSessionVariable(ConnectContext connectContext, SessionVariable customVariable) {
-        if (customVariable != null) {
-            connectContext.setSessionVariable(customVariable);
+    // Currently finalize just send kill's result. But any other statement which only send state information can use finalize to send result
+    private void finalize(BaseRequest request, BaseResponse response, StatementBase parsedStmt)
+            throws StarRocksHttpException, DdlException {
+        HttpConnectContext context = (HttpConnectContext) ConnectContext.get();
+
+        // need forwarding to leader
+        if (context.isForwardToLeader()) {
+            redirectToLeader(request, response);
+            return;
         }
+
+        // exception was caught in StmtExecutor and set Error info in QueryState, so just send status 500 with exception info
+        if (!context.getState().getErrorMessage().isEmpty()) {
+            // for queryStatement, if some data already sent, we just close the channel
+            if (parsedStmt instanceof QueryStatement && context.getSendDate()) {
+                context.getNettyChannel().close();
+                return;
+            }
+            throw new StarRocksHttpException(INTERNAL_SERVER_ERROR, context.getState().getErrorMessage());
+        }
+
+        // right now, select and show will send out result in StmtExecutor.execute in streaming mode
+        if (parsedStmt instanceof QueryStatement || parsedStmt instanceof ShowStmt) {
+            return;
+        }
+
+        // only happend when commit suicid,same as mysql's \q command，send status 200, then close the channel
+        // but why client will kill themselves instead of closing the channel directly?
+        if (context.isKilled()) {
+            HttpUtil.setKeepAlive(request.getRequest(), false);
+        }
+
+        // 200 OK for killStatement
+        sendResult(request, response);
     }
 
     private static class SqlRequest {
         public String query;
-        public SessionVariable context;
-
-        @Override
-        public String toString() {
-            String sessionVariable = "{}";
-            try {
-                sessionVariable = context.getJsonString();
-            } catch (Exception e) {
-                // ignore
-            }
-            return "SqlRequest{" +
-                    "query='" + query + '\'' +
-                    ", context=" + sessionVariable +
-                    '}';
-        }
+        public Map<String, String> sessionVariables;
+        public boolean disablePrintConnectionId;
     }
 }

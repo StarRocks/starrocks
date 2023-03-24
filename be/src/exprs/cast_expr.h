@@ -193,4 +193,6 @@ struct CastToString {
 
 StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column);
 
+StatusOr<std::string> cast_type_to_json_str(const ColumnPtr& column, int idx);
+
 } // namespace starrocks

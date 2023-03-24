@@ -70,6 +70,7 @@ set(RUNTIME_FILES
     memory_scratch_sink.cpp
     external_scan_context_mgr.cpp
     mysql_result_writer.cpp
+    http_result_writer.cpp
     file_result_writer.cpp
     statistic_result_writer.cpp
     variable_result_writer.cpp

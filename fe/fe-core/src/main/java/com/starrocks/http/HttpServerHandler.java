@@ -60,9 +60,13 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     protected HttpRequest request = null;
     private BaseAction action = null;
 
+    // keep connectContext when channel is open
+    private HttpConnectContext connectContext = null;
+
     public HttpServerHandler(ActionController controller) {
         super();
         this.controller = controller;
+        connectContext = new HttpConnectContext();
     }
 
     @Override
@@ -84,7 +88,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 writeResponse(ctx, HttpResponseStatus.BAD_REQUEST, "Bad Request. <br/> " + e.getMessage());
                 return;
             }
-            BaseRequest req = new BaseRequest(ctx, request);
+            BaseRequest req = new BaseRequest(ctx, request, connectContext);
             action = getAction(req);
             if (action != null) {
                 if (LOG.isDebugEnabled()) {
@@ -94,6 +98,13 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             }
         } else {
             ReferenceCountUtil.release(msg);
+        }
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        if (action != null) {
+            action.handleChannelInactive(ctx);
         }
     }
 

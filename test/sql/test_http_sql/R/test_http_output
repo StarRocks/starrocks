@@ -1,0 +1,182 @@
+-- name: test_http_output_correct
+use ${db[0]};
+-- result:
+-- !result
+CREATE TABLE `duplicate_table_with_null` (
+    `k1`  date,
+    `k2`  datetime,
+    `k3`  char(20),
+    `k4`  varchar(20),
+    `k5`  boolean,
+    `k6`  tinyint,
+    `k7`  smallint,
+    `k8`  int,
+    `k9`  bigint,
+    `k10` largeint,
+    `k11` float,
+    `k12` double,
+    `k13` decimal(27,9)
+) 
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+COMMENT "OLAP"
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO duplicate_table_with_null VALUES(null,null,null,null,null,null,null,null,null,null,null,null,null);
+-- result:
+-- !result
+INSERT INTO duplicate_table_with_null VALUES(
+"2020-01-27",
+                    "2022-12-26 09:06:11",
+                    "chengdu",
+                    "chengdu",
+                    2,
+                    -125,
+                    3,
+                    -2147450877,
+                    -9223372036854743037,
+                    -18446744073709518845,
+                    3274.1,
+                    324.57,
+                    29.628000002);
+-- result:
+-- !result
+INSERT INTO duplicate_table_with_null VALUES("2020-01-25",
+                    "2022-12-26 09:06:09",
+                    "anhui",
+                    "anhui",
+                    0,
+                    -127,
+                    1,
+                    -2147450879,
+                    -9223372036854743039,
+                    -18446744073709518847,
+                    3273.8,
+                    324.55,
+                    29.628000000);
+-- result:
+-- !result
+INSERT INTO duplicate_table_with_null VALUES("2020-01-26",
+                    "2022-12-26 09:06:10",
+                    "beijin",
+                    "beijin",
+                    1,
+                    -126,
+                    2,
+                    -2147450878,
+                    -9223372036854743038,
+                    -18446744073709518846,
+                    3273.9,
+                    324.56,
+                    29.628000001);
+-- result:
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null order by k6;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+-- result:
+0
+{"meta":[{"name":"k1","type":"date"},{"name":"k2","type":"datetime"},{"name":"k3","type":"varchar"},{"name":"k4","type":"varchar"},{"name":"k5","type":"boolean"},{"name":"k6","type":"tinyint(4)"},{"name":"k7","type":"smallint(6)"},{"name":"k8","type":"int(11)"},{"name":"k9","type":"bigint(20)"},{"name":"k10","type":"largeint(40)"},{"name":"k11","type":"float"},{"name":"k12","type":"double"},{"name":"k13","type":"decimal128(27, 9)"}]}
+{"data":[null,null,null,null,null,null,null,null,null,null,null,null,null]}
+{"data":["2020-01-25","2022-12-26 09:06:09","anhui","anhui",0,-127,1,-2147450879,-9223372036854743039,"-18446744073709518847",3273.800048828125,324.55,"29.628000000"]}
+{"data":["2020-01-26","2022-12-26 09:06:10","beijin","beijin",1,-126,2,-2147450878,-9223372036854743038,"-18446744073709518846",3273.89990234375,324.56,"29.628000001"]}
+{"data":["2020-01-27","2022-12-26 09:06:11","chengdu","chengdu",1,-125,3,-2147450877,-9223372036854743037,"-18446744073709518845",3274.10009765625,324.57,"29.628000002"]}
+{"statistics":{"scanRows":0,"scanBytes":0,"returnRows":4}}
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "show create table duplicate_table_with_null;"}' --header "Content-Type: application/json"  
+-- result:
+0
+{"meta":[{"name":"Table","type":"varchar(20)"},{"name":"Create Table","type":"varchar(30)"}],"data":[{"Table":"duplicate_table_with_null","Create Table":"CREATE TABLE `duplicate_table_with_null` (\n  `k1` date NULL COMMENT \"\",\n  `k2` datetime NULL COMMENT \"\",\n  `k3` char(20) NULL COMMENT \"\",\n  `k4` varchar(20) NULL COMMENT \"\",\n  `k5` boolean NULL COMMENT \"\",\n  `k6` tinyint(4) NULL COMMENT \"\",\n  `k7` smallint(6) NULL COMMENT \"\",\n  `k8` int(11) NULL COMMENT \"\",\n  `k9` bigint(20) NULL COMMENT \"\",\n  `k10` largeint(40) NULL COMMENT \"\",\n  `k11` float NULL COMMENT \"\",\n  `k12` double NULL COMMENT \"\",\n  `k13` decimal128(27, 9) NULL COMMENT \"\"\n) ENGINE=OLAP \nDUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY RANDOM\nPROPERTIES (\n\"replication_num\" = \"1\",\n\"in_memory\" = \"false\",\n\"enable_persistent_index\" = \"false\",\n\"replicated_storage\" = \"true\",\n\"compression\" = \"LZ4\"\n);"}],"statistics":{"scanRows":0,"scanBytes":0,"returnRows":1}}
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "explain select * from duplicate_table_with_null;"}' --header "Content-Type: application/json"  
+-- result:
+0
+{"explain":"PLAN FRAGMENT 0\n OUTPUT EXPRS:1: k1 | 2: k2 | 3: k3 | 4: k4 | 5: k5 | 6: k6 | 7: k7 | 8: k8 | 9: k9 | 10: k10 | 11: k11 | 12: k12 | 13: k13\n  PARTITION: UNPARTITIONED\n\n  RESULT SINK\n\n  1:EXCHANGE\n\nPLAN FRAGMENT 1\n OUTPUT EXPRS:\n  PARTITION: RANDOM\n\n  STREAM DATA SINK\n    EXCHANGE ID: 01\n    UNPARTITIONED\n\n  0:OlapScanNode\n     TABLE: duplicate_table_with_null\n     PREAGGREGATION: ON\n     partitions=1/1\n     rollup: duplicate_table_with_null\n     tabletRatio=2/2\n     tabletList=11107,11109\n     cardinality=4\n     avgRowSize=76.0\n     numNodes=0\n"}
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "SHOW VARIABLES;", "sessionVariables":{"broadcast_row_limit":14000000}}' --header "Content-Type: application/json"  
+-- result:
+0
+{"meta":[{"name":"Variable_name","type":"varchar(20)"},{"name":"Value","type":"varchar(20)"}],"data":[{"Variable_name":"SQL_AUTO_IS_NULL","Value":"false"},{"Variable_name":"activate_all_roles_on_login","Value":"false"},{"Variable_name":"analyze_mv","Value":"sample"},{"Variable_name":"auto_increment_increment","Value":"1"},{"Variable_name":"autocommit","Value":"true"},{"Variable_name":"big_query_log_cpu_second_threshold","Value":"480"},{"Variable_name":"big_query_log_scan_bytes_threshold","Value":"10737418240"},{"Variable_name":"big_query_log_scan_rows_threshold","Value":"1000000000"},{"Variable_name":"broadcast_row_limit","Value":"14000000"},{"Variable_name":"cbo_cte_reuse","Value":"true"},{"Variable_name":"cbo_enable_low_cardinality_optimize","Value":"true"},{"Variable_name":"cbo_max_reorder_node_use_dp","Value":"10"},{"Variable_name":"cbo_max_reorder_node_use_exhaustive","Value":"4"},{"Variable_name":"cbo_push_down_distinct_below_window","Value":"true"},{"Variable_name":"cbo_reorder_threshold_use_exhaustive","Value":"6"},{"Variable_name":"character_set_client","Value":"utf8"},{"Variable_name":"character_set_connection","Value":"utf8"},{"Variable_name":"character_set_database","Value":"utf8"},{"Variable_name":"character_set_results","Value":"utf8"},{"Variable_name":"character_set_server","Value":"utf8"},{"Variable_name":"collation_connection","Value":"utf8_general_ci"},{"Variable_name":"collation_database","Value":"utf8_general_ci"},{"Variable_name":"collation_server","Value":"utf8_general_ci"},{"Variable_name":"connector_io_tasks_per_scan_operator","Value":"16"},{"Variable_name":"connector_scan_use_query_mem_ratio","Value":"0.3"},{"Variable_name":"count_distinct_column_buckets","Value":"1024"},{"Variable_name":"default_rowset_type","Value":"alpha"},{"Variable_name":"default_table_compression","Value":"lz4_frame"},{"Variable_name":"disable_colocate_join","Value":"false"},{"Variable_name":"disable_join_reorder","Value":"false"},{"Variable_name":"div_precision_increment","Value":"4"},{"Variable_name":"enable_adaptive_sink_dop","Value":"true"},{"Variable_name":"enable_big_query_log","Value":"true"},{"Variable_name":"enable_connector_adaptive_io_tasks","Value":"true"},{"Variable_name":"enable_deliver_batch_fragments","Value":"true"},{"Variable_name":"enable_distinct_column_bucketization","Value":"false"},{"Variable_name":"enable_filter_unused_columns_in_scan_stage","Value":"true"},{"Variable_name":"enable_global_runtime_filter","Value":"true"},{"Variable_name":"enable_groupby_use_output_alias","Value":"false"},{"Variable_name":"enable_hive_column_stats","Value":"true"},{"Variable_name":"enable_hive_metadata_cache_with_insert","Value":"false"},{"Variable_name":"enable_incremental_mv","Value":"false"},{"Variable_name":"enable_insert_strict","Value":"true"},{"Variable_name":"enable_load_profile","Value":"false"},{"Variable_name":"enable_local_shuffle_agg","Value":"true"},{"Variable_name":"enable_materialized_view_rewrite","Value":"true"},{"Variable_name":"enable_materialized_view_union_rewrite","Value":"true"},{"Variable_name":"enable_materialized_view_view_delta_rewrite","Value":"true"},{"Variable_name":"enable_multicolumn_global_runtime_filter","Value":"false"},{"Variable_name":"enable_mv_planner","Value":"false"},{"Variable_name":"enable_outer_join_reorder","Value":"true"},{"Variable_name":"enable_parallel_merge","Value":"true"},{"Variable_name":"enable_pipeline_engine","Value":"true"},{"Variable_name":"enable_pipeline_query_statistic","Value":"true"},{"Variable_name":"enable_populate_block_cache","Value":"true"},{"Variable_name":"enable_predicate_reorder","Value":"false"},{"Variable_name":"enable_profile","Value":"false"},{"Variable_name":"enable_prune_complex_types","Value":"true"},{"Variable_name":"enable_query_cache","Value":"false"},{"Variable_name":"enable_query_dump","Value":"false"},{"Variable_name":"enable_query_queue_load","Value":"false"},{"Variable_name":"enable_query_queue_select","Value":"false"},{"Variable_name":"enable_query_queue_statistic","Value":"false"},{"Variable_name":"enable_rewrite_groupingsets_to_union_all","Value":"false"},{"Variable_name":"enable_rewrite_simple_agg_to_meta_scan","Value":"false"},{"Variable_name":"enable_rewrite_sum_by_associative_rule","Value":"true"},{"Variable_name":"enable_rule_based_materialized_view_rewrite","Value":"true"},{"Variable_name":"enable_runtime_adaptive_dop","Value":"false"},{"Variable_name":"enable_scan_block_cache","Value":"false"},{"Variable_name":"enable_shared_scan","Value":"false"},{"Variable_name":"enable_sort_aggregate","Value":"false"},{"Variable_name":"enable_spill","Value":"false"},{"Variable_name":"enable_sync_materialized_view_rewrite","Value":"true"},{"Variable_name":"enable_tablet_internal_parallel","Value":"true"},{"Variable_name":"event_scheduler","Value":"OFF"},{"Variable_name":"force_schedule_local","Value":"false"},{"Variable_name":"forward_to_leader","Value":"false"},{"Variable_name":"full_sort_late_materialization","Value":"false"},{"Variable_name":"group_concat_max_len","Value":"65535"},{"Variable_name":"hash_join_push_down_right_table","Value":"true"},{"Variable_name":"hive_partition_stats_sample_size","Value":"3000"},{"Variable_name":"hudi_mor_force_jni_reader","Value":"false"},{"Variable_name":"init_connect","Value":""},{"Variable_name":"innodb_read_only","Value":"true"},{"Variable_name":"interactive_timeout","Value":"3600"},{"Variable_name":"io_tasks_per_scan_operator","Value":"4"},{"Variable_name":"join_implementation_mode_v2","Value":"auto"},{"Variable_name":"language","Value":"/starrocks/share/english/"},{"Variable_name":"license","Value":"Apache License 2.0"},{"Variable_name":"load_mem_limit","Value":"0"},{"Variable_name":"load_transmission_compression_type","Value":"NO_COMPRESSION"},{"Variable_name":"log_rejected_record_num","Value":"0"},{"Variable_name":"lower_case_table_names","Value":"0"},{"Variable_name":"max_allowed_packet","Value":"33554432"},{"Variable_name":"max_parallel_scan_instance_num","Value":"-1"},{"Variable_name":"max_pipeline_dop","Value":"64"},{"Variable_name":"max_pushdown_conditions_per_column","Value":"-1"},{"Variable_name":"max_scan_key_num","Value":"-1"},{"Variable_name":"nested_mv_rewrite_max_level","Value":"3"},{"Variable_name":"net_buffer_length","Value":"16384"},{"Variable_name":"net_read_timeout","Value":"60"},{"Variable_name":"net_write_timeout","Value":"60"},{"Variable_name":"new_planner_agg_stage","Value":"0"},{"Variable_name":"new_planner_optimize_timeout","Value":"3000"},{"Variable_name":"parallel_exchange_instance_num","Value":"-1"},{"Variable_name":"parallel_fragment_exec_instance_num","Value":"1"},{"Variable_name":"parse_tokens_limit","Value":"3500000"},{"Variable_name":"partial_update_mode","Value":"auto"},{"Variable_name":"performance_schema","Value":"false"},{"Variable_name":"pipeline_dop","Value":"0"},{"Variable_name":"pipeline_profile_level","Value":"1"},{"Variable_name":"pipeline_sink_dop","Value":"0"},{"Variable_name":"prefer_compute_node","Value":"false"},{"Variable_name":"query_cache_agg_cardinality_limit","Value":"5000000"},{"Variable_name":"query_cache_entry_max_bytes","Value":"4194304"},{"Variable_name":"query_cache_entry_max_rows","Value":"409600"},{"Variable_name":"query_cache_force_populate","Value":"false"},{"Variable_name":"query_cache_hot_partition_num","Value":"3"},{"Variable_name":"query_cache_size","Value":"1048576"},{"Variable_name":"query_cache_type","Value":"0"},{"Variable_name":"query_delivery_timeout","Value":"300"},{"Variable_name":"query_mem_limit","Value":"0"},{"Variable_name":"query_queue_concurrency_limit","Value":"0"},{"Variable_name":"query_queue_cpu_used_permille_limit","Value":"0"},{"Variable_name":"query_queue_fresh_resource_usage_interval_ms","Value":"5000"},{"Variable_name":"query_queue_max_queued_queries","Value":"1024"},{"Variable_name":"query_queue_mem_used_pct_limit","Value":"0.0"},{"Variable_name":"query_queue_pending_timeout_second","Value":"300"},{"Variable_name":"query_timeout","Value":"300"},{"Variable_name":"range_pruner_max_predicate","Value":"100"},{"Variable_name":"resource_group","Value":""},{"Variable_name":"runtime_filter_on_exchange_node","Value":"false"},{"Variable_name":"runtime_join_filter_push_down_limit","Value":"1024000"},{"Variable_name":"scan_use_query_mem_ratio","Value":"0.3"},{"Variable_name":"spill_encode_level","Value":"7"},{"Variable_name":"spill_mode","Value":"auto"},{"Variable_name":"sql_dialect","Value":"StarRocks"},{"Variable_name":"sql_mode","Value":"ONLY_FULL_GROUP_BY"},{"Variable_name":"sql_quote_show_create","Value":"true"},{"Variable_name":"sql_safe_updates","Value":"0"},{"Variable_name":"sql_select_limit","Value":"9223372036854775807"},{"Variable_name":"statistic_collect_parallel","Value":"1"},{"Variable_name":"storage_engine","Value":"olap"},{"Variable_name":"streaming_preaggregation_mode","Value":"auto"},{"Variable_name":"system_time_zone","Value":"Asia/Shanghai"},{"Variable_name":"time_zone","Value":"Asia/Shanghai"},{"Variable_name":"transaction_isolation","Value":"REPEATABLE-READ"},{"Variable_name":"transmission_compression_type","Value":"NO_COMPRESSION"},{"Variable_name":"transmission_encode_level","Value":"7"},{"Variable_name":"tx_isolation","Value":"REPEATABLE-READ"},{"Variable_name":"tx_visible_wait_timeout","Value":"10"},{"Variable_name":"use_compute_nodes","Value":"-1"},{"Variable_name":"use_page_cache","Value":"true"},{"Variable_name":"version","Value":"5.1.0"},{"Variable_name":"version_comment","Value":"http-query-0c14277077"},{"Variable_name":"wait_timeout","Value":"28800"}],"statistics":{"scanRows":0,"scanBytes":0,"returnRows":156}}
+-- !result
+sync;
+-- result:
+-- !result
+-- name: test_http_output_error
+use ${db[0]};
+-- result:
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sqll' -u 'root:' -d '{"query": "select 1;"}' --header "Content-Type: application/json"
+-- result:
+0
+{"status":"FAILED","msg":"Not implemented"}
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -d '{"query": "select 1;"}' --header "Content-Type: application/json"  
+-- result:
+0
+{"status":"FAILED","msg":"Need auth information."}
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select 1;":"xxx"}' --header "Content-Type: application/json"  
+-- result:
+0
+{"exception":"malformed json [ {\"query\": \"select 1;\":\"xxx\"} ]"}
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"sessionVariables":{"broadcast_row_limit":14000000}}' --header "Content-Type: application/json"  
+-- result:
+0
+{"exception":"\"query can not be empty\""}
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select 1;", "sessionVariables":{"broadcast":14000000}}' --header "Content-Type: application/json"  
+-- result:
+0
+{"exception":"Unknown system variable 'broadcast'"}
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select from duplicate_table_with_null;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+-- result:
+0
+{"exception":"Getting syntax error at line 1, column 7. Detail message: Input 'from' is not valid at this position."}
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null;select 1 from duplicate_table_with_null;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+-- result:
+0
+{"exception":"/api/v2/<catalog_name>/<database_name>/query does not support execute multiple query"}
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "set profile_timeout =60", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+-- result:
+0
+{"exception":"/api/v2/<catalog_name>/<database_name>/query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement"}
+-- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "kill 314159265432222;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+-- result:
+0
+{"exception":"Unknown thread id: 314159265432222"}
+-- !result
+sync;
+-- result:
+-- !result

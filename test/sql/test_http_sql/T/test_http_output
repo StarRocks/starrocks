@@ -1,0 +1,123 @@
+-- name: test_http_output_correct
+use ${db[0]};
+CREATE TABLE `duplicate_table_with_null` (
+    `k1`  date,
+    `k2`  datetime,
+    `k3`  char(20),
+    `k4`  varchar(20),
+    `k5`  boolean,
+    `k6`  tinyint,
+    `k7`  smallint,
+    `k8`  int,
+    `k9`  bigint,
+    `k10` largeint,
+    `k11` float,
+    `k12` double,
+    `k13` decimal(27,9)
+) 
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+COMMENT "OLAP"
+PROPERTIES (
+    "replication_num" = "1"
+);
+INSERT INTO duplicate_table_with_null VALUES(null,null,null,null,null,null,null,null,null,null,null,null,null);
+
+INSERT INTO duplicate_table_with_null VALUES(
+"2020-01-27",
+                    "2022-12-26 09:06:11",
+                    "chengdu",
+                    "chengdu",
+                    2,
+                    -125,
+                    3,
+                    -2147450877,
+                    -9223372036854743037,
+                    -18446744073709518845,
+                    3274.1,
+                    324.57,
+                    29.628000002);
+
+
+INSERT INTO duplicate_table_with_null VALUES("2020-01-25",
+                    "2022-12-26 09:06:09",
+                    "anhui",
+                    "anhui",
+                    0,
+                    -127,
+                    1,
+                    -2147450879,
+                    -9223372036854743039,
+                    -18446744073709518847,
+                    3273.8,
+                    324.55,
+                    29.628000000);
+INSERT INTO duplicate_table_with_null VALUES("2020-01-26",
+                    "2022-12-26 09:06:10",
+                    "beijin",
+                    "beijin",
+                    1,
+                    -126,
+                    2,
+                    -2147450878,
+                    -9223372036854743038,
+                    -18446744073709518846,
+                    3273.9,
+                    324.56,
+                    29.628000001);
+
+-- a normal select with catalog and database
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null order by k6;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+sync;
+
+-- support catalog/sql without database
+--shell: curl -X POST '${url}/api/v2/default_catalog/sql' -u 'root:' -d '{"query": "select 1 from ${db[0]}.duplicate_table_with_null limit 1;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+--sync;
+
+-- support show
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "show create table duplicate_table_with_null;"}' --header "Content-Type: application/json"  
+sync;
+
+-- support explain
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "explain select * from duplicate_table_with_null;"}' --header "Content-Type: application/json"  
+sync;
+
+-- support set session variable in request body
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "SHOW VARIABLES;", "sessionVariables":{"broadcast_row_limit":14000000}}' --header "Content-Type: application/json"  
+sync;
+
+-- name: test_http_output_error
+use ${db[0]};
+-- wrong uri
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sqll' -u 'root:' -d '{"query": "select 1;"}' --header "Content-Type: application/json"
+sync;
+
+-- without Account and password
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -d '{"query": "select 1;"}' --header "Content-Type: application/json"  
+sync;
+
+-- request body is not legal json object
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select 1;":"xxx"}' --header "Content-Type: application/json"  
+sync;
+
+-- without query
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"sessionVariables":{"broadcast_row_limit":14000000}}' --header "Content-Type: application/json"  
+sync;
+
+-- set invalid sessionvariable
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select 1;", "sessionVariables":{"broadcast":14000000}}' --header "Content-Type: application/json"  
+sync;
+
+-- parse error
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select from duplicate_table_with_null;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+sync;
+
+-- mutil query
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null;select 1 from duplicate_table_with_null;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+
+-- query not support yet
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "set profile_timeout =60", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+
+
+-- kill a random connection
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "kill 314159265432222;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+sync;
