@@ -296,7 +296,7 @@ public:
         std::stringstream ss;
         ss << "[";
         size_t size = _data_column->size();
-        for (size_t i = 0; i < size - 1; ++i) {
+        for (size_t i = 0; i + 1 < size; ++i) {
             ss << debug_item(i) << ", ";
         }
         if (size > 0) {

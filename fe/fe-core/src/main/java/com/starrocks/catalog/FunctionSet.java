@@ -449,25 +449,6 @@ public class FunctionSet {
                     .add(Type.DECIMALV2)
                     .build();
 
-    private static final Map<Type, Type> ARRAY_AGG_TYPES = ImmutableMap.<Type, Type>builder()
-            .put(Type.BOOLEAN, Type.ARRAY_BOOLEAN)
-            .put(Type.TINYINT, Type.ARRAY_TINYINT)
-            .put(Type.SMALLINT, Type.ARRAY_SMALLINT)
-            .put(Type.INT, Type.ARRAY_INT)
-            .put(Type.BIGINT, Type.ARRAY_BIGINT)
-            .put(Type.LARGEINT, Type.ARRAY_LARGEINT)
-            .put(Type.FLOAT, Type.ARRAY_FLOAT)
-            .put(Type.DOUBLE, Type.ARRAY_DOUBLE)
-            .put(Type.VARCHAR, Type.ARRAY_VARCHAR)
-            .put(Type.CHAR, Type.ARRAY_VARCHAR)
-            .put(Type.DATE, Type.ARRAY_DATE)
-            .put(Type.DATETIME, Type.ARRAY_DATETIME)
-            .put(Type.DECIMAL32, Type.ARRAY_DECIMAL32)
-            .put(Type.DECIMAL64, Type.ARRAY_DECIMAL64)
-            .put(Type.DECIMAL128, Type.ARRAY_DECIMAL128)
-            .put(Type.TIME, Type.ARRAY_DATETIME) // ??
-            .put(Type.JSON, Type.ARRAY_JSON)
-            .build();
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
      * need to check whether the expression tree can use vectorized function from bottom to
@@ -759,6 +740,10 @@ public class FunctionSet {
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.BIGINT, true,
                 true, false, true));
 
+        addBuiltin(AggregateFunction.createBuiltin(ARRAY_AGG,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.ANY_ARRAY, Type.ANY_STRUCT, true,
+                true, false, false));
+
         for (Type t : Type.getSupportedTypes()) {
             if (t.isFunctionType()) {
                 continue;
@@ -855,8 +840,6 @@ public class FunctionSet {
         // Percentile
         registerBuiltinPercentileAggFunction();
 
-        // ArrayAgg
-        registerBuiltinArrayAggFunction();
 
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin(HLL_UNION_AGG,
@@ -1107,14 +1090,6 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
                 Lists.newArrayList(Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
                 false, false, false));
-    }
-
-    private void registerBuiltinArrayAggFunction() {
-        for (Map.Entry<Type, Type> entry : ARRAY_AGG_TYPES.entrySet()) {
-            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                    Lists.newArrayList(entry.getKey()), entry.getValue(), entry.getValue(),
-                    false, false, false));
-        }
     }
 
     public List<Function> getBuiltinFunctions() {

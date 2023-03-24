@@ -88,6 +88,27 @@ public class AggregateFunction extends Function {
     // function. e.g. org.example.MyUdf.class.
     private String symbolName;
 
+    public List<Boolean> getIsAscOrder() {
+        return isAscOrder;
+    }
+
+    public void setIsAscOrder(List<Boolean> isAscOrder) {
+        this.isAscOrder = isAscOrder;
+    }
+
+    private List<Boolean> isAscOrder;
+
+    public List<Boolean> getNullsFirst() {
+        return nullsFirst;
+    }
+
+    public void setNullsFirst(List<Boolean> nullsFirst) {
+        this.nullsFirst = nullsFirst;
+    }
+
+    // True if "NULLS FIRST", false if "NULLS LAST", null if not specified.
+    private List<Boolean> nullsFirst;
+
     // only used for serialization
     protected AggregateFunction() {
     }
@@ -301,6 +322,12 @@ public class AggregateFunction extends Function {
             aggFn.setIntermediate_type(intermediateType.toThrift());
         } else {
             aggFn.setIntermediate_type(getReturnType().toThrift());
+        }
+        if (isAscOrder != null && !isAscOrder.isEmpty()) {
+            aggFn.setIs_asc_order(isAscOrder);
+        }
+        if (nullsFirst != null && !nullsFirst.isEmpty()) {
+            aggFn.setNulls_first(nullsFirst);
         }
         aggFn.setSymbol(getSymbolName());
         fn.setAggregate_fn(aggFn);
