@@ -270,7 +270,6 @@ private:
 #define TRY_CATCH_ALL(result, stmt)                                                      \
     do {                                                                                 \
         try {                                                                            \
-            SCOPED_SET_CATCHED(true);                                                    \
             { result = stmt; }                                                           \
         } catch (std::runtime_error const& e) {                                          \
             result = Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));   \
