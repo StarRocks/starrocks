@@ -199,6 +199,8 @@ struct TQueryOptions {
   68: optional i32 transmission_encode_level;
   
   69: optional bool enable_populate_block_cache;
+
+  70: optional i64 rpc_http_min_size;
 }
 
 
