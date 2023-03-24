@@ -82,9 +82,10 @@ void RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRunti
     }
 
     // peek logical type.
-    LogicalType type;
+    RuntimeFilterSerializeType::PrimitiveType type;
     memcpy(&type, data + offset, sizeof(type));
-    JoinRuntimeFilter* filter = create_join_runtime_filter(pool, type);
+    auto ltype = RuntimeFilterSerializeType::from_serialize_type(type);
+    JoinRuntimeFilter* filter = create_join_runtime_filter(pool, ltype);
     DCHECK(filter != nullptr);
     if (filter != nullptr) {
         offset += filter->deserialize(data + offset);

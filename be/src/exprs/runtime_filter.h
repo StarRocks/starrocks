@@ -23,8 +23,56 @@
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
+// compatible code from 2.5 to 3.0
+// TODO: remove it
+class RuntimeFilterSerializeType {
+public:
+    enum PrimitiveType {
+        INVALID_TYPE = 0,
+        TYPE_NULL,     /* 1 */
+        TYPE_BOOLEAN,  /* 2 */
+        TYPE_TINYINT,  /* 3 */
+        TYPE_SMALLINT, /* 4 */
+        TYPE_INT,      /* 5 */
+        TYPE_BIGINT,   /* 6 */
+        TYPE_LARGEINT, /* 7 */
+        TYPE_FLOAT,    /* 8 */
+        TYPE_DOUBLE,   /* 9 */
+        TYPE_VARCHAR,  /* 10 */
+        TYPE_DATE,     /* 11 */
+        TYPE_DATETIME, /* 12 */
+        TYPE_BINARY,
+        /* 13 */      // Not implemented
+        TYPE_DECIMAL, /* 14 */
+        TYPE_CHAR,    /* 15 */
+
+        TYPE_STRUCT,    /* 16 */
+        TYPE_ARRAY,     /* 17 */
+        TYPE_MAP,       /* 18 */
+        TYPE_HLL,       /* 19 */
+        TYPE_DECIMALV2, /* 20 */
+
+        TYPE_TIME,       /* 21 */
+        TYPE_OBJECT,     /* 22 */
+        TYPE_PERCENTILE, /* 23 */
+        TYPE_DECIMAL32,  /* 24 */
+        TYPE_DECIMAL64,  /* 25 */
+        TYPE_DECIMAL128, /* 26 */
+
+        TYPE_JSON,      /* 27 */
+        TYPE_FUNCTION,  /* 28 */
+        TYPE_VARBINARY, /* 28 */
+    };
+
+    static_assert(sizeof(PrimitiveType) == sizeof(int32_t));
+
+    static PrimitiveType to_serialize_type(LogicalType type);
+
+    static LogicalType from_serialize_type(PrimitiveType type);
+};
 
 // Modify from https://github.com/FastFilter/fastfilter_cpp/blob/master/src/bloom/simd-block.h
 // This is avx2 simd implementation for paper <<Cache-, Hash- and Space-Efficient Bloom Filters>>
@@ -401,7 +449,7 @@ public:
     }
 
     size_t serialize(uint8_t* data) const override {
-        LogicalType ltype = Type;
+        auto ltype = RuntimeFilterSerializeType::to_serialize_type(Type);
         size_t offset = 0;
         memcpy(data + offset, &ltype, sizeof(ltype));
         offset += sizeof(ltype);
@@ -434,7 +482,7 @@ public:
     }
 
     size_t deserialize(const uint8_t* data) override {
-        LogicalType ltype = Type;
+        RuntimeFilterSerializeType::PrimitiveType ltype = RuntimeFilterSerializeType::to_serialize_type(Type);
         size_t offset = 0;
         memcpy(&ltype, data + offset, sizeof(ltype));
         offset += sizeof(ltype);
