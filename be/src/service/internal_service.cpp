@@ -187,7 +187,7 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
         }
     }
 
-    TRY_CATCH_ALL(st, _exec_env->stream_mgr()->transmit_chunk(*request, &done));
+    st = _exec_env->stream_mgr()->transmit_chunk(*request, &done);
 }
 
 template <typename T>
