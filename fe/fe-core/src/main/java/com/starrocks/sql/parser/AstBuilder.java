@@ -580,12 +580,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context, List<ColumnDef> columnDefs) {
         List<PartitionDesc> partitionDescList = new ArrayList<>();
         if (context.functionCall() != null) {
+            String currentGranularity = null;
             for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
                 final PartitionDesc rangePartitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
+                if (!(rangePartitionDesc instanceof MultiRangePartitionDesc)) {
+                    throw new ParsingException("Automatic partition table creation only supports " +
+                            "batch create partition syntax", rangePartitionDesc.getPos());
+                }
+                MultiRangePartitionDesc multiRangePartitionDesc = (MultiRangePartitionDesc) rangePartitionDesc;
+                String descGranularity = multiRangePartitionDesc.getTimeUnit().toLowerCase();
+                if (currentGranularity == null) {
+                    currentGranularity = descGranularity;
+                } else if (!currentGranularity.equals(descGranularity)) {
+                    throw new ParsingException("The partition granularity of automatic partition table " +
+                            "batch creation in advance should be consistent", rangePartitionDesc.getPos());
+                }
                 partitionDescList.add(rangePartitionDesc);
             }
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
             List<String> columnList = checkAndExtractPartitionCol(functionCallExpr, columnDefs);
+            checkGranularity(functionCallExpr, currentGranularity);
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
             return new ExpressionPartitionDesc(rangePartitionDesc, functionCallExpr);
         }
@@ -609,7 +623,109 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return partitionDesc;
     }
 
+<<<<<<< HEAD
     private void checkPartitionColumnTypeValid(List<ColumnDef> columnDefs, String partitionColumnName, String fmt) {
+=======
+    private void checkGranularity(FunctionCallExpr functionCallExpr, String prePartitionGranularity) {
+        if (prePartitionGranularity == null) {
+            return;
+        }
+        String functionName = functionCallExpr.getFnName().getFunction();
+        if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)) {
+            Expr expr = functionCallExpr.getParams().exprs().get(0);
+            String functionGranularity = ((StringLiteral) expr).getStringValue();
+            if (!prePartitionGranularity.equalsIgnoreCase(functionGranularity)) {
+                throw new ParsingException("The partition granularity of automatic partition table " +
+                        "batch creation in advance should be consistent", functionCallExpr.getPos());
+            }
+        } else if (FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName)) {
+            Expr expr = functionCallExpr.getParams().exprs().get(2);
+            String functionGranularity = ((StringLiteral) expr).getStringValue();
+            if (!prePartitionGranularity.equalsIgnoreCase(functionGranularity)) {
+                throw new ParsingException("The partition granularity of automatic partition table " +
+                        "batch creation in advance should be consistent", functionCallExpr.getPos());
+            }
+        }
+    }
+
+    // check the partition expr is legal and extract partition columns
+    private List<String> checkAndExtractPartitionCol(FunctionCallExpr expr, List<ColumnDef> columnDefs) {
+        String functionName = expr.getFnName().getFunction();
+        NodePosition pos = expr.getPos();
+        List<String> columnList = Lists.newArrayList();
+        List<Expr> paramsExpr = expr.getParams().exprs();
+        if (FunctionSet.DATE_TRUNC.equals(functionName)) {
+            if (paramsExpr.size() != 2) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr firstExpr = paramsExpr.get(0);
+            Expr secondExpr = paramsExpr.get(1);
+            String partitionColumnName;
+            if (secondExpr instanceof SlotRef) {
+                partitionColumnName = ((SlotRef) secondExpr).getColumnName();
+                columnList.add(partitionColumnName);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+
+            if (firstExpr instanceof StringLiteral) {
+                StringLiteral stringLiteral = (StringLiteral) firstExpr;
+                String fmt = stringLiteral.getValue();
+                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
+                }
+                checkPartitionColumnTypeValid(expr, columnDefs, pos, partitionColumnName, fmt);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+
+        } else if (FunctionSet.TIME_SLICE.equals(functionName)) {
+            if (paramsExpr.size() != 4) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr firstExpr = paramsExpr.get(0);
+            String partitionColumnName;
+            if (firstExpr instanceof SlotRef) {
+                partitionColumnName = ((SlotRef) firstExpr).getColumnName();
+                columnList.add(partitionColumnName);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr secondExpr = paramsExpr.get(1);
+            Expr thirdExpr = paramsExpr.get(2);
+            if (secondExpr instanceof IntLiteral && thirdExpr instanceof StringLiteral) {
+                StringLiteral stringLiteral = (StringLiteral) thirdExpr;
+                String fmt = stringLiteral.getValue();
+                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
+                }
+                // For materialized views currently columnDefs == null
+                checkPartitionColumnTypeValid(expr, columnDefs, pos, partitionColumnName, fmt);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr fourthExpr = paramsExpr.get(3);
+            if (fourthExpr instanceof StringLiteral) {
+                StringLiteral boundaryLiteral = (StringLiteral) fourthExpr;
+                String boundary = boundaryLiteral.getValue();
+                if (!"floor".equalsIgnoreCase(boundary)) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(expr.toSql(),
+                            "PARTITION BY", "Automatic partitioning does not support the ceil parameter"), pos);
+                }
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+        }
+        return columnList;
+    }
+
+    private void checkPartitionColumnTypeValid(FunctionCallExpr expr, List<ColumnDef> columnDefs,
+                                               NodePosition pos, String partitionColumnName, String fmt) {
+>>>>>>> f705be63c ([Enhancement] Limit automatic partition to the same granularity, show create table … (#20160))
         // For materialized views currently columnDefs == null
         if (columnDefs != null && "hour".equalsIgnoreCase(fmt)) {
             ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionColumnName);
