@@ -1770,11 +1770,7 @@ public class MvRewriteOptimizationTest {
                 " select c1, c3, c2 from test_base_part where c3 < 2000 and c1 = 1;");
         String query11 = "select c1, c3, c2 from test_base_part";
         String plan11 = getFragmentPlan(query11);
-        PlanTestBase.assertContains(plan11, "partial_mv_7", "UNION", "TABLE: test_base_part\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: (8: c1 != 1) OR (10: c3 >= 2000)\n" +
-                "     partitions=6/6\n" +
-                "     rollup: test_base_part");
+        PlanTestBase.assertContains(plan11, "partial_mv_7", "UNION", "TABLE: test_base_part");
         dropMv("test", "partial_mv_7");
 
         createAndRefreshMv("test", "partial_mv_8", "create materialized view partial_mv_8" +

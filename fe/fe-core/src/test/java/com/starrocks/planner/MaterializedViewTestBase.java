@@ -165,7 +165,12 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
 
         public MVRewriteChecker contains(String expect) {
-            Assert.assertTrue(this.rewritePlan.contains(expect));
+            boolean contained = this.rewritePlan.contains(expect);
+            if (!contained) {
+                LOG.warn("rewritePlan: \n{}", rewritePlan);
+                LOG.warn("expect: \n{}", expect);
+            }
+            Assert.assertTrue(contained);
             return this;
         }
 
