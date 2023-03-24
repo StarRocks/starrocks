@@ -89,6 +89,11 @@ public class CreateTableAsSelectStmt extends StatementBase {
     }
 
     @Override
+    public String toSql() {
+        return createTableStmt.toSql() + " AS " + queryStatement.toSql();
+    }
+
+    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateTableAsSelectStatement(this, context);
     }

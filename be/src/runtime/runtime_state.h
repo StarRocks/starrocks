@@ -77,6 +77,8 @@ namespace pipeline {
 class QueryContext;
 }
 
+constexpr int64_t kRpcHttpMinSize = ((1L << 31) - (1L << 10));
+
 // A collection of items that are part of the global state of a
 // query and shared across all execution nodes of that query.
 class RuntimeState {
@@ -352,6 +354,10 @@ public:
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
     Status reset_epoch();
+
+    int64_t get_rpc_http_min_size() {
+        return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
+    }
 
 private:
     // Set per-query state.

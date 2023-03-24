@@ -21,6 +21,7 @@
 #include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+#include "runtime/current_thread.h"
 #include "types/logical_type.h"
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
@@ -1352,6 +1353,93 @@ private:
         }
 
         return NullableColumn::create(std::move(result), array_null);
+    }
+};
+
+// Todo:support datatime/data
+template <LogicalType Type>
+class ArrayGenerate {
+public:
+    using InputColumnType = RunTimeColumnType<Type>;
+    using InputCppType = RunTimeCppType<Type>;
+    static StatusOr<ColumnPtr> process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+        DCHECK(columns.size() == 3);
+
+        auto num_rows = columns[0]->size();
+
+        // compute nulls first. if any input is null, then output is null
+        NullColumnPtr nulls;
+        for (auto& column : columns) {
+            if (column->has_null()) {
+                auto nullable_column = down_cast<NullableColumn*>(column.get());
+                if (nulls == nullptr) {
+                    nulls = std::static_pointer_cast<NullColumn>(nullable_column->null_column()->clone_shared());
+                } else {
+                    ColumnHelper::or_two_filters(num_rows, nulls->get_data().data(),
+                                                 nullable_column->null_column()->get_data().data());
+                }
+            }
+        }
+
+        auto array_offsets = UInt32Column::create(0);
+        auto array_elements = ColumnHelper::create_column(TypeDescriptor(Type), true, false, 0);
+
+        auto offsets = array_offsets.get();
+        auto elements = down_cast<NullableColumn*>(array_elements.get());
+
+        offsets->reserve(num_rows + 1);
+        offsets->append(0);
+
+        auto all_const_cols = columns[0]->is_constant() && columns[1]->is_constant() && columns[2]->is_constant();
+
+        auto num_rows_to_process = all_const_cols ? 1 : num_rows;
+
+        size_t total_elements_num = 0;
+        for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {
+            if (nulls && nulls->get_data()[cur_row]) {
+                offsets->append(offsets->get_data().back());
+                continue;
+            }
+
+            auto start = columns[0]->get(cur_row).get<InputCppType>();
+            auto stop = columns[1]->get(cur_row).get<InputCppType>();
+            auto step = columns[2]->get(cur_row).get<InputCppType>();
+
+            // just return empty array
+            if (step == 0) {
+                offsets->append(offsets->get_data().back());
+                continue;
+            }
+
+            InputCppType temp;
+            for (InputCppType cur_element = start; step > 0 ? cur_element <= stop : cur_element >= stop;
+                 cur_element += step) {
+                TRY_CATCH_BAD_ALLOC(elements->append_numbers(&cur_element, sizeof(InputCppType)));
+                total_elements_num++;
+                if (__builtin_add_overflow(cur_element, step, &temp)) break;
+            }
+            offsets->append(total_elements_num);
+        }
+
+        CHECK_EQ(offsets->get_data().back(), elements->size());
+
+        auto dst = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));
+
+        if (all_const_cols) {
+            if (nulls->is_null(0)) {
+                return ColumnHelper::create_const_null_column(num_rows);
+            } else {
+                return ConstColumn::create(std::move(dst), num_rows);
+            }
+        }
+
+        if (nulls == nullptr) {
+            return std::move(dst);
+        } else {
+            // if any of input column has null value, then output column is nullable
+            return NullableColumn::create(std::move(dst), std::move(nulls));
+        }
     }
 };
 
