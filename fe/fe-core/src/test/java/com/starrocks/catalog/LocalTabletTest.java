@@ -39,7 +39,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
@@ -98,8 +98,8 @@ public class LocalTabletTest {
         tablet.addReplica(replica3);
 
         infoService = GlobalStateMgr.getCurrentSystemInfo();
-        infoService.addBackend(new Backend(10001L, "host1", 9050));
-        infoService.addBackend(new Backend(10002L, "host2", 9050));
+        infoService.addDataNode(new DataNode(10001L, "host1", 9050));
+        infoService.addDataNode(new DataNode(10002L, "host2", 9050));
 
     }
 
@@ -110,9 +110,9 @@ public class LocalTabletTest {
         Assert.assertEquals(replica3, tablet.getReplicaById(replica3.getId()));
 
         Assert.assertEquals(3, tablet.getImmutableReplicas().size());
-        Assert.assertEquals(replica1, tablet.getReplicaByBackendId(replica1.getBackendId()));
-        Assert.assertEquals(replica2, tablet.getReplicaByBackendId(replica2.getBackendId()));
-        Assert.assertEquals(replica3, tablet.getReplicaByBackendId(replica3.getBackendId()));
+        Assert.assertEquals(replica1, tablet.getReplicaByDataNodeId(replica1.getDataNodeId()));
+        Assert.assertEquals(replica2, tablet.getReplicaByDataNodeId(replica2.getDataNodeId()));
+        Assert.assertEquals(replica3, tablet.getReplicaByDataNodeId(replica3.getDataNodeId()));
 
         Assert.assertEquals(600003L, tablet.getDataSize(false));
         Assert.assertEquals(200002L, tablet.getDataSize(true));
@@ -122,11 +122,11 @@ public class LocalTabletTest {
     @Test
     public void deleteReplicaTest() {
         // delete replica1
-        Assert.assertTrue(tablet.deleteReplicaByBackendId(replica1.getBackendId()));
+        Assert.assertTrue(tablet.deleteReplicaByDataNodeId(replica1.getDataNodeId()));
         Assert.assertNull(tablet.getReplicaById(replica1.getId()));
 
         // err: re-delete replica1
-        Assert.assertFalse(tablet.deleteReplicaByBackendId(replica1.getBackendId()));
+        Assert.assertFalse(tablet.deleteReplicaByDataNodeId(replica1.getDataNodeId()));
         Assert.assertFalse(tablet.deleteReplica(replica1));
         Assert.assertNull(tablet.getReplicaById(replica1.getId()));
 
@@ -203,7 +203,7 @@ public class LocalTabletTest {
 
 
     @Test
-    public void testGetBackends() throws Exception {
+    public void testGetDataNodes() throws Exception {
         LocalTablet tablet = new LocalTablet();
 
         Replica replica1 = new Replica(1L, 10001L, 8,
@@ -213,7 +213,7 @@ public class LocalTabletTest {
         tablet.addReplica(replica1, false);
         tablet.addReplica(replica2, false);
 
-        Assert.assertEquals(tablet.getBackends().size(), 2);
+        Assert.assertEquals(tablet.getDataNodes().size(), 2);
 
     }
 }

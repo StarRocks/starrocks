@@ -46,7 +46,7 @@ public class SetReplicaStatusOperationLog implements Writable {
         return tabletId;
     }
 
-    public long getBackendId() {
+    public long getDataNodeId() {
         return backendId;
     }
 

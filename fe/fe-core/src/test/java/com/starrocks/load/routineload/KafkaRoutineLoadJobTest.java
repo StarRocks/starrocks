@@ -119,13 +119,13 @@ public class KafkaRoutineLoadJobTest {
                 GlobalStateMgr.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
-                systemInfoService.getBackendIds(true);
+                systemInfoService.getDataNodeIds(true);
                 result = beIds2;
                 minTimes = 0;
-                systemInfoService.getAliveBackendNumber();
+                systemInfoService.getAliveDataNodeNumber();
                 result = beIds2.size();
                 minTimes = 0;
-                systemInfoService.getTotalBackendNumber();
+                systemInfoService.getTotalDataNodeNumber();
                 result = beIds2.size();
                 minTimes = 0;
             }

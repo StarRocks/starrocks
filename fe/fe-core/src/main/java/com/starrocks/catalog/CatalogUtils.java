@@ -221,8 +221,8 @@ public class CatalogUtils {
         }
     }
 
-    public static int calBucketNumAccordingToBackends() {
-        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+    public static int calBucketNumAccordingToDataNodes() {
+        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds().size();
         // When POC, the backends is not greater than three most of the time.
         // The bucketNum will be given a small multiplier factor for small backends.
         int bucketNum = 0;

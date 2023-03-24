@@ -129,7 +129,7 @@ public class StatisticUtils {
             // check replicate miss
             for (Partition partition : table.getPartitions()) {
                 if (partition.getBaseIndex().getTablets().stream()
-                        .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
+                        .anyMatch(t -> ((LocalTablet) t).getNormalReplicaDataNodeIds().isEmpty())) {
                     return false;
                 }
             }

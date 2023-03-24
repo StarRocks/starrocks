@@ -143,15 +143,15 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
         OlapTable datesN = (OlapTable) globalStateMgr.getDb("test").getTable("dates_n");
         setTableStatistics(datesN, 2556);
 
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
     }
 
     @AfterClass
     public static void afterClass() {
         try {
-            UtFrameUtils.dropMockBackend(10002);
-            UtFrameUtils.dropMockBackend(10003);
+            UtFrameUtils.dropMockDataNode(10002);
+            UtFrameUtils.dropMockDataNode(10003);
         } catch (DdlException e) {
             e.printStackTrace();
         }

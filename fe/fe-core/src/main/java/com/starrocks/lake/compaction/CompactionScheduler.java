@@ -37,7 +37,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -178,7 +178,7 @@ public class CompactionScheduler extends Daemon {
         if (Config.lake_compaction_max_tasks >= 0) {
             return Config.lake_compaction_max_tasks;
         }
-        return systemInfoService.getAliveBackendNumber() * 16;
+        return systemInfoService.getAliveDataNodeNumber() * 16;
     }
 
     private void cleanPartition() {
@@ -289,9 +289,9 @@ public class CompactionScheduler extends Daemon {
             throws UserException {
         List<Future<CompactResponse>> futures = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            Backend backend = systemInfoService.getBackend(entry.getKey());
+            DataNode backend = systemInfoService.getDataNode(entry.getKey());
             if (backend == null) {
-                throw new UserException("Backend " + entry.getKey() + " has been dropped");
+                throw new UserException("DataNode " + entry.getKey() + " has been dropped");
             }
             CompactRequest request = new CompactRequest();
             request.tabletIds = entry.getValue();
@@ -310,7 +310,7 @@ public class CompactionScheduler extends Daemon {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                Long beId = Utils.chooseBackend((LakeTablet) tablet);
+                Long beId = Utils.chooseDataNode((LakeTablet) tablet);
                 if (beId == null) {
                     beToTablets.clear();
                     return beToTablets;

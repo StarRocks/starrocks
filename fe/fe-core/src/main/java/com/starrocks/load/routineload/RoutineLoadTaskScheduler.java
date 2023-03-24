@@ -49,7 +49,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRoutineLoadTask;
@@ -86,7 +86,7 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService threadPool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
 
-    private long lastBackendSlotUpdateTime = -1;
+    private long lastDataNodeSlotUpdateTime = -1;
 
     @VisibleForTesting
     public RoutineLoadTaskScheduler() {
@@ -109,7 +109,7 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
     }
 
     private void process() throws InterruptedException {
-        updateBackendSlotIfNecessary();
+        updateDataNodeSlotIfNecessary();
 
         int idleSlotNum = routineLoadManager.getClusterIdleSlotNum();
         // scheduler will be blocked when there is no slot for task in cluster
@@ -298,12 +298,12 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
         routineLoadTaskInfo.setBeId(RoutineLoadTaskInfo.INVALID_BE_ID);
     }
 
-    private void updateBackendSlotIfNecessary() {
+    private void updateDataNodeSlotIfNecessary() {
         long currentTime = System.currentTimeMillis();
-        if (lastBackendSlotUpdateTime == -1
-                || (currentTime - lastBackendSlotUpdateTime > BACKEND_SLOT_UPDATE_INTERVAL_MS)) {
+        if (lastDataNodeSlotUpdateTime == -1
+                || (currentTime - lastDataNodeSlotUpdateTime > BACKEND_SLOT_UPDATE_INTERVAL_MS)) {
             routineLoadManager.updateBeTaskSlot();
-            lastBackendSlotUpdateTime = currentTime;
+            lastDataNodeSlotUpdateTime = currentTime;
             LOG.debug("update backend max slot for routine load task scheduling. current task num per BE: {}",
                     Config.max_routine_load_task_num_per_be);
         }
@@ -320,7 +320,7 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
     }
 
     private void submitTask(long beId, TRoutineLoadTask tTask) throws LoadException {
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(beId);
         if (backend == null) {
             throw new LoadException("failed to send tasks to backend " + beId + " because not exist");
         }

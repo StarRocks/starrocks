@@ -322,35 +322,35 @@ public class ColocateMetaService {
                         + backendsPerBucketSeq.size());
             }
 
-            List<Long> clusterBackendIds =
-                    GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
-            //check the Backend id
+            List<Long> clusterDataNodeIds =
+                    GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds(true);
+            //check the DataNode id
             for (List<Long> backendIds : backendsPerBucketSeq) {
                 if (backendIds.size() != groupSchema.getReplicationNum()) {
                     throw new DdlException("Invalid backend num per bucket. expected: "
                             + groupSchema.getReplicationNum() + ", actual: " + backendIds.size());
                 }
                 for (Long beId : backendIds) {
-                    if (!clusterBackendIds.contains(beId)) {
+                    if (!clusterDataNodeIds.contains(beId)) {
                         throw new DdlException("The backend " + beId + " does not exist or not available");
                     }
                 }
             }
 
-            int bucketsNum = colocateIndex.getBackendsPerBucketSeq(groupId).size();
+            int bucketsNum = colocateIndex.getDataNodesPerBucketSeq(groupId).size();
             Preconditions.checkState(backendsPerBucketSeq.size() == bucketsNum,
                     backendsPerBucketSeq.size() + " vs. " + bucketsNum);
-            updateBackendPerBucketSeq(groupId, backendsPerBucketSeq);
+            updateDataNodePerBucketSeq(groupId, backendsPerBucketSeq);
             LOG.info("the group {} backendsPerBucketSeq meta has been changed to {}", groupId, backendsPerBucketSeq);
 
             sendResult(request, response);
         }
 
-        private void updateBackendPerBucketSeq(GroupId groupId, List<List<Long>> backendsPerBucketSeq) {
-            colocateIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+        private void updateDataNodePerBucketSeq(GroupId groupId, List<List<Long>> backendsPerBucketSeq) {
+            colocateIndex.addDataNodesPerBucketSeq(groupId, backendsPerBucketSeq);
             ColocatePersistInfo info2 =
-                    ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
-            GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info2);
+                    ColocatePersistInfo.createForDataNodesPerBucketSeq(groupId, backendsPerBucketSeq);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateDataNodesPerBucketSeq(info2);
         }
     }
 

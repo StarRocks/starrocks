@@ -184,11 +184,11 @@ public class GlobalTransactionMgrTest {
                         LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
         TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId1);
+                GlobalStateMgrTestUtil.testDataNodeId1);
         TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId2);
+                GlobalStateMgrTestUtil.testDataNodeId2);
         TabletCommitInfo tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId3);
+                GlobalStateMgrTestUtil.testDataNodeId3);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
@@ -228,9 +228,9 @@ public class GlobalTransactionMgrTest {
                         LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction with 1,2 success
         TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId1);
+                GlobalStateMgrTestUtil.testDataNodeId1);
         TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId2);
+                GlobalStateMgrTestUtil.testDataNodeId2);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
@@ -249,9 +249,9 @@ public class GlobalTransactionMgrTest {
                         GlobalStateMgrTestUtil.testTxnLable2,
                         transactionSource,
                         LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
-        tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId1);
+        tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId1);
         TabletCommitInfo tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId3);
+                GlobalStateMgrTestUtil.testDataNodeId3);
         transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo3);
@@ -280,9 +280,9 @@ public class GlobalTransactionMgrTest {
         assertTrue(GlobalStateMgrTestUtil.compareState(masterGlobalStateMgr, slaveGlobalStateMgr));
 
         // commit the second transaction with 1,2,3 success
-        tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId1);
-        tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId2);
-        tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId3);
+        tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId1);
+        tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId2);
+        tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId3);
         transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
@@ -334,11 +334,11 @@ public class GlobalTransactionMgrTest {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
 
         TabletCommitInfo tabletCommitInfo1 =
-                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId1);
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId1);
         TabletCommitInfo tabletCommitInfo2 =
-                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId2);
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId2);
         TabletCommitInfo tabletCommitInfo3 =
-                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId3);
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId3);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
@@ -407,11 +407,11 @@ public class GlobalTransactionMgrTest {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
 
         TabletCommitInfo tabletCommitInfo1 =
-                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId1);
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId1);
         TabletCommitInfo tabletCommitInfo2 =
-                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId2);
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId2);
         TabletCommitInfo tabletCommitInfo3 =
-                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId3);
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId3);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
@@ -482,11 +482,11 @@ public class GlobalTransactionMgrTest {
                         LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
         TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId1);
+                GlobalStateMgrTestUtil.testDataNodeId1);
         TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId2);
+                GlobalStateMgrTestUtil.testDataNodeId2);
         TabletCommitInfo tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId3);
+                GlobalStateMgrTestUtil.testDataNodeId3);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
@@ -538,9 +538,9 @@ public class GlobalTransactionMgrTest {
                         LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction with 1,2 success
         TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId1);
+                GlobalStateMgrTestUtil.testDataNodeId1);
         TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId2);
+                GlobalStateMgrTestUtil.testDataNodeId2);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
@@ -570,8 +570,8 @@ public class GlobalTransactionMgrTest {
         assertEquals(GlobalStateMgrTestUtil.testStartVersion + 1, replcia3.getLastFailedVersion());
 
         errorReplicaIds = Sets.newHashSet();
-        Set<Long> unfinishedBackends = Sets.newHashSet(replcia2.getBackendId(), replcia3.getBackendId());
-        assertEquals(masterTransMgr.canTxnFinished(transactionState, errorReplicaIds, unfinishedBackends), false);
+        Set<Long> unfinishedDataNodes = Sets.newHashSet(replcia2.getDataNodeId(), replcia3.getDataNodeId());
+        assertEquals(masterTransMgr.canTxnFinished(transactionState, errorReplicaIds, unfinishedDataNodes), false);
         errorReplicaIds = Sets.newHashSet();
         assertEquals(masterTransMgr.canTxnFinished(transactionState, errorReplicaIds, Sets.newHashSet()), true);
         masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, errorReplicaIds);
@@ -596,9 +596,9 @@ public class GlobalTransactionMgrTest {
                         GlobalStateMgrTestUtil.testTxnLable2,
                         transactionSource,
                         LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
-        tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId1);
+        tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId1);
         TabletCommitInfo tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId3);
+                GlobalStateMgrTestUtil.testDataNodeId3);
         transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo3);
@@ -612,9 +612,9 @@ public class GlobalTransactionMgrTest {
         }
 
         // commit the second transaction with 1,2,3 success
-        tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId1);
-        tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId2);
-        tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId3);
+        tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId1);
+        tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId2);
+        tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testDataNodeId3);
         transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
@@ -638,7 +638,7 @@ public class GlobalTransactionMgrTest {
 
         // master finish the transaction2
         errorReplicaIds = Sets.newHashSet();
-        assertEquals(masterTransMgr.canTxnFinished(transactionState, errorReplicaIds, unfinishedBackends), false);
+        assertEquals(masterTransMgr.canTxnFinished(transactionState, errorReplicaIds, unfinishedDataNodes), false);
         errorReplicaIds = Sets.newHashSet();
         masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, errorReplicaIds);
         assertEquals(TransactionStatus.VISIBLE, transactionState.getTransactionStatus());
@@ -734,11 +734,11 @@ public class GlobalTransactionMgrTest {
                         LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
         TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId1);
+                GlobalStateMgrTestUtil.testDataNodeId1);
         TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId2);
+                GlobalStateMgrTestUtil.testDataNodeId2);
         TabletCommitInfo tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId3);
+                GlobalStateMgrTestUtil.testDataNodeId3);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);

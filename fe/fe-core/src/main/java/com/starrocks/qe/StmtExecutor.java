@@ -1421,7 +1421,7 @@ public class StmtExecutor {
                  * 2: BE EXCEPTION
                  * So we should distinguish these two factors.
                  */
-                if (!coord.checkBackendState()) {
+                if (!coord.checkDataNodeState()) {
                     // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
                     // and hence there is no need to log it here.
                     if (Config.log_plan_cancelled_by_crash_be && context.getQueryDetail() == null) {

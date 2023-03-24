@@ -101,7 +101,7 @@ public class QueryQueueManager {
 
     public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
                                     int cpuUsedPermille) {
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(backendId);
+        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getDataNodeOrComputeNode(backendId);
         if (node == null) {
             LOG.warn("backend or computed node doesn't exist. id: {}", backendId);
             return;

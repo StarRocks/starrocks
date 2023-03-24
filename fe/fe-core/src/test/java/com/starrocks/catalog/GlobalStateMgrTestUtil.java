@@ -46,7 +46,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 
@@ -68,9 +68,9 @@ public class GlobalStateMgrTestUtil {
     public static String testIndex1 = "testIndex1";
     public static long testIndexId1 = 2; // the base indexid == tableid
     public static int testSchemaHash1 = 93423942;
-    public static long testBackendId1 = 5;
-    public static long testBackendId2 = 6;
-    public static long testBackendId3 = 7;
+    public static long testDataNodeId1 = 5;
+    public static long testDataNodeId2 = 6;
+    public static long testDataNodeId3 = 7;
     public static long testReplicaId1 = 8;
     public static long testReplicaId2 = 9;
     public static long testReplicaId3 = 10;
@@ -92,12 +92,12 @@ public class GlobalStateMgrTestUtil {
         GlobalStateMgr globalStateMgr = constructor.newInstance();
         globalStateMgr.setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
-        Backend backend1 = createBackend(testBackendId1, "host1", 123, 124, 125);
-        Backend backend2 = createBackend(testBackendId2, "host2", 123, 124, 125);
-        Backend backend3 = createBackend(testBackendId3, "host3", 123, 124, 125);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend1);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend2);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend3);
+        DataNode backend1 = createDataNode(testDataNodeId1, "host1", 123, 124, 125);
+        DataNode backend2 = createDataNode(testDataNodeId2, "host2", 123, 124, 125);
+        DataNode backend3 = createDataNode(testDataNodeId3, "host3", 123, 124, 125);
+        GlobalStateMgr.getCurrentSystemInfo().addDataNode(backend1);
+        GlobalStateMgr.getCurrentSystemInfo().addDataNode(backend2);
+        GlobalStateMgr.getCurrentSystemInfo().addDataNode(backend3);
         globalStateMgr.initDefaultCluster();
         Database db = createSimpleDb(testDbId1, testTableId1, testPartitionId1, testIndexId1, testTabletId1,
                 testStartVersion);
@@ -142,7 +142,7 @@ public class GlobalStateMgrTestUtil {
                     List<Replica> allReplicas = ((LocalTablet) masterTablet).getImmutableReplicas();
                     for (Replica masterReplica : allReplicas) {
                         Replica slaveReplica = ((LocalTablet) slaveTablet).getReplicaById(masterReplica.getId());
-                        if (slaveReplica.getBackendId() != masterReplica.getBackendId()
+                        if (slaveReplica.getDataNodeId() != masterReplica.getDataNodeId()
                                 || slaveReplica.getVersion() != masterReplica.getVersion()
                                 || slaveReplica.getLastFailedVersion() != masterReplica.getLastFailedVersion()
                                 || slaveReplica.getLastSuccessVersion() != slaveReplica.getLastSuccessVersion()) {
@@ -161,11 +161,11 @@ public class GlobalStateMgrTestUtil {
 
         // replica
         long replicaId = 0;
-        Replica replica1 = new Replica(testReplicaId1, testBackendId1, version, 0, 0L, 0L,
+        Replica replica1 = new Replica(testReplicaId1, testDataNodeId1, version, 0, 0L, 0L,
                 ReplicaState.NORMAL, -1, 0);
-        Replica replica2 = new Replica(testReplicaId2, testBackendId2, version, 0, 0L, 0L,
+        Replica replica2 = new Replica(testReplicaId2, testDataNodeId2, version, 0, 0L, 0L,
                 ReplicaState.NORMAL, -1, 0);
-        Replica replica3 = new Replica(testReplicaId3, testBackendId3, version, 0, 0L, 0L,
+        Replica replica3 = new Replica(testReplicaId3, testDataNodeId3, version, 0, 0L, 0L,
                 ReplicaState.NORMAL, -1, 0);
 
         // tablet
@@ -258,8 +258,8 @@ public class GlobalStateMgrTestUtil {
         db.createTable(esTable);
     }
 
-    public static Backend createBackend(long id, String host, int heartPort, int bePort, int httpPort) {
-        Backend backend = new Backend(id, host, heartPort);
+    public static DataNode createDataNode(long id, String host, int heartPort, int bePort, int httpPort) {
+        DataNode backend = new DataNode(id, host, heartPort);
         backend.setAlive(true);
         return backend;
     }

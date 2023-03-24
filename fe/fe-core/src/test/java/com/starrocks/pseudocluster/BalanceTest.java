@@ -58,12 +58,12 @@ public class BalanceTest {
             insertSqls[i] = PseudoCluster.buildInsertSql("test", tableNames[i]);
             cluster.runSqls("test", createTableSqls[i], insertSqls[i], insertSqls[i], insertSqls[i]);
         }
-        List<Long> beIds = cluster.addBackends(3);
+        List<Long> beIds = cluster.addDataNodes(3);
         Random rand = new Random(0);
         while (true) {
             boolean balanceFinished = true;
             for (Long beId : beIds) {
-                PseudoBackend backend = cluster.getBackend(beId);
+                PseudoDataNode backend = cluster.getDataNode(beId);
                 // we have 10 tables with 6 tablets and 18 replicas, so the final state should be
                 // every backends having 30 tablets
                 if (backend.getTabletManager().getNumTablet() != 30) {

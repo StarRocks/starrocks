@@ -55,8 +55,8 @@ public class ListPartitionInfoTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE t_recharge_detail(\n" +

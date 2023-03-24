@@ -39,7 +39,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
-import com.starrocks.rpc.PBackendService;
+import com.starrocks.rpc.PDataNodeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
@@ -82,10 +82,10 @@ public class PseudoCluster {
     int queryPort;
 
     PseudoFrontend frontend;
-    Map<String, PseudoBackend> backends;
+    Map<String, PseudoDataNode> backends;
     Map<Long, String> backendIdToHost = new HashMap<>();
     HeatBeatPool heartBeatPool = new HeatBeatPool("heartbeat");
-    BackendThriftPool backendThriftPool = new BackendThriftPool("backend");
+    DataNodeThriftPool backendThriftPool = new DataNodeThriftPool("backend");
     PseudoBrpcRroxy brpcProxy = new PseudoBrpcRroxy();
 
     private BasicDataSource dataSource;
@@ -113,31 +113,31 @@ public class PseudoCluster {
 
         @Override
         public HeartbeatService.Client borrowObject(TNetworkAddress address) throws Exception {
-            return getBackendByHost(address.getHostname()).heatBeatClient;
+            return getDataNodeByHost(address.getHostname()).heatBeatClient;
         }
     }
 
-    private class BackendThriftPool extends PseudoGenericPool<BackendService.Client> {
-        public BackendThriftPool(String name) {
+    private class DataNodeThriftPool extends PseudoGenericPool<BackendService.Client> {
+        public DataNodeThriftPool(String name) {
             super(name);
         }
 
         @Override
         public BackendService.Client borrowObject(TNetworkAddress address) throws Exception {
-            return getBackendByHost(address.getHostname()).backendClient;
+            return getDataNodeByHost(address.getHostname()).backendClient;
         }
 
     }
 
     private class PseudoBrpcRroxy extends BrpcProxy {
         @Override
-        protected PBackendService getBackendServiceImpl(TNetworkAddress address) {
-            return getBackendByHost(address.getHostname()).pBackendService;
+        protected PDataNodeService getDataNodeServiceImpl(TNetworkAddress address) {
+            return getDataNodeByHost(address.getHostname()).pDataNodeService;
         }
 
         @Override
         protected LakeService getLakeServiceImpl(TNetworkAddress address) {
-            return getBackendByHost(address.getHostname()).pLakeService;
+            return getDataNodeByHost(address.getHostname()).pLakeService;
         }
     }
 
@@ -194,7 +194,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public long getWorkerIdByBackendId(long backendId) {
+        public long getWorkerIdByDataNodeId(long backendId) {
             Optional<Worker> worker = workers.stream().filter(w -> w.backendId == backendId).findFirst();
             return worker.map(value -> value.workerId).orElse(-1L);
         }
@@ -241,12 +241,12 @@ public class PseudoCluster {
         }
 
         @Override
-        public long getPrimaryBackendIdByShard(long shardId) throws UserException {
+        public long getPrimaryDataNodeIdByShard(long shardId) throws UserException {
             return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
         }
 
         @Override
-        public Set<Long> getBackendIdsByShard(long shardId) throws UserException {
+        public Set<Long> getDataNodeIdsByShard(long shardId) throws UserException {
             Set<Long> results = new HashSet<>();
             shardInfos.stream().filter(x -> x.getShardId() == shardId).forEach(y -> {
                 for (ReplicaInfo info : y.getReplicaInfoList()) {
@@ -261,7 +261,7 @@ public class PseudoCluster {
         return config;
     }
 
-    public PseudoBackend getBackend(long beId) {
+    public PseudoDataNode getDataNode(long beId) {
         String host = backendIdToHost.get(beId);
         if (host == null) {
             return null;
@@ -269,8 +269,8 @@ public class PseudoCluster {
         return backends.get(host);
     }
 
-    public PseudoBackend getBackendByHost(String host) {
-        PseudoBackend be = backends.get(host);
+    public PseudoDataNode getDataNodeByHost(String host) {
+        PseudoDataNode be = backends.get(host);
         if (be == null) {
             LOG.warn("no backend found for host {} hosts:{}", host, backends.keySet());
         }
@@ -388,11 +388,11 @@ public class PseudoCluster {
      * build cluster at specified dir
      *
      * @param runDir      must be an absolute path
-     * @param numBackends num backends
+     * @param numDataNodes num backends
      * @return PseudoCluster
      * @throws Exception
      */
-    private static PseudoCluster build(String runDir, boolean fakeJournal, int queryPort, int numBackends) throws Exception {
+    private static PseudoCluster build(String runDir, boolean fakeJournal, int queryPort, int numDataNodes) throws Exception {
         PseudoCluster cluster = new PseudoCluster();
         cluster.runDir = runDir;
         cluster.queryPort = queryPort;
@@ -431,22 +431,22 @@ public class PseudoCluster {
 
         LOG.info("start create and start backends");
         cluster.backends = Maps.newConcurrentMap();
-        for (int i = 0; i < numBackends; i++) {
-            String host = genBackendHost();
+        for (int i = 0; i < numDataNodes; i++) {
+            String host = genDataNodeHost();
             long beId = backendIdStart++;
             String beRunPath = runDir + "/be" + beId;
-            PseudoBackend backend = new PseudoBackend(cluster, beRunPath, beId, host,
+            PseudoDataNode backend = new PseudoDataNode(cluster, beRunPath, beId, host,
                     backendPortStart++, backendPortStart++, backendPortStart++, backendPortStart++,
                     cluster.frontend.getFrontendService());
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
-            GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
+            GlobalStateMgr.getCurrentSystemInfo().addDataNode(backend.be);
             GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1));
-            LOG.info("add PseudoBackend {} {}", beId, host);
+            LOG.info("add PseudoDataNode {} {}", beId, host);
         }
         int retry = 0;
-        while (GlobalStateMgr.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
+        while (GlobalStateMgr.getCurrentSystemInfo().getDataNode(10001).getBePort() == -1 &&
                 retry++ < 600) {
             Thread.sleep(100);
         }
@@ -454,25 +454,25 @@ public class PseudoCluster {
         return cluster;
     }
 
-    public List<Long> addBackends(int numBackends) {
+    public List<Long> addDataNodes(int numDataNodes) {
         List<Long> beIds = new ArrayList<>();
-        for (int i = 0; i < numBackends; i++) {
-            String host = genBackendHost();
+        for (int i = 0; i < numDataNodes; i++) {
+            String host = genDataNodeHost();
             long beId = backendIdStart++;
             String beRunPath = runDir + "/be" + beId;
-            PseudoBackend backend = new PseudoBackend(this, beRunPath, beId, host,
+            PseudoDataNode backend = new PseudoDataNode(this, beRunPath, beId, host,
                     backendPortStart++, backendPortStart++, backendPortStart++, backendPortStart++,
                     this.frontend.getFrontendService());
             this.backends.put(backend.getHost(), backend);
             this.backendIdToHost.put(beId, backend.getHost());
-            GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
+            GlobalStateMgr.getCurrentSystemInfo().addDataNode(backend.be);
             GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1));
-            LOG.info("add PseudoBackend {} {}", beId, host);
+            LOG.info("add PseudoDataNode {} {}", beId, host);
             beIds.add(beId);
         }
         int retry = 0;
-        while (GlobalStateMgr.getCurrentSystemInfo().getBackend(beIds.get(0)).getBePort() == -1 &&
+        while (GlobalStateMgr.getCurrentSystemInfo().getDataNode(beIds.get(0)).getBePort() == -1 &&
                 retry++ < 600) {
             try {
                 Thread.sleep(100);
@@ -484,7 +484,7 @@ public class PseudoCluster {
         return beIds;
     }
 
-    private static String genBackendHost() {
+    private static String genDataNodeHost() {
         int i = backendHostStart % 128;
         int j = (backendHostStart >> 7) % 128;
         int k = (backendHostStart >> 14) % 128;
@@ -505,15 +505,15 @@ public class PseudoCluster {
         ((org.apache.logging.log4j.core.Logger) LogManager.getRootLogger()).addAppender(ca);
     }
 
-    public static synchronized PseudoCluster getOrCreateWithRandomPort(boolean fakeJournal, int numBackends) throws Exception {
+    public static synchronized PseudoCluster getOrCreateWithRandomPort(boolean fakeJournal, int numDataNodes) throws Exception {
         int queryPort = UtFrameUtils.findValidPort();
-        return getOrCreate("pseudo_cluster_" + queryPort, fakeJournal, queryPort, numBackends);
+        return getOrCreate("pseudo_cluster_" + queryPort, fakeJournal, queryPort, numDataNodes);
     }
 
-    public static synchronized PseudoCluster getOrCreate(String runDir, boolean fakeJournal, int queryPort, int numBackends)
+    public static synchronized PseudoCluster getOrCreate(String runDir, boolean fakeJournal, int queryPort, int numDataNodes)
             throws Exception {
         if (instance == null) {
-            instance = build(runDir, fakeJournal, queryPort, numBackends);
+            instance = build(runDir, fakeJournal, queryPort, numDataNodes);
         }
         return instance;
     }
@@ -587,7 +587,7 @@ public class PseudoCluster {
     public static void main(String[] args) throws Exception {
         PseudoCluster.getOrCreate("pseudo_cluster", false, 9030, 4);
         for (int i = 0; i < 4; i++) {
-            System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
+            System.out.println(GlobalStateMgr.getCurrentSystemInfo().getDataNode(10001 + i).getBePort());
         }
         while (true) {
             Thread.sleep(1000);

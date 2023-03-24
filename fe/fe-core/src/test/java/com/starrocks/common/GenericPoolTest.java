@@ -91,7 +91,7 @@ public class GenericPoolTest {
             config.setMaxTotal(3); // (default -1)
             config.setMaxWaitMillis(500);
             // new ClientPool
-            backendService = new GenericPool("BackendService", config, 0);
+            backendService = new GenericPool("DataNodeService", config, 0);
             // new ThriftService
             TProcessor tprocessor = new BackendService.Processor<BackendService.Iface>(
                     new InternalProcessor());

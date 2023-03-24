@@ -40,8 +40,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
@@ -61,9 +61,9 @@ public class SimpleScheduler {
     //count id for compute node get TNetworkAddress
     private static AtomicLong nextComputeNodeHostId = new AtomicLong(0);
     //count id for backend get TNetworkAddress
-    private static AtomicLong nextBackendHostId = new AtomicLong(0);
+    private static AtomicLong nextDataNodeHostId = new AtomicLong(0);
     //count id for get ComputeNode
-    private static Map<Long, Integer> blacklistBackends = Maps.newHashMap();
+    private static Map<Long, Integer> blacklistDataNodes = Maps.newHashMap();
     private static Lock lock = new ReentrantLock();
     private static UpdateBlacklistThread updateBlacklistThread;
 
@@ -75,29 +75,29 @@ public class SimpleScheduler {
     @Nullable
     public static TNetworkAddress getHost(long backendId,
                                           List<TScanRangeLocation> locations,
-                                          ImmutableMap<Long, Backend> backends,
+                                          ImmutableMap<Long, DataNode> backends,
                                           Reference<Long> backendIdRef) {
         if (locations == null || backends == null) {
             return null;
         }
         LOG.debug("getHost backendID={}, backendSize={}", backendId, backends.size());
-        Backend backend = backends.get(backendId);
+        DataNode backend = backends.get(backendId);
         lock.lock();
         try {
-            if (backend != null && backend.isAlive() && !blacklistBackends.containsKey(backendId)) {
+            if (backend != null && backend.isAlive() && !blacklistDataNodes.containsKey(backendId)) {
                 backendIdRef.setRef(backendId);
                 return new TNetworkAddress(backend.getHost(), backend.getBePort());
             } else {
                 for (TScanRangeLocation location : locations) {
-                    if (location.backend_id == backendId) {
+                    if (location.datanode_id == backendId) {
                         continue;
                     }
                     // choose the first alive backend(in analysis stage, the locations are random)
-                    Backend candidateBackend = backends.get(location.backend_id);
-                    if (candidateBackend != null && candidateBackend.isAlive()
-                            && !blacklistBackends.containsKey(location.backend_id)) {
-                        backendIdRef.setRef(location.backend_id);
-                        return new TNetworkAddress(candidateBackend.getHost(), candidateBackend.getBePort());
+                    DataNode candidateDataNode = backends.get(location.datanode_id);
+                    if (candidateDataNode != null && candidateDataNode.isAlive()
+                            && !blacklistDataNodes.containsKey(location.datanode_id)) {
+                        backendIdRef.setRef(location.datanode_id);
+                        return new TNetworkAddress(candidateDataNode.getHost(), candidateDataNode.getBePort());
                     }
                 }
             }
@@ -120,9 +120,9 @@ public class SimpleScheduler {
     }
 
     @Nullable
-    public static TNetworkAddress getBackendHost(ImmutableMap<Long, Backend> backendMap,
+    public static TNetworkAddress getDataNodeHost(ImmutableMap<Long, DataNode> backendMap,
                                                  Reference<Long> backendIdRef) {
-        Backend node = getBackend(backendMap);
+        DataNode node = getDataNode(backendMap);
         if (node != null) {
             backendIdRef.setRef(node.getId());
             return new TNetworkAddress(node.getHost(), node.getBePort());
@@ -131,11 +131,11 @@ public class SimpleScheduler {
     }
 
     @Nullable
-    public static Backend getBackend(ImmutableMap<Long, Backend> nodeMap) {
+    public static DataNode getDataNode(ImmutableMap<Long, DataNode> nodeMap) {
         if (nodeMap == null || nodeMap.isEmpty()) {
             return null;
         }
-        return chooseNode(nodeMap.values().asList(), nextBackendHostId);
+        return chooseNode(nodeMap.values().asList(), nextDataNodeHostId);
     }
 
     @Nullable
@@ -151,7 +151,7 @@ public class SimpleScheduler {
         long id = nextId.getAndIncrement();
         for (int i = 0; i < nodes.size(); i++) {
             T node = nodes.get((int) (id % nodes.size()));
-            if (node != null && node.isAlive() && !blacklistBackends.containsKey(node.getId())) {
+            if (node != null && node.isAlive() && !blacklistDataNodes.containsKey(node.getId())) {
                 nextId.addAndGet(i); // skip failed nodes
                 return node;
             }
@@ -167,7 +167,7 @@ public class SimpleScheduler {
         lock.lock();
         try {
             int tryTime = Config.heartbeat_timeout_second + 1;
-            blacklistBackends.put(backendID, tryTime);
+            blacklistDataNodes.put(backendID, tryTime);
             LOG.warn("add black list " + backendID);
         } finally {
             lock.unlock();
@@ -177,7 +177,7 @@ public class SimpleScheduler {
     public static boolean isInBlacklist(long backendId) {
         lock.lock();
         try {
-            return blacklistBackends.containsKey(backendId);
+            return blacklistDataNodes.containsKey(backendId);
         } finally {
             lock.unlock();
         }
@@ -206,7 +206,7 @@ public class SimpleScheduler {
                     LOG.debug("UpdateBlacklistThread retry begin");
                     lock.lock();
                     try {
-                        Iterator<Map.Entry<Long, Integer>> iterator = blacklistBackends.entrySet().iterator();
+                        Iterator<Map.Entry<Long, Integer>> iterator = blacklistDataNodes.entrySet().iterator();
                         while (iterator.hasNext()) {
                             Map.Entry<Long, Integer> entry = iterator.next();
                             Long backendId = entry.getKey();
@@ -214,8 +214,8 @@ public class SimpleScheduler {
                             // remove from blacklist if
                             // 1. backend does not exist anymore
                             // 2. backend is alive
-                            if (clusterInfoService.getBackend(backendId) == null
-                                    || clusterInfoService.checkBackendAvailable(backendId)) {
+                            if (clusterInfoService.getDataNode(backendId) == null
+                                    || clusterInfoService.checkDataNodeAvailable(backendId)) {
                                 iterator.remove();
                                 LOG.debug("remove backendID {} which is alive", backendId);
                             } else {
@@ -227,7 +227,7 @@ public class SimpleScheduler {
                                     LOG.warn("remove backendID {}. reach max try time", backendId);
                                 } else {
                                     entry.setValue(retryTimes);
-                                    LOG.debug("blacklistBackends backendID={} retryTimes={}", backendId, retryTimes);
+                                    LOG.debug("blacklistDataNodes backendID={} retryTimes={}", backendId, retryTimes);
                                 }
                             }
                         }

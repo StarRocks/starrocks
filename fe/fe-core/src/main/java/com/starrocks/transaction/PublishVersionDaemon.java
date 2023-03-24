@@ -98,8 +98,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
             if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
                 return;
             }
-            List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
-            if (allBackends.isEmpty()) {
+            List<Long> allDataNodes = GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds(false);
+            if (allDataNodes.isEmpty()) {
                 LOG.warn("some transaction state need to publish, but no backend exists");
                 return;
             }
@@ -175,7 +175,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         for (TransactionState transactionState : readyTransactionStates) {
             Map<Long, PublishVersionTask> transTasks = transactionState.getPublishVersionTasks();
             Set<Long> publishErrorReplicaIds = Sets.newHashSet();
-            Set<Long> unfinishedBackends = Sets.newHashSet();
+            Set<Long> unfinishedDataNodes = Sets.newHashSet();
             boolean allTaskFinished = true;
             for (PublishVersionTask publishVersionTask : transTasks.values()) {
                 if (publishVersionTask.isFinished()) {
@@ -191,13 +191,13 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     // Publish version task may succeed and finish in quorum replicas
                     // but not finish in one replica.
                     // here collect the backendId that do not finish publish version
-                    unfinishedBackends.add(publishVersionTask.getBackendId());
+                    unfinishedDataNodes.add(publishVersionTask.getDataNodeId());
                 }
             }
             boolean shouldFinishTxn = true;
             if (!allTaskFinished) {
                 shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState,
-                        publishErrorReplicaIds, unfinishedBackends);
+                        publishErrorReplicaIds, unfinishedDataNodes);
             }
 
             if (shouldFinishTxn) {
@@ -209,7 +209,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                             transactionState, publishErrorReplicaIds.size());
                 } else {
                     for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
-                        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
+                        AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.PUBLISH_VERSION, task.getSignature());
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearAfterPublished();
@@ -237,7 +237,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                             transactionState, transactionState.getErrorReplicas().size());
                 } else {
                     for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
-                        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
+                        AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.PUBLISH_VERSION, task.getSignature());
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearAfterPublished();

@@ -81,7 +81,7 @@ public class PseudoOlapTableSink {
                 return tablet;
             }).collect(Collectors.toList());
             request.isVectorized = true;
-            PTabletWriterOpenResult result = cluster.getBackend(nodeId).tabletWriterOpen(request);
+            PTabletWriterOpenResult result = cluster.getDataNode(nodeId).tabletWriterOpen(request);
             if (result.status.statusCode != 0) {
                 if (errMsg == null) {
                     errMsg = result.status.errorMsgs.get(0);
@@ -98,7 +98,7 @@ public class PseudoOlapTableSink {
             request.id = loadId;
             request.indexId = indexId;
             request.txnId = txnId;
-            cluster.getBackend(nodeId).tabletWriterCancel(request);
+            cluster.getDataNode(nodeId).tabletWriterCancel(request);
         }
 
         boolean close() {
@@ -108,7 +108,7 @@ public class PseudoOlapTableSink {
             request.txnId = txnId;
             request.partitionIds = partitionsWithData;
             request.eos = true;
-            PTabletWriterAddBatchResult result = cluster.getBackend(nodeId).tabletWriterAddChunk(request);
+            PTabletWriterAddBatchResult result = cluster.getDataNode(nodeId).tabletWriterAddChunk(request);
             if (result.tabletVec != null) {
                 result.tabletVec.forEach(tablet -> {
                     TTabletCommitInfo commitInfo = new TTabletCommitInfo();

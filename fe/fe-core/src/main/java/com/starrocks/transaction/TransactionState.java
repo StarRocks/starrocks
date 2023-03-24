@@ -882,16 +882,16 @@ public class TransactionState implements Writable {
             return tasks;
         }
 
-        Set<Long> publishBackends = this.getPublishVersionTasks().keySet();
-        // public version tasks are not persisted in globalStateMgr, so publishBackends may be empty.
+        Set<Long> publishDataNodes = this.getPublishVersionTasks().keySet();
+        // public version tasks are not persisted in globalStateMgr, so publishDataNodes may be empty.
         // We have to send publish version task to all backends
-        if (publishBackends.isEmpty()) {
+        if (publishDataNodes.isEmpty()) {
             // note: tasks are sent to all backends including dead ones, or else
             // transaction manager will treat it as success
-            List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
-            if (!allBackends.isEmpty()) {
-                publishBackends = Sets.newHashSet();
-                publishBackends.addAll(allBackends);
+            List<Long> allDataNodes = GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds(false);
+            if (!allDataNodes.isEmpty()) {
+                publishDataNodes = Sets.newHashSet();
+                publishDataNodes.addAll(allDataNodes);
             } else {
                 // all backends may be dropped, no need to create task
                 LOG.warn("transaction {} want to publish, but no backend exists", this.getTransactionId());
@@ -912,7 +912,7 @@ public class TransactionState implements Writable {
         }
 
         long createTime = System.currentTimeMillis();
-        for (long backendId : publishBackends) {
+        for (long backendId : publishDataNodes) {
             PublishVersionTask task = new PublishVersionTask(backendId,
                     this.getTransactionId(),
                     this.getDbId(),

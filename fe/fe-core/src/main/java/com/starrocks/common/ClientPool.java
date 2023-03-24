@@ -82,7 +82,7 @@ public class ClientPool {
     public static GenericPool<FrontendService.Client> frontendPool =
             new GenericPool("FrontendService", backendConfig, backendTimeoutMs);
     public static GenericPool<BackendService.Client> backendPool =
-            new GenericPool("BackendService", backendConfig, backendTimeoutMs);
+            new GenericPool("DataNodeService", backendConfig, backendTimeoutMs);
     public static GenericPool<TFileBrokerService.Client> brokerPool =
             new GenericPool("TFileBrokerService", brokerPoolConfig, brokerTimeoutMs);
 }

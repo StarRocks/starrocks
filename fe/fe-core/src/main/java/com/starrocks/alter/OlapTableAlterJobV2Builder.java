@@ -105,7 +105,7 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
                     int healthyReplicaNum = 0;
                     for (Replica originReplica : originReplicas) {
                         long shadowReplicaId = globalStateMgr.getNextId();
-                        long backendId = originReplica.getBackendId();
+                        long backendId = originReplica.getDataNodeId();
 
                         if (originReplica.getState() == Replica.ReplicaState.CLONE
                                 || originReplica.getState() == Replica.ReplicaState.DECOMMISSION

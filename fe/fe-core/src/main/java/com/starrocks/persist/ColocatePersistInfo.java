@@ -64,7 +64,7 @@ public class ColocatePersistInfo implements Writable {
         return new ColocatePersistInfo(groupId, tableId, backendsPerBucketSeq);
     }
 
-    public static ColocatePersistInfo createForBackendsPerBucketSeq(GroupId groupId,
+    public static ColocatePersistInfo createForDataNodesPerBucketSeq(GroupId groupId,
                                                                     List<List<Long>> backendsPerBucketSeq) {
         return new ColocatePersistInfo(groupId, -1L, backendsPerBucketSeq);
     }
@@ -95,7 +95,7 @@ public class ColocatePersistInfo implements Writable {
         return groupId;
     }
 
-    public List<List<Long>> getBackendsPerBucketSeq() {
+    public List<List<Long>> getDataNodesPerBucketSeq() {
         return backendsPerBucketSeq;
     }
 

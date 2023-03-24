@@ -40,7 +40,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.DataNodeCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
@@ -225,7 +225,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // only for Aliyun DTS, no actual use.
     public static final String FOREIGN_KEY_CHECKS = "foreign_key_checks";
 
-    // force schedule local be for HybridBackendSelector
+    // force schedule local be for HybridDataNodeSelector
     // only for hive external table now
     public static final String FORCE_SCHEDULE_LOCAL = "force_schedule_local";
 
@@ -720,7 +720,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean cboEnableGreedyJoinReorder = true;
 
     @VariableMgr.VarAttr(name = CBO_DEBUG_ALIVE_BACKEND_NUMBER, flag = VariableMgr.INVISIBLE)
-    private int cboDebugAliveBackendNumber = 0;
+    private int cboDebugAliveDataNodeNumber = 0;
 
     @VariableMgr.VarAttr(name = TRANSACTION_VISIBLE_WAIT_TIMEOUT)
     private long transactionVisibleWaitTimeout = 10;
@@ -992,7 +992,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableDistinctColumnBucketization = false;
 
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
-    private boolean hdfsBackendSelectorScanRangeShuffle = false;
+    private boolean hdfsDataNodeSelectorScanRangeShuffle = false;
 
     @VariableMgr.VarAttr(name = CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW)
     private boolean cboPushDownDistinctBelowWindow = true;
@@ -1211,9 +1211,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
-                return BackendCoreStat.getDefaultDOP();
+                return DataNodeCoreStat.getDefaultDOP();
             }
-            return Math.min(maxPipelineDop, BackendCoreStat.getDefaultDOP());
+            return Math.min(maxPipelineDop, DataNodeCoreStat.getDefaultDOP());
         } else {
             return parallelExecInstanceNum;
         }
@@ -1225,9 +1225,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
-                return BackendCoreStat.getSinkDefaultDOP();
+                return DataNodeCoreStat.getSinkDefaultDOP();
             }
-            return Math.min(maxPipelineDop, BackendCoreStat.getSinkDefaultDOP());
+            return Math.min(maxPipelineDop, DataNodeCoreStat.getSinkDefaultDOP());
         } else {
             return parallelExecInstanceNum;
         }
@@ -1369,8 +1369,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboMaxReorderNode;
     }
 
-    public int getCboDebugAliveBackendNumber() {
-        return cboDebugAliveBackendNumber;
+    public int getCboDebugAliveDataNodeNumber() {
+        return cboDebugAliveDataNodeNumber;
     }
 
     public long getTransactionVisibleWaitTimeout() {
@@ -1913,8 +1913,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.defaultTableCompressionAlgorithm = compression;
     }
 
-    public boolean getHDFSBackendSelectorScanRangeShuffle() {
-        return hdfsBackendSelectorScanRangeShuffle;
+    public boolean getHDFSDataNodeSelectorScanRangeShuffle() {
+        return hdfsDataNodeSelectorScanRangeShuffle;
     }
 
     // Serialize to thrift object

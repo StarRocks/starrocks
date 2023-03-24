@@ -24,6 +24,6 @@ public class ConcurrentTxnWithFailureTest extends ConcurrentTxnTest {
     void setup() throws SQLException {
         Config.enable_new_publish_mechanism = false;
         PseudoCluster cluster = PseudoCluster.getInstance();
-        cluster.getBackend(10001).setWriteFailureRate(1.0f);
+        cluster.getDataNode(10001).setWriteFailureRate(1.0f);
     }
 }

@@ -214,10 +214,10 @@ public class RestoreJob extends AbstractJob {
         // Full path will look like:
         // /path/to/your/be/data/snapshot/20180410102311.0/10006/352781111/
         SnapshotInfo info = new SnapshotInfo(task.getDbId(), task.getTableId(), task.getPartitionId(),
-                task.getIndexId(), task.getTabletId(), task.getBackendId(),
+                task.getIndexId(), task.getTabletId(), task.getDataNodeId(),
                 task.getSchemaHash(), request.getSnapshot_path(), Lists.newArrayList());
 
-        snapshotInfos.put(task.getTabletId(), task.getBackendId(), info);
+        snapshotInfos.put(task.getTabletId(), task.getDataNodeId(), info);
         taskProgress.remove(task.getSignature());
         Long removedTabletId = unfinishedSignatureToId.remove(task.getSignature());
         if (removedTabletId != null) {
@@ -238,17 +238,17 @@ public class RestoreJob extends AbstractJob {
         Preconditions.checkState(request.isSetDownloaded_tablet_ids());
 
         for (Long tabletId : request.getDownloaded_tablet_ids()) {
-            SnapshotInfo info = snapshotInfos.get(tabletId, task.getBackendId());
+            SnapshotInfo info = snapshotInfos.get(tabletId, task.getDataNodeId());
             if (info == null) {
                 LOG.error("failed to find snapshot infos of tablet {} in be {}, {}",
-                        tabletId, task.getBackendId(), this);
+                        tabletId, task.getDataNodeId(), this);
                 return false;
             }
         }
 
         taskProgress.remove(task.getSignature());
         Long beId = unfinishedSignatureToId.remove(task.getSignature());
-        if (beId == null || beId != task.getBackendId()) {
+        if (beId == null || beId != task.getDataNodeId()) {
             LOG.error("invalid download task: {}. {}", task, this);
             return false;
         }
@@ -685,7 +685,7 @@ public class RestoreJob extends AbstractJob {
         if (batchTask.getTaskNum() > 0) {
             MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<Long, Long>(batchTask.getTaskNum());
             for (AgentTask task : batchTask.getAllTasks()) {
-                latch.addMark(task.getBackendId(), task.getTabletId());
+                latch.addMark(task.getDataNodeId(), task.getTabletId());
                 ((CreateReplicaTask) task).setLatch(latch);
                 AgentTaskQueue.addTask(task);
             }
@@ -753,7 +753,7 @@ public class RestoreJob extends AbstractJob {
                 LocalTablet tablet = (LocalTablet) index.getTablet(idChain.getTabletId());
                 Replica replica = tablet.getReplicaById(idChain.getReplicaId());
                 long signature = globalStateMgr.getNextId();
-                SnapshotTask task = new SnapshotTask(null, replica.getBackendId(), signature,
+                SnapshotTask task = new SnapshotTask(null, replica.getDataNodeId(), signature,
                         jobId, db.getId(),
                         tbl.getId(), part.getId(), index.getId(), tablet.getId(),
                         part.getVisibleVersion(),
@@ -761,7 +761,7 @@ public class RestoreJob extends AbstractJob {
                         true /* is restore task*/);
                 batchTask.addTask(task);
                 unfinishedSignatureToId.put(signature, tablet.getId());
-                bePathsMap.put(replica.getBackendId(), replica.getPathHash());
+                bePathsMap.put(replica.getDataNodeId(), replica.getPathHash());
             }
         } finally {
             db.readUnlock();
@@ -814,7 +814,7 @@ public class RestoreJob extends AbstractJob {
                 GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
                 for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
                     GlobalStateMgr.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
-                    CreateReplicaTask task = new CreateReplicaTask(restoreReplica.getBackendId(), dbId,
+                    CreateReplicaTask task = new CreateReplicaTask(restoreReplica.getDataNodeId(), dbId,
                             localTbl.getId(), restorePart.getId(), restoredIdx.getId(),
                             restoreTablet.getId(), indexMeta.getShortKeyColumnCount(),
                             indexMeta.getSchemaHash(), restoreReplica.getVersion(),
@@ -1121,7 +1121,7 @@ public class RestoreJob extends AbstractJob {
                     return;
                 }
 
-                Replica replica = tablet.getReplicaByBackendId(info.getBeId());
+                Replica replica = tablet.getReplicaByDataNodeId(info.getBeId());
                 if (replica == null) {
                     status = new Status(ErrCode.NOT_FOUND,
                             "replica in be " + info.getBeId() + " of tablet "

@@ -44,8 +44,8 @@ public class ListPartitionDescTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
     }
 
     private List<ColumnDef> findColumnDefList() {

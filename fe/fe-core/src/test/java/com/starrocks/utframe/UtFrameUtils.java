@@ -97,8 +97,8 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.system.Backend;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.DataNode;
+import com.starrocks.system.DataNodeCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.codec.binary.Hex;
@@ -235,15 +235,15 @@ public class UtFrameUtils {
         }
         try {
             ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
-            ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
+            ClientPool.backendPool = new MockGenericPool.DataNodeThriftPool("backend");
 
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
 
-            addMockBackend(10001);
+            addMockDataNode(10001);
 
             // sleep to wait first heartbeat
             int retry = 0;
-            while (GlobalStateMgr.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
+            while (GlobalStateMgr.getCurrentSystemInfo().getDataNode(10001).getBePort() == -1 &&
                     retry++ < 600) {
                 Thread.sleep(100);
             }
@@ -257,12 +257,12 @@ public class UtFrameUtils {
         createMinStarRocksCluster(false);
     }
 
-    public static Backend addMockBackend(int backendId) throws Exception {
+    public static DataNode addMockDataNode(int backendId) throws Exception {
         // start be
-        MockedBackend backend = new MockedBackend("127.0.0.1");
+        MockedDataNode backend = new MockedDataNode("127.0.0.1");
 
         // add be
-        Backend be = new Backend(backendId, backend.getHost(), backend.getHeartBeatPort());
+        DataNode be = new DataNode(backendId, backend.getHost(), backend.getHeartBeatPort());
         Map<String, DiskInfo> disks = Maps.newHashMap();
         DiskInfo diskInfo1 = new DiskInfo(backendId + "/path1");
         diskInfo1.setTotalCapacityB(1000000);
@@ -274,7 +274,7 @@ public class UtFrameUtils {
         be.setBePort(backend.getBeThriftPort());
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
+        GlobalStateMgr.getCurrentSystemInfo().addDataNode(be);
 
         return be;
     }
@@ -287,8 +287,8 @@ public class UtFrameUtils {
         GlobalStateMgr.getCurrentState().getBrokerMgr().addBrokers(brokerName, addresses);
     }
 
-    public static void dropMockBackend(int backendId) throws DdlException {
-        GlobalStateMgr.getCurrentSystemInfo().dropBackend(backendId);
+    public static void dropMockDataNode(int backendId) throws DdlException {
+        GlobalStateMgr.getCurrentSystemInfo().dropDataNode(backendId);
     }
 
     public static int findValidPort() {
@@ -517,9 +517,9 @@ public class UtFrameUtils {
 
         // create table
         int backendId = 10002;
-        int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+        int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getAliveDataNodeNumber();
         for (int i = 1; i < backendIdSize; ++i) {
-            UtFrameUtils.dropMockBackend(backendId++);
+            UtFrameUtils.dropMockDataNode(backendId++);
         }
 
         Set<String> dbSet = replayDumpInfo.getCreateTableStmtMap().keySet().stream().map(key -> key.split("\\.")[0])
@@ -554,13 +554,13 @@ public class UtFrameUtils {
         // mock be num
         backendId = 10002;
         for (int i = 1; i < replayDumpInfo.getBeNum(); ++i) {
-            UtFrameUtils.addMockBackend(backendId++);
+            UtFrameUtils.addMockDataNode(backendId++);
         }
         // mock be core stat
         for (Map.Entry<Long, Integer> entry : replayDumpInfo.getNumOfHardwareCoresPerBe().entrySet()) {
-            BackendCoreStat.setNumOfHardwareCoresOfBe(entry.getKey(), entry.getValue());
+            DataNodeCoreStat.setNumOfHardwareCoresOfBe(entry.getKey(), entry.getValue());
         }
-        BackendCoreStat.setCachedAvgNumOfHardwareCores(replayDumpInfo.getCachedAvgNumOfHardwareCores());
+        DataNodeCoreStat.setCachedAvgNumOfHardwareCores(replayDumpInfo.getCachedAvgNumOfHardwareCores());
 
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
@@ -589,10 +589,10 @@ public class UtFrameUtils {
 
     private static void tearMockEnv() {
         int backendId = 10002;
-        int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+        int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getAliveDataNodeNumber();
         for (int i = 1; i < backendIdSize; ++i) {
             try {
-                UtFrameUtils.dropMockBackend(backendId++);
+                UtFrameUtils.dropMockDataNode(backendId++);
             } catch (DdlException e) {
                 e.printStackTrace();
             }

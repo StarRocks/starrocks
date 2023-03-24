@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 public class CoordinatorMonitorTest {
 
     @Test
-    public void testDeadBackendAndComputeNodeChecker(@Mocked Coordinator coord1,
+    public void testDeadDataNodeAndComputeNodeChecker(@Mocked Coordinator coord1,
                                                      @Mocked Coordinator coord2,
                                                      @Mocked Coordinator coord3) throws InterruptedException {
         int prevHeartbeatTimeout = Config.heartbeat_timeout_second;
@@ -49,27 +49,27 @@ public class CoordinatorMonitorTest {
                 }
 
                 {
-                    coord1.isUsingBackend(anyLong);
+                    coord1.isUsingDataNode(anyLong);
                     result = new mockit.Delegate<Boolean>() {
-                        boolean isUsingBackend(Long backendID) {
+                        boolean isUsingDataNode(Long backendID) {
                             return 0L == backendID;
                         }
                     };
                 }
 
                 {
-                    coord2.isUsingBackend(anyLong);
+                    coord2.isUsingDataNode(anyLong);
                     result = new mockit.Delegate<Boolean>() {
-                        boolean isUsingBackend(Long backendID) {
+                        boolean isUsingDataNode(Long backendID) {
                             return 2L == backendID;
                         }
                     };
                 }
 
                 {
-                    coord3.isUsingBackend(anyLong);
+                    coord3.isUsingDataNode(anyLong);
                     result = new mockit.Delegate<Boolean>() {
-                        boolean isUsingBackend(Long backendID) {
+                        boolean isUsingDataNode(Long backendID) {
                             return 3L == backendID;
                         }
                     };
@@ -105,9 +105,9 @@ public class CoordinatorMonitorTest {
 
             // Set node#0,1,3 to dead, and stay node#2 alive.
             // coord1 and coord3 will be cancelled, and coord2 will be still alive.
-            CoordinatorMonitor.getInstance().addDeadBackend(0L);
-            CoordinatorMonitor.getInstance().addDeadBackend(1L);
-            CoordinatorMonitor.getInstance().addDeadBackend(3L);
+            CoordinatorMonitor.getInstance().addDeadDataNode(0L);
+            CoordinatorMonitor.getInstance().addDeadDataNode(1L);
+            CoordinatorMonitor.getInstance().addDeadDataNode(3L);
 
             // Wait until invoking coord1.cancel and coord3.cancel once or timeout.
             Assert.assertTrue(cancelInvocationLatch.await(5, TimeUnit.SECONDS));

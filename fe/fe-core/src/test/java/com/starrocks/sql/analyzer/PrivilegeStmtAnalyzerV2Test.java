@@ -54,8 +54,8 @@ public class PrivilegeStmtAnalyzerV2Test {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         UtFrameUtils.setUpForPersistTest();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
         // create db1.tbl0, db1.tbl1
         String createTblStmtStr = "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "

@@ -50,7 +50,7 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
         return tabletId;
     }
 
-    public long getBackendId() {
+    public long getDataNodeId() {
         return backendId;
     }
 
@@ -62,7 +62,7 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
         this.tabletId = tabletId;
     }
 
-    public void setBackendId(long backendId) {
+    public void setDataNodeId(long backendId) {
         this.backendId = backendId;
     }
 

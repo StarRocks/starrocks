@@ -119,9 +119,9 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
-import com.starrocks.persist.BackendIdsUpdateInfo;
-import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.DataNodeIdsUpdateInfo;
+import com.starrocks.persist.DataNodeTabletsInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
@@ -199,7 +199,7 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -950,7 +950,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // 1. If the partition is less than recentPartitionNum, use backendNum to speculate the bucketNum
         int bucketNum = 0;
         if (olapTable.getPartitions().size() < recentPartitionNum) {
-            bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+            bucketNum = CatalogUtils.calBucketNumAccordingToDataNodes();
             return bucketNum;
         }
 
@@ -964,7 +964,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
-        bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+        bucketNum = CatalogUtils.calBucketNumAccordingToDataNodes();
         if (!dataImported) {
             return bucketNum;
         }
@@ -975,7 +975,7 @@ public class LocalMetastore implements ConnectorMetadata {
             maxDataSize = Math.max(maxDataSize, partition.getDataSize());
         }
         // A tablet will be regarded using the 1GB size
-        // And also the number will not be larger than the calBucketNumAccordingToBackends()
+        // And also the number will not be larger than the calBucketNumAccordingToDataNodes()
         bucketNum = (int) Math.min(bucketNum, maxDataSize / FeConstants.AUTO_DISTRIBUTION_UNIT);
         if (bucketNum == 0) {
             bucketNum = 1;
@@ -1651,43 +1651,43 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitions.isEmpty()) {
             return;
         }
-        int numAliveBackends = systemInfoService.getAliveBackendNumber();
+        int numAliveDataNodes = systemInfoService.getAliveDataNodeNumber();
         int numReplicas = 0;
         for (Partition partition : partitions) {
             numReplicas += partition.getReplicaCount();
         }
 
-        if (partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500) {
+        if (partitions.size() >= 3 && numAliveDataNodes >= 3 && numReplicas >= numAliveDataNodes * 500) {
             LOG.info("creating {} partitions of table {} concurrently", partitions.size(), table.getName());
-            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
-        } else if (numAliveBackends > 0) {
-            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
+            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveDataNodes);
+        } else if (numAliveDataNodes > 0) {
+            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveDataNodes);
         } else {
             throw new DdlException("no alive backend");
         }
     }
 
-    private int countMaxTasksPerBackend(List<CreateReplicaTask> tasks) {
-        Map<Long, Integer> tasksPerBackend = new HashMap<>();
+    private int countMaxTasksPerDataNode(List<CreateReplicaTask> tasks) {
+        Map<Long, Integer> tasksPerDataNode = new HashMap<>();
         for (CreateReplicaTask task : tasks) {
-            tasksPerBackend.compute(task.getBackendId(), (k, v) -> (v == null) ? 1 : v + 1);
+            tasksPerDataNode.compute(task.getDataNodeId(), (k, v) -> (v == null) ? 1 : v + 1);
         }
-        return Collections.max(tasksPerBackend.values());
+        return Collections.max(tasksPerDataNode.values());
     }
 
     private void buildPartitionsSequentially(long dbId, OlapTable table, List<Partition> partitions, int numReplicas,
-                                             int numBackends) throws DdlException {
+                                             int numDataNodes) throws DdlException {
         // Try to bundle at least 200 CreateReplicaTask's in a single AgentBatchTask.
         // The number 200 is just an experiment value that seems to work without obvious problems, feel free to
         // change it if you have a better choice.
         int avgReplicasPerPartition = numReplicas / partitions.size();
-        int partitionGroupSize = Math.max(1, numBackends * 200 / Math.max(1, avgReplicasPerPartition));
+        int partitionGroupSize = Math.max(1, numDataNodes * 200 / Math.max(1, avgReplicasPerPartition));
         for (int i = 0; i < partitions.size(); i += partitionGroupSize) {
             int endIndex = Math.min(partitions.size(), i + partitionGroupSize);
             List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partitions.subList(i, endIndex));
             int partitionCount = endIndex - i;
             int indexCountPerPartition = partitions.get(i).getVisibleMaterializedIndicesCount();
-            int timeout = Config.tablet_create_timeout_second * countMaxTasksPerBackend(tasks);
+            int timeout = Config.tablet_create_timeout_second * countMaxTasksPerDataNode(tasks);
             // Compatible with older versions, `Config.max_create_table_timeout_second` is the timeout time for a single index.
             // Here we assume that all partitions have the same number of indexes.
             int maxTimeout = partitionCount * indexCountPerPartition * Config.max_create_table_timeout_second;
@@ -1696,15 +1696,15 @@ public class LocalMetastore implements ConnectorMetadata {
                 tasks.clear();
             } finally {
                 for (CreateReplicaTask task : tasks) {
-                    AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CREATE, task.getSignature());
+                    AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.CREATE, task.getSignature());
                 }
             }
         }
     }
 
     private void buildPartitionsConcurrently(long dbId, OlapTable table, List<Partition> partitions, int numReplicas,
-                                             int numBackends) throws DdlException {
-        int timeout = numReplicas / numBackends * Config.tablet_create_timeout_second;
+                                             int numDataNodes) throws DdlException {
+        int timeout = numReplicas / numDataNodes * Config.tablet_create_timeout_second;
         int numIndexes = partitions.stream().mapToInt(Partition::getVisibleMaterializedIndicesCount).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(numReplicas);
@@ -1720,7 +1720,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition);
                     for (CreateReplicaTask task : tasks) {
                         List<Long> signatures =
-                                taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
+                                taskSignatures.computeIfAbsent(task.getDataNodeId(), k -> new ArrayList<>());
                         signatures.add(task.getSignature());
                     }
                     sendCreateReplicaTasks(tasks, countDownLatch);
@@ -1732,7 +1732,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     // To avoid these situations, new tasks are sent only when the average number of tasks on each node is less
                     // than 200.
                     // (numSendedTasks - numFinishedTasks) is number of tasks that have been sent but not yet finished.
-                    while (numSendedTasks - numFinishedTasks > 200 * numBackends) {
+                    while (numSendedTasks - numFinishedTasks > 200 * numDataNodes) {
                         ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
                         numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
                     }
@@ -1785,15 +1785,15 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
             if (table.isCloudNativeTable()) {
-                long primaryBackendId = -1;
+                long primaryDataNodeId = -1;
                 try {
-                    primaryBackendId = ((LakeTablet) tablet).getPrimaryBackendId();
+                    primaryDataNodeId = ((LakeTablet) tablet).getPrimaryDataNodeId();
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }
 
                 CreateReplicaTask task = new CreateReplicaTask(
-                        primaryBackendId,
+                        primaryDataNodeId,
                         dbId,
                         table.getId(),
                         partition.getId(),
@@ -1818,7 +1818,7 @@ public class LocalMetastore implements ConnectorMetadata {
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                     CreateReplicaTask task = new CreateReplicaTask(
-                            replica.getBackendId(),
+                            replica.getDataNodeId(),
                             dbId,
                             table.getId(),
                             partition.getId(),
@@ -1860,11 +1860,11 @@ public class LocalMetastore implements ConnectorMetadata {
         HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
         for (CreateReplicaTask task : tasks) {
             task.setLatch(countDownLatch);
-            countDownLatch.addMark(task.getBackendId(), task.getTabletId());
-            AgentBatchTask batchTask = batchTaskMap.get(task.getBackendId());
+            countDownLatch.addMark(task.getDataNodeId(), task.getTabletId());
+            AgentBatchTask batchTask = batchTaskMap.get(task.getDataNodeId());
             if (batchTask == null) {
                 batchTask = new AgentBatchTask();
-                batchTaskMap.put(task.getBackendId(), batchTask);
+                batchTaskMap.put(task.getDataNodeId(), batchTask);
             }
             batchTask.addTask(task);
         }
@@ -1893,7 +1893,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 for (Map.Entry<Long, Long> mark : firstThree) {
                     sb.append(mark.getValue()); // TabletId
                     sb.append('(');
-                    Backend backend = stateMgr.getClusterInfo().getBackend(mark.getKey());
+                    DataNode backend = stateMgr.getClusterInfo().getDataNode(mark.getKey());
                     sb.append(backend != null ? backend.getHost() : "N/A");
                     sb.append(") ");
                 }
@@ -2090,17 +2090,17 @@ public class LocalMetastore implements ConnectorMetadata {
             // This lock will release very fast.
             db.writeLock();
             try {
-                backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+                backendsPerBucketSeq = colocateTableIndex.getDataNodesPerBucketSeq(groupId);
             } finally {
                 db.writeUnlock();
             }
         }
 
-        // chooseBackendsArbitrary is true, means this may be the first table of colocation group,
+        // chooseDataNodesArbitrary is true, means this may be the first table of colocation group,
         // or this is just a normal table, and we can choose backends arbitrary.
         // otherwise, backends should be chosen from backendsPerBucketSeq;
-        boolean chooseBackendsArbitrary = backendsPerBucketSeq == null || backendsPerBucketSeq.isEmpty();
-        if (chooseBackendsArbitrary) {
+        boolean chooseDataNodesArbitrary = backendsPerBucketSeq == null || backendsPerBucketSeq.isEmpty();
+        if (chooseDataNodesArbitrary) {
             backendsPerBucketSeq = Lists.newArrayList();
         }
         for (int i = 0; i < distributionInfo.getBucketNum(); ++i) {
@@ -2111,48 +2111,48 @@ public class LocalMetastore implements ConnectorMetadata {
             index.addTablet(tablet, tabletMeta);
             tabletIdSet.add(tablet.getId());
 
-            // get BackendIds
-            List<Long> chosenBackendIds;
-            if (chooseBackendsArbitrary) {
+            // get DataNodeIds
+            List<Long> chosenDataNodeIds;
+            if (chooseDataNodesArbitrary) {
                 // This is the first colocate table in the group, or just a normal table,
                 // randomly choose backends
                 if (Config.enable_strict_storage_medium_check) {
-                    chosenBackendIds =
-                            chosenBackendIdBySeq(replicationNum, tabletMeta.getStorageMedium());
+                    chosenDataNodeIds =
+                            chosenDataNodeIdBySeq(replicationNum, tabletMeta.getStorageMedium());
                 } else {
-                    chosenBackendIds = chosenBackendIdBySeq(replicationNum);
+                    chosenDataNodeIds = chosenDataNodeIdBySeq(replicationNum);
                 }
-                backendsPerBucketSeq.add(chosenBackendIds);
+                backendsPerBucketSeq.add(chosenDataNodeIds);
             } else {
                 // get backends from existing backend sequence
-                chosenBackendIds = backendsPerBucketSeq.get(i);
+                chosenDataNodeIds = backendsPerBucketSeq.get(i);
             }
 
             // create replicas
-            for (long backendId : chosenBackendIds) {
+            for (long backendId : chosenDataNodeIds) {
                 long replicaId = getNextId();
                 Replica replica = new Replica(replicaId, backendId, replicaState, version,
                         tabletMeta.getOldSchemaHash());
                 tablet.addReplica(replica);
             }
-            Preconditions.checkState(chosenBackendIds.size() == replicationNum,
-                    chosenBackendIds.size() + " vs. " + replicationNum);
+            Preconditions.checkState(chosenDataNodeIds.size() == replicationNum,
+                    chosenDataNodeIds.size() + " vs. " + replicationNum);
         }
 
-        if (groupId != null && chooseBackendsArbitrary) {
-            colocateTableIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+        if (groupId != null && chooseDataNodesArbitrary) {
+            colocateTableIndex.addDataNodesPerBucketSeq(groupId, backendsPerBucketSeq);
             ColocatePersistInfo info =
-                    ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
-            editLog.logColocateBackendsPerBucketSeq(info);
+                    ColocatePersistInfo.createForDataNodesPerBucketSeq(groupId, backendsPerBucketSeq);
+            editLog.logColocateDataNodesPerBucketSeq(info);
         }
     }
 
     // create replicas for tablet with random chosen backends
-    private List<Long> chosenBackendIdBySeq(int replicationNum, TStorageMedium storageMedium)
+    private List<Long> chosenDataNodeIdBySeq(int replicationNum, TStorageMedium storageMedium)
             throws DdlException {
-        List<Long> chosenBackendIds = systemInfoService.seqChooseBackendIdsByStorageMedium(replicationNum,
+        List<Long> chosenDataNodeIds = systemInfoService.seqChooseDataNodeIdsByStorageMedium(replicationNum,
                 true, true, storageMedium);
-        if (CollectionUtils.isEmpty(chosenBackendIds)) {
+        if (CollectionUtils.isEmpty(chosenDataNodeIds)) {
             throw new DdlException(
                     "Failed to find enough hosts with storage medium " + storageMedium +
                             " at all backends, number of replicas needed: " +
@@ -2161,14 +2161,14 @@ public class LocalMetastore implements ConnectorMetadata {
                             "but incompatible medium type can cause balance problem, so we strongly recommend" +
                             " creating table with compatible 'storage_medium' property set.");
         }
-        return chosenBackendIds;
+        return chosenDataNodeIds;
     }
 
-    private List<Long> chosenBackendIdBySeq(int replicationNum) throws DdlException {
-        List<Long> chosenBackendIds =
-                systemInfoService.seqChooseBackendIds(replicationNum, true, true);
-        if (!CollectionUtils.isEmpty(chosenBackendIds)) {
-            return chosenBackendIds;
+    private List<Long> chosenDataNodeIdBySeq(int replicationNum) throws DdlException {
+        List<Long> chosenDataNodeIds =
+                systemInfoService.seqChooseDataNodeIds(replicationNum, true, true);
+        if (!CollectionUtils.isEmpty(chosenDataNodeIds)) {
+            return chosenDataNodeIds;
         } else if (replicationNum > 1) {
             throw new DdlException(String.format("Unable to find %d alive nodes on different hosts to create %d replicas",
                     replicationNum, replicationNum));
@@ -2265,7 +2265,7 @@ public class LocalMetastore implements ConnectorMetadata {
             schemaHash = olapTable.getSchemaHashByIndexId(info.getIndexId());
         }
 
-        Replica replica = new Replica(info.getReplicaId(), info.getBackendId(), info.getVersion(),
+        Replica replica = new Replica(info.getReplicaId(), info.getDataNodeId(), info.getVersion(),
                 schemaHash, info.getDataSize(), info.getRowCount(),
                 Replica.ReplicaState.NORMAL,
                 info.getLastFailedVersion(),
@@ -2281,7 +2281,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
         MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
         LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
-        Replica replica = tablet.getReplicaByBackendId(info.getBackendId());
+        Replica replica = tablet.getReplicaByDataNodeId(info.getDataNodeId());
         Preconditions.checkNotNull(replica, info);
         replica.updateRowCount(info.getVersion(), info.getMinReadableVersion(), info.getDataSize(), info.getRowCount());
         replica.setBad(false);
@@ -2313,7 +2313,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
         MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
         LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
-        tablet.deleteReplicaByBackendId(info.getBackendId());
+        tablet.deleteReplicaByDataNodeId(info.getDataNodeId());
     }
 
     public void replayDeleteReplica(ReplicaPersistInfo info) {
@@ -2625,7 +2625,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
         if (distributionInfo.getBucketNum() == 0) {
-            int numBucket = CatalogUtils.calBucketNumAccordingToBackends();
+            int numBucket = CatalogUtils.calBucketNumAccordingToDataNodes();
             distributionInfo.setBucketNum(numBucket);
         }
         // create refresh scheme
@@ -3755,12 +3755,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 checksum ^= cluster.getId();
 
                 Preconditions.checkState(cluster.isDefaultCluster(), "Cluster must be default_cluster");
-                List<Long> latestBackendIds = stateMgr.getClusterInfo().getBackendIds();
+                List<Long> latestDataNodeIds = stateMgr.getClusterInfo().getDataNodeIds();
 
                 // The number of BE in cluster is not same as in SystemInfoService, when perform 'ALTER
                 // SYSTEM ADD BACKEND TO ...' or 'ALTER SYSTEM ADD BACKEND ...', because both of them are
-                // for adding BE to some Cluster, but loadCluster is after loadBackend.
-                cluster.setBackendIdList(latestBackendIds);
+                // for adding BE to some Cluster, but loadCluster is after loadDataNode.
+                cluster.setDataNodeIdList(latestDataNodeIds);
 
                 String dbName = InfoSchemaDb.getFullInfoSchemaDbName();
                 InfoSchemaDb db;
@@ -3789,8 +3789,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
-        final List<Backend> defaultClusterBackends = systemInfoService.getBackends();
-        for (Backend backend : defaultClusterBackends) {
+        final List<DataNode> defaultClusterDataNodes = systemInfoService.getDataNodes();
+        for (DataNode backend : defaultClusterDataNodes) {
             backendList.add(backend.getId());
         }
 
@@ -3799,7 +3799,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // make sure one host hold only one backend.
         Set<String> beHost = Sets.newHashSet();
-        for (Backend be : defaultClusterBackends) {
+        for (DataNode be : defaultClusterDataNodes) {
             if (beHost.contains(be.getHost())) {
                 // we can not handle this situation automatically.
                 LOG.error("found more than one backends in same host: {}", be.getHost());
@@ -3811,7 +3811,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // we create default_cluster to meet the need for ease of use, because
         // most users hava no multi tenant needs.
-        cluster.setBackendIdList(backendList);
+        cluster.setDataNodeIdList(backendList);
         unprotectCreateCluster(cluster);
         for (Database db : idToDb.values()) {
             cluster.addDb(db.getFullName(), db.getId());
@@ -3836,14 +3836,14 @@ public class LocalMetastore implements ConnectorMetadata {
         return checksum;
     }
 
-    public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
-        for (long id : info.getBackendList()) {
-            final Backend backend = stateMgr.getClusterInfo().getBackend(id);
+    public void replayUpdateClusterAndDataNodes(DataNodeIdsUpdateInfo info) {
+        for (long id : info.getDataNodeList()) {
+            final DataNode backend = stateMgr.getClusterInfo().getDataNode(id);
             final Cluster cluster = defaultCluster;
-            cluster.removeBackend(id);
+            cluster.removeDataNode(id);
             backend.setDecommissioned(false);
             backend.clearClusterName();
-            backend.setBackendState(Backend.BackendState.free);
+            backend.setDataNodeState(DataNode.DataNodeState.free);
         }
     }
 
@@ -4101,7 +4101,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public void replayBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
+    public void replayDataNodeTabletsInfo(DataNodeTabletsInfo backendTabletsInfo) {
         List<Pair<Long, Integer>> tabletsWithSchemaHash = backendTabletsInfo.getTabletSchemaHash();
         if (!tabletsWithSchemaHash.isEmpty()) {
             // In previous version, we save replica info in `tabletsWithSchemaHash`,
@@ -4148,7 +4148,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (replica != null) {
                     replica.setBad(true);
                     LOG.debug("get replica {} of tablet {} on backend {} to bad when replaying",
-                            info.getReplicaId(), info.getTabletId(), info.getBackendId());
+                            info.getReplicaId(), info.getTabletId(), info.getDataNodeId());
                 }
             } finally {
                 db.writeUnlock();
@@ -4261,13 +4261,13 @@ public class LocalMetastore implements ConnectorMetadata {
     // Set specified replica's status. If replica does not exist, just ignore it.
     public void setReplicaStatus(AdminSetReplicaStatusStmt stmt) {
         long tabletId = stmt.getTabletId();
-        long backendId = stmt.getBackendId();
+        long backendId = stmt.getDataNodeId();
         Replica.ReplicaStatus status = stmt.getStatus();
         setReplicaStatusInternal(tabletId, backendId, status, false);
     }
 
     public void replaySetReplicaStatus(SetReplicaStatusOperationLog log) {
-        setReplicaStatusInternal(log.getTabletId(), log.getBackendId(), log.getReplicaStatus(), true);
+        setReplicaStatusInternal(log.getTabletId(), log.getDataNodeId(), log.getReplicaStatus(), true);
     }
 
     private void setReplicaStatusInternal(long tabletId, long backendId, Replica.ReplicaStatus status,

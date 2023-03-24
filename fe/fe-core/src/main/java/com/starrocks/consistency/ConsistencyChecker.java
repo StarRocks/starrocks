@@ -370,7 +370,7 @@ public class ConsistencyChecker extends LeaderDaemon {
 
     public void handleFinishedConsistencyCheck(CheckConsistencyTask task, long checksum) {
         long tabletId = task.getTabletId();
-        long backendId = task.getBackendId();
+        long backendId = task.getDataNodeId();
 
         CheckConsistencyJob job = getJob(tabletId);
         if (job == null) {

@@ -44,7 +44,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
@@ -95,12 +95,12 @@ public class LoadAction extends RestBaseAction {
         }
 
         // Choose a backend sequentially.
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseDataNodeIds(1, true, false);
         if (CollectionUtils.isEmpty(backendIds)) {
             throw new DdlException("No backend alive.");
         }
 
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(backendIds.get(0));
         if (backend == null) {
             throw new DdlException("No backend alive.");
         }

@@ -394,7 +394,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 int healthyReplicaNum = 0;
                 for (Replica baseReplica : baseReplicas) {
                     long mvReplicaId = globalStateMgr.getNextId();
-                    long backendId = baseReplica.getBackendId();
+                    long backendId = baseReplica.getDataNodeId();
                     if (baseReplica.getState() == Replica.ReplicaState.CLONE
                             || baseReplica.getState() == Replica.ReplicaState.DECOMMISSION
                             || baseReplica.getLastFailedVersion() > 0) {

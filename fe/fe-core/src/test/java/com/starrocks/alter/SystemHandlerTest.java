@@ -18,7 +18,7 @@ package com.starrocks.alter;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.AlterClause;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyDataNodeAddressClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import org.junit.Before;
 import org.junit.Test;
@@ -36,8 +36,8 @@ public class SystemHandlerTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testModifyBackendAddressLogic() throws UserException {
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.1", "sandbox-fqdn");
+    public void testModifyDataNodeAddressLogic() throws UserException {
+        ModifyDataNodeAddressClause clause = new ModifyDataNodeAddressClause("127.0.0.1", "sandbox-fqdn");
         List<AlterClause> clauses = new ArrayList<>();
         clauses.add(clause);
         systemHandler.process(clauses, null, null);

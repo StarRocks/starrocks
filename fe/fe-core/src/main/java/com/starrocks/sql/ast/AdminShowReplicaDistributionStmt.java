@@ -27,7 +27,7 @@ import com.starrocks.sql.parser.NodePosition;
 // ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1 PARTITION(p1, p2);
 public class AdminShowReplicaDistributionStmt extends ShowStmt {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("BackendId").add("ReplicaNum").add("Graph").add("Percent").build();
+            .add("DataNodeId").add("ReplicaNum").add("Graph").add("Percent").build();
 
     private final TableRef tblRef;
 

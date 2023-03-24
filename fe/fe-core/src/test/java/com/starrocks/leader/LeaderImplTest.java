@@ -83,7 +83,7 @@ public class LeaderImplTest {
         // lake table
         new MockUp<LakeTablet>() {
             @Mock
-            public Set<Long> getBackendIds() {
+            public Set<Long> getDataNodeIds() {
                 return Sets.newHashSet();
             }
         };

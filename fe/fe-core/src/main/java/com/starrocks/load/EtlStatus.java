@@ -330,11 +330,11 @@ public class EtlStatus implements Writable {
         private Table<String, String, Long> counterTbl = HashBasedTable.create();
 
         // load task id -> unfinished backend id list
-        @SerializedName("unfinishedBackendIds")
-        private Map<String, List<Long>> unfinishedBackendIds = Maps.newHashMap();
+        @SerializedName("unfinishedDataNodeIds")
+        private Map<String, List<Long>> unfinishedDataNodeIds = Maps.newHashMap();
         // load task id -> all backend id list
-        @SerializedName("allBackendIds")
-        private Map<String, List<Long>> allBackendIds = Maps.newHashMap();
+        @SerializedName("allDataNodeIds")
+        private Map<String, List<Long>> allDataNodeIds = Maps.newHashMap();
 
         // number of file to be loaded
         @SerializedName("fileNum")
@@ -355,7 +355,7 @@ public class EtlStatus implements Writable {
         private boolean loadFinish = false;
 
         // init the statistic of specified load task
-        public synchronized void initLoad(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {
+        public synchronized void initLoad(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedDataNodeIds) {
             String loadStr = DebugUtil.printId(loadId);
             counterTbl.rowMap().remove(loadStr);
             sinkBytesCounterTbl.rowMap().remove(loadStr);
@@ -369,10 +369,10 @@ public class EtlStatus implements Writable {
                 sourceBytesCounterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
             }
             
-            allBackendIds.put(loadStr, relatedBackendIds);
-            // need to get a copy of relatedBackendIds, so that when we modify the "relatedBackendIds" in
-            // allBackendIds, the list in unfinishedBackendIds will not be changed.
-            unfinishedBackendIds.put(loadStr, Lists.newArrayList(relatedBackendIds));
+            allDataNodeIds.put(loadStr, relatedDataNodeIds);
+            // need to get a copy of relatedDataNodeIds, so that when we modify the "relatedDataNodeIds" in
+            // allDataNodeIds, the list in unfinishedDataNodeIds will not be changed.
+            unfinishedDataNodeIds.put(loadStr, Lists.newArrayList(relatedDataNodeIds));
         }
 
         public synchronized void removeLoad(TUniqueId loadId) {
@@ -382,8 +382,8 @@ public class EtlStatus implements Writable {
             sourceRowsCounterTbl.rowMap().remove(loadStr);
             sourceBytesCounterTbl.rowMap().remove(loadStr);
             
-            unfinishedBackendIds.remove(loadStr);
-            allBackendIds.remove(loadStr);
+            unfinishedDataNodeIds.remove(loadStr);
+            allDataNodeIds.remove(loadStr);
         }
 
         public synchronized long totalFileSize() {
@@ -446,8 +446,8 @@ public class EtlStatus implements Writable {
                 sourceBytesCounterTbl.put(loadStr, fragmentStr, sourceBytes);
             }
 
-            if (isDone && unfinishedBackendIds.containsKey(loadStr)) {
-                unfinishedBackendIds.get(loadStr).remove(backendId);
+            if (isDone && unfinishedDataNodeIds.containsKey(loadStr)) {
+                unfinishedDataNodeIds.get(loadStr).remove(backendId);
             }
         }
 
@@ -462,8 +462,8 @@ public class EtlStatus implements Writable {
                 sourceBytesCounterTbl.put(loadStr, fragmentStr, 0L);
             }
 
-            if (isDone && unfinishedBackendIds.containsKey(loadStr)) {
-                unfinishedBackendIds.get(loadStr).remove(backendId);
+            if (isDone && unfinishedDataNodeIds.containsKey(loadStr)) {
+                unfinishedDataNodeIds.get(loadStr).remove(backendId);
             }
         }
 
@@ -501,8 +501,8 @@ public class EtlStatus implements Writable {
             details.put("FileNumber", fileNum);
             details.put("FileSize", totalFileSizeB);
             details.put("TaskNumber", counterTbl.rowMap().size());
-            details.put("Unfinished backends", unfinishedBackendIds);
-            details.put("All backends", allBackendIds);
+            details.put("Unfinished backends", unfinishedDataNodeIds);
+            details.put("All backends", allDataNodeIds);
             Gson gson = new Gson();
             return gson.toJson(details);
         }

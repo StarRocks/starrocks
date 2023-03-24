@@ -276,7 +276,7 @@ public class ReplicaPersistInfo implements Writable {
         return replicaId;
     }
 
-    public long getBackendId() {
+    public long getDataNodeId() {
         return backendId;
     }
 

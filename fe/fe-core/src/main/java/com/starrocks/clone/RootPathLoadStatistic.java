@@ -35,8 +35,8 @@
 package com.starrocks.clone;
 
 import com.starrocks.catalog.DiskInfo.DiskState;
-import com.starrocks.clone.BackendLoadStatistic.Classification;
 import com.starrocks.clone.BalanceStatus.ErrCode;
+import com.starrocks.clone.DataNodeLoadStatistic.Classification;
 import com.starrocks.common.Config;
 import com.starrocks.thrift.TStorageMedium;
 

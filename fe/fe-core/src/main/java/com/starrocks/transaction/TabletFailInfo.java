@@ -40,7 +40,7 @@ public class TabletFailInfo implements Writable {
         return tabletId;
     }
 
-    public long getBackendId() {
+    public long getDataNodeId() {
         return backendId;
     }
 

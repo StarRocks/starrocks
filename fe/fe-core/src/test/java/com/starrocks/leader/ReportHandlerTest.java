@@ -22,8 +22,8 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TMasterResult;
@@ -74,7 +74,7 @@ public class ReportHandlerTest {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         long dbId = db.getId();
         long backendId = 10001L;
-        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByDataNodeId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
@@ -99,7 +99,7 @@ public class ReportHandlerTest {
         long dbId = db.getId();
         OlapTable olapTable = (OlapTable) db.getTable("binlog_report_handler_test");
         long backendId = 10001L;
-        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByDataNodeId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
@@ -145,12 +145,12 @@ public class ReportHandlerTest {
     public void testHandleResourceUsageReport() {
         QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
 
-        Backend backend = new Backend(0, "127.0.0.1", 80);
+        DataNode backend = new DataNode(0, "127.0.0.1", 80);
         ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
 
         new MockUp<SystemInfoService>() {
             @Mock
-            public ComputeNode getBackendOrComputeNode(long id) {
+            public ComputeNode getDataNodeOrComputeNode(long id) {
                 if (id == backend.getId()) {
                     return backend;
                 }
@@ -199,12 +199,12 @@ public class ReportHandlerTest {
     
     @Test
     public void testHandleReport() throws TException {
-        Backend be = new Backend(10001, "host1", 8000);
+        DataNode be = new DataNode(10001, "host1", 8000);
         ComputeNode cn = new ComputeNode(10002, "host2", 8000);
 
         new MockUp<SystemInfoService>() {
             @Mock
-            public Backend getBackendWithBePort(String host, int bePort) {
+            public DataNode getDataNodeWithBePort(String host, int bePort) {
                 if (host.equals(be.getHost()) && bePort == be.getBePort()) {
                     return be;
                 }

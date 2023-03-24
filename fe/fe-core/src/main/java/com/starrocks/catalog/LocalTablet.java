@@ -46,7 +46,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TxnFinishState;
 import org.apache.logging.log4j.LogManager;
@@ -140,12 +140,12 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     private boolean deleteRedundantReplica(long backendId, long version) {
         boolean delete = false;
-        boolean hasBackend = false;
+        boolean hasDataNode = false;
         Iterator<Replica> iterator = replicas.iterator();
         while (iterator.hasNext()) {
             Replica replica = iterator.next();
-            if (replica.getBackendId() == backendId) {
-                hasBackend = true;
+            if (replica.getDataNodeId() == backendId) {
+                hasDataNode = true;
                 if (replica.getVersion() <= version) {
                     iterator.remove();
                     delete = true;
@@ -153,12 +153,12 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
         }
 
-        return delete || !hasBackend;
+        return delete || !hasDataNode;
     }
 
     public void addReplica(Replica replica, boolean updateInvertedIndex) {
         synchronized (replicas) {
-            if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
+            if (deleteRedundantReplica(replica.getDataNodeId(), replica.getVersion())) {
                 replicas.add(replica);
                 if (updateInvertedIndex) {
                     GlobalStateMgr.getCurrentInvertedIndex().addReplica(id, replica);
@@ -196,19 +196,19 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     @Override
-    public Set<Long> getBackendIds() {
+    public Set<Long> getDataNodeIds() {
         Set<Long> beIds = Sets.newHashSet();
         for (Replica replica : replicas) {
-            beIds.add(replica.getBackendId());
+            beIds.add(replica.getDataNodeId());
         }
         return beIds;
     }
 
-    public List<String> getBackends() {
+    public List<String> getDataNodes() {
         List<String> backends = new ArrayList<String>();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
-            Backend backend = infoService.getBackend(replica.getBackendId());
+            DataNode backend = infoService.getDataNode(replica.getDataNodeId());
             if (backend == null) {
                 continue;
             }
@@ -218,7 +218,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     // for loading data
-    public List<Long> getNormalReplicaBackendIds() {
+    public List<Long> getNormalReplicaDataNodeIds() {
         List<Long> beIds = Lists.newArrayList();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
@@ -227,15 +227,15 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
 
             ReplicaState state = replica.getState();
-            if (infoService.checkBackendAlive(replica.getBackendId()) && state.canLoad()) {
-                beIds.add(replica.getBackendId());
+            if (infoService.checkDataNodeAlive(replica.getDataNodeId()) && state.canLoad()) {
+                beIds.add(replica.getDataNodeId());
             }
         }
         return beIds;
     }
 
     // return map of (BE id -> path hash) of normal replicas
-    public Multimap<Replica, Long> getNormalReplicaBackendPathMap(int clusterId) {
+    public Multimap<Replica, Long> getNormalReplicaDataNodePathMap(int clusterId) {
         Multimap<Replica, Long> map = LinkedHashMultimap.create();
         SystemInfoService infoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
         for (Replica replica : replicas) {
@@ -244,7 +244,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
 
             ReplicaState state = replica.getState();
-            if (infoService.checkBackendAlive(replica.getBackendId())
+            if (infoService.checkDataNodeAlive(replica.getDataNodeId())
                     && (state == ReplicaState.NORMAL || state == ReplicaState.ALTER)) {
                 map.put(replica, replica.getPathHash());
             }
@@ -273,7 +273,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                         && replica.getMinReadableVersion() <= visibleVersion
                         && (replica.getSchemaHash() == -1 || replica.getSchemaHash() == schemaHash)) {
                     allQueryableReplicas.add(replica);
-                    if (localBeId != -1 && replica.getBackendId() == localBeId) {
+                    if (localBeId != -1 && replica.getDataNodeId() == localBeId) {
                         localReplicas.add(replica);
                     }
                 }
@@ -315,9 +315,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return null;
     }
 
-    public Replica getReplicaByBackendId(long backendId) {
+    public Replica getReplicaByDataNodeId(long backendId) {
         for (Replica replica : replicas) {
-            if (replica.getBackendId() == backendId) {
+            if (replica.getDataNodeId() == backendId) {
                 return replica;
             }
         }
@@ -328,19 +328,19 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         synchronized (replicas) {
             if (replicas.contains(replica)) {
                 replicas.remove(replica);
-                GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, replica.getBackendId());
+                GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, replica.getDataNodeId());
                 return true;
             }
             return false;
         }
     }
 
-    public boolean deleteReplicaByBackendId(long backendId) {
+    public boolean deleteReplicaByDataNodeId(long backendId) {
         synchronized (replicas) {
             Iterator<Replica> iterator = replicas.iterator();
             while (iterator.hasNext()) {
                 Replica replica = iterator.next();
-                if (replica.getBackendId() == backendId) {
+                if (replica.getDataNodeId() == backendId) {
                     iterator.remove();
                     GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, backendId);
                     return true;
@@ -398,7 +398,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         int replicaCount = in.readInt();
         for (int i = 0; i < replicaCount; ++i) {
             Replica replica = Replica.read(in);
-            if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
+            if (deleteRedundantReplica(replica.getDataNodeId(), replica.getVersion())) {
                 // do not need to update immutableReplicas, because it is a view of replicas
                 replicas.add(replica);
             }
@@ -516,7 +516,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         Replica needFurtherRepairReplica = null;
         Set<String> hosts = Sets.newHashSet();
         for (Replica replica : replicas) {
-            Backend backend = systemInfoService.getBackend(replica.getBackendId());
+            DataNode backend = systemInfoService.getDataNode(replica.getDataNodeId());
             if (backend == null || !backend.isAlive() || replica.getState() == ReplicaState.CLONE
                     || replica.getState() == ReplicaState.DECOMMISSION
                     || replica.isBad() || !hosts.add(backend.getHost())) {
@@ -548,23 +548,23 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         }
 
         // 1. alive replicas are not enough
-        int aliveBackendsNum = aliveBeIdsInCluster.size();
-        if (alive < replicationNum && replicas.size() >= aliveBackendsNum
-                && aliveBackendsNum >= replicationNum && replicationNum > 1) {
+        int aliveDataNodesNum = aliveBeIdsInCluster.size();
+        if (alive < replicationNum && replicas.size() >= aliveDataNodesNum
+                && aliveDataNodesNum >= replicationNum && replicationNum > 1) {
             // there is no enough backend for us to create a new replica, so we have to delete an existing replica,
             // so there can be available backend for us to create a new replica.
             // And if there is only one replica, we will not handle it(maybe need human interference)
             // condition explain:
             // 1. alive < replicationNum: replica is missing or bad
-            // 2. replicas.size() >= aliveBackendsNum: the existing replicas occupies all available backends
-            // 3. aliveBackendsNum >= replicationNum: make sure after deleting, there will be
+            // 2. replicas.size() >= aliveDataNodesNum: the existing replicas occupies all available backends
+            // 3. aliveDataNodesNum >= replicationNum: make sure after deleting, there will be
             //    at least one backend for new replica.
             // 4. replicationNum > 1: if replication num is set to 1, do not delete any replica, for safety reason
             // For example: 3 replica, 3 be, one set bad, we need to forcefully delete one first
             return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
                     needFurtherRepairReplica);
         } else {
-            List<Long> availableBEs = systemInfoService.getAvailableBackendIds();
+            List<Long> availableBEs = systemInfoService.getAvailableDataNodeIds();
             // We create `REPLICA_MISSING` type task only when there exists enough available BEs which
             // we can choose to clone data to, if not we should check if we can create `VERSION_INCOMPLETE` task,
             // so that repair of replica with incomplete version won't be blocked and hence version publish process
@@ -592,9 +592,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         // 3. replica is under relocating
         if (stable < replicationNum) {
             List<Long> replicaBeIds = replicas.stream()
-                    .map(Replica::getBackendId).collect(Collectors.toList());
+                    .map(Replica::getDataNodeId).collect(Collectors.toList());
             List<Long> availableBeIds = aliveBeIdsInCluster.stream()
-                    .filter(systemInfoService::checkBackendAvailable)
+                    .filter(systemInfoService::checkDataNodeAvailable)
                     .collect(Collectors.toList());
             if (replicaBeIds.containsAll(availableBeIds)
                     && availableBeIds.size() >= replicationNum
@@ -656,9 +656,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     public TabletStatus getColocateHealthStatus(long visibleVersion,
                                                 int replicationNum, Set<Long> backendsSet) {
         // 1. check if replicas' backends are mismatch
-        Set<Long> replicaBackendIds = getBackendIds();
+        Set<Long> replicaDataNodeIds = getDataNodeIds();
         for (Long backendId : backendsSet) {
-            if (!replicaBackendIds.contains(backendId)) {
+            if (!replicaDataNodeIds.contains(backendId)) {
                 return TabletStatus.COLOCATE_MISMATCH;
             }
         }
@@ -667,7 +667,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         for (Replica replica : replicas) {
             // do not check the replica that is not in the colocate backend set,
             // this kind of replica should be dropped.
-            if (!backendsSet.contains(replica.getBackendId())) {
+            if (!backendsSet.contains(replica.getDataNodeId())) {
                 continue;
             }
 
@@ -739,7 +739,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     public String getReplicaInfos() {
         StringBuilder sb = new StringBuilder();
         for (Replica replica : replicas) {
-            sb.append(String.format("%d:%d/%d/%d,", replica.getBackendId(), replica.getVersion(),
+            sb.append(String.format("%d:%d/%d/%d,", replica.getDataNodeId(), replica.getVersion(),
                     replica.getLastFailedVersion(), replica.getLastSuccessVersion()));
         }
         return sb.toString();
@@ -783,9 +783,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                                 replicas.size()));
                         empty = false;
                     }
-                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                    DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(replica.getDataNodeId());
                     sb.append(String.format(" %s:%d%s",
-                            backend == null ? Long.toString(replica.getBackendId()) : backend.getHost(), replicaVersion,
+                            backend == null ? Long.toString(replica.getDataNodeId()) : backend.getHost(), replicaVersion,
                             replica.getState() == ReplicaState.ALTER ? "ALTER" : ""));
                 }
             }

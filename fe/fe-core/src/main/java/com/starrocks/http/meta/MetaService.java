@@ -391,10 +391,10 @@ public class MetaService {
             /*
              * Before dump, we acquired the globalStateMgr read lock and all databases' read lock and all
              * the jobs' read lock. This will guarantee the consistency of database and job queues.
-             * But Backend may still inconsistent.
+             * But DataNode may still inconsistent.
              */
 
-            // TODO: Still need to lock ClusterInfoService to prevent add or drop Backends
+            // TODO: Still need to lock ClusterInfoService to prevent add or drop DataNodes
             String dumpFilePath = GlobalStateMgr.getCurrentState().dumpImage();
             if (dumpFilePath == null) {
                 response.appendContent("dump failed. " + dumpFilePath);

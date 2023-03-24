@@ -256,7 +256,7 @@ public class OlapTableSinkTest {
                 result = globalStateMgr;
                 globalStateMgr.getOrCreateSystemInfo(anyInt);
                 result = systemInfoService;
-                systemInfoService.checkBackendAlive(anyLong);
+                systemInfoService.checkDataNodeAlive(anyLong);
                 result = true;
             }
         };
@@ -340,7 +340,7 @@ public class OlapTableSinkTest {
                 result = globalStateMgr;
                 globalStateMgr.getOrCreateSystemInfo(anyInt);
                 result = systemInfoService;
-                systemInfoService.checkBackendAlive(anyLong);
+                systemInfoService.checkDataNodeAlive(anyLong);
                 result = true;
             }
         };

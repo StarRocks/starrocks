@@ -79,7 +79,7 @@ public class ReplicaTest {
     @Test
     public void getMethodTest() {
         Assert.assertEquals(replicaId, replica.getId());
-        Assert.assertEquals(backendId, replica.getBackendId());
+        Assert.assertEquals(backendId, replica.getDataNodeId());
         Assert.assertEquals(version, replica.getVersion());
         Assert.assertEquals(dataSize, replica.getDataSize());
         Assert.assertEquals(rowCount, replica.getRowCount());
@@ -133,7 +133,7 @@ public class ReplicaTest {
             Replica olapReplica = new Replica();
             olapReplica.readFields(dis);
             Assert.assertEquals(100 * count, olapReplica.getId());
-            Assert.assertEquals(100 * count, olapReplica.getBackendId());
+            Assert.assertEquals(100 * count, olapReplica.getDataNodeId());
             Assert.assertEquals(100 * count, olapReplica.getVersion());
             Assert.assertEquals(100 * count, olapReplica.getDataSize());
             Assert.assertEquals(100 * count, olapReplica.getRowCount());

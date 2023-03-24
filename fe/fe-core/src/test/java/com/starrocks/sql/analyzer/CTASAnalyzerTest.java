@@ -54,8 +54,8 @@ public class CTASAnalyzerTest {
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);

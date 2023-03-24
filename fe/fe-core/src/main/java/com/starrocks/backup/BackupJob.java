@@ -207,7 +207,7 @@ public class BackupJob extends AbstractJob {
         // Full path will look like:
         //      /path/to/your/be/data/snapshot/20180410102311.0.86400/10006/352781111/
         SnapshotInfo info = new SnapshotInfo(task.getDbId(), task.getTableId(), task.getPartitionId(),
-                task.getIndexId(), task.getTabletId(), task.getBackendId(),
+                task.getIndexId(), task.getTabletId(), task.getDataNodeId(),
                 task.getSchemaHash(), request.getSnapshot_path(),
                 request.getSnapshot_files());
 
@@ -233,7 +233,7 @@ public class BackupJob extends AbstractJob {
         Map<Long, List<String>> tabletFileMap = request.getTablet_files();
         if (tabletFileMap.isEmpty()) {
             LOG.warn("upload snapshot files failed because nothing is uploaded. be: {}. {}",
-                    task.getBackendId(), this);
+                    task.getDataNodeId(), this);
             return false;
         }
 
@@ -254,14 +254,14 @@ public class BackupJob extends AbstractJob {
             if (tabletFiles.size() != uploadedFiles.size()) {
                 LOG.warn("upload snapshot files failed because file num is wrong. "
                                 + "expect: {}, actual:{}, tablet: {}, be: {}. {}",
-                        tabletFiles.size(), uploadedFiles.size(), tabletId, task.getBackendId(), this);
+                        tabletFiles.size(), uploadedFiles.size(), tabletId, task.getDataNodeId(), this);
                 return false;
             }
 
             if (!Collections2.filter(tabletFiles, Predicates.not(Predicates.in(uploadedFiles))).isEmpty()) {
                 LOG.warn("upload snapshot files failed because file is different. "
                                 + "expect: [{}], actual: [{}], tablet: {}, be: {}. {}",
-                        tabletFiles, uploadedFiles, tabletId, task.getBackendId(), this);
+                        tabletFiles, uploadedFiles, tabletId, task.getDataNodeId(), this);
                 return false;
             }
 
@@ -415,13 +415,13 @@ public class BackupJob extends AbstractJob {
                             + ". visible version: " + visibleVersion);
             return;
         }
-        SnapshotTask task = new SnapshotTask(null, replica.getBackendId(), tablet.getId(),
+        SnapshotTask task = new SnapshotTask(null, replica.getDataNodeId(), tablet.getId(),
                 jobId, dbId, tbl.getId(), partition.getId(),
                 index.getId(), tablet.getId(),
                 visibleVersion,
                 schemaHash, timeoutMs, false /* not restore task */);
         batchTask.addTask(task);
-        unfinishedTaskIds.put(tablet.getId(), replica.getBackendId());
+        unfinishedTaskIds.put(tablet.getId(), replica.getDataNodeId());
     }
 
     private void sendTasks() {

@@ -26,13 +26,13 @@ import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 import java.util.Map;
 
 public class MockGenericPool<VALUE extends org.apache.thrift.TServiceClient> extends GenericPool<VALUE> {
-    protected Map<TNetworkAddress, MockedBackend> backendMap = Maps.newConcurrentMap();
+    protected Map<TNetworkAddress, MockedDataNode> backendMap = Maps.newConcurrentMap();
 
     public MockGenericPool(String name) {
         super(name, new GenericKeyedObjectPoolConfig(), 100);
     }
 
-    public void register(MockedBackend backend) {
+    public void register(MockedDataNode backend) {
     }
 
     @Override
@@ -78,7 +78,7 @@ public class MockGenericPool<VALUE extends org.apache.thrift.TServiceClient> ext
         }
 
         @Override
-        public void register(MockedBackend backend) {
+        public void register(MockedDataNode backend) {
             backendMap.put(new TNetworkAddress(backend.getHost(), backend.getHeartBeatPort()), backend);
         }
 
@@ -89,13 +89,13 @@ public class MockGenericPool<VALUE extends org.apache.thrift.TServiceClient> ext
         }
     }
 
-    public static class BackendThriftPool extends MockGenericPool<BackendService.Client> {
-        public BackendThriftPool(String name) {
+    public static class DataNodeThriftPool extends MockGenericPool<BackendService.Client> {
+        public DataNodeThriftPool(String name) {
             super(name);
         }
 
         @Override
-        public void register(MockedBackend backend) {
+        public void register(MockedDataNode backend) {
             backendMap.put(new TNetworkAddress(backend.getHost(), backend.getBeThriftPort()), backend);
         }
 

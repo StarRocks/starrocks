@@ -50,7 +50,7 @@ import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -121,10 +121,10 @@ public class TabletStatMgr extends LeaderDaemon {
     }
 
     private void updateLocalTabletStat() {
-        ImmutableMap<Long, Backend> backends = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, DataNode> backends = GlobalStateMgr.getCurrentSystemInfo().getIdToDataNode();
 
         long start = System.currentTimeMillis();
-        for (Backend backend : backends.values()) {
+        for (DataNode backend : backends.values()) {
             BackendService.Client client = null;
             TNetworkAddress address = null;
             boolean ok = false;
@@ -218,7 +218,7 @@ public class TabletStatMgr extends LeaderDaemon {
                 partitionToVersion.put(partitionId, version);
                 for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     for (Tablet tablet : index.getTablets()) {
-                        Long beId = Utils.chooseBackend((LakeTablet) tablet);
+                        Long beId = Utils.chooseDataNode((LakeTablet) tablet);
                         if (beId == null) {
                             continue;
                         }
@@ -244,7 +244,7 @@ public class TabletStatMgr extends LeaderDaemon {
         long start = System.currentTimeMillis();
         try {
             for (Map.Entry<Long, List<TabletInfo>> entry : beToTabletInfos.entrySet()) {
-                Backend backend = systemInfoService.getBackend(entry.getKey());
+                DataNode backend = systemInfoService.getDataNode(entry.getKey());
                 if (backend == null) {
                     continue;
                 }

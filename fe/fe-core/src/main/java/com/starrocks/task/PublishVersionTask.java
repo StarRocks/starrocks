@@ -144,11 +144,11 @@ public class PublishVersionTask extends AgentTask {
                 if (tablets.getTabletMeta(tabletId) == null) {
                     continue;
                 }
-                Replica replica = tablets.getReplica(tabletId, this.getBackendId());
+                Replica replica = tablets.getReplica(tabletId, this.getDataNodeId());
                 if (replica != null) {
                     errorReplicas.add(replica.getId());
                 } else {
-                    LOG.info("could not find related replica with tabletid={}, backendid={}", tabletId, this.getBackendId());
+                    LOG.info("could not find related replica with tabletid={}, backendid={}", tabletId, this.getDataNodeId());
                 }
             }
         }
@@ -162,7 +162,7 @@ public class PublishVersionTask extends AgentTask {
         }
         TabletInvertedIndex tablets = GlobalStateMgr.getCurrentInvertedIndex();
         List<Long> tabletIds = tabletVersions.stream().map(tv -> tv.tablet_id).collect(Collectors.toList());
-        List<Replica> replicas = tablets.getReplicasOnBackendByTabletIds(tabletIds, backendId);
+        List<Replica> replicas = tablets.getReplicasOnDataNodeByTabletIds(tabletIds, backendId);
         if (replicas == null) {
             LOG.warn("backend not found backendid={}", backendId);
             return;

@@ -193,7 +193,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     distributionInfo, indexes, properties);
         } else if (stmt.isOlapEngine()) {
             if (distributionInfo.getBucketNum() == 0) {
-                int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                int bucketNum = CatalogUtils.calBucketNumAccordingToDataNodes();
                 distributionInfo.setBucketNum(bucketNum);
             }
 
@@ -572,7 +572,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             // we have added these index to memory, only need to persist here
             if (colocateTableIndex.isColocateTable(tableId)) {
                 ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
-                List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+                List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getDataNodesPerBucketSeq(groupId);
                 ColocatePersistInfo info =
                         ColocatePersistInfo.createForAddTable(groupId, tableId, backendsPerBucketSeq);
                 editLog.logColocateAddTable(info);

@@ -668,16 +668,16 @@ public class ConnectContext {
         return threadInfo;
     }
 
-    public int getAliveBackendNumber() {
-        int v = sessionVariable.getCboDebugAliveBackendNumber();
+    public int getAliveDataNodeNumber() {
+        int v = sessionVariable.getCboDebugAliveDataNodeNumber();
         if (v > 0) {
             return v;
         }
-        return globalStateMgr.getClusterInfo().getAliveBackendNumber();
+        return globalStateMgr.getClusterInfo().getAliveDataNodeNumber();
     }
 
-    public int getTotalBackendNumber() {
-        return globalStateMgr.getClusterInfo().getTotalBackendNumber();
+    public int getTotalDataNodeNumber() {
+        return globalStateMgr.getClusterInfo().getTotalDataNodeNumber();
     }
 
     public void setPending(boolean pending) {

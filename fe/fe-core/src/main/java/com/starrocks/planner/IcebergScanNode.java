@@ -123,10 +123,10 @@ public class IcebergScanNode extends ScanNode {
     @Override
     public void init(Analyzer analyzer) throws UserException {
         super.init(analyzer);
-        getAliveBackends();
+        getAliveDataNodes();
     }
 
-    private void getAliveBackends() throws UserException {
+    private void getAliveDataNodes() throws UserException {
         ImmutableCollection<ComputeNode> computeNodes =
                 ImmutableList.copyOf(GlobalStateMgr.getCurrentSystemInfo().getComputeNodes());
 

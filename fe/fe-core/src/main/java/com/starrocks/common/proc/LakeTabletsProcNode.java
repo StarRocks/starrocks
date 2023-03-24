@@ -38,7 +38,7 @@ import java.util.List;
  */
 public class LakeTabletsProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("TabletId").add("BackendId").add("DataSize").add("RowCount")
+            .add("TabletId").add("DataNodeId").add("DataSize").add("RowCount")
             .build();
 
     private final Database db;
@@ -74,7 +74,7 @@ public class LakeTabletsProcNode implements ProcNodeInterface {
                 List<Comparable> tabletInfo = Lists.newArrayList();
                 LakeTablet lakeTablet = (LakeTablet) tablet;
                 tabletInfo.add(lakeTablet.getId());
-                tabletInfo.add(new Gson().toJson(lakeTablet.getBackendIds()));
+                tabletInfo.add(new Gson().toJson(lakeTablet.getDataNodeIds()));
                 tabletInfo.add(new ByteSizeValue(lakeTablet.getDataSize(true)));
                 tabletInfo.add(lakeTablet.getRowCount(0L));
                 tabletInfos.add(tabletInfo);

@@ -47,7 +47,7 @@ public class CloneTask extends AgentTask {
     public static final int VERSION_2 = 2;
 
     private int schemaHash;
-    private List<TBackend> srcBackends;
+    private List<TBackend> srcDataNodes;
     private TStorageMedium storageMedium;
 
     private long visibleVersion;
@@ -63,11 +63,11 @@ public class CloneTask extends AgentTask {
     private boolean isLocal = false;
 
     public CloneTask(long backendId, long dbId, long tableId, long partitionId, long indexId,
-                     long tabletId, int schemaHash, List<TBackend> srcBackends, TStorageMedium storageMedium,
+                     long tabletId, int schemaHash, List<TBackend> srcDataNodes, TStorageMedium storageMedium,
                      long visibleVersion, int timeoutS) {
         super(null, backendId, TTaskType.CLONE, dbId, tableId, partitionId, indexId, tabletId);
         this.schemaHash = schemaHash;
-        this.srcBackends = srcBackends;
+        this.srcDataNodes = srcDataNodes;
         this.storageMedium = storageMedium;
         this.visibleVersion = visibleVersion;
         this.timeoutS = timeoutS;
@@ -104,7 +104,7 @@ public class CloneTask extends AgentTask {
     }
 
     public TCloneReq toThrift() {
-        TCloneReq request = new TCloneReq(tabletId, schemaHash, srcBackends);
+        TCloneReq request = new TCloneReq(tabletId, schemaHash, srcDataNodes);
         request.setStorage_medium(storageMedium);
         request.setCommitted_version(visibleVersion);
         request.setTask_version(taskVersion);
@@ -124,7 +124,7 @@ public class CloneTask extends AgentTask {
         sb.append("tablet id: ").append(tabletId).append(", schema hash: ").append(schemaHash);
         sb.append(", storageMedium: ").append(storageMedium.name());
         sb.append(", visible version(hash): ").append(visibleVersion).append("-").append(0);
-        sb.append(", src backend: ").append(srcBackends.get(0).getHost()).append(", src path hash: ")
+        sb.append(", src backend: ").append(srcDataNodes.get(0).getHost()).append(", src path hash: ")
                 .append(srcPathHash);
         sb.append(", dest backend: ").append(backendId).append(", dest path hash: ").append(destPathHash);
         sb.append(", is local: ").append(isLocal);

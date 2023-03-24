@@ -26,7 +26,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TMetaScanNode;
@@ -91,7 +91,7 @@ public class MetaScanNode extends ScanNode {
                         if (olapTable.isCloudNativeTable()) {
                             LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId,
                                     ((LakeTablet) tablet).getShardId(),
-                                    tablet.getBackendIds());
+                                    tablet.getDataNodeIds());
                         } else {
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
@@ -105,15 +105,15 @@ public class MetaScanNode extends ScanNode {
                 Collections.shuffle(allQueryableReplicas);
                 boolean tabletIsNull = true;
                 for (Replica replica : allQueryableReplicas) {
-                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                    DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(replica.getDataNodeId());
                     if (backend == null) {
-                        LOG.debug("replica {} not exists", replica.getBackendId());
+                        LOG.debug("replica {} not exists", replica.getDataNodeId());
                         continue;
                     }
                     String ip = backend.getHost();
                     int port = backend.getBePort();
                     TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(ip, port));
-                    scanRangeLocation.setBackend_id(replica.getBackendId());
+                    scanRangeLocation.setDatanode_id(replica.getDataNodeId());
                     scanRangeLocations.addToLocations(scanRangeLocation);
                     internalRange.addToHosts(new TNetworkAddress(ip, port));
                     tabletIsNull = false;

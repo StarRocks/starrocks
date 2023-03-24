@@ -36,7 +36,7 @@ public class ClusterInfo implements Writable {
     private long newClusterId;
     private int newInstanceNum;
 
-    private List<Long> expandBackendIds = Lists.newArrayList();
+    private List<Long> expandDataNodeIds = Lists.newArrayList();
 
     public ClusterInfo() {
         this.clusterName = "";
@@ -56,10 +56,10 @@ public class ClusterInfo implements Writable {
         this.newInstanceNum = 0;
     }
 
-    public ClusterInfo(String clusterName, long clusterId, List<Long> expandBackendIds) {
+    public ClusterInfo(String clusterName, long clusterId, List<Long> expandDataNodeIds) {
         this.clusterName = clusterName;
         this.clusterId = clusterId;
-        this.expandBackendIds = expandBackendIds;
+        this.expandDataNodeIds = expandDataNodeIds;
         this.instanceNum = 0;
         this.newClusterName = "";
         this.newClusterId = 0L;
@@ -71,8 +71,8 @@ public class ClusterInfo implements Writable {
         Text.writeString(out, clusterName);
         out.writeLong(clusterId);
         out.writeInt(instanceNum);
-        out.writeInt(expandBackendIds.size());
-        for (long id : expandBackendIds) {
+        out.writeInt(expandDataNodeIds.size());
+        for (long id : expandDataNodeIds) {
             out.writeLong(id);
         }
     }
@@ -83,7 +83,7 @@ public class ClusterInfo implements Writable {
         instanceNum = in.readInt();
         int count = in.readInt();
         while (count-- > 0) {
-            expandBackendIds.add(in.readLong());
+            expandDataNodeIds.add(in.readLong());
         }
     }
 
@@ -107,7 +107,7 @@ public class ClusterInfo implements Writable {
         return newInstanceNum;
     }
 
-    public List<Long> getBackendIdList() {
-        return expandBackendIds;
+    public List<Long> getDataNodeIdList() {
+        return expandDataNodeIds;
     }
 }

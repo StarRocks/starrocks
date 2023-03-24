@@ -42,7 +42,7 @@ public class AdminSetTest {
         AdminSetReplicaStatusStmt stmt = (AdminSetReplicaStatusStmt) analyzeSuccess(
                 "admin set replica status properties(\"tablet_id\" = \"10003\",\"backend_id\" = \"10001\",\"status\" = \"ok\");");
         Assert.assertEquals(10003, stmt.getTabletId());
-        Assert.assertEquals(10001, stmt.getBackendId());
+        Assert.assertEquals(10001, stmt.getDataNodeId());
         Assert.assertEquals("OK", stmt.getStatus().name());
 
         analyzeFail("admin set replica status properties(\"backend_id\" = \"10001\",\"status\" = \"ok\");",

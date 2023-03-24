@@ -99,7 +99,7 @@ public final class FeMetaVersion {
     // schema change support row to column
     public static final int VERSION_39 = 39;
 
-    // persistent brpc port in Backend
+    // persistent brpc port in DataNode
     public static final int VERSION_40 = 40;
 
     // change the way to name Frontend

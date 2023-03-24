@@ -309,16 +309,16 @@ public class CostModel {
                     break;
                 case BROADCAST:
                     // beNum is the number of right table should broadcast, now use alive backends
-                    int aliveBackendNumber = ctx.getAliveBackendNumber();
-                    int beNum = Math.max(1, aliveBackendNumber);
+                    int aliveDataNodeNumber = ctx.getAliveDataNodeNumber();
+                    int beNum = Math.max(1, aliveDataNodeNumber);
 
-                    result = CostEstimate.of(outputSize * aliveBackendNumber,
+                    result = CostEstimate.of(outputSize * aliveDataNodeNumber,
                             outputSize * beNum,
                             Math.max(outputSize * beNum, 1));
                     if (outputSize > sessionVariable.getMaxExecMemByte()) {
                         result = result.multiplyBy(StatisticsEstimateCoefficient.BROADCAST_JOIN_MEM_EXCEED_PENALTY);
                     }
-                    LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}.", aliveBackendNumber, beNum, outputSize);
+                    LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}.", aliveDataNodeNumber, beNum, outputSize);
                     break;
                 case SHUFFLE:
                     // This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
@@ -327,7 +327,7 @@ public class CostModel {
                     // 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
                     boolean ignoreNetworkCost = sessionVariable.isEnableLocalShuffleAgg()
                             && sessionVariable.isEnablePipelineEngine()
-                            && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                            && GlobalStateMgr.getCurrentSystemInfo().isSingleDataNodeAndComputeNode();
                     double networkCost = ignoreNetworkCost ? 0 : Math.max(outputSize, 1);
 
                     result = CostEstimate.of(outputSize * penalty, 0, networkCost * penalty);

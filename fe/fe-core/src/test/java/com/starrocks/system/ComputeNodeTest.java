@@ -55,7 +55,7 @@ public class ComputeNodeTest {
             }
         }
 
-        BackendHbResponse hbResponse = new BackendHbResponse();
+        DataNodeHbResponse hbResponse = new DataNodeHbResponse();
         ComputeNode node = new ComputeNode();
         node.setBrpcPort(hbResponse.getBrpcPort()); // Don't return needSync by different BrpcPort.
         CoordinatorMonitor coordinatorMonitor = CoordinatorMonitor.getInstance();
@@ -92,7 +92,7 @@ public class ComputeNodeTest {
                 node.setAlive(tc.nodeAlive);
                 new Expectations(coordinatorMonitor) {
                     {
-                        coordinatorMonitor.addDeadBackend(node.getId());
+                        coordinatorMonitor.addDeadDataNode(node.getId());
                         times = tc.expectedNeedNotifyCoordinatorMonitor ? 1 : 0;
                     }
                 };
@@ -110,7 +110,7 @@ public class ComputeNodeTest {
     @Test
     public void testUpdateStartTime() {
 
-        BackendHbResponse hbResponse = new BackendHbResponse();
+        DataNodeHbResponse hbResponse = new DataNodeHbResponse();
         hbResponse.status = HbStatus.OK;
         hbResponse.setRebootTime(1000L);
         ComputeNode node = new ComputeNode();

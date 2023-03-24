@@ -101,7 +101,7 @@ public class MetadataViewerTest {
                 minTimes = 0;
                 result = infoService;
 
-                infoService.getBackendIds(anyBoolean);
+                infoService.getDataNodeIds(anyBoolean);
                 minTimes = 0;
                 result = Lists.newArrayList(10000L, 10001L, 10002L);
             }

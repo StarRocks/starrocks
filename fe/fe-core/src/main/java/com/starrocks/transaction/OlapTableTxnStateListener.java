@@ -27,7 +27,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.ClearTransactionTask;
@@ -49,7 +49,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     // olap table or olap materialized view
     private final OlapTable table;
 
-    private Set<Long> totalInvolvedBackends;
+    private Set<Long> totalInvolvedDataNodes;
     private Set<Long> errorReplicaIds;
     private Set<Long> dirtyPartitionSet;
     private Set<String> invalidDictCacheColumns;
@@ -67,15 +67,15 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         if (table.getState() == OlapTable.OlapTableState.RESTORE) {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
         }
-        totalInvolvedBackends = Sets.newHashSet();
+        totalInvolvedDataNodes = Sets.newHashSet();
         errorReplicaIds = Sets.newHashSet();
         dirtyPartitionSet = Sets.newHashSet();
         invalidDictCacheColumns = Sets.newHashSet();
         validDictCacheColumns = Sets.newHashSet();
 
         TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
-        Map<Long, Set<Long>> tabletToBackends = new HashMap<>();
-        Set<Long> allCommittedBackends = new HashSet<>();
+        Map<Long, Set<Long>> tabletToDataNodes = new HashMap<>();
+        Set<Long> allCommittedDataNodes = new HashSet<>();
 
         // 2. validate potential exists problem: db->table->partition
         // guarantee exist exception during a transaction
@@ -101,9 +101,9 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                 continue;
             }
             dirtyPartitionSet.add(partitionId);
-            tabletToBackends.computeIfAbsent(tabletId, id -> new HashSet<>())
-                    .add(tabletCommitInfos.get(i).getBackendId());
-            allCommittedBackends.add(tabletCommitInfos.get(i).getBackendId());
+            tabletToDataNodes.computeIfAbsent(tabletId, id -> new HashSet<>())
+                    .add(tabletCommitInfos.get(i).getDataNodeId());
+            allCommittedDataNodes.add(tabletCommitInfos.get(i).getDataNodeId());
 
             // Invalid column set should union
             invalidDictCacheColumns.addAll(tabletCommitInfos.get(i).getInvalidDictCacheColumns());
@@ -124,20 +124,20 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         // use for selection of primary replica for replicated storage
         for (TabletFailInfo failedTablet : failedTablets) {
             if (failedTablet.getTabletId() == -1) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(failedTablet.getBackendId());
+                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(failedTablet.getDataNodeId());
                 if (backend != null) {
                     backend.setLastWriteFail(true);
                 }
             } else {
-                Replica replica = tabletInvertedIndex.getReplica(failedTablet.getTabletId(), failedTablet.getBackendId());
+                Replica replica = tabletInvertedIndex.getReplica(failedTablet.getTabletId(), failedTablet.getDataNodeId());
                 if (replica != null) {
                     replica.setLastWriteFail(true);
                 }
             }
         }
 
-        for (Long committedBackend : allCommittedBackends) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(committedBackend);
+        for (Long committedDataNode : allCommittedDataNodes) {
+            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(committedDataNode);
             if (backend != null) {
                 backend.setLastWriteFail(false);
             }
@@ -153,25 +153,25 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             for (MaterializedIndex index : allIndices) {
                 for (Tablet tablet : index.getTablets()) {
                     long tabletId = tablet.getId();
-                    Set<Long> commitBackends = tabletToBackends.get(tabletId);
+                    Set<Long> commitDataNodes = tabletToDataNodes.get(tabletId);
 
-                    Set<Long> tabletBackends = tablet.getBackendIds();
-                    totalInvolvedBackends.addAll(tabletBackends);
+                    Set<Long> tabletDataNodes = tablet.getDataNodeIds();
+                    totalInvolvedDataNodes.addAll(tabletDataNodes);
 
                     // save the error replica ids for current tablet
                     // this param is used for log
                     StringBuilder failedReplicaInfoSB = new StringBuilder();
                     int successReplicaNum = 0;
-                    for (long tabletBackend : tabletBackends) {
-                        Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
+                    for (long tabletDataNode : tabletDataNodes) {
+                        Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletDataNode);
                         if (replica == null) {
-                            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
+                            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(tabletDataNode);
                             throw new TransactionCommitFailedException("Not found replicas of tablet. "
                                     + "tablet_id: " + tabletId + ", backend_id: " + backend.getHost());
                         }
                         // if the tablet have no replica's to commit or the tablet is a rolling up tablet, the commit backends maybe null
                         // if the commit backends is null, set all replicas as error replicas
-                        if (commitBackends != null && commitBackends.contains(tabletBackend)) {
+                        if (commitDataNodes != null && commitDataNodes.contains(tabletDataNode)) {
                             // if the backend load success but the backend has some errors previously, then it is not a normal replica
                             // ignore it but not log it
                             // for example, a replica is in clone state
@@ -179,16 +179,16 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                             if (lfv < 0) {
                                 ++successReplicaNum;
                             } else {
-                                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
+                                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(tabletDataNode);
                                 failedReplicaInfoSB.append(
-                                        String.format("%d:{be:%d %s V:%d LFV:%d},", replica.getId(), tabletBackend,
+                                        String.format("%d:{be:%d %s V:%d LFV:%d},", replica.getId(), tabletDataNode,
                                                 backend == null ? "" : backend.getHost(), replica.getVersion(), lfv));
                             }
                             replica.setLastWriteFail(false);
                         } else {
-                            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
+                            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(tabletDataNode);
                             failedReplicaInfoSB.append(
-                                    String.format("%d:{be:%d %s V:%d LFV:%d},", replica.getId(), tabletBackend,
+                                    String.format("%d:{be:%d %s V:%d LFV:%d},", replica.getId(), tabletDataNode,
                                             backend == null ? "" : backend.getHost(), replica.getVersion(),
                                             replica.getLastFailedVersion()));
                             // not remove rollup task here, because the commit maybe failed
@@ -201,11 +201,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
                     if (successReplicaNum < quorumReplicaNum) {
                         String msg = String.format(
-                                "Commit failed. txn: %d table: %s tablet: %d quorum: %d<%d errorReplicas: %s commitBackends: %s",
+                                "Commit failed. txn: %d table: %s tablet: %d quorum: %d<%d errorReplicas: %s commitDataNodes: %s",
                                 txnState.getTransactionId(), table.getName(), tablet.getId(), successReplicaNum,
                                 quorumReplicaNum,
                                 failedReplicaInfoSB.toString(),
-                                commitBackends == null ? "" : commitBackends.toString());
+                                commitDataNodes == null ? "" : commitDataNodes.toString());
                         LOG.warn(msg);
                         throw new TabletQuorumFailedException(msg);
                     }
@@ -249,7 +249,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     public void postWriteCommitLog(TransactionState txnState) {
         // add publish version tasks. set task to null as a placeholder.
         // tasks will be created when publishing version.
-        for (long backendId : totalInvolvedBackends) {
+        for (long backendId : totalInvolvedDataNodes) {
             txnState.addPublishVersionTask(backendId, null);
         }
     }
@@ -266,13 +266,13 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                 for (TabletFailInfo failedTablet : failedTablets) {
                     LOG.debug("failed tablet ", failedTablet);
                     if (failedTablet.getTabletId() == -1) {
-                        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(failedTablet.getBackendId());
+                        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(failedTablet.getDataNodeId());
                         if (backend != null) {
                             backend.setLastWriteFail(true);
                         }
                     } else {
                         Replica replica = tabletInvertedIndex.getReplica(failedTablet.getTabletId(),
-                                failedTablet.getBackendId());
+                                failedTablet.getDataNodeId());
                         if (replica != null) {
                             replica.setLastWriteFail(true);
                         }
@@ -290,7 +290,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             return;
         }
         // for aborted transaction, we don't know which backends are involved, so we have to send clear task to all backends.
-        List<Long> allBeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+        List<Long> allBeIds = GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds(false);
         AgentBatchTask batchTask = null;
         synchronized (CLEAR_TRANSACTION_TASKS) {
             for (Long beId : allBeIds) {

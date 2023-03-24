@@ -778,7 +778,7 @@ public class DatabaseTransactionMgr {
     // check whether transaction can be finished or not
     // for each tablet of load txn, if most replicas version publish successed
     // the trasaction can be treated as successful and can be finished
-    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas, Set<Long> unfinishedBackends) {
+    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas, Set<Long> unfinishedDataNodes) {
         Database db = globalStateMgr.getDb(txn.getDbId());
         if (db == null) {
             return true;
@@ -823,15 +823,15 @@ public class DatabaseTransactionMgr {
                                     // 2. publish version task in this replica has finished
                                     if (replica.checkVersionCatchUp(partition.getVisibleVersion(), true)
                                             && replica.getLastFailedVersion() < 0
-                                            && (unfinishedBackends == null
-                                            || !unfinishedBackends.contains(replica.getBackendId()))) {
+                                            && (unfinishedDataNodes == null
+                                            || !unfinishedDataNodes.contains(replica.getDataNodeId()))) {
                                         ++successHealthyReplicaNum;
                                         // replica report version has greater cur transaction commit version
                                         // This can happen when the BE publish succeeds but fails to send a response to FE
                                     } else if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
                                         ++successHealthyReplicaNum;
-                                    } else if (unfinishedBackends != null
-                                            && unfinishedBackends.contains(replica.getBackendId())) {
+                                    } else if (unfinishedDataNodes != null
+                                            && unfinishedDataNodes.contains(replica.getDataNodeId())) {
                                         errReplicas.add(replica.getId());
                                     }
                                 } else if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
@@ -850,13 +850,13 @@ public class DatabaseTransactionMgr {
                             // so that we wait quorum_publish_wait_time_ms util all backend publish finish
                             // before quorum publish
                             if (successHealthyReplicaNum != replicaNum
-                                    && CollectionUtils.isNotEmpty(unfinishedBackends)
+                                    && CollectionUtils.isNotEmpty(unfinishedDataNodes)
                                     && currentTs
                                     - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
 
                                 // if all unfinished backends already down through heartbeat detect, we don't need to wait anymore
-                                for (Long backendID : unfinishedBackends) {
-                                    if (globalStateMgr.getCurrentSystemInfo().checkBackendAlive(backendID)) {
+                                for (Long backendID : unfinishedDataNodes) {
+                                    if (globalStateMgr.getCurrentSystemInfo().checkDataNodeAlive(backendID)) {
                                         return false;
                                     }
                                 }

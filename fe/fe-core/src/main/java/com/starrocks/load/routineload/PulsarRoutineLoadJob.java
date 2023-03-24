@@ -206,7 +206,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     @Override
     public int calculateCurrentConcurrentTaskNum() throws MetaNotFoundException {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        int aliveBeNum = systemInfoService.getAliveBackendNumber();
+        int aliveBeNum = systemInfoService.getAliveDataNodeNumber();
         int partitionNum = currentPulsarPartitions.size();
         if (desireTaskConcurrentNum == 0) {
             desireTaskConcurrentNum = Config.max_routine_load_task_concurrent_num;

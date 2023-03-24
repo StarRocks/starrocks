@@ -140,12 +140,12 @@ public class OlapDeleteJob extends DeleteJob {
 
                         for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             long replicaId = replica.getId();
-                            long backendId = replica.getBackendId();
+                            long backendId = replica.getDataNodeId();
                             countDownLatch.addMark(backendId, tabletId);
 
                             // create push task for each replica
                             PushTask pushTask = new PushTask(null,
-                                    replica.getBackendId(), db.getId(), olapTable.getId(),
+                                    replica.getDataNodeId(), db.getId(), olapTable.getId(),
                                     partition.getId(), indexId,
                                     tabletId, replicaId, schemaHash,
                                     -1, 0,
@@ -336,7 +336,7 @@ public class OlapDeleteJob extends DeleteJob {
     @Override
     public void clear() {
         for (PushTask pushTask : getPushTasks()) {
-            AgentTaskQueue.removePushTask(pushTask.getBackendId(), pushTask.getSignature(),
+            AgentTaskQueue.removePushTask(pushTask.getDataNodeId(), pushTask.getSignature(),
                     pushTask.getVersion(),
                     pushTask.getPushType(), pushTask.getTaskType());
         }
@@ -349,7 +349,7 @@ public class OlapDeleteJob extends DeleteJob {
         }
 
         // create cancel delete push task for each backends
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds(true);
         for (Long backendId : backendIds) {
             PushTask cancelDeleteTask = new PushTask(backendId, TPushType.CANCEL_DELETE, TPriority.HIGH,
                     TTaskType.REALTIME_PUSH, getTransactionId(),
@@ -375,7 +375,7 @@ public class OlapDeleteJob extends DeleteJob {
                     LOG.warn("could not find tablet id for replica {}, the tablet maybe dropped", replica);
                     continue;
                 }
-                tabletCommitInfos.add(new TabletCommitInfo(tabletId, replica.getBackendId()));
+                tabletCommitInfos.add(new TabletCommitInfo(tabletId, replica.getDataNodeId()));
             }
         }
         return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, tabletCommitInfos,

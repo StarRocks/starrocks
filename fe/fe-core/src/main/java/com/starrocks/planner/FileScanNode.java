@@ -68,7 +68,7 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
@@ -144,7 +144,7 @@ public class FileScanNode extends LoadScanNode {
     private int filesAdded;
 
     // Only used for external table in select statement
-    private List<Backend> backends;
+    private List<DataNode> backends;
     private int nextBe = 0;
 
     private Analyzer analyzer;
@@ -194,7 +194,7 @@ public class FileScanNode extends LoadScanNode {
         }
 
         // Get all broker file status
-        assignBackends();
+        assignDataNodes();
         getFileStatusAndCalcInstance();
 
         paramCreateContexts = Lists.newArrayList();
@@ -405,7 +405,7 @@ public class FileScanNode extends LoadScanNode {
 
     private TScanRangeLocations newLocations(TBrokerScanRangeParams params, String brokerName, boolean hasBroker)
             throws UserException {
-        Backend selectedBackend = backends.get(nextBe++);
+        DataNode selectedDataNode = backends.get(nextBe++);
         nextBe = nextBe % backends.size();
 
         // Generate on broker scan range
@@ -415,7 +415,7 @@ public class FileScanNode extends LoadScanNode {
         if (hasBroker) {
             FsBroker broker = null;
             try {
-                broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
+                broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedDataNode.getHost());
             } catch (AnalysisException e) {
                 throw new UserException(e.getMessage());
             }
@@ -433,8 +433,8 @@ public class FileScanNode extends LoadScanNode {
         locations.setScan_range(scanRange);
 
         TScanRangeLocation location = new TScanRangeLocation();
-        location.setBackend_id(selectedBackend.getId());
-        location.setServer(new TNetworkAddress(selectedBackend.getHost(), selectedBackend.getBePort()));
+        location.setDatanode_id(selectedDataNode.getId());
+        location.setServer(new TNetworkAddress(selectedDataNode.getHost(), selectedDataNode.getBePort()));
         locations.addToLocations(location);
 
         return locations;
@@ -494,9 +494,9 @@ public class FileScanNode extends LoadScanNode {
         bytesPerInstance = (totalBytes + numInstances - 1) / (numInstances != 0 ? numInstances : 1);
     }
 
-    private void assignBackends() throws UserException {
+    private void assignDataNodes() throws UserException {
         backends = Lists.newArrayList();
-        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+        for (DataNode be : GlobalStateMgr.getCurrentSystemInfo().getIdToDataNode().values()) {
             if (be.isAvailable()) {
                 backends.add(be);
             }
@@ -653,7 +653,7 @@ public class FileScanNode extends LoadScanNode {
         if (loadJobId != -1) {
             LOG.info("broker load job {} with txn {} has {} scan range: {}",
                     loadJobId, txnId, locationsList.size(),
-                    locationsList.stream().map(loc -> loc.locations.get(0).backend_id).toArray());
+                    locationsList.stream().map(loc -> loc.locations.get(0).datanode_id).toArray());
         }
     }
 
@@ -675,14 +675,14 @@ public class FileScanNode extends LoadScanNode {
      */
     public void updateScanRangeLocations() {
         try {
-            assignBackends();
+            assignDataNodes();
         } catch (UserException e) {
             LOG.warn("assign backends failed.", e);
             // Just return, retry by LoadTask
             return;
         }
 
-        Set<Long> aliveBes = backends.stream().map(Backend::getId).collect(Collectors.toSet());
+        Set<Long> aliveBes = backends.stream().map(DataNode::getId).collect(Collectors.toSet());
         nextBe = 0;
         for (TScanRangeLocations locations : locationsList) {
             TScanRangeLocation scanRangeLocation = locations.getLocations().get(0);
@@ -690,7 +690,7 @@ public class FileScanNode extends LoadScanNode {
             TNetworkAddress address = brokerScanRange.getBroker_addresses().get(0);
             FsBroker fsBroker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerDesc.getName(),
                     address.hostname, address.port);
-            if (aliveBes.contains(scanRangeLocation.getBackend_id()) && (fsBroker != null && fsBroker.isAlive)) {
+            if (aliveBes.contains(scanRangeLocation.getDatanode_id()) && (fsBroker != null && fsBroker.isAlive)) {
                 continue;
             }
 

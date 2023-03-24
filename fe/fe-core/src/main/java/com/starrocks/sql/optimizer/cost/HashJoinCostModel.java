@@ -84,7 +84,7 @@ public class HashJoinCostModel {
         double probeCost;
         double leftOutput = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
         double rightOutput = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-        int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber(),
+        int parallelFactor = Math.max(ConnectContext.get().getAliveDataNodeNumber(),
                 ConnectContext.get().getSessionVariable().getDegreeOfParallelism());
         switch (execMode) {
             case BROADCAST:
@@ -106,7 +106,7 @@ public class HashJoinCostModel {
         JoinExecMode execMode = deriveJoinExecMode();
         double rightOutput = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
         double memCost;
-        int beNum = Math.max(1, ConnectContext.get().getAliveBackendNumber());
+        int beNum = Math.max(1, ConnectContext.get().getAliveDataNodeNumber());
 
         if (JoinExecMode.BROADCAST == execMode) {
             memCost = rightOutput * beNum;
@@ -121,7 +121,7 @@ public class HashJoinCostModel {
         double keySize = calculateKeySize();
 
         double cachePenaltyFactor;
-        int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber(),
+        int parallelFactor = Math.max(ConnectContext.get().getAliveDataNodeNumber(),
                 ConnectContext.get().getSessionVariable().getDegreeOfParallelism()) * 2;
         double mapSize = Math.min(1, keySize) * rightStatistics.getOutputRowCount();
 

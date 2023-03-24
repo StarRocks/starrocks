@@ -41,7 +41,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -52,15 +52,15 @@ import java.util.List;
 
 public class StorageMediumInferTest {
     private static ConnectContext connectContext;
-    private static Backend be1;
-    private static Backend be2;
+    private static DataNode be1;
+    private static DataNode be2;
 
     @BeforeClass
     public static void init() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        be1 = GlobalStateMgr.getCurrentSystemInfo().getBackend(10001);
+        be1 = GlobalStateMgr.getCurrentSystemInfo().getDataNode(10001);
         be1.getDisks().get("10001/path1").setPathHash(10001);
-        be2 = UtFrameUtils.addMockBackend(10002);
+        be2 = UtFrameUtils.addMockDataNode(10002);
         be2.getDisks().get("10002/path1").setPathHash(10002);
         Config.enable_strict_storage_medium_check = false;
         // create connect context

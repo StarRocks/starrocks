@@ -65,7 +65,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerScanRangeParams;
@@ -104,7 +104,7 @@ public class LoadingTaskPlannerTest {
     private int maxBrokerConcurrency;
 
     // backends
-    private ImmutableMap<Long, Backend> idToBackend;
+    private ImmutableMap<Long, DataNode> idToDataNode;
 
     private static ConnectContext ctx;
 
@@ -124,14 +124,14 @@ public class LoadingTaskPlannerTest {
         maxBrokerConcurrency = Config.max_broker_concurrency;
 
         // backends
-        Map<Long, Backend> idToBackendTmp = Maps.newHashMap();
-        Backend b1 = new Backend(0L, "host0", 9050);
+        Map<Long, DataNode> idToDataNodeTmp = Maps.newHashMap();
+        DataNode b1 = new DataNode(0L, "host0", 9050);
         b1.setAlive(true);
-        idToBackendTmp.put(0L, b1);
-        Backend b2 = new Backend(1L, "host1", 9050);
+        idToDataNodeTmp.put(0L, b1);
+        DataNode b2 = new DataNode(1L, "host1", 9050);
         b2.setAlive(true);
-        idToBackendTmp.put(1L, b2);
-        idToBackend = ImmutableMap.copyOf(idToBackendTmp);
+        idToDataNodeTmp.put(1L, b2);
+        idToDataNode = ImmutableMap.copyOf(idToDataNodeTmp);
         ctx = UtFrameUtils.createDefaultCtx();
     }
 
@@ -156,8 +156,8 @@ public class LoadingTaskPlannerTest {
             {
                 GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
+                systemInfoService.getIdToDataNode();
+                result = idToDataNode;
                 table.getBaseSchema();
                 result = columns;
                 table.getFullSchema();
@@ -241,8 +241,8 @@ public class LoadingTaskPlannerTest {
             {
                 GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
+                systemInfoService.getIdToDataNode();
+                result = idToDataNode;
                 table.getBaseSchema();
                 result = columns;
                 table.getFullSchema();
@@ -372,8 +372,8 @@ public class LoadingTaskPlannerTest {
             {
                 GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
+                systemInfoService.getIdToDataNode();
+                result = idToDataNode;
                 table.getKeysType();
                 minTimes = 0;
                 result = KeysType.PRIMARY_KEYS;
@@ -464,8 +464,8 @@ public class LoadingTaskPlannerTest {
             {
                 GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
+                systemInfoService.getIdToDataNode();
+                result = idToDataNode;
                 table.getKeysType();
                 result = KeysType.PRIMARY_KEYS;
                 table.getBaseSchema();
@@ -550,8 +550,8 @@ public class LoadingTaskPlannerTest {
             {
                 GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
+                systemInfoService.getIdToDataNode();
+                result = idToDataNode;
                 table.getKeysType();
                 result = KeysType.PRIMARY_KEYS;
                 table.getBaseSchema();
@@ -645,8 +645,8 @@ public class LoadingTaskPlannerTest {
             {
                 GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
+                systemInfoService.getIdToDataNode();
+                result = idToDataNode;
                 table.getKeysType();
                 result = KeysType.PRIMARY_KEYS;
                 table.getBaseSchema();
@@ -754,8 +754,8 @@ public class LoadingTaskPlannerTest {
             {
                 GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
+                systemInfoService.getIdToDataNode();
+                result = idToDataNode;
                 table.getKeysType();
                 result = KeysType.PRIMARY_KEYS;
                 table.getBaseSchema();
@@ -847,8 +847,8 @@ public class LoadingTaskPlannerTest {
             {
                 GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
+                systemInfoService.getIdToDataNode();
+                result = idToDataNode;
                 table.getKeysType();
                 result = KeysType.UNIQUE_KEYS;
                 table.getDefaultReplicationNum();
@@ -946,8 +946,8 @@ public class LoadingTaskPlannerTest {
             {
                 GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
+                systemInfoService.getIdToDataNode();
+                result = idToDataNode;
                 table.getKeysType();
                 result = KeysType.AGG_KEYS;
                 table.getDefaultReplicationNum();

@@ -388,7 +388,7 @@ public class PropertyAnalyzer {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0");
         }
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableDataNodeIds();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             if (RunMode.defaultReplicationNum() > backendIds.size()) {
                 throw new AnalysisException("Number of available BE nodes is " + backendIds.size()

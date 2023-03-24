@@ -39,8 +39,8 @@ public class InformationSchemaDataSourceTest {
     @Test
     public void testGetTablesConfig() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
         starRocksAssert.withEnableMV().withDatabase("db1").useDatabase("db1");

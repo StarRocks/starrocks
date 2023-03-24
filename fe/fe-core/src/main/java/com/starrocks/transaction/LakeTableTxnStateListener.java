@@ -25,13 +25,13 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.NoAliveBackendException;
+import com.starrocks.common.NoAliveDataNodeException;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -169,7 +169,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         try {
             // Preconditions: has acquired the database's reader or writer lock.
             tabletGroup = Utils.groupTabletID(table);
-        } catch (NoAliveBackendException e) {
+        } catch (NoAliveDataNodeException e) {
             LOG.warn(e);
         } finally {
             db.readUnlock();
@@ -180,7 +180,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         }
 
         for (Map.Entry<Long, List<Long>> entry : tabletGroup.entrySet()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
+            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(entry.getKey());
             if (backend == null) {
                 // It's ok to skip sending abort transaction request.
                 continue;

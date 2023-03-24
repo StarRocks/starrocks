@@ -255,8 +255,8 @@ public class BackupJobPrimaryKeyTest {
         snapshotFiles.add("1.dat");
         snapshotFiles.add("meta");
         TStatus taskStatus = new TStatus(TStatusCode.OK);
-        TBackend tBackend = new TBackend("", 0, 1);
-        TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
+        TBackend tDataNode = new TBackend("", 0, 1);
+        TFinishTaskRequest request = new TFinishTaskRequest(tDataNode, TTaskType.MAKE_SNAPSHOT,
                 snapshotTask.getSignature(), taskStatus);
         request.setSnapshot_files(snapshotFiles);
         request.setSnapshot_path(snapshotPath);
@@ -287,7 +287,7 @@ public class BackupJobPrimaryKeyTest {
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(BackupJobState.UPLOADING, job.getState());
         Map<Long, List<String>> tabletFileMap = Maps.newHashMap();
-        request = new TFinishTaskRequest(tBackend, TTaskType.UPLOAD,
+        request = new TFinishTaskRequest(tDataNode, TTaskType.UPLOAD,
                 upTask.getSignature(), taskStatus);
         request.setTablet_files(tabletFileMap);
 

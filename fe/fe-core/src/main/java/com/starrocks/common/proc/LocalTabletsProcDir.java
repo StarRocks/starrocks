@@ -50,7 +50,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -63,7 +63,7 @@ import java.util.List;
  */
 public class LocalTabletsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("TabletId").add("ReplicaId").add("BackendId").add("SchemaHash").add("Version")
+            .add("TabletId").add("ReplicaId").add("DataNodeId").add("SchemaHash").add("Version")
             .add("VersionHash").add("LstSuccessVersion").add("LstSuccessVersionHash")
             .add("LstFailedVersion").add("LstFailedVersionHash").add("LstFailedTime")
             .add("DataSize").add("RowCount").add("State")
@@ -95,7 +95,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(index);
         Preconditions.checkState(table.isLocalTable());
-        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, DataNode> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToDataNode();
 
         List<List<Comparable>> tabletInfos = new ArrayList<List<Comparable>>();
         db.readLock();
@@ -132,7 +132,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                 } else {
                     for (Replica replica : localTablet.getImmutableReplicas()) {
                         if ((version > -1 && replica.getVersion() != version)
-                                || (backendId > -1 && replica.getBackendId() != backendId)
+                                || (backendId > -1 && replica.getDataNodeId() != backendId)
                                 || (state != null && replica.getState() != state)) {
                             continue;
                         }
@@ -140,7 +140,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         // tabletId -- replicaId -- backendId -- version -- versionHash -- dataSize -- rowCount -- state
                         tabletInfo.add(tabletId);
                         tabletInfo.add(replica.getId());
-                        tabletInfo.add(replica.getBackendId());
+                        tabletInfo.add(replica.getDataNodeId());
                         tabletInfo.add(Replica.DEPRECATED_PROP_SCHEMA_HASH);
                         tabletInfo.add(replica.getVersion());
                         tabletInfo.add(0);
@@ -158,7 +158,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         tabletInfo.add(0);
                         tabletInfo.add(replica.getVersionCount());
                         tabletInfo.add(Replica.DEPRECATED_PROP_PATH_HASH);
-                        Backend backend = backendMap.get(replica.getBackendId());
+                        DataNode backend = backendMap.get(replica.getDataNodeId());
                         String metaUrl;
                         String compactionUrl;
                         if (backend != null) {

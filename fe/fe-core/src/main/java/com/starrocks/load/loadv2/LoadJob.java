@@ -240,8 +240,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return transactionId;
     }
 
-    public void initLoadProgress(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {
-        loadingStatus.getLoadStatistic().initLoad(loadId, fragmentIds, relatedBackendIds);
+    public void initLoadProgress(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedDataNodeIds) {
+        loadingStatus.getLoadStatistic().initLoad(loadId, fragmentIds, relatedDataNodeIds);
         startLoad = true;
         loadStartTimestamp = System.currentTimeMillis();
     }

@@ -171,7 +171,7 @@ public class RoutineLoadManager implements Writable {
         slotLock.lock();
         try {
             Set<Long> aliveBeIds = Sets.newHashSet();
-            aliveBeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
+            aliveBeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds(true));
 
             // add new be
             for (Long beId : aliveBeIds) {

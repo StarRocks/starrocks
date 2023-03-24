@@ -49,7 +49,7 @@ import com.starrocks.external.elasticsearch.EsShardRouting;
 import com.starrocks.external.elasticsearch.QueryBuilders;
 import com.starrocks.external.elasticsearch.QueryConverter;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TEsScanNode;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExplainLevel;
@@ -74,8 +74,8 @@ public class EsScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(EsScanNode.class);
 
     private final Random random = new Random(System.currentTimeMillis());
-    private Multimap<String, Backend> backendMap;
-    private List<Backend> backendList;
+    private Multimap<String, DataNode> backendMap;
+    private List<DataNode> backendList;
     private List<TScanRangeLocations> shardScanRanges = Lists.newArrayList();
     private EsTable table;
 
@@ -88,7 +88,7 @@ public class EsScanNode extends ScanNode {
     public void init(Analyzer analyzer) throws UserException {
         super.init(analyzer);
 
-        assignBackends();
+        assignDataNodes();
     }
 
     @Override
@@ -160,10 +160,10 @@ public class EsScanNode extends ScanNode {
         msg.es_scan_node = esScanNode;
     }
 
-    public void assignBackends() throws UserException {
+    public void assignDataNodes() throws UserException {
         backendMap = HashMultimap.create();
         backendList = Lists.newArrayList();
-        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+        for (DataNode be : GlobalStateMgr.getCurrentSystemInfo().getIdToDataNode().values()) {
             if (be.isAlive()) {
                 backendMap.put(be.getHost(), be);
                 backendList.add(be);
@@ -181,7 +181,7 @@ public class EsScanNode extends ScanNode {
         for (EsShardPartitions indexState : selectedIndex) {
             for (List<EsShardRouting> shardRouting : indexState.getShardRoutings().values()) {
                 // get backends
-                Set<Backend> colocatedBes = Sets.newHashSet();
+                Set<DataNode> colocatedBes = Sets.newHashSet();
                 int numBe = Math.min(3, size);
                 List<TNetworkAddress> shardAllocations = new ArrayList<>();
                 for (EsShardRouting item : shardRouting) {
@@ -193,9 +193,9 @@ public class EsScanNode extends ScanNode {
                 for (TNetworkAddress address : shardAllocations) {
                     colocatedBes.addAll(backendMap.get(address.getHostname()));
                 }
-                boolean usingRandomBackend = colocatedBes.size() == 0;
-                List<Backend> candidateBeList = Lists.newArrayList();
-                if (usingRandomBackend) {
+                boolean usingRandomDataNode = colocatedBes.size() == 0;
+                List<DataNode> candidateBeList = Lists.newArrayList();
+                if (usingRandomDataNode) {
                     for (int i = 0; i < numBe; ++i) {
                         candidateBeList.add(backendList.get(beIndex++ % size));
                     }
@@ -208,8 +208,8 @@ public class EsScanNode extends ScanNode {
                 TScanRangeLocations locations = new TScanRangeLocations();
                 for (int i = 0; i < numBe && i < candidateBeList.size(); ++i) {
                     TScanRangeLocation location = new TScanRangeLocation();
-                    Backend be = candidateBeList.get(i);
-                    location.setBackend_id(be.getId());
+                    DataNode be = candidateBeList.get(i);
+                    location.setDatanode_id(be.getId());
                     location.setServer(new TNetworkAddress(be.getHost(), be.getBePort()));
                     locations.addToLocations(location);
                 }

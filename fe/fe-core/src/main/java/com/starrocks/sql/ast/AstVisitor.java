@@ -147,7 +147,7 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitShowBackendsStatement(ShowBackendsStmt statement, C context) {
+    public R visitShowDataNodesStatement(ShowDataNodesStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -770,11 +770,11 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-    public R visitBackendClause(BackendClause clause, C context) {
+    public R visitDataNodeClause(DataNodeClause clause, C context) {
         return visitNode(clause, context);
     }
 
-    public R visitModifyBackendHostClause(ModifyBackendAddressClause clause, C context) {
+    public R visitModifyDataNodeHostClause(ModifyDataNodeAddressClause clause, C context) {
         return visitNode(clause, context);
     }
 

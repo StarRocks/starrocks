@@ -219,11 +219,11 @@ public class PrometheusMetricVisitor extends MetricVisitor {
         sb.append(NODE_INFO).append("{type=\"fe_node_num\", state=\"total\"} ")
                 .append(GlobalStateMgr.getCurrentState().getFrontends(null).size()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"total\"} ")
-                .append(GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber()).append("\n");
+                .append(GlobalStateMgr.getCurrentSystemInfo().getTotalDataNodeNumber()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"alive\"} ")
-                .append(GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber()).append("\n");
+                .append(GlobalStateMgr.getCurrentSystemInfo().getAliveDataNodeNumber()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"decommissioned\"} ")
-                .append(GlobalStateMgr.getCurrentSystemInfo().getDecommissionedBackendIds().size()).append("\n");
+                .append(GlobalStateMgr.getCurrentSystemInfo().getDecommissionedDataNodeIds().size()).append("\n");
         sb.append(NODE_INFO).append("{type=\"broker_node_num\", state=\"dead\"} ").append(
                         GlobalStateMgr.getCurrentState().getBrokerMgr().getAllBrokers().stream().filter(b -> !b.isAlive)
                                 .count())

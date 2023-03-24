@@ -109,11 +109,11 @@ public class DatabaseTransactionMgrTest {
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
         TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId1);
+                GlobalStateMgrTestUtil.testDataNodeId1);
         TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId2);
+                GlobalStateMgrTestUtil.testDataNodeId2);
         TabletCommitInfo tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
-                GlobalStateMgrTestUtil.testBackendId3);
+                GlobalStateMgrTestUtil.testDataNodeId3);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);

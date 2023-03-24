@@ -69,7 +69,7 @@ public class AgentTaskQueue {
     }
 
     public static synchronized boolean addTask(AgentTask task) {
-        long backendId = task.getBackendId();
+        long backendId = task.getDataNodeId();
         TTaskType type = task.getTaskType();
 
         Map<Long, AgentTask> signatureMap = tasks.get(backendId, type);
@@ -92,7 +92,7 @@ public class AgentTaskQueue {
     // the caller should make sure all tasks in AgentBatchTask is type of 'type'
     public static synchronized void removeBatchTask(AgentBatchTask batchTask, TTaskType type) {
         for (AgentTask task : batchTask.getAllTasks()) {
-            removeTask(task.getBackendId(), type, task.getSignature());
+            removeTask(task.getDataNodeId(), type, task.getSignature());
         }
     }
 

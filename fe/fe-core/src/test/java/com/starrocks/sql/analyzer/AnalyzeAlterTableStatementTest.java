@@ -42,8 +42,8 @@ public class AnalyzeAlterTableStatementTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
         connectContext = AnalyzeTestUtil.getConnectContext();
         clauseAnalyzerVisitor = new AlterTableStatementAnalyzer.AlterTableClauseAnalyzerVisitor();
     }

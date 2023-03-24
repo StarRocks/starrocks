@@ -258,7 +258,7 @@ public class Replica implements Writable {
         return this.id;
     }
 
-    public long getBackendId() {
+    public long getDataNodeId() {
         return this.backendId;
     }
 
@@ -529,7 +529,7 @@ public class Replica implements Writable {
     public String toString() {
         StringBuffer strBuffer = new StringBuffer("[replicaId=");
         strBuffer.append(id);
-        strBuffer.append(", BackendId=");
+        strBuffer.append(", DataNodeId=");
         strBuffer.append(backendId);
         strBuffer.append(", version=");
         strBuffer.append(version);

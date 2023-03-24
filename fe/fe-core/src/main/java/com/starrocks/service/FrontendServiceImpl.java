@@ -117,7 +117,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
@@ -1774,7 +1774,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                     LocalTablet localTablet = (LocalTablet) tablet;
                     Multimap<Replica, Long> bePathsMap =
-                            localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
+                            localTablet.getNormalReplicaDataNodePathMap(olapTable.getClusterId());
                     if (bePathsMap.keySet().size() < quorum) {
                         errorStatus.setError_msgs(Lists.newArrayList(
                                 "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
@@ -1784,9 +1784,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         return result;
                     }
                     // replicas[0] will be the primary replica
-                    // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable 
+                    // getNormalReplicaDataNodePathMap returns a linkedHashMap, it's keysets is stable
                     List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
-                    tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
+                    tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getDataNodeId)
                             .collect(Collectors.toList())));
                 }
             }
@@ -1798,8 +1798,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TNodeInfo> nodeInfos = Lists.newArrayList();
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(olapTable.getClusterId());
-        for (Long id : systemInfoService.getBackendIds(false)) {
-            Backend backend = systemInfoService.getBackend(id);
+        for (Long id : systemInfoService.getDataNodeIds(false)) {
+            DataNode backend = systemInfoService.getDataNode(id);
             nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
         }
         result.setNodes(nodeInfos);

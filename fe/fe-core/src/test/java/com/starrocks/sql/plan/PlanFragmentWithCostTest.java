@@ -387,8 +387,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testShuffleInnerJoin() throws Exception {
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table1 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(table1, 10000);
@@ -413,8 +413,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 + "    HASH_PARTITIONED: 2: v2\n"
                 + "\n"
                 + "  0:OlapScanNode");
-        UtFrameUtils.dropMockBackend(10002);
-        UtFrameUtils.dropMockBackend(10003);
+        UtFrameUtils.dropMockDataNode(10002);
+        UtFrameUtils.dropMockDataNode(10003);
     }
 
     @Test
@@ -962,7 +962,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 result = Replica.ReplicaState.NORMAL;
                 replica.getSchemaHash();
                 result = -1;
-                replica.getBackendId();
+                replica.getDataNodeId();
                 result = 10001;
                 replica.checkVersionCatchUp(anyLong, anyBoolean);
                 result = true;
@@ -1565,7 +1565,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testOnePhaseAggWithLocalShuffle() throws Exception {
-        final Reference<Boolean> isSingleBackendAndComputeNode = new Reference<>(true);
+        final Reference<Boolean> isSingleDataNodeAndComputeNode = new Reference<>(true);
         final List<ColumnStatistic> avgHighCardinality = ImmutableList.of(
                 new ColumnStatistic(0.0, NUM_TABLE0_ROWS, 0.0, 10, NUM_TABLE0_ROWS));
         final List<ColumnStatistic> avgLowCardinality = ImmutableList.of(
@@ -1573,8 +1573,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         final Reference<List<ColumnStatistic>> cardinality = new Reference<>(avgHighCardinality);
         new MockUp<SystemInfoService>() {
             @Mock
-            public boolean isSingleBackendAndComputeNode() {
-                return isSingleBackendAndComputeNode.getRef();
+            public boolean isSingleDataNodeAndComputeNode() {
+                return isSingleDataNodeAndComputeNode.getRef();
             }
         };
         new MockUp<MockTpchStatisticStorage>() {
@@ -1601,7 +1601,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         try {
             // case 1: use one-phase local aggregation with local shuffle for high-cardinality agg and single BE.
-            isSingleBackendAndComputeNode.setRef(true);
+            isSingleDataNodeAndComputeNode.setRef(true);
             cardinality.setRef(avgHighCardinality);
             sql = "select sum(v2) from colocate_t0 group by v2";
             execPlan = getExecPlan(sql);
@@ -1617,7 +1617,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  0:OlapScanNode");
 
             // case 2: use one-phase local aggregation without local shuffle for high-cardinality agg and single BE.
-            isSingleBackendAndComputeNode.setRef(true);
+            isSingleDataNodeAndComputeNode.setRef(true);
             cardinality.setRef(avgHighCardinality);
             sql = "select sum(v1) from colocate_t0 group by v1";
             execPlan = getExecPlan(sql);
@@ -1632,7 +1632,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  0:OlapScanNode");
 
             // case 3: use two-phase aggregation for non-grouping agg.
-            isSingleBackendAndComputeNode.setRef(true);
+            isSingleDataNodeAndComputeNode.setRef(true);
             cardinality.setRef(avgHighCardinality);
             sql = "select sum(v2) from t0";
             execPlan = getExecPlan(sql);
@@ -1651,7 +1651,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  2:EXCHANGE");
 
             // case 4: use two-phase aggregation for multiple BEs.
-            isSingleBackendAndComputeNode.setRef(false);
+            isSingleDataNodeAndComputeNode.setRef(false);
             cardinality.setRef(avgHighCardinality);
             sql = "select sum(v2) from t0 group by v2";
             execPlan = getExecPlan(sql);
@@ -1665,7 +1665,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  1:EXCHANGE");
 
             // case 5: use two-phase aggregation for low-cardinality agg.
-            isSingleBackendAndComputeNode.setRef(true);
+            isSingleDataNodeAndComputeNode.setRef(true);
             cardinality.setRef(avgLowCardinality);
             sql = "select sum(v2) from t0 group by v2";
             execPlan = getExecPlan(sql);
@@ -1685,7 +1685,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  2:EXCHANGE");
 
             // case 6: insert into cannot use one-phase local aggregation with local shuffle.
-            isSingleBackendAndComputeNode.setRef(true);
+            isSingleDataNodeAndComputeNode.setRef(true);
             cardinality.setRef(avgHighCardinality);
             sql = "insert into colocate_t0 select v2, v2, sum(v2) from t0 group by v2";
             execPlan = getExecPlan(sql);
@@ -1700,7 +1700,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  1:EXCHANGE");
 
             // case 7: Plan with join cannot use one-phase local aggregation with local shuffle.
-            isSingleBackendAndComputeNode.setRef(true);
+            isSingleDataNodeAndComputeNode.setRef(true);
             cardinality.setRef(avgHighCardinality);
             sql = "select count(1) from " +
                     "(select v2, sum(v2) from t0 group by v2) t1 join " +

@@ -85,8 +85,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
-import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.ComputeNodeProcDir;
+import com.starrocks.common.proc.DataNodesProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.common.proc.LakeTabletsProcNode;
 import com.starrocks.common.proc.LocalTabletsProcDir;
@@ -145,7 +145,6 @@ import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowAuthorStmt;
-import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
@@ -158,6 +157,7 @@ import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataNodesStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
@@ -309,8 +309,8 @@ public class ShowExecutor {
             handleShowResources();
         } else if (stmt instanceof ShowExportStmt) {
             handleShowExport();
-        } else if (stmt instanceof ShowBackendsStmt) {
-            handleShowBackends();
+        } else if (stmt instanceof ShowDataNodesStmt) {
+            handleShowDataNodes();
         } else if (stmt instanceof ShowFrontendsStmt) {
             handleShowFrontends();
         } else if (stmt instanceof ShowRepositoriesStmt) {
@@ -1761,7 +1761,7 @@ public class ShowExecutor {
 
                     List<Replica> replicas = tablet.getImmutableReplicas();
                     for (Replica replica : replicas) {
-                        Replica tmp = invertedIndex.getReplica(tabletId, replica.getBackendId());
+                        Replica tmp = invertedIndex.getReplica(tabletId, replica.getDataNodeId());
                         if (tmp == null) {
                             isSync = false;
                             break;
@@ -1844,7 +1844,7 @@ public class ShowExecutor {
                         } else {
                             LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
                             tabletInfos.addAll(procDir.fetchComparableResult(
-                                    showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
+                                    showStmt.getVersion(), showStmt.getDataNodeId(), showStmt.getReplicaState()));
                         }
                         if (sizeLimit > -1 && tabletInfos.size() >= sizeLimit) {
                             stop = true;
@@ -1924,9 +1924,9 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showExportStmt.getMetaData(), infos);
     }
 
-    private void handleShowBackends() {
-        final ShowBackendsStmt showStmt = (ShowBackendsStmt) stmt;
-        List<List<String>> backendInfos = BackendsProcDir.getClusterBackendInfos();
+    private void handleShowDataNodes() {
+        final ShowDataNodesStmt showStmt = (ShowDataNodesStmt) stmt;
+        List<List<String>> backendInfos = DataNodesProcDir.getClusterDataNodeInfos();
         resultSet = new ShowResultSet(showStmt.getMetaData(), backendInfos);
     }
 

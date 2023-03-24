@@ -288,7 +288,7 @@ public class RoutineLoadManagerTest {
 
         new Expectations() {
             {
-                systemInfoService.getBackendIds(true);
+                systemInfoService.getDataNodeIds(true);
                 minTimes = 0;
                 result = beIds;
             }
@@ -314,7 +314,7 @@ public class RoutineLoadManagerTest {
 
         new Expectations() {
             {
-                systemInfoService.getBackendIds(true);
+                systemInfoService.getDataNodeIds(true);
                 minTimes = 0;
                 result = beIds;
             }

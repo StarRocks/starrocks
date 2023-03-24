@@ -67,7 +67,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -96,14 +96,14 @@ import java.util.stream.Stream;
  * <p>
  * We are expecting an efficient way to recovery the entire cluster and make it balanced.
  * Case 1:
- * A Backend is down. All tablets which has replica on this BE should be repaired as soon as possible.
+ * A DataNode is down. All tablets which has replica on this BE should be repaired as soon as possible.
  * <p>
  * Case 1.1:
- * As Backend is down, some tables should be repaired in high priority. So the clone task should be able
+ * As DataNode is down, some tables should be repaired in high priority. So the clone task should be able
  * to be preempted.
  * <p>
  * Case 2:
- * A new Backend is added to the cluster. Replicas should be transfer to that host to balance the cluster load.
+ * A new DataNode is added to the cluster. Replicas should be transfer to that host to balance the cluster load.
  */
 public class TabletScheduler extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletScheduler.class);
@@ -206,12 +206,12 @@ public class TabletScheduler extends LeaderDaemon {
         }
         currentSlotPerPathConfig = cappedVal;
 
-        ImmutableMap<Long, Backend> backends = infoService.getIdToBackend();
+        ImmutableMap<Long, DataNode> backends = infoService.getIdToDataNode();
         if (backends == null) {
             return false;
         }
 
-        for (Backend backend : backends.values()) {
+        for (DataNode backend : backends.values()) {
             if (!backend.hasPathHash() && backend.isAlive()) {
                 // when upgrading, backend may not get path info yet. so return false and wait for next round.
                 // and we should check if backend is alive. If backend is dead when upgrading, this backend
@@ -241,7 +241,7 @@ public class TabletScheduler extends LeaderDaemon {
         }
 
         // add new backends
-        for (Backend be : backends.values()) {
+        for (DataNode be : backends.values()) {
             if (!backendsWorkingSlots.containsKey(be.getId())) {
                 List<Long> pathHashes =
                         be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
@@ -262,7 +262,7 @@ public class TabletScheduler extends LeaderDaemon {
         return true;
     }
 
-    public Map<Long, PathSlot> getBackendsWorkingSlots() {
+    public Map<Long, PathSlot> getDataNodesWorkingSlots() {
         return backendsWorkingSlots;
     }
 
@@ -649,17 +649,17 @@ public class TabletScheduler extends LeaderDaemon {
                 }
                 Preconditions.checkState(tabletOrderIdx != -1);
 
-                Set<Long> backendsSet = colocateTableIndex.getTabletBackendsByGroup(groupId, tabletOrderIdx);
-                trySkipRelocateSchedAndResetBackendSeq(tabletCtx, partition.getVisibleVersion(),
+                Set<Long> backendsSet = colocateTableIndex.getTabletDataNodesByGroup(groupId, tabletOrderIdx);
+                trySkipRelocateSchedAndResetDataNodeSeq(tabletCtx, partition.getVisibleVersion(),
                         replicaNum, backendsSet, tablet);
                 TabletStatus st = tablet.getColocateHealthStatus(
                         partition.getVisibleVersion(),
                         replicaNum,
                         backendsSet);
                 statusPair = Pair.create(st, Priority.HIGH);
-                tabletCtx.setColocateGroupBackendIds(backendsSet);
+                tabletCtx.setColocateGroupDataNodeIds(backendsSet);
             } else {
-                List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
+                List<Long> aliveBeIdsInCluster = infoService.getDataNodeIds(true);
                 statusPair = tablet.getHealthStatusWithPriority(
                         infoService,
                         partition.getVisibleVersion(),
@@ -722,18 +722,18 @@ public class TabletScheduler extends LeaderDaemon {
      * we won't try to skip the current scheduling and reset the backend sequence because this will cause the tablets
      * which have finished scheduling to be scheduled again.
      */
-    private void trySkipRelocateSchedAndResetBackendSeq(TabletSchedCtx ctx, long visibleVersion, short replicaNum,
-                                                        Set<Long> currentBackendsSet, LocalTablet tablet) {
+    private void trySkipRelocateSchedAndResetDataNodeSeq(TabletSchedCtx ctx, long visibleVersion, short replicaNum,
+                                                        Set<Long> currentDataNodesSet, LocalTablet tablet) {
         if (ctx.getRelocationForRepair()) {
-            Set<Long> lastBackendsSet = ColocateTableBalancer.getInstance().getLastBackendSeqForBucket(ctx);
+            Set<Long> lastDataNodesSet = ColocateTableBalancer.getInstance().getLastDataNodeSeqForBucket(ctx);
             // if we have already reset the backend set to last backend set, skip the reset action
-            if (lastBackendsSet.isEmpty() || currentBackendsSet.equals(lastBackendsSet)) {
+            if (lastDataNodesSet.isEmpty() || currentDataNodesSet.equals(lastDataNodesSet)) {
                 return;
             }
 
             // check the backends of original sequence are all available
-            for (Long backendId : lastBackendsSet) {
-                Backend be = infoService.getBackend(backendId);
+            for (Long backendId : lastDataNodesSet) {
+                DataNode be = infoService.getDataNode(backendId);
                 if (!be.isAvailable()) {
                     return;
                 }
@@ -742,14 +742,14 @@ public class TabletScheduler extends LeaderDaemon {
             int num = ColocateTableBalancer.getInstance().getScheduledTabletNumForBucket(ctx);
             int totalTabletsPerBucket = colocateTableIndex.getNumOfTabletsPerBucket(ctx.getColocateGroupId());
             if (num <= totalTabletsPerBucket * COLOCATE_BACKEND_RESET_RATIO) {
-                TabletStatus st = tablet.getColocateHealthStatus(visibleVersion, replicaNum, lastBackendsSet);
+                TabletStatus st = tablet.getColocateHealthStatus(visibleVersion, replicaNum, lastDataNodesSet);
                 if (st != TabletStatus.COLOCATE_MISMATCH) {
-                    colocateTableIndex.setBackendsSetByIdxForGroup(ctx.getColocateGroupId(),
-                            ctx.getTabletOrderIdx(), lastBackendsSet);
+                    colocateTableIndex.setDataNodesSetByIdxForGroup(ctx.getColocateGroupId(),
+                            ctx.getTabletOrderIdx(), lastDataNodesSet);
                     LOG.info("all current backends are available for tablet {}, bucket index: {}, reset " +
                                     "backend set to: {} for colocate group {}, before backend set: {}",
-                            ctx.getTabletId(), ctx.getTabletOrderIdx(), lastBackendsSet,
-                            ctx.getColocateGroupId(), currentBackendsSet);
+                            ctx.getTabletId(), ctx.getTabletOrderIdx(), lastDataNodesSet,
+                            ctx.getColocateGroupId(), currentDataNodesSet);
                 }
             }
         }
@@ -875,13 +875,13 @@ public class TabletScheduler extends LeaderDaemon {
             LOG.info(
                     "succeed to find version incomplete replica from tablet relocating. tablet: {} replicas: {} {}->{}",
                     tabletCtx.getTabletId(), tabletCtx.getTablet().getReplicaInfos(),
-                    tabletCtx.getSrcReplica().getBackendId(), tabletCtx.getDestBackendId());
+                    tabletCtx.getSrcReplica().getDataNodeId(), tabletCtx.getDestDataNodeId());
         } catch (SchedException e) {
             if (e.getStatus() == Status.SCHEDULE_RETRY) {
                 LOG.debug("failed to find version incomplete replica from tablet relocating. " +
                                 "reason: [{}], tablet: [{}], replicas: {} dest:{} try to find a new backend", e.getMessage(),
                         tabletCtx.getTabletId(), tabletCtx.getTablet().getReplicaInfos(),
-                        tabletCtx.getDestBackendId());
+                        tabletCtx.getDestDataNodeId());
                 // the dest or src slot may be taken after calling handleReplicaVersionIncomplete(),
                 // so we need to release these slots first.
                 // and reserve the tablet in TabletSchedCtx so that it can continue to be scheduled.
@@ -889,7 +889,7 @@ public class TabletScheduler extends LeaderDaemon {
                 handleReplicaMissing(tabletCtx, batchTask);
                 LOG.info("succeed to find new backend for tablet relocating. tablet: {} replicas: {} {}->{}",
                         tabletCtx.getTabletId(), tabletCtx.getTablet().getReplicaInfos(),
-                        tabletCtx.getSrcReplica().getBackendId(), tabletCtx.getDestBackendId());
+                        tabletCtx.getSrcReplica().getDataNodeId(), tabletCtx.getDestDataNodeId());
             } else {
                 throw e;
             }
@@ -914,16 +914,16 @@ public class TabletScheduler extends LeaderDaemon {
     private void handleRedundantReplica(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         stat.counterReplicaRedundantErr.incrementAndGet();
 
-        if (deleteBackendDropped(tabletCtx, force)
+        if (deleteDataNodeDropped(tabletCtx, force)
                 || deleteBadReplica(tabletCtx, force)
-                || deleteBackendUnavailable(tabletCtx, force)
+                || deleteDataNodeUnavailable(tabletCtx, force)
                 || deleteCloneOrDecommissionReplica(tabletCtx, force)
                 || deleteReplicaWithFailedVersion(tabletCtx, force)
                 || deleteReplicaWithLowerVersion(tabletCtx, force)
                 || deleteReplicaOnSameHost(tabletCtx, force)
                 || deleteReplicaNotInCluster(tabletCtx, force)
                 || deleteReplicaChosenByRebalancer(tabletCtx, force)
-                || deleteReplicaOnHighLoadBackend(tabletCtx, force)) {
+                || deleteReplicaOnHighLoadDataNode(tabletCtx, force)) {
             // if we delete at least one redundant replica, we still throw a SchedException with status FINISHED
             // to remove this tablet from the pendingTablets(consider it as finished)
             throw new SchedException(Status.FINISHED, "redundant replica is deleted");
@@ -931,10 +931,10 @@ public class TabletScheduler extends LeaderDaemon {
         throw new SchedException(Status.UNRECOVERABLE, "unable to delete any redundant replicas");
     }
 
-    private boolean deleteBackendDropped(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
+    private boolean deleteDataNodeDropped(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         for (Replica replica : tabletCtx.getReplicas()) {
-            long beId = replica.getBackendId();
-            if (infoService.getBackend(beId) == null) {
+            long beId = replica.getDataNodeId();
+            if (infoService.getDataNode(beId) == null) {
                 deleteReplicaInternal(tabletCtx, replica, "backend dropped", force);
                 return true;
             }
@@ -952,11 +952,11 @@ public class TabletScheduler extends LeaderDaemon {
         return false;
     }
 
-    private boolean deleteBackendUnavailable(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
+    private boolean deleteDataNodeUnavailable(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         for (Replica replica : tabletCtx.getReplicas()) {
-            Backend be = infoService.getBackend(replica.getBackendId());
+            DataNode be = infoService.getDataNode(replica.getDataNodeId());
             if (be == null) {
-                // this case should be handled in deleteBackendDropped()
+                // this case should be handled in deleteDataNodeDropped()
                 continue;
             }
             if (!be.isAvailable()) {
@@ -1008,9 +1008,9 @@ public class TabletScheduler extends LeaderDaemon {
         // host -> (replicas on same host)
         Map<String, List<Replica>> hostToReplicas = Maps.newHashMap();
         for (Replica replica : tabletCtx.getReplicas()) {
-            Backend be = infoService.getBackend(replica.getBackendId());
+            DataNode be = infoService.getDataNode(replica.getDataNodeId());
             if (be == null) {
-                // this case should be handled in deleteBackendDropped()
+                // this case should be handled in deleteDataNodeDropped()
                 return false;
             }
             List<Replica> replicas = hostToReplicas.get(be.getHost());
@@ -1026,7 +1026,7 @@ public class TabletScheduler extends LeaderDaemon {
             if (replicas.size() > 1) {
                 // delete one replica from replicas on same host.
                 // better to choose high load backend
-                return deleteFromHighLoadBackend(tabletCtx, replicas, force, statistic);
+                return deleteFromHighLoadDataNode(tabletCtx, replicas, force, statistic);
             }
         }
 
@@ -1035,9 +1035,9 @@ public class TabletScheduler extends LeaderDaemon {
 
     private boolean deleteReplicaNotInCluster(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         for (Replica replica : tabletCtx.getReplicas()) {
-            Backend be = infoService.getBackend(replica.getBackendId());
+            DataNode be = infoService.getDataNode(replica.getDataNodeId());
             if (be == null) {
-                // this case should be handled in deleteBackendDropped()
+                // this case should be handled in deleteDataNodeDropped()
                 return false;
             }
         }
@@ -1057,21 +1057,21 @@ public class TabletScheduler extends LeaderDaemon {
         return false;
     }
 
-    private boolean deleteReplicaOnHighLoadBackend(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
+    private boolean deleteReplicaOnHighLoadDataNode(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         ClusterLoadStatistic statistic = loadStatistic;
         if (statistic == null) {
             return false;
         }
 
-        return deleteFromHighLoadBackend(tabletCtx, tabletCtx.getReplicas(), force, statistic);
+        return deleteFromHighLoadDataNode(tabletCtx, tabletCtx.getReplicas(), force, statistic);
     }
 
-    private boolean deleteFromHighLoadBackend(TabletSchedCtx tabletCtx, List<Replica> replicas,
+    private boolean deleteFromHighLoadDataNode(TabletSchedCtx tabletCtx, List<Replica> replicas,
                                               boolean force, ClusterLoadStatistic statistic) throws SchedException {
         Replica chosenReplica = null;
         double maxScore = 0;
         for (Replica replica : replicas) {
-            BackendLoadStatistic beStatistic = statistic.getBackendLoadStatistic(replica.getBackendId());
+            DataNodeLoadStatistic beStatistic = statistic.getDataNodeLoadStatistic(replica.getDataNodeId());
             if (beStatistic == null) {
                 continue;
             }
@@ -1108,18 +1108,18 @@ public class TabletScheduler extends LeaderDaemon {
      * return true if delete one replica, otherwise, return false.
      */
     private boolean handleColocateRedundant(TabletSchedCtx tabletCtx) throws SchedException {
-        Set<Long> backendSet = tabletCtx.getColocateBackendsSet();
+        Set<Long> backendSet = tabletCtx.getColocateDataNodesSet();
         Preconditions.checkNotNull(backendSet);
         stat.counterReplicaColocateRedundant.incrementAndGet();
         List<Replica> replicas = tabletCtx.getReplicas();
         for (Replica replica : replicas) {
             boolean forceDropBad = false;
-            if (backendSet.contains(replica.getBackendId())) {
+            if (backendSet.contains(replica.getDataNodeId())) {
                 if (replica.isBad() && replicas.size() > 1) {
                     forceDropBad = true;
                     LOG.info("colocate tablet {}, replica {} is bad," +
                                     "will forcefully drop it, current backend set: {}",
-                            tabletCtx.getTabletId(), replica.getBackendId(), backendSet);
+                            tabletCtx.getTabletId(), replica.getDataNodeId(), backendSet);
                 } else {
                     continue;
                 }
@@ -1152,7 +1152,7 @@ public class TabletScheduler extends LeaderDaemon {
             // set priority to normal because it may wait for a long time. Remain it as VERY_HIGH may block other task.
             tabletCtx.setOrigPriority(Priority.NORMAL);
             LOG.info("decommission tablet:" + tabletCtx.getTabletId() + " type:" + tabletCtx.getType() + " replica:" +
-                    replica.getBackendId() + " reason:" + reason + " watermark:" + nextTxnId + " replicas:" +
+                    replica.getDataNodeId() + " reason:" + reason + " watermark:" + nextTxnId + " replicas:" +
                     tabletCtx.getTablet().getReplicaInfos());
             throw new SchedException(Status.SCHEDULE_RETRY, "set watermark txn " + nextTxnId);
         } else if (replica.getState() == ReplicaState.DECOMMISSION && replica.getWatermarkTxnId() != -1) {
@@ -1173,7 +1173,7 @@ public class TabletScheduler extends LeaderDaemon {
         // it will also delete replica from tablet inverted index.
         if (!tabletCtx.deleteReplica(replica)) {
             LOG.warn("delete replica for tablet: {} failed backend {} not found replicas:{}", tabletCtx.getTabletId(),
-                    replica.getBackendId(), replicaInfos);
+                    replica.getDataNodeId(), replicaInfos);
         }
 
         if (force) {
@@ -1182,7 +1182,7 @@ public class TabletScheduler extends LeaderDaemon {
             // NOTICE: only delete the replica from meta may not work. sometimes we can depend on tablet report
             // to delete these replicas, but in FORCE_REDUNDANT case, replica may be added to meta again in report
             // process.
-            sendDeleteReplicaTask(replica.getBackendId(), tabletCtx.getTabletId(), tabletCtx.getSchemaHash());
+            sendDeleteReplicaTask(replica.getDataNodeId(), tabletCtx.getTabletId(), tabletCtx.getSchemaHash());
         }
 
         // write edit log
@@ -1191,12 +1191,12 @@ public class TabletScheduler extends LeaderDaemon {
                 tabletCtx.getPartitionId(),
                 tabletCtx.getIndexId(),
                 tabletCtx.getTabletId(),
-                replica.getBackendId());
+                replica.getDataNodeId());
 
         GlobalStateMgr.getCurrentState().getEditLog().logDeleteReplica(info);
 
         LOG.info("delete replica. tablet id: {}, backend id: {}. reason: {}, force: {} replicas: {}",
-                tabletCtx.getTabletId(), replica.getBackendId(), reason, force, replicaInfos);
+                tabletCtx.getTabletId(), replica.getDataNodeId(), reason, force, replicaInfos);
     }
 
     private void sendDeleteReplicaTask(long backendId, long tabletId, int schemaHash) {
@@ -1232,7 +1232,7 @@ public class TabletScheduler extends LeaderDaemon {
      * tablet replicas:    1,2,4,5
      */
     private void handleColocateMismatch(TabletSchedCtx tabletCtx, AgentBatchTask batchTask) throws SchedException {
-        Preconditions.checkNotNull(tabletCtx.getColocateBackendsSet());
+        Preconditions.checkNotNull(tabletCtx.getColocateDataNodesSet());
 
         stat.counterReplicaColocateMismatch.incrementAndGet();
         // find an available dest backend and path
@@ -1322,12 +1322,12 @@ public class TabletScheduler extends LeaderDaemon {
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
-        List<BackendLoadStatistic> beStatistics = statistic.getSortedBeLoadStats(null /* sorted ignore medium */);
+        List<DataNodeLoadStatistic> beStatistics = statistic.getSortedBeLoadStats(null /* sorted ignore medium */);
 
         // get all available paths which this tablet can fit in.
         // beStatistics is sorted by mix load score in ascend order, so select from first to last.
         List<RootPathLoadStatistic> allFitPaths = Lists.newArrayList();
-        for (BackendLoadStatistic bes : beStatistics) {
+        for (DataNodeLoadStatistic bes : beStatistics) {
             if (!bes.isAvailable()) {
                 continue;
             }
@@ -1336,7 +1336,7 @@ public class TabletScheduler extends LeaderDaemon {
                 continue;
             }
 
-            if (forColocate && !tabletCtx.getColocateBackendsSet().contains(bes.getBeId())) {
+            if (forColocate && !tabletCtx.getColocateDataNodesSet().contains(bes.getBeId())) {
                 continue;
             }
 
@@ -1445,7 +1445,7 @@ public class TabletScheduler extends LeaderDaemon {
         long tabletId = cloneTask.getTabletId();
         TabletSchedCtx tabletCtx = takeRunningTablets(tabletId);
         if (tabletCtx == null) {
-            LOG.warn("tablet info does not exist, tablet:{} backend:{}", tabletId, cloneTask.getBackendId());
+            LOG.warn("tablet info does not exist, tablet:{} backend:{}", tabletId, cloneTask.getDataNodeId());
             // tablet does not exist, no need to keep task.
             return true;
         }
@@ -1489,16 +1489,16 @@ public class TabletScheduler extends LeaderDaemon {
      */
     private void gatherStatistics(TabletSchedCtx tabletCtx) {
         if (tabletCtx.getCopySize() > 0 && tabletCtx.getCopyTimeMs() > 0) {
-            if (tabletCtx.getSrcBackendId() != -1 && tabletCtx.getSrcPathHash() != -1) {
-                PathSlot pathSlot = backendsWorkingSlots.get(tabletCtx.getSrcBackendId());
+            if (tabletCtx.getSrcDataNodeId() != -1 && tabletCtx.getSrcPathHash() != -1) {
+                PathSlot pathSlot = backendsWorkingSlots.get(tabletCtx.getSrcDataNodeId());
                 if (pathSlot != null) {
                     pathSlot.updateStatistic(tabletCtx.getSrcPathHash(), tabletCtx.getCopySize(),
                             tabletCtx.getCopyTimeMs());
                 }
             }
 
-            if (tabletCtx.getDestBackendId() != -1 && tabletCtx.getDestPathHash() != -1) {
-                PathSlot pathSlot = backendsWorkingSlots.get(tabletCtx.getDestBackendId());
+            if (tabletCtx.getDestDataNodeId() != -1 && tabletCtx.getDestPathHash() != -1) {
+                PathSlot pathSlot = backendsWorkingSlots.get(tabletCtx.getDestDataNodeId());
                 if (pathSlot != null) {
                     pathSlot.updateStatistic(tabletCtx.getDestPathHash(), tabletCtx.getCopySize(),
                             tabletCtx.getCopyTimeMs());
@@ -1644,8 +1644,8 @@ public class TabletScheduler extends LeaderDaemon {
     }
 
     /**
-     * PathSlot keeps track of slot num per path of a Backend.
-     * Each path on a Backend has several slot.
+     * PathSlot keeps track of slot num per path of a DataNode.
+     * Each path on a DataNode has several slot.
      * If a path's available slot num become 0, no task should be assigned to this path.
      */
     public static class PathSlot {

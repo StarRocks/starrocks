@@ -38,7 +38,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 
 import java.util.List;
 
@@ -64,7 +64,7 @@ public class SchedulerWorkingSlotsProcDir implements ProcDirInterface {
     @Override
     public ProcNodeInterface lookup(String beIdStr) throws AnalysisException {
         if (Strings.isNullOrEmpty(beIdStr)) {
-            throw new AnalysisException("Backend id is null");
+            throw new AnalysisException("DataNode id is null");
         }
 
         long backendId = -1L;
@@ -74,12 +74,12 @@ public class SchedulerWorkingSlotsProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid backend id format: " + beIdStr);
         }
 
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(backendId);
         if (backend == null) {
-            throw new AnalysisException("Backend[" + backendId + "] does not exist.");
+            throw new AnalysisException("DataNode[" + backendId + "] does not exist.");
         }
 
-        return new BackendProcNode(backend);
+        return new DataNodeProcNode(backend);
     }
 
 }

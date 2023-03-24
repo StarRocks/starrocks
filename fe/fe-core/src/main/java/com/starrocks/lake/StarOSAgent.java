@@ -47,7 +47,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -72,13 +72,13 @@ public class StarOSAgent {
     private StarClient client;
     private String serviceId;
     private Map<String, Long> workerToId;
-    private Map<Long, Long> workerToBackend;
+    private Map<Long, Long> workerToDataNode;
     private ReentrantReadWriteLock rwLock;
 
     public StarOSAgent() {
         serviceId = "";
         workerToId = Maps.newHashMap();
-        workerToBackend = Maps.newHashMap();
+        workerToDataNode = Maps.newHashMap();
         rwLock = new ReentrantReadWriteLock();
     }
 
@@ -213,14 +213,14 @@ public class StarOSAgent {
             }
             tryRemovePreviousWorker(backendId);
             workerToId.put(workerIpPort, workerId);
-            workerToBackend.put(workerId, backendId);
+            workerToDataNode.put(workerId, backendId);
             LOG.info("add worker {} success, backendId is {}", workerId, backendId);
         }
     }
 
     // remove previous worker with same backend id
     private void tryRemovePreviousWorker(long backendId) {
-        long prevWorkerId = getWorkerIdByBackendIdInternal(backendId);
+        long prevWorkerId = getWorkerIdByDataNodeIdInternal(backendId);
         if (prevWorkerId < 0) {
             return;
         }
@@ -230,7 +230,7 @@ public class StarOSAgent {
             // TODO: fix this corner case later in star mgr
             LOG.error("Failed to remove worker {} with backend id {}. error: {}", prevWorkerId, backendId, e.getMessage());
         }
-        workerToBackend.remove(prevWorkerId);
+        workerToDataNode.remove(prevWorkerId);
         workerToId.entrySet().removeIf(e -> e.getValue() == prevWorkerId);
     }
 
@@ -255,22 +255,22 @@ public class StarOSAgent {
 
     public void removeWorkerFromMap(long workerId, String workerIpPort) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            workerToBackend.remove(workerId);
+            workerToDataNode.remove(workerId);
             workerToId.remove(workerIpPort);
         }
 
         LOG.info("remove worker {} success from StarMgr", workerIpPort);
     }
 
-    public long getWorkerIdByBackendId(long backendId) {
+    public long getWorkerIdByDataNodeId(long backendId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return getWorkerIdByBackendIdInternal(backendId);
+            return getWorkerIdByDataNodeIdInternal(backendId);
         }
     }
 
-    private long getWorkerIdByBackendIdInternal(long backendId) {
+    private long getWorkerIdByDataNodeIdInternal(long backendId) {
         long workerId = -1;
-        for (Map.Entry<Long, Long> entry : workerToBackend.entrySet()) {
+        for (Map.Entry<Long, Long> entry : workerToDataNode.entrySet()) {
             if (entry.getValue() == backendId) {
                 workerId = entry.getKey();
                 break;
@@ -400,7 +400,7 @@ public class StarOSAgent {
         }
     }
 
-    public long getPrimaryBackendIdByShard(long shardId) throws UserException {
+    public long getPrimaryDataNodeIdByShard(long shardId) throws UserException {
         List<ReplicaInfo> replicas = getShardReplicas(shardId);
 
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
@@ -408,12 +408,12 @@ public class StarOSAgent {
                 if (replicaInfo.getReplicaRole() == ReplicaRole.PRIMARY) {
                     WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
                     long workerId = workerInfo.getWorkerId();
-                    if (!workerToBackend.containsKey(workerId)) {
+                    if (!workerToDataNode.containsKey(workerId)) {
                         // get backendId from system info by host & starletPort
                         String workerAddr = workerInfo.getIpPort();
                         String[] pair = workerAddr.split(":");
                         long backendId = GlobalStateMgr.getCurrentSystemInfo()
-                                .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
+                                .getDataNodeIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
 
                         if (backendId == -1L) {
                             throw new UserException("Failed to get backend by worker. worker id: " + workerId);
@@ -421,18 +421,18 @@ public class StarOSAgent {
 
                         // put it into map
                         workerToId.put(workerAddr, workerId);
-                        workerToBackend.put(workerId, backendId);
+                        workerToDataNode.put(workerId, backendId);
                         return backendId;
                     }
 
-                    return workerToBackend.get(workerId);
+                    return workerToDataNode.get(workerId);
                 }
             }
         }
         throw new UserException("Failed to get primary backend. shard id: " + shardId);
     }
 
-    public Set<Long> getBackendIdsByShard(long shardId) throws UserException {
+    public Set<Long> getDataNodeIdsByShard(long shardId) throws UserException {
         List<ReplicaInfo> replicas = getShardReplicas(shardId);
 
         Set<Long> backendIds = Sets.newHashSet();
@@ -441,21 +441,21 @@ public class StarOSAgent {
                 // TODO: check worker state
                 WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
                 long workerId = workerInfo.getWorkerId();
-                if (!workerToBackend.containsKey(workerId)) {
+                if (!workerToDataNode.containsKey(workerId)) {
                     // get backendId from system info
                     String workerAddr = workerInfo.getIpPort();
                     String[] pair = workerAddr.split(":");
                     long backendId = GlobalStateMgr.getCurrentSystemInfo()
-                            .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
+                            .getDataNodeIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
 
                     if (backendId == -1L) {
                         LOG.info("can't find backendId with starletPort for {}.", workerAddr);
-                        // FIXME: workaround fix of missing starletPort due to Backend::write() missing the field during
+                        // FIXME: workaround fix of missing starletPort due to DataNode::write() missing the field during
                         //  saveImage(). Refer to: https://starrocks.atlassian.net/browse/SR-16340
                         if (workerInfo.getWorkerPropertiesMap().containsKey("be_port")) {
                             int bePort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_port"));
-                            Backend be = GlobalStateMgr.getCurrentSystemInfo()
-                                    .getBackendWithBePort(pair[0], bePort);
+                            DataNode be = GlobalStateMgr.getCurrentSystemInfo()
+                                    .getDataNodeWithBePort(pair[0], bePort);
                             if (be == null) {
                                 LOG.warn("can't find backendId with bePort:{} for {}.", bePort, workerAddr);
                             } else {
@@ -470,10 +470,10 @@ public class StarOSAgent {
 
                     // put it into map
                     workerToId.put(workerAddr, workerId);
-                    workerToBackend.put(workerId, backendId);
+                    workerToDataNode.put(workerId, backendId);
                     backendIds.add(backendId);
                 } else {
-                    backendIds.add(workerToBackend.get(workerId));
+                    backendIds.add(workerToDataNode.get(workerId));
                 }
             }
         }

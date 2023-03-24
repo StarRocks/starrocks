@@ -79,14 +79,14 @@ public class LakeTablet extends Tablet {
         this.rowCount = rowCount;
     }
 
-    public long getPrimaryBackendId() throws UserException {
-        return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryBackendIdByShard(getShardId());
+    public long getPrimaryDataNodeId() throws UserException {
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryDataNodeIdByShard(getShardId());
     }
 
     @Override
-    public Set<Long> getBackendIds() {
+    public Set<Long> getDataNodeIds() {
         try {
-            return GlobalStateMgr.getCurrentState().getStarOSAgent().getBackendIdsByShard(getShardId());
+            return GlobalStateMgr.getCurrentState().getStarOSAgent().getDataNodeIdsByShard(getShardId());
         } catch (UserException e) {
             LOG.warn("Failed to get backends by shard. tablet id: {}", getId(), e);
             return Sets.newHashSet();
@@ -97,7 +97,7 @@ public class LakeTablet extends Tablet {
     @Override
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
-        for (long backendId : getBackendIds()) {
+        for (long backendId : getDataNodeIds()) {
             Replica replica = new Replica(getId(), backendId, -1, NORMAL);
             allQuerableReplicas.add(replica);
             if (localBeId != -1 && backendId == localBeId) {

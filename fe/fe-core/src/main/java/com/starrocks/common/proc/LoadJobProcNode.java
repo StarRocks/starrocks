@@ -23,7 +23,7 @@ import com.starrocks.common.AnalysisException;
 public class LoadJobProcNode implements ProcNodeInterface {
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("BackendId").add("TabletId").add("ReplicaId").add("Version")
+            .add("DataNodeId").add("TabletId").add("ReplicaId").add("Version")
             .add("VersionHash").add("PartitionId").add("LoadVersion").add("LoadVersionHash")
             .build();
 

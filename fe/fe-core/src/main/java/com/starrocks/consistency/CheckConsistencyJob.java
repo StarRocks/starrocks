@@ -185,7 +185,7 @@ public class CheckConsistencyJob {
                     maxDataSize = replica.getDataSize();
                 }
 
-                CheckConsistencyTask task = new CheckConsistencyTask(null, replica.getBackendId(),
+                CheckConsistencyTask task = new CheckConsistencyTask(null, replica.getDataNodeId(),
                         tabletMeta.getDbId(),
                         tabletMeta.getTableId(),
                         tabletMeta.getPartitionId(),
@@ -197,7 +197,7 @@ public class CheckConsistencyJob {
                 batchTask.addTask(task);
 
                 // init checksum as '-1'
-                checksumMap.put(replica.getBackendId(), -1L);
+                checksumMap.put(replica.getDataNodeId(), -1L);
 
                 ++sentTaskReplicaNum;
             }
@@ -303,7 +303,7 @@ public class CheckConsistencyJob {
                 Iterator<Map.Entry<Long, Long>> iter = checksumMap.entrySet().iterator();
                 while (iter.hasNext()) {
                     Map.Entry<Long, Long> entry = iter.next();
-                    if (tablet.getReplicaByBackendId(entry.getKey()) == null) {
+                    if (tablet.getReplicaByDataNodeId(entry.getKey()) == null) {
                         LOG.debug("tablet[{}]'s replica in backend[{}] does not exist. remove from checksumMap",
                                 tabletId, entry.getKey());
                         iter.remove();

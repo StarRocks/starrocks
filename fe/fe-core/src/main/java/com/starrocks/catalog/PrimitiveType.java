@@ -70,7 +70,7 @@ public enum PrimitiveType {
 
     HLL("HLL", 16, TPrimitiveType.HLL),
     TIME("TIME", 8, TPrimitiveType.TIME),
-    // we use OBJECT type represent BITMAP type in Backend
+    // we use OBJECT type represent BITMAP type in DataNode
     BITMAP("BITMAP", 16, TPrimitiveType.OBJECT),
     PERCENTILE("PERCENTILE", 16, TPrimitiveType.PERCENTILE),
     DECIMAL32("DECIMAL32", 4, TPrimitiveType.DECIMAL32),

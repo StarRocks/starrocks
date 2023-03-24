@@ -101,7 +101,7 @@ public abstract class AgentTask {
         return this.signature;
     }
 
-    public long getBackendId() {
+    public long getDataNodeId() {
         return this.backendId;
     }
 

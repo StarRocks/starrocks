@@ -393,7 +393,7 @@ public class SparkLoadJobTest {
                 result = Lists.newArrayList(replica);
                 replica.getId();
                 result = replicaId;
-                replica.getBackendId();
+                replica.getDataNodeId();
                 result = backendId;
                 replica.getLastFailedVersion();
                 result = -1;
@@ -485,7 +485,7 @@ public class SparkLoadJobTest {
                 result = Lists.newArrayList(tablet);
                 tablet.getId();
                 result = tabletId;
-                ((LakeTablet) tablet).getPrimaryBackendId();
+                ((LakeTablet) tablet).getPrimaryDataNodeId();
                 result = backendId;
                 AgentTaskExecutor.submit((AgentBatchTask) any);
                 GlobalStateMgr.getCurrentGlobalTransactionMgr();

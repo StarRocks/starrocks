@@ -29,9 +29,9 @@ import com.starrocks.proto.PPulsarMetaProxyRequest;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PStringPair;
-import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.DataNodeServiceClient;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -135,17 +135,17 @@ public class PulsarUtil {
         private PPulsarProxyResult sendProxyRequest(PPulsarProxyRequest request) throws UserException {
             TNetworkAddress address = new TNetworkAddress();
             try {
-                List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+                List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds(true);
                 if (backendIds.isEmpty()) {
                     throw new LoadException("Failed to send proxy request. No alive backends");
                 }
                 Collections.shuffle(backendIds);
-                Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
+                DataNode be = GlobalStateMgr.getCurrentSystemInfo().getDataNode(backendIds.get(0));
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
                 request.timeout = Config.routine_load_pulsar_timeout_second;
-                Future<PPulsarProxyResult> future = BackendServiceClient.getInstance().getPulsarInfo(address, request);
+                Future<PPulsarProxyResult> future = DataNodeServiceClient.getInstance().getPulsarInfo(address, request);
                 PPulsarProxyResult result = future.get(Config.routine_load_pulsar_timeout_second, TimeUnit.SECONDS);
                 TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                 if (code != TStatusCode.OK) {

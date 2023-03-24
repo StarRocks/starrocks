@@ -45,7 +45,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionStatus;
 import io.netty.handler.codec.http.HttpMethod;
@@ -70,9 +70,9 @@ public class TransactionLoadAction extends RestBaseAction {
     private static final String CHANNEL_ID_STR = "channel_id";
     private static TransactionLoadAction ac;
 
-    private Map<String, Long> txnBackendMap = new LinkedHashMap<String, Long>(512, 0.75f, true) {
+    private Map<String, Long> txnDataNodeMap = new LinkedHashMap<String, Long>(512, 0.75f, true) {
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
-            return size() > GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber() * 512;
+            return size() > GlobalStateMgr.getCurrentSystemInfo().getTotalDataNodeNumber() * 512;
         }
     };
 
@@ -80,9 +80,9 @@ public class TransactionLoadAction extends RestBaseAction {
         super(controller);
     }
 
-    public int txnBackendMapSize() {
+    public int txnDataNodeMapSize() {
         synchronized (this) {
-            return txnBackendMap.size();
+            return txnDataNodeMap.size();
         }
     }
 
@@ -186,15 +186,15 @@ public class TransactionLoadAction extends RestBaseAction {
             synchronized (this) {
                 // 2.1 save label->be map when begin transaction, so that subsequent operator can send to same BE
                 if (op.equalsIgnoreCase(TXN_BEGIN)) {
-                    List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+                    List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseDataNodeIds(1, true, false);
                     if (CollectionUtils.isEmpty(backendIds)) {
                         throw new UserException("No backend alive.");
                     }
                     backendID = backendIds.get(0);
-                    // txnBackendMap is LRU cache, it automic remove unused entry
-                    txnBackendMap.put(label, backendID);
+                    // txnDataNodeMap is LRU cache, it automic remove unused entry
+                    txnDataNodeMap.put(label, backendID);
                 } else if (channelIdStr == null) {
-                    backendID = txnBackendMap.get(label);
+                    backendID = txnDataNodeMap.get(label);
                 }
             }
         }
@@ -268,9 +268,9 @@ public class TransactionLoadAction extends RestBaseAction {
             throw new UserException("transaction with op " + op + " label " + label + " has no backend");
         }
 
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendID);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(backendID);
         if (backend == null) {
-            throw new UserException("Backend " + backendID + " is not alive");
+            throw new UserException("DataNode " + backendID + " is not alive");
         }
 
         TNetworkAddress redirectAddr = new TNetworkAddress(backend.getHost(), backend.getHttpPort());

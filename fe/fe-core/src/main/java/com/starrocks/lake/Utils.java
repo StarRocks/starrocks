@@ -20,7 +20,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.NoAliveBackendException;
+import com.starrocks.common.NoAliveDataNodeException;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
@@ -30,7 +30,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -50,13 +50,13 @@ public class Utils {
     }
 
     // Returns null if no backend available.
-    public static Long chooseBackend(LakeTablet tablet) {
+    public static Long chooseDataNode(LakeTablet tablet) {
         try {
-            return tablet.getPrimaryBackendId();
+            return tablet.getPrimaryDataNodeId();
         } catch (UserException ex) {
             LOG.info("Ignored error {}", ex.getMessage());
         }
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseDataNodeIds(1, true, false);
         if (CollectionUtils.isEmpty(backendIds)) {
             return null;
         }
@@ -65,20 +65,20 @@ public class Utils {
 
     // Preconditions: Has required the database's reader lock.
     // Returns a map from backend ID to a list of tablet IDs.
-    public static Map<Long, List<Long>> groupTabletID(OlapTable table) throws NoAliveBackendException {
+    public static Map<Long, List<Long>> groupTabletID(OlapTable table) throws NoAliveDataNodeException {
         return groupTabletID(table.getPartitions(), MaterializedIndex.IndexExtState.ALL);
     }
 
     public static Map<Long, List<Long>> groupTabletID(Collection<Partition> partitions,
                                                       MaterializedIndex.IndexExtState indexState)
-            throws NoAliveBackendException {
+            throws NoAliveDataNodeException {
         Map<Long, List<Long>> groupMap = new HashMap<>();
         for (Partition partition : partitions) {
             for (MaterializedIndex index : partition.getMaterializedIndices(indexState)) {
                 for (Tablet tablet : index.getTablets()) {
-                    Long beId = chooseBackend((LakeTablet) tablet);
+                    Long beId = chooseDataNode((LakeTablet) tablet);
                     if (beId == null) {
-                        throw new NoAliveBackendException("no alive backend");
+                        throw new NoAliveDataNodeException("no alive backend");
                     }
                     groupMap.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
                 }
@@ -88,29 +88,29 @@ public class Utils {
     }
 
     public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion)
-            throws NoAliveBackendException, RpcException {
+            throws NoAliveDataNodeException, RpcException {
         publishVersion(tablets, txnId, baseVersion, newVersion, null);
     }
 
     public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion, Map<Long,
             Double> compactionScores)
-            throws NoAliveBackendException, RpcException {
+            throws NoAliveDataNodeException, RpcException {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
-            Long beId = Utils.chooseBackend((LakeTablet) tablet);
+            Long beId = Utils.chooseDataNode((LakeTablet) tablet);
             if (beId == null) {
-                throw new NoAliveBackendException("No alive backend for handle publish version request");
+                throw new NoAliveDataNodeException("No alive backend for handle publish version request");
             }
             beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
         }
         List<Long> txnIds = Lists.newArrayList(txnId);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<Backend> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
+        List<DataNode> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            Backend backend = systemInfoService.getBackend(entry.getKey());
+            DataNode backend = systemInfoService.getDataNode(entry.getKey());
             if (backend == null) {
-                throw new NoAliveBackendException("Backend been dropped while building publish version request");
+                throw new NoAliveDataNodeException("DataNode been dropped while building publish version request");
             }
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = baseVersion;
@@ -145,22 +145,22 @@ public class Utils {
     }
 
     public static void publishLogVersion(@NotNull List<Tablet> tablets, long txnId, long version)
-            throws NoAliveBackendException, RpcException {
+            throws NoAliveDataNodeException, RpcException {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
-            Long beId = Utils.chooseBackend((LakeTablet) tablet);
+            Long beId = Utils.chooseDataNode((LakeTablet) tablet);
             if (beId == null) {
-                throw new NoAliveBackendException("No alive backend for handle publish version request");
+                throw new NoAliveDataNodeException("No alive backend for handle publish version request");
             }
             beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
         }
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Future<PublishLogVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<Backend> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
+        List<DataNode> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            Backend backend = systemInfoService.getBackend(entry.getKey());
+            DataNode backend = systemInfoService.getDataNode(entry.getKey());
             if (backend == null) {
-                throw new NoAliveBackendException("Backend been dropped while building publish version request");
+                throw new NoAliveDataNodeException("DataNode been dropped while building publish version request");
             }
             PublishLogVersionRequest request = new PublishLogVersionRequest();
             request.tabletIds = entry.getValue();

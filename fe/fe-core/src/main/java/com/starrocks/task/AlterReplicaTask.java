@@ -237,7 +237,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
 
                 if (versionChanged) {
                     ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(getDbId(), getTableId(),
-                            getPartitionId(), getIndexId(), getTabletId(), getBackendId(),
+                            getPartitionId(), getIndexId(), getTabletId(), getDataNodeId(),
                             replica.getId(), replica.getVersion(), -1,
                             replica.getDataSize(), replica.getRowCount(),
                             replica.getLastFailedVersion(),

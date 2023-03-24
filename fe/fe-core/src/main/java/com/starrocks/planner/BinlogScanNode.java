@@ -28,7 +28,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.StreamSourceType;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanNode;
@@ -59,13 +59,13 @@ public class BinlogScanNode extends ScanNode {
     private boolean isFinalized = false;
     private OlapTable olapTable;
     private List<Long> tabletIds;
-    private Set<Long> scanBackendIds;
+    private Set<Long> scanDataNodeIds;
     private List<TScanRangeLocations> scanRanges;
 
     public BinlogScanNode(PlanNodeId id, TupleDescriptor desc) {
         super(id, desc, "BinlogScanNode");
         this.tabletIds = new ArrayList<>();
-        this.scanBackendIds = new HashSet<>();
+        this.scanDataNodeIds = new HashSet<>();
         this.scanRanges = new ArrayList<>();
         olapTable = (OlapTable) Preconditions.checkNotNull(desc.getTable());
     }
@@ -99,8 +99,8 @@ public class BinlogScanNode extends ScanNode {
 
     @Override
     public void computeStats(Analyzer analyzer) {
-        if (CollectionUtils.isNotEmpty(scanBackendIds)) {
-            numNodes = scanBackendIds.size();
+        if (CollectionUtils.isNotEmpty(scanDataNodeIds)) {
+            numNodes = scanDataNodeIds.size();
         }
     }
 
@@ -173,12 +173,12 @@ public class BinlogScanNode extends ScanNode {
                     throw new UserException("No queryable replica for tablet " + tabletId);
                 }
                 for (Replica replica : allQueryableReplicas) {
-                    Backend backend = Preconditions.checkNotNull(
-                            GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId()),
-                            "backend not found: " + replica.getBackendId());
-                    scanBackendIds.add(backend.getId());
+                    DataNode backend = Preconditions.checkNotNull(
+                            GlobalStateMgr.getCurrentSystemInfo().getDataNode(replica.getDataNodeId()),
+                            "backend not found: " + replica.getDataNodeId());
+                    scanDataNodeIds.add(backend.getId());
                     TScanRangeLocation replicaLocation = new TScanRangeLocation(backend.getAddress());
-                    replicaLocation.setBackend_id(backend.getId());
+                    replicaLocation.setDatanode_id(backend.getId());
                     locations.addToLocations(replicaLocation);
                 }
 

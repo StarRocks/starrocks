@@ -46,10 +46,10 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddDataNodeClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
-import com.starrocks.sql.ast.DropBackendClause;
-import com.starrocks.system.Backend;
+import com.starrocks.sql.ast.DropDataNodeClause;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -88,13 +88,13 @@ public class SystemInfoServiceTest {
     public void setUp() throws IOException {
         new Expectations() {
             {
-                editLog.logAddBackend((Backend) any);
+                editLog.logAddDataNode((DataNode) any);
                 minTimes = 0;
 
-                editLog.logDropBackend((Backend) any);
+                editLog.logDropDataNode((DataNode) any);
                 minTimes = 0;
 
-                editLog.logBackendStateChange((Backend) any);
+                editLog.logDataNodeStateChange((DataNode) any);
                 minTimes = 0;
 
                 db.readLock();
@@ -196,8 +196,8 @@ public class SystemInfoServiceTest {
         }
     }
 
-    public void clearAllBackend() {
-        GlobalStateMgr.getCurrentSystemInfo().dropAllBackend();
+    public void clearAllDataNode() {
+        GlobalStateMgr.getCurrentSystemInfo().dropAllDataNode();
     }
 
     @Test(expected = AnalysisException.class)
@@ -219,56 +219,56 @@ public class SystemInfoServiceTest {
     }
 
     @Test
-    public void addBackendTest() throws AnalysisException {
-        clearAllBackend();
-        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+    public void addDataNodeTest() throws AnalysisException {
+        clearAllDataNode();
+        AddDataNodeClause stmt = new AddDataNodeClause(Lists.newArrayList("192.168.0.1:1234"));
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentSystemInfo().addDataNodes(stmt.getHostPortPairs());
         } catch (DdlException e) {
             Assert.fail();
         }
 
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentSystemInfo().addDataNodes(stmt.getHostPortPairs());
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("already exists"));
         }
 
-        Assert.assertNotNull(GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId));
-        Assert.assertNotNull(GlobalStateMgr.getCurrentSystemInfo().getBackendWithHeartbeatPort("192.168.0.1", 1234));
+        Assert.assertNotNull(GlobalStateMgr.getCurrentSystemInfo().getDataNode(backendId));
+        Assert.assertNotNull(GlobalStateMgr.getCurrentSystemInfo().getDataNodeWithHeartbeatPort("192.168.0.1", 1234));
 
-        Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber() == 1);
-        Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false).get(0) == backendId);
+        Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getTotalDataNodeNumber() == 1);
+        Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds(false).get(0) == backendId);
 
-        Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getBackendReportVersion(backendId) == 0L);
+        Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getDataNodeReportVersion(backendId) == 0L);
 
-        GlobalStateMgr.getCurrentSystemInfo().updateBackendReportVersion(backendId, 2L, 20000L);
-        Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getBackendReportVersion(backendId) == 2L);
+        GlobalStateMgr.getCurrentSystemInfo().updateDataNodeReportVersion(backendId, 2L, 20000L);
+        Assert.assertTrue(GlobalStateMgr.getCurrentSystemInfo().getDataNodeReportVersion(backendId) == 2L);
     }
 
     @Test
-    public void removeBackendTest() throws AnalysisException {
-        clearAllBackend();
-        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+    public void removeDataNodeTest() throws AnalysisException {
+        clearAllDataNode();
+        AddDataNodeClause stmt = new AddDataNodeClause(Lists.newArrayList("192.168.0.1:1234"));
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentSystemInfo().addDataNodes(stmt.getHostPortPairs());
         } catch (DdlException e) {
             e.printStackTrace();
         }
 
-        DropBackendClause dropStmt = new DropBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        DropDataNodeClause dropStmt = new DropDataNodeClause(Lists.newArrayList("192.168.0.1:1234"));
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(dropStmt), new ConnectContext(null));
         try {
-            GlobalStateMgr.getCurrentSystemInfo().dropBackends(dropStmt);
+            GlobalStateMgr.getCurrentSystemInfo().dropDataNodes(dropStmt);
         } catch (DdlException e) {
             e.printStackTrace();
             Assert.fail();
         }
 
         try {
-            GlobalStateMgr.getCurrentSystemInfo().dropBackends(dropStmt);
+            GlobalStateMgr.getCurrentSystemInfo().dropDataNodes(dropStmt);
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }
@@ -300,20 +300,20 @@ public class SystemInfoServiceTest {
             }
         };
 
-        AddBackendClause stmt2 = new AddBackendClause(Lists.newArrayList("192.168.0.1:1235"));
+        AddDataNodeClause stmt2 = new AddDataNodeClause(Lists.newArrayList("192.168.0.1:1235"));
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt2), new ConnectContext(null));
 
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt2.getHostPortPairs());
+            GlobalStateMgr.getCurrentSystemInfo().addDataNodes(stmt2.getHostPortPairs());
         } catch (DdlException e) {
             e.printStackTrace();
         }
 
-        DropBackendClause dropStmt2 = new DropBackendClause(Lists.newArrayList("192.168.0.1:1235"));
+        DropDataNodeClause dropStmt2 = new DropDataNodeClause(Lists.newArrayList("192.168.0.1:1235"));
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(dropStmt2), new ConnectContext(null));
 
         try {
-            GlobalStateMgr.getCurrentSystemInfo().dropBackends(dropStmt2);
+            GlobalStateMgr.getCurrentSystemInfo().dropDataNodes(dropStmt2);
         } catch (DdlException e) {
             e.printStackTrace();
             Assert.assertTrue(e.getMessage()
@@ -321,34 +321,34 @@ public class SystemInfoServiceTest {
         }
 
         try {
-            GlobalStateMgr.getCurrentSystemInfo().dropBackends(dropStmt2);
+            GlobalStateMgr.getCurrentSystemInfo().dropDataNodes(dropStmt2);
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }
     }
 
     @Test
-    public void testSaveLoadBackend() throws Exception {
-        clearAllBackend();
-        String dir = "testLoadBackend";
+    public void testSaveLoadDataNode() throws Exception {
+        clearAllDataNode();
+        String dir = "testLoadDataNode";
         mkdir(dir);
         File file = new File(dir, "image");
         file.createNewFile();
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        Backend back1 = new Backend(1L, "localhost", 3);
+        DataNode back1 = new DataNode(1L, "localhost", 3);
         back1.updateOnce(4, 6, 8);
-        systemInfoService.replayAddBackend(back1);
-        long checksum1 = systemInfoService.saveBackends(dos, 0);
+        systemInfoService.replayAddDataNode(back1);
+        long checksum1 = systemInfoService.saveDataNodes(dos, 0);
         globalStateMgr.clear();
         globalStateMgr = null;
         dos.close();
 
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
-        long checksum2 = systemInfoService.loadBackends(dis, 0);
+        long checksum2 = systemInfoService.loadDataNodes(dis, 0);
         Assert.assertEquals(checksum1, checksum2);
-        Assert.assertEquals(1, systemInfoService.getIdToBackend().size());
-        Backend back2 = systemInfoService.getBackend(1);
+        Assert.assertEquals(1, systemInfoService.getIdToDataNode().size());
+        DataNode back2 = systemInfoService.getDataNode(1);
         Assert.assertTrue(back1.equals(back2));
         dis.close();
 

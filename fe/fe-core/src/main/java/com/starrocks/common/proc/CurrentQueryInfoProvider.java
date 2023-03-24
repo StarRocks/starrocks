@@ -44,11 +44,11 @@ import com.starrocks.proto.PCollectQueryStatistics;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.qe.QueryStatisticsItem;
-import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.DataNodeServiceClient;
 import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -174,7 +174,7 @@ public class CurrentQueryInfoProvider {
             final PCollectQueryStatisticsRequest pbRequest = new PCollectQueryStatisticsRequest(queryIds);
             try {
                 futures.add(Pair.create(
-                        request, BackendServiceClient.getInstance().collectQueryStatisticsAsync(address, pbRequest)));
+                        request, DataNodeServiceClient.getInstance().collectQueryStatisticsAsync(address, pbRequest)));
             } catch (RpcException e) {
                 throw new AnalysisException("Sending collect query statistics request fails.");
             }
@@ -214,10 +214,10 @@ public class CurrentQueryInfoProvider {
     }
 
     private TNetworkAddress toBrpcHost(TNetworkAddress host) throws AnalysisException {
-        final Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
+        final DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNodeWithBePort(
                 host.getHostname(), host.getPort());
         if (backend == null) {
-            throw new AnalysisException(new StringBuilder("Backend ")
+            throw new AnalysisException(new StringBuilder("DataNode ")
                     .append(host.getHostname())
                     .append(":")
                     .append(host.getPort())

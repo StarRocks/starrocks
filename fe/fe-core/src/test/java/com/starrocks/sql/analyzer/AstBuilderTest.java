@@ -20,7 +20,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyDataNodeAddressClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TruncatePartitionClause;
@@ -54,7 +54,7 @@ public class AstBuilderTest {
     }
 
     @Test
-    public void testModifyBackendHost() throws NoSuchFieldException, SecurityException,
+    public void testModifyDataNodeHost() throws NoSuchFieldException, SecurityException,
             IllegalArgumentException, IllegalAccessException {
         String sql = "alter system modify backend host '127.0.0.1' to 'testHost'";
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
@@ -64,7 +64,7 @@ public class AstBuilderTest {
         StatementBase statement = (StatementBase) new AstBuilder(32).visitSingleStatement(sqlStatements.singleStatement(0));
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
-        ModifyBackendAddressClause clause = (ModifyBackendAddressClause) field.get(statement);
+        ModifyDataNodeAddressClause clause = (ModifyDataNodeAddressClause) field.get(statement);
         Assert.assertTrue(clause.getSrcHost().equals("127.0.0.1") && clause.getDestHost().equals("testHost"));
     }
 

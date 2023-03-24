@@ -35,7 +35,7 @@
 package com.starrocks.http;
 
 import com.starrocks.common.Config;
-import com.starrocks.http.action.BackendAction;
+import com.starrocks.http.action.DataNodeAction;
 import com.starrocks.http.action.HaAction;
 import com.starrocks.http.action.HelpAction;
 import com.starrocks.http.action.IndexAction;
@@ -146,7 +146,7 @@ public class HttpServer {
         // add web action
         IndexAction.registerAction(controller);
         SystemAction.registerAction(controller);
-        BackendAction.registerAction(controller);
+        DataNodeAction.registerAction(controller);
         LogAction.registerAction(controller);
         QueryAction.registerAction(controller);
         QueryProfileAction.registerAction(controller);

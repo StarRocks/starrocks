@@ -42,7 +42,7 @@ import com.starrocks.catalog.SchemaTable;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -232,7 +232,7 @@ public class SchemaScanNode extends ScanNode {
     }
 
     public void computeBeScanRanges() {
-        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+        for (DataNode be : GlobalStateMgr.getCurrentSystemInfo().getIdToDataNode().values()) {
             // if user specifies BE id, we try to scan all BEs(including bad BE)
             // if user doesn't specify BE id, we only scan live BEs
             if ((be.isAlive() && beId == null) || be.getId() == beId) {
@@ -241,7 +241,7 @@ public class SchemaScanNode extends ScanNode {
                 }
                 TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
                 TScanRangeLocation location = new TScanRangeLocation();
-                location.setBackend_id(be.getId());
+                location.setDatanode_id(be.getId());
                 location.setServer(new TNetworkAddress(be.getHost(), be.getBePort()));
                 scanRangeLocations.addToLocations(location);
                 TScanRange scanRange = new TScanRange();

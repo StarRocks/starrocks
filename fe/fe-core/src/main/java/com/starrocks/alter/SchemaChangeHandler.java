@@ -1278,7 +1278,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
                     for (Tablet tablet : index.getTablets()) {
                         for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                            ClearAlterTask alterTask = new ClearAlterTask(replica.getBackendId(), db.getId(),
+                            ClearAlterTask alterTask = new ClearAlterTask(replica.getDataNodeId(), db.getId(),
                                     olapTable.getId(), partition.getId(), index.getId(), tablet.getId(), schemaHash);
                             batchTask.addTask(alterTask);
                         }
@@ -1519,7 +1519,7 @@ public class SchemaChangeHandler extends AlterHandler {
             for (Tablet tablet : baseIndex.getTablets()) {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                     Set<Pair<Long, Integer>> tabletIdWithHash =
-                            beIdToTabletIdWithHash.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
+                            beIdToTabletIdWithHash.computeIfAbsent(replica.getDataNodeId(), k -> Sets.newHashSet());
                     tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));
                 }
             }
@@ -1602,7 +1602,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 for (Tablet tablet : index.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         Set<Pair<Long, Integer>> tabletIdWithHash =
-                                beIdToTabletIdWithHash.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
+                                beIdToTabletIdWithHash.computeIfAbsent(replica.getDataNodeId(), k -> Sets.newHashSet());
                         tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));
                     }
                 }

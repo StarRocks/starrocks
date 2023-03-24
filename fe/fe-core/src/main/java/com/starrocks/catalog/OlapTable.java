@@ -689,7 +689,7 @@ public class OlapTable extends Table {
 
             // replicas
             List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
-                    .seqChooseBackendIds(replicationNum, true, true);
+                    .seqChooseDataNodeIds(replicationNum, true, true);
             if (CollectionUtils.isEmpty(beIds)) {
                 return new Status(ErrCode.COMMON_ERROR, "failed to find "
                         + replicationNum
@@ -800,7 +800,7 @@ public class OlapTable extends Table {
     }
 
     public void sendDropAutoIncrementMapTask() {
-        Set<Long> fullBackendId = Sets.newHashSet();
+        Set<Long> fullDataNodeId = Sets.newHashSet();
         for (Partition partition : this.getAllPartitions()) {
             List<MaterializedIndex> allIndices =
                     partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
@@ -808,8 +808,8 @@ public class OlapTable extends Table {
                 for (Tablet tablet : materializedIndex.getTablets()) {
                     List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
                     for (Replica replica : replicas) {
-                        long backendId = replica.getBackendId();
-                        fullBackendId.add(backendId);
+                        long backendId = replica.getDataNodeId();
+                        fullDataNodeId.add(backendId);
                     }
                 }
             }
@@ -817,7 +817,7 @@ public class OlapTable extends Table {
 
         AgentBatchTask batchTask = new AgentBatchTask();
 
-        for (long backendId : fullBackendId) {
+        for (long backendId : fullDataNodeId) {
             DropAutoIncrementMapTask dropAutoIncrementMapTask = new DropAutoIncrementMapTask(backendId, this.id,
                     GlobalStateMgr.getCurrentState().getNextId());
             batchTask.addTask(dropAutoIncrementMapTask);
@@ -826,7 +826,7 @@ public class OlapTable extends Table {
         if (batchTask.getTaskNum() > 0) {
             MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<>(batchTask.getTaskNum());
             for (AgentTask task : batchTask.getAllTasks()) {
-                latch.addMark(task.getBackendId(), -1L);
+                latch.addMark(task.getDataNodeId(), -1L);
                 ((DropAutoIncrementMapTask) task).setLatch(latch);
                 AgentTaskQueue.addTask(task);
             }
@@ -1195,7 +1195,7 @@ public class OlapTable extends Table {
             setColocateGroup(groupName);
 
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(this.id);
-            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getDataNodesPerBucketSeq(groupId);
             ColocatePersistInfo info =
                     ColocatePersistInfo.createForAddTable(groupId, this.id, backendsPerBucketSeq);
             GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(info);
@@ -1707,7 +1707,7 @@ public class OlapTable extends Table {
     }
 
     public long checkAndGetUnhealthyTablet(SystemInfoService infoService, TabletScheduler tabletScheduler) {
-        List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
+        List<Long> aliveBeIdsInCluster = infoService.getDataNodeIds(true);
         for (Partition partition : idToPartition.values()) {
             long visibleVersion = partition.getVisibleVersion();
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
@@ -1742,13 +1742,13 @@ public class OlapTable extends Table {
             MaterializedIndex baseIdx = partition.getBaseIndex();
             for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
                 LocalTablet tablet = (LocalTablet) baseIdx.getTablet(tabletId);
-                List<Long> replicaBackendIds = tablet.getNormalReplicaBackendIds();
-                if (replicaBackendIds.size() < replicationNum) {
+                List<Long> replicaDataNodeIds = tablet.getNormalReplicaDataNodeIds();
+                if (replicaDataNodeIds.size() < replicationNum) {
                     // this should not happen, but in case, throw an exception to terminate this process
                     throw new DdlException("Normal replica number of tablet " + tabletId + " is: "
-                            + replicaBackendIds.size() + ", which is less than expected: " + replicationNum);
+                            + replicaDataNodeIds.size() + ", which is less than expected: " + replicationNum);
                 }
-                backendsPerBucketSeq.add(replicaBackendIds.subList(0, replicationNum));
+                backendsPerBucketSeq.add(replicaDataNodeIds.subList(0, replicationNum));
             }
         }
         return backendsPerBucketSeq;
@@ -2313,7 +2313,7 @@ public class OlapTable extends Table {
                         long tabletId = tablet.getId();
                         List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
                         for (Replica replica : replicas) {
-                            long backendId = replica.getBackendId();
+                            long backendId = replica.getDataNodeId();
                             DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
                             AgentBatchTask batchTask = batchTaskMap.get(backendId);
                             if (batchTask == null) {

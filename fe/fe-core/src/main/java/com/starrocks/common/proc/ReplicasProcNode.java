@@ -39,7 +39,7 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 
 import java.util.Arrays;
 import java.util.List;
@@ -50,7 +50,7 @@ import java.util.List;
  */
 public class ReplicasProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("ReplicaId").add("BackendId").add("Version").add("VersionHash")
+            .add("ReplicaId").add("DataNodeId").add("Version").add("VersionHash")
             .add("LstSuccessVersion").add("LstSuccessVersionHash")
             .add("LstFailedVersion").add("LstFailedVersionHash")
             .add("LstFailedTime").add("SchemaHash").add("DataSize").add("RowCount").add("State")
@@ -68,14 +68,14 @@ public class ReplicasProcNode implements ProcNodeInterface {
 
     @Override
     public ProcResult fetchResult() {
-        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, DataNode> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToDataNode();
 
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         for (Replica replica : replicas) {
             String metaUrl;
             String compactionUrl;
-            Backend backend = backendMap.get(replica.getBackendId());
+            DataNode backend = backendMap.get(replica.getDataNodeId());
             if (backend != null) {
                 metaUrl = String.format("http://%s:%d/api/meta/header/%d",
                         backend.getHost(),
@@ -93,7 +93,7 @@ public class ReplicasProcNode implements ProcNodeInterface {
             }
 
             result.addRow(Arrays.asList(String.valueOf(replica.getId()),
-                    String.valueOf(replica.getBackendId()),
+                    String.valueOf(replica.getDataNodeId()),
                     String.valueOf(replica.getVersion()),
                     String.valueOf(0),
                     String.valueOf(replica.getLastSuccessVersion()),

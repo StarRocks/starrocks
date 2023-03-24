@@ -37,7 +37,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
@@ -81,13 +81,13 @@ public class DiskAndTabletLoadReBalancerTest {
 
         SystemInfoService infoService = new SystemInfoService();
 
-        infoService.addBackend(genBackend(beId1, "host1", 2 * tabletDataSize,
+        infoService.addDataNode(genDataNode(beId1, "host1", 2 * tabletDataSize,
                 3 * tabletDataSize, 5 * tabletDataSize, pathHash1));
 
-        infoService.addBackend(genBackend(beId2, "host2", 2 * tabletDataSize,
+        infoService.addDataNode(genDataNode(beId2, "host2", 2 * tabletDataSize,
                 3 * tabletDataSize, 5 * tabletDataSize, pathHash2));
 
-        infoService.addBackend(genBackend(beId3, "host3", 5 * tabletDataSize,
+        infoService.addDataNode(genDataNode(beId3, "host3", 5 * tabletDataSize,
                 0, 5 * tabletDataSize, pathHash3));
 
         // tablet inverted index
@@ -171,18 +171,18 @@ public class DiskAndTabletLoadReBalancerTest {
 
         List<TabletSchedCtx> tablets = rebalancer.selectAlternativeTablets();
         Assert.assertEquals(2, tablets.size());
-        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId3)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId1)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId2)));
+        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestDataNodeId() == beId3)));
+        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcDataNodeId() == beId1)));
+        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcDataNodeId() == beId2)));
 
         // set Config.balance_load_disk_safe_threshold to 0.9 to trigger tablet balance
         Config.tablet_sched_balance_load_disk_safe_threshold = 0.9;
         Config.storage_flood_stage_left_capacity_bytes = 1;
         tablets = rebalancer.selectAlternativeTablets();
         Assert.assertEquals(2, tablets.size());
-        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId3)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId1)));
-        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId2)));
+        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestDataNodeId() == beId3)));
+        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcDataNodeId() == beId1)));
+        Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcDataNodeId() == beId2)));
 
         // set table state to schema_change, balance should be ignored
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
@@ -221,16 +221,16 @@ public class DiskAndTabletLoadReBalancerTest {
 
         SystemInfoService infoService = new SystemInfoService();
 
-        infoService.addBackend(genBackend(beId1, "host1", 2 * tabletDataSize,
+        infoService.addDataNode(genDataNode(beId1, "host1", 2 * tabletDataSize,
                 3 * tabletDataSize, 5 * tabletDataSize, pathHash1));
 
-        infoService.addBackend(genBackend(beId2, "host2", 2 * tabletDataSize,
+        infoService.addDataNode(genDataNode(beId2, "host2", 2 * tabletDataSize,
                 3 * tabletDataSize, 5 * tabletDataSize, pathHash2));
 
-        infoService.addBackend(genBackend(beId3, "host3", 2 * tabletDataSize,
+        infoService.addDataNode(genDataNode(beId3, "host3", 2 * tabletDataSize,
                 3 * tabletDataSize, 5 * tabletDataSize, pathHash3));
 
-        infoService.addBackend(genBackend(beId4, "host1", 5 * tabletDataSize,
+        infoService.addDataNode(genDataNode(beId4, "host1", 5 * tabletDataSize,
                 0, 5 * tabletDataSize, pathHash3));
 
         // tablet inverted index
@@ -354,7 +354,7 @@ public class DiskAndTabletLoadReBalancerTest {
      * 1 tablet moved from be1 data13 to data14
      */
     @Test
-    public void testBalanceBackendTablet(@Mocked GlobalStateMgr globalStateMgr) {
+    public void testBalanceDataNodeTablet(@Mocked GlobalStateMgr globalStateMgr) {
         // system info
         long dbId = 10001L;
         long tableId = 10002L;
@@ -372,7 +372,7 @@ public class DiskAndTabletLoadReBalancerTest {
         long pathHash20 = 20L;
         long pathHash21 = 21L;
 
-        Backend be1 = genBackend(beId1, "host1", 2 * tabletDataSize,
+        DataNode be1 = genDataNode(beId1, "host1", 2 * tabletDataSize,
                 2 * tabletDataSize, 4 * tabletDataSize, pathHash10);
         DiskInfo disk10 = genDiskInfo(2 * tabletDataSize, 2 * tabletDataSize,
                 4 * tabletDataSize, "/data10", pathHash10, TStorageMedium.HDD);
@@ -392,7 +392,7 @@ public class DiskAndTabletLoadReBalancerTest {
         diskInfoMap1.put(disk14.getRootPath(), disk14);
         be1.setDisks(ImmutableMap.copyOf(diskInfoMap1));
 
-        Backend be2 = genBackend(beId2, "host2", 6 * tabletDataSize,
+        DataNode be2 = genDataNode(beId2, "host2", 6 * tabletDataSize,
                 2 * tabletDataSize, 8 * tabletDataSize, pathHash20);
         DiskInfo disk20 = genDiskInfo(6 * tabletDataSize, 2 * tabletDataSize,
                 8 * tabletDataSize, "/data20", pathHash20, TStorageMedium.HDD);
@@ -404,8 +404,8 @@ public class DiskAndTabletLoadReBalancerTest {
         be2.setDisks(ImmutableMap.copyOf(diskInfoMap2));
 
         SystemInfoService infoService = new SystemInfoService();
-        infoService.addBackend(be1);
-        infoService.addBackend(be2);
+        infoService.addDataNode(be1);
+        infoService.addDataNode(be2);
 
         // tablet inverted index
         TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
@@ -506,8 +506,8 @@ public class DiskAndTabletLoadReBalancerTest {
         Config.storage_flood_stage_left_capacity_bytes = 1;
         List<TabletSchedCtx> tablets = rebalancer.selectAlternativeTablets();
         Assert.assertEquals(2, tablets.size());
-        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId1)));
-        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getSrcBackendId() == beId1)));
+        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestDataNodeId() == beId1)));
+        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getSrcDataNodeId() == beId1)));
         Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash12)));
         Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash14)));
         Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash10)));
@@ -517,8 +517,8 @@ public class DiskAndTabletLoadReBalancerTest {
         Config.tablet_sched_balance_load_disk_safe_threshold = 0.9;
         tablets = rebalancer.selectAlternativeTablets();
         Assert.assertEquals(2, tablets.size());
-        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId1)));
-        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getSrcBackendId() == beId1)));
+        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestDataNodeId() == beId1)));
+        Assert.assertTrue(tablets.stream().allMatch(t -> (t.getSrcDataNodeId() == beId1)));
         Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash12)));
         Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash14)));
         Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash10)));
@@ -529,9 +529,9 @@ public class DiskAndTabletLoadReBalancerTest {
         Assert.assertEquals(0, rebalancer.selectAlternativeTablets().size());
     }
 
-    private Backend genBackend(long beId, String host, long availableCapB, long dataUsedCapB, long totalCapB,
+    private DataNode genDataNode(long beId, String host, long availableCapB, long dataUsedCapB, long totalCapB,
                                long pathHash) {
-        Backend backend = new Backend(beId, host, 0);
+        DataNode backend = new DataNode(beId, host, 0);
         backend.updateOnce(0, 0, 0);
         DiskInfo diskInfo = new DiskInfo("/data");
         diskInfo.setAvailableCapacityB(availableCapB);

@@ -32,7 +32,7 @@ import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -86,7 +86,7 @@ public class ShardDeleter extends LeaderDaemon {
         // group shards by be
         for (long shardId : shardIds) {
             try {
-                long backendId = starOSAgent.getPrimaryBackendIdByShard(shardId);
+                long backendId = starOSAgent.getPrimaryDataNodeIdByShard(shardId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
             } catch (UserException ignored1) {
                 // ignore error
@@ -98,7 +98,7 @@ public class ShardDeleter extends LeaderDaemon {
             Set<Long> shards = entry.getValue();
 
             // 1. drop tablet
-            Backend backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackend(backendId);
+            DataNode backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getDataNode(backendId);
             DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
 

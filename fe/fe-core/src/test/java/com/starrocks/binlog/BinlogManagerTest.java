@@ -21,7 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -34,7 +34,7 @@ public class BinlogManagerTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        Backend be = UtFrameUtils.addMockBackend(10002);
+        DataNode be = UtFrameUtils.addMockDataNode(10002);
         be.setIsDecommissioned(true);
         Config.enable_strict_storage_medium_check = true;
         // create connect context
@@ -78,7 +78,7 @@ public class BinlogManagerTest {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("binlog_test");
         table.setBinlogTxnId(2);
-        long totalNum = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001).size();
+        long totalNum = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByDataNodeId(10001).size();
         binlogManager.checkAndSetBinlogAvailableVersion(db, table, 1, 10002);
         Assert.assertFalse(binlogManager.isBinlogAvailable(db.getId(), table.getId()));
 

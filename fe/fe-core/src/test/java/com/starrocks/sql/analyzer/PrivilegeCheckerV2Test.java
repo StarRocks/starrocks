@@ -89,8 +89,8 @@ public class PrivilegeCheckerV2Test {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
         UtFrameUtils.addBroker("broker0");
         String createTblStmtStr1 = "create table db1.tbl1(event_day DATE, k1 varchar(32), " +
                 "k2 varchar(32), k3 varchar(32), k4 int) "

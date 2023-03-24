@@ -62,7 +62,7 @@ public class FeConstants {
     public static final int SHORTKEY_MAX_COLUMN_COUNT = 3;
     public static final int SHORTKEY_MAXSIZE_BYTES = 36;
     public static final String BACKEND_NODE_NOT_FOUND_ERROR =
-            "Backend node not found. Check if any backend node is down.";
+            "DataNode node not found. Check if any backend node is down.";
     public static final String COMPUTE_NODE_NOT_FOUND_ERROR =
             "Compute node not found. Check if any compute node is down.";
 

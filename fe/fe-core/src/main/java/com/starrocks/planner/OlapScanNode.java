@@ -76,7 +76,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TLakeScanNode;
@@ -144,7 +144,7 @@ public class OlapScanNode extends ScanNode {
 
     private boolean isSortedByKeyPerTablet = false;
 
-    private final HashSet<Long> scanBackendIds = new HashSet<>();
+    private final HashSet<Long> scanDataNodeIds = new HashSet<>();
 
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
@@ -296,7 +296,7 @@ public class OlapScanNode extends ScanNode {
             if (hasLimit()) {
                 cardinality = Math.min(cardinality, limit);
             }
-            numNodes = scanBackendIds.size();
+            numNodes = scanDataNodeIds.size();
         }
         // even current node scan has no data,at least on backend will be assigned when the fragment actually execute
         numNodes = numNodes <= 0 ? 1 : numNodes;
@@ -398,15 +398,15 @@ public class OlapScanNode extends ScanNode {
             Collections.shuffle(replicas);
             boolean tabletIsNull = true;
             for (Replica replica : replicas) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(replica.getDataNodeId());
                 if (backend == null) {
-                    LOG.debug("replica {} not exists", replica.getBackendId());
+                    LOG.debug("replica {} not exists", replica.getDataNodeId());
                     continue;
                 }
                 String ip = backend.getHost();
                 int port = backend.getBePort();
                 TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(ip, port));
-                scanRangeLocation.setBackend_id(replica.getBackendId());
+                scanRangeLocation.setDatanode_id(replica.getDataNodeId());
                 scanRangeLocations.addToLocations(scanRangeLocation);
                 internalRange.addToHosts(new TNetworkAddress(ip, port));
                 tabletIsNull = false;
@@ -462,7 +462,7 @@ public class OlapScanNode extends ScanNode {
                 if (LOG.isDebugEnabled()) {
                     if (olapTable.isCloudNativeTable()) {
                         LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
-                                tablet.getBackendIds());
+                                tablet.getDataNodeIds());
                     } else {
                         for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
@@ -485,15 +485,15 @@ public class OlapScanNode extends ScanNode {
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(replica.getDataNodeId());
                 if (backend == null) {
-                    LOG.debug("replica {} not exists", replica.getBackendId());
+                    LOG.debug("replica {} not exists", replica.getDataNodeId());
                     continue;
                 }
                 String ip = backend.getHost();
                 int port = backend.getBePort();
                 TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(ip, port));
-                scanRangeLocation.setBackend_id(replica.getBackendId());
+                scanRangeLocation.setDatanode_id(replica.getDataNodeId());
                 scanRangeLocations.addToLocations(scanRangeLocation);
                 internalRange.addToHosts(new TNetworkAddress(ip, port));
                 tabletIsNull = false;
@@ -503,7 +503,7 @@ public class OlapScanNode extends ScanNode {
                     actualRows += replica.getRowCount();
                     collectedStat = true;
                 }
-                scanBackendIds.add(backend.getId());
+                scanDataNodeIds.add(backend.getId());
             }
             if (tabletIsNull) {
                 throw new UserException(tabletId + "have no alive replicas");
@@ -564,13 +564,13 @@ public class OlapScanNode extends ScanNode {
     private void computeTabletInfo() throws UserException {
         long localBeId = -1;
         if (Config.enable_local_replica_selection) {
-            localBeId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(FrontendOptions.getLocalHostAddress());
+            localBeId = GlobalStateMgr.getCurrentSystemInfo().getDataNodeIdByHost(FrontendOptions.getLocalHostAddress());
         }
         /**
          * The tablet info could be computed only once.
-         * So the scanBackendIds should be empty in the beginning.
+         * So the scanDataNodeIds should be empty in the beginning.
          */
-        Preconditions.checkState(scanBackendIds.size() == 0);
+        Preconditions.checkState(scanDataNodeIds.size() == 0);
         Preconditions.checkState(scanTabletIds.size() == 0);
         for (Long partitionId : selectedPartitionIds) {
             final Partition partition = olapTable.getPartition(partitionId);
@@ -872,8 +872,8 @@ public class OlapScanNode extends ScanNode {
             return false;
         }
         ConnectContext ctx = ConnectContext.get();
-        int backendSize = ctx.getTotalBackendNumber();
-        int aliveBackendSize = ctx.getAliveBackendNumber();
+        int backendSize = ctx.getTotalDataNodeNumber();
+        int aliveDataNodeSize = ctx.getAliveDataNodeNumber();
         int schemaHash = olapTable.getSchemaHashByIndexId(selectedIndexId);
         for (Map.Entry<Long, List<Long>> entry : partitionToScanTabletMap.entrySet()) {
             long partitionId = entry.getKey();
@@ -885,7 +885,7 @@ public class OlapScanNode extends ScanNode {
             MaterializedIndex materializedIndex = partition.getIndex(selectedIndexId);
             for (Long id : entry.getValue()) {
                 LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(id);
-                if (tablet.getQueryableReplicasSize(visibleVersion, schemaHash) != aliveBackendSize) {
+                if (tablet.getQueryableReplicasSize(visibleVersion, schemaHash) != aliveDataNodeSize) {
                     return false;
                 }
             }

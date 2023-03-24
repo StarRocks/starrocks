@@ -46,7 +46,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
@@ -138,19 +138,19 @@ public class TabletInvertedIndex {
         }
 
         int backendStorageTypeCnt = -1;
-        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        DataNode be = GlobalStateMgr.getCurrentSystemInfo().getDataNode(backendId);
         if (be != null) {
-            backendStorageTypeCnt = be.getAvailableBackendStorageTypeCnt();
+            backendStorageTypeCnt = be.getAvailableDataNodeStorageTypeCnt();
         }
 
         readLock();
         long start = System.currentTimeMillis();
         try {
             LOG.debug("begin to do tablet diff with backend[{}]. num: {}", backendId, backendTablets.size());
-            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
-            if (replicaMetaWithBackend != null) {
+            Map<Long, Replica> replicaMetaWithDataNode = backingReplicaMetaTable.row(backendId);
+            if (replicaMetaWithDataNode != null) {
                 // traverse replicas in meta with this backend
-                for (Map.Entry<Long, Replica> entry : replicaMetaWithBackend.entrySet()) {
+                for (Map.Entry<Long, Replica> entry : replicaMetaWithDataNode.entrySet()) {
                     long tabletId = entry.getKey();
                     Preconditions.checkState(tabletMetaMap.containsKey(tabletId));
                     TabletMeta tabletMeta = tabletMetaMap.get(tabletId);
@@ -295,7 +295,7 @@ public class TabletInvertedIndex {
                         LOG.debug("backend[{}] does not report tablet[{}-{}]", backendId, tabletId, tabletMeta);
                         tabletDeleteFromMeta.put(tabletMeta.getDbId(), tabletId);
                     }
-                } // end for replicaMetaWithBackend
+                } // end for replicaMetaWithDataNode
             }
         } finally {
             readUnlock();
@@ -479,11 +479,11 @@ public class TabletInvertedIndex {
         writeLock();
         try {
             Preconditions.checkState(tabletMetaMap.containsKey(tabletId));
-            replicaMetaTable.put(tabletId, replica.getBackendId(), replica);
+            replicaMetaTable.put(tabletId, replica.getDataNodeId(), replica);
             replicaToTabletMap.put(replica.getId(), tabletId);
-            backingReplicaMetaTable.put(replica.getBackendId(), tabletId, replica);
+            backingReplicaMetaTable.put(replica.getDataNodeId(), tabletId, replica);
             LOG.debug("add replica {} of tablet {} in backend {}",
-                    replica.getId(), tabletId, replica.getBackendId());
+                    replica.getId(), tabletId, replica.getDataNodeId());
         } finally {
             writeUnlock();
         }
@@ -542,14 +542,14 @@ public class TabletInvertedIndex {
      * @param backendId backendid
      * @return list of replica or null if backend not found
      */
-    public List<Replica> getReplicasOnBackendByTabletIds(List<Long> tabletIds, long backendId) {
+    public List<Replica> getReplicasOnDataNodeByTabletIds(List<Long> tabletIds, long backendId) {
         readLock();
         try {
-            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
-            if (replicaMetaWithBackend != null) {
+            Map<Long, Replica> replicaMetaWithDataNode = backingReplicaMetaTable.row(backendId);
+            if (replicaMetaWithDataNode != null) {
                 List<Replica> replicas = Lists.newArrayList();
                 for (long tabletId : tabletIds) {
-                    replicas.add(replicaMetaWithBackend.get(tabletId));
+                    replicas.add(replicaMetaWithDataNode.get(tabletId));
                 }
                 return replicas;
             }
@@ -559,13 +559,13 @@ public class TabletInvertedIndex {
         }
     }
 
-    public List<Long> getTabletIdsByBackendId(long backendId) {
+    public List<Long> getTabletIdsByDataNodeId(long backendId) {
         List<Long> tabletIds = Lists.newArrayList();
         readLock();
         try {
-            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
-            if (replicaMetaWithBackend != null) {
-                tabletIds.addAll(replicaMetaWithBackend.keySet());
+            Map<Long, Replica> replicaMetaWithDataNode = backingReplicaMetaTable.row(backendId);
+            if (replicaMetaWithDataNode != null) {
+                tabletIds.addAll(replicaMetaWithDataNode.keySet());
             }
         } finally {
             readUnlock();
@@ -573,13 +573,13 @@ public class TabletInvertedIndex {
         return tabletIds;
     }
 
-    public List<Long> getTabletIdsByBackendIdAndStorageMedium(long backendId, TStorageMedium storageMedium) {
+    public List<Long> getTabletIdsByDataNodeIdAndStorageMedium(long backendId, TStorageMedium storageMedium) {
         List<Long> tabletIds = Lists.newArrayList();
         readLock();
         try {
-            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
-            if (replicaMetaWithBackend != null) {
-                tabletIds = replicaMetaWithBackend.keySet().stream().filter(
+            Map<Long, Replica> replicaMetaWithDataNode = backingReplicaMetaTable.row(backendId);
+            if (replicaMetaWithDataNode != null) {
+                tabletIds = replicaMetaWithDataNode.keySet().stream().filter(
                         id -> tabletMetaMap.get(id).getStorageMedium() == storageMedium).collect(Collectors.toList());
             }
         } finally {
@@ -588,12 +588,12 @@ public class TabletInvertedIndex {
         return tabletIds;
     }
 
-    public long getTabletNumByBackendId(long backendId) {
+    public long getTabletNumByDataNodeId(long backendId) {
         readLock();
         try {
-            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
-            if (replicaMetaWithBackend != null) {
-                return replicaMetaWithBackend.size();
+            Map<Long, Replica> replicaMetaWithDataNode = backingReplicaMetaTable.row(backendId);
+            if (replicaMetaWithDataNode != null) {
+                return replicaMetaWithDataNode.size();
             }
         } finally {
             readUnlock();
@@ -601,12 +601,12 @@ public class TabletInvertedIndex {
         return 0;
     }
 
-    public long getTabletNumByBackendIdAndPathHash(long backendId, long pathHash) {
+    public long getTabletNumByDataNodeIdAndPathHash(long backendId, long pathHash) {
         readLock();
         try {
-            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
-            if (replicaMetaWithBackend != null) {
-                return replicaMetaWithBackend.values().stream().filter(r -> r.getPathHash() == pathHash).count();
+            Map<Long, Replica> replicaMetaWithDataNode = backingReplicaMetaTable.row(backendId);
+            if (replicaMetaWithDataNode != null) {
+                return replicaMetaWithDataNode.values().stream().filter(r -> r.getPathHash() == pathHash).count();
             }
         } finally {
             readUnlock();
@@ -620,9 +620,9 @@ public class TabletInvertedIndex {
         long ssdNum = 0;
         readLock();
         try {
-            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
-            if (replicaMetaWithBackend != null) {
-                for (long tabletId : replicaMetaWithBackend.keySet()) {
+            Map<Long, Replica> replicaMetaWithDataNode = backingReplicaMetaTable.row(backendId);
+            if (replicaMetaWithDataNode != null) {
+                for (long tabletId : replicaMetaWithDataNode.keySet()) {
                     if (tabletMetaMap.get(tabletId).getStorageMedium() == TStorageMedium.HDD) {
                         hddNum++;
                     } else {

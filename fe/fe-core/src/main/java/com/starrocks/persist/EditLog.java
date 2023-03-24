@@ -100,8 +100,8 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
@@ -475,18 +475,18 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_ADD_BACKEND: {
-                    Backend be = (Backend) journal.getData();
-                    GlobalStateMgr.getCurrentSystemInfo().replayAddBackend(be);
+                    DataNode be = (DataNode) journal.getData();
+                    GlobalStateMgr.getCurrentSystemInfo().replayAddDataNode(be);
                     break;
                 }
                 case OperationType.OP_DROP_BACKEND: {
-                    Backend be = (Backend) journal.getData();
-                    GlobalStateMgr.getCurrentSystemInfo().replayDropBackend(be);
+                    DataNode be = (DataNode) journal.getData();
+                    GlobalStateMgr.getCurrentSystemInfo().replayDropDataNode(be);
                     break;
                 }
                 case OperationType.OP_BACKEND_STATE_CHANGE: {
-                    Backend be = (Backend) journal.getData();
-                    GlobalStateMgr.getCurrentSystemInfo().updateBackendState(be);
+                    DataNode be = (DataNode) journal.getData();
+                    GlobalStateMgr.getCurrentSystemInfo().updateDataNodeState(be);
                     break;
                 }
                 case OperationType.OP_ADD_FIRST_FRONTEND:
@@ -593,8 +593,8 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS: {
-                    final BackendIdsUpdateInfo info = (BackendIdsUpdateInfo) journal.getData();
-                    globalStateMgr.replayUpdateClusterAndBackends(info);
+                    final DataNodeIdsUpdateInfo info = (DataNodeIdsUpdateInfo) journal.getData();
+                    globalStateMgr.replayUpdateClusterAndDataNodes(info);
                     break;
                 }
                 case OperationType.OP_UPSERT_TRANSACTION_STATE: {
@@ -636,7 +636,7 @@ public class EditLog {
                 }
                 case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
-                    globalStateMgr.getColocateTableIndex().replayAddBackendsPerBucketSeq(info);
+                    globalStateMgr.getColocateTableIndex().replayAddDataNodesPerBucketSeq(info);
                     break;
                 }
                 case OperationType.OP_COLOCATE_MARK_UNSTABLE: {
@@ -679,8 +679,8 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_BACKEND_TABLETS_INFO: {
-                    BackendTabletsInfo backendTabletsInfo = (BackendTabletsInfo) journal.getData();
-                    GlobalStateMgr.getCurrentState().replayBackendTabletsInfo(backendTabletsInfo);
+                    DataNodeTabletsInfo backendTabletsInfo = (DataNodeTabletsInfo) journal.getData();
+                    GlobalStateMgr.getCurrentState().replayDataNodeTabletsInfo(backendTabletsInfo);
                     break;
                 }
                 case OperationType.OP_CREATE_ROUTINE_LOAD_JOB: {
@@ -1273,7 +1273,7 @@ public class EditLog {
         logEdit(OperationType.OP_ADD_COMPUTE_NODE, computeNode);
     }
 
-    public void logAddBackend(Backend be) {
+    public void logAddDataNode(DataNode be) {
         logEdit(OperationType.OP_ADD_BACKEND, be);
     }
 
@@ -1281,7 +1281,7 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_COMPUTE_NODE, log);
     }
 
-    public void logDropBackend(Backend be) {
+    public void logDropDataNode(DataNode be) {
         logEdit(OperationType.OP_DROP_BACKEND, be);
     }
 
@@ -1329,7 +1329,7 @@ public class EditLog {
         logEdit(OperationType.OP_META_VERSION_V2, metaVersion);
     }
 
-    public void logBackendStateChange(Backend be) {
+    public void logDataNodeStateChange(DataNode be) {
         logEdit(OperationType.OP_BACKEND_STATE_CHANGE, be);
     }
 
@@ -1433,7 +1433,7 @@ public class EditLog {
         logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
     }
 
-    public void logUpdateClusterAndBackendState(BackendIdsUpdateInfo info) {
+    public void logUpdateClusterAndDataNodeState(DataNodeIdsUpdateInfo info) {
         logEdit(OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS, info);
     }
 
@@ -1478,7 +1478,7 @@ public class EditLog {
         logEdit(OperationType.OP_COLOCATE_REMOVE_TABLE, info);
     }
 
-    public void logColocateBackendsPerBucketSeq(ColocatePersistInfo info) {
+    public void logColocateDataNodesPerBucketSeq(ColocatePersistInfo info) {
         logEdit(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ, info);
     }
 
@@ -1510,7 +1510,7 @@ public class EditLog {
         logEdit(OperationType.OP_SET_FORBIT_GLOBAL_DICT, info);
     }
 
-    public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
+    public void logDataNodeTabletsInfo(DataNodeTabletsInfo backendTabletsInfo) {
         logEdit(OperationType.OP_BACKEND_TABLETS_INFO, backendTabletsInfo);
     }
 

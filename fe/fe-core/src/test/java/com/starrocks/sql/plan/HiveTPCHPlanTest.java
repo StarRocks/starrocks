@@ -26,16 +26,16 @@ public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.beforeClass();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
         GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.tpch");
     }
 
     @AfterClass
     public static void afterClass() {
         try {
-            UtFrameUtils.dropMockBackend(10002);
-            UtFrameUtils.dropMockBackend(10003);
+            UtFrameUtils.dropMockDataNode(10002);
+            UtFrameUtils.dropMockDataNode(10003);
         } catch (DdlException e) {
             e.printStackTrace();
         }

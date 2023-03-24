@@ -21,14 +21,14 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.BackendClause;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.ComputeNodeClause;
 import com.starrocks.sql.ast.CreateImageClause;
+import com.starrocks.sql.ast.DataNodeClause;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.FrontendClause;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
+import com.starrocks.sql.ast.ModifyDataNodeAddressClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.validator.routines.InetAddressValidator;
@@ -76,7 +76,7 @@ public class AlterSystemStmtAnalyzer {
         }
 
         @Override
-        public Void visitBackendClause(BackendClause backendClause, ConnectContext context) {
+        public Void visitDataNodeClause(DataNodeClause backendClause, ConnectContext context) {
             try {
                 for (String hostPort : backendClause.getHostPorts()) {
                     Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
@@ -114,7 +114,7 @@ public class AlterSystemStmtAnalyzer {
         }
 
         @Override
-        public Void visitModifyBackendHostClause(ModifyBackendAddressClause clause, ConnectContext context) {
+        public Void visitModifyDataNodeHostClause(ModifyDataNodeAddressClause clause, ConnectContext context) {
             checkModifyHostClause(clause.getSrcHost(), clause.getDestHost());
             return null;
         }

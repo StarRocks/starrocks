@@ -107,7 +107,7 @@ public class StreamLoadManagerTest {
                 minTimes = 0;
                 result = systemInfoService;
 
-                systemInfoService.getBackendIds(true);
+                systemInfoService.getDataNodeIds(true);
                 minTimes = 0;
                 result = Lists.newArrayList();
             }

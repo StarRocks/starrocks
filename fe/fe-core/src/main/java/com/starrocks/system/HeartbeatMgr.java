@@ -78,7 +78,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Heartbeat manager run as a daemon at a fix interval.
- * For now, it will send heartbeat to all Frontends, Backends and Brokers
+ * For now, it will send heartbeat to all Frontends, DataNodes and Brokers
  */
 public class HeartbeatMgr extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(HeartbeatMgr.class);
@@ -121,22 +121,22 @@ public class HeartbeatMgr extends LeaderDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
-        ImmutableMap<Long, Backend> idToBackendRef = nodeMgr.getIdToBackend();
-        if (idToBackendRef == null) {
+        ImmutableMap<Long, DataNode> idToDataNodeRef = nodeMgr.getIdToDataNode();
+        if (idToDataNodeRef == null) {
             return;
         }
 
         List<Future<HeartbeatResponse>> hbResponses = Lists.newArrayList();
 
         // send backend heartbeat
-        for (Backend backend : idToBackendRef.values()) {
-            BackendHeartbeatHandler handler = new BackendHeartbeatHandler(backend);
+        for (DataNode backend : idToDataNodeRef.values()) {
+            DataNodeHeartbeatHandler handler = new DataNodeHeartbeatHandler(backend);
             hbResponses.add(executor.submit(handler));
         }
 
         // send compute node heartbeat
         for (ComputeNode computeNode : nodeMgr.getIdComputeNode().values()) {
-            BackendHeartbeatHandler handler = new BackendHeartbeatHandler(computeNode);
+            DataNodeHeartbeatHandler handler = new DataNodeHeartbeatHandler(computeNode);
             hbResponses.add(executor.submit(handler));
         }
 
@@ -188,8 +188,8 @@ public class HeartbeatMgr extends LeaderDaemon {
 
         // we also add a 'mocked' master Frontend heartbeat response to synchronize master info to other Frontends.
         Map<Long, Integer> backendId2cpuCores = Maps.newHashMap();
-        idToBackendRef.values().forEach(
-                backend -> backendId2cpuCores.put(backend.getId(), BackendCoreStat.getCoresOfBe(backend.getId())));
+        idToDataNodeRef.values().forEach(
+                backend -> backendId2cpuCores.put(backend.getId(), DataNodeCoreStat.getCoresOfBe(backend.getId())));
         hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName, Config.query_port, Config.rpc_port,
                 GlobalStateMgr.getCurrentState().getMaxJournalId(),
                 System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getFeStartTime(),
@@ -206,11 +206,11 @@ public class HeartbeatMgr extends LeaderDaemon {
 
                 // Synchronize cpu cores of backends when synchronizing master info to other Frontends.
                 // It is non-empty, only when replaying a 'mocked' master Frontend heartbeat response to other Frontends.
-                hbResponse.getBackendId2cpuCores().forEach((backendId, cpuCores) -> {
-                    Backend be = nodeMgr.getBackend(backendId);
+                hbResponse.getDataNodeId2cpuCores().forEach((backendId, cpuCores) -> {
+                    DataNode be = nodeMgr.getDataNode(backendId);
                     if (be != null && be.getCpuCores() != cpuCores) {
                         be.setCpuCores(cpuCores);
-                        BackendCoreStat.setNumOfHardwareCoresOfBe(backendId, cpuCores);
+                        DataNodeCoreStat.setNumOfHardwareCoresOfBe(backendId, cpuCores);
                     }
                 });
 
@@ -221,8 +221,8 @@ public class HeartbeatMgr extends LeaderDaemon {
                 break;
             }
             case BACKEND: {
-                BackendHbResponse hbResponse = (BackendHbResponse) response;
-                ComputeNode computeNode = nodeMgr.getBackend(hbResponse.getBeId());
+                DataNodeHbResponse hbResponse = (DataNodeHbResponse) response;
+                ComputeNode computeNode = nodeMgr.getDataNode(hbResponse.getBeId());
                 if (computeNode == null) {
                     computeNode = nodeMgr.getComputeNode(hbResponse.getBeId());
                 }
@@ -270,10 +270,10 @@ public class HeartbeatMgr extends LeaderDaemon {
     }
 
     // backend heartbeat
-    private class BackendHeartbeatHandler implements Callable<HeartbeatResponse> {
+    private class DataNodeHeartbeatHandler implements Callable<HeartbeatResponse> {
         private ComputeNode computeNode;
 
-        public BackendHeartbeatHandler(ComputeNode computeNode) {
+        public DataNodeHeartbeatHandler(ComputeNode computeNode) {
             this.computeNode = computeNode;
         }
 
@@ -296,45 +296,45 @@ public class HeartbeatMgr extends LeaderDaemon {
 
                 ok = true;
                 if (result.getStatus().getStatus_code() == TStatusCode.OK) {
-                    TBackendInfo tBackendInfo = result.getBackend_info();
-                    int bePort = tBackendInfo.getBe_port();
-                    int httpPort = tBackendInfo.getHttp_port();
+                    TBackendInfo tDataNodeInfo = result.getBackend_info();
+                    int bePort = tDataNodeInfo.getBe_port();
+                    int httpPort = tDataNodeInfo.getHttp_port();
                     int brpcPort = -1;
                     int starletPort = 0;
-                    if (tBackendInfo.isSetBrpc_port()) {
-                        brpcPort = tBackendInfo.getBrpc_port();
+                    if (tDataNodeInfo.isSetBrpc_port()) {
+                        brpcPort = tDataNodeInfo.getBrpc_port();
                     }
-                    if (tBackendInfo.isSetStarlet_port()) {
-                        starletPort = tBackendInfo.getStarlet_port();
+                    if (tDataNodeInfo.isSetStarlet_port()) {
+                        starletPort = tDataNodeInfo.getStarlet_port();
                     }
                     String version = "";
-                    if (tBackendInfo.isSetVersion()) {
-                        version = tBackendInfo.getVersion();
+                    if (tDataNodeInfo.isSetVersion()) {
+                        version = tDataNodeInfo.getVersion();
                     }
 
                     // Update number of hardare of cores of corresponding backend.
-                    int cpuCores = tBackendInfo.isSetNum_hardware_cores() ? tBackendInfo.getNum_hardware_cores() : 0;
-                    if (tBackendInfo.isSetNum_hardware_cores()) {
-                        BackendCoreStat.setNumOfHardwareCoresOfBe(computeNodeId, cpuCores);
+                    int cpuCores = tDataNodeInfo.isSetNum_hardware_cores() ? tDataNodeInfo.getNum_hardware_cores() : 0;
+                    if (tDataNodeInfo.isSetNum_hardware_cores()) {
+                        DataNodeCoreStat.setNumOfHardwareCoresOfBe(computeNodeId, cpuCores);
                     }
 
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
-                    BackendHbResponse backendHbResponse = new BackendHbResponse(
+                    DataNodeHbResponse backendHbResponse = new DataNodeHbResponse(
                             computeNodeId, bePort, httpPort, brpcPort, starletPort,
                             System.currentTimeMillis(), version, cpuCores);
-                    if (tBackendInfo.isSetReboot_time()) {
-                        backendHbResponse.setRebootTime(tBackendInfo.getReboot_time());
+                    if (tDataNodeInfo.isSetReboot_time()) {
+                        backendHbResponse.setRebootTime(tDataNodeInfo.getReboot_time());
                     }
                     return backendHbResponse;
                 } else {
-                    return new BackendHbResponse(computeNodeId,
+                    return new DataNodeHbResponse(computeNodeId,
                             result.getStatus().getError_msgs().isEmpty() ? "Unknown error"
                                     : result.getStatus().getError_msgs().get(0));
                 }
             } catch (Exception e) {
                 LOG.warn("backend heartbeat got exception, addr: {}:{}",
                         computeNode.getHost(), computeNode.getHeartbeatPort(), e);
-                return new BackendHbResponse(computeNodeId,
+                return new DataNodeHbResponse(computeNodeId,
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             } finally {
                 if (ok) {

@@ -82,8 +82,8 @@ public class StatisticsMetaManager extends LeaderDaemon {
     }
 
     private boolean checkReplicateNormal(String tableName) {
-        int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
-        int total = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
+        int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getAliveDataNodeNumber();
+        int total = GlobalStateMgr.getCurrentSystemInfo().getTotalDataNodeNumber();
         // maybe cluster just shutdown, ignore
         if (aliveSize <= total / 2) {
             lossTableCount = 0;
@@ -102,7 +102,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         for (Partition partition : table.getPartitions()) {
             // check replicate miss
             if (partition.getBaseIndex().getTablets().stream()
-                    .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
+                    .anyMatch(t -> ((LocalTablet) t).getNormalReplicaDataNodeIds().isEmpty())) {
                 check = false;
                 break;
             }
@@ -134,7 +134,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
+        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalDataNodeNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         KeysType keysType = KeysType.UNIQUE_KEYS;
         CreateTableStmt stmt = new CreateTableStmt(false, false,
@@ -166,7 +166,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 StatsConstants.FULL_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
+        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalDataNodeNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,
@@ -197,7 +197,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
+        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalDataNodeNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,

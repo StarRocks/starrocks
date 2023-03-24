@@ -87,7 +87,7 @@ public class ClusterBalanceProcDir implements ProcDirInterface {
         TabletChecker tabletChecker = GlobalStateMgr.getCurrentState().getTabletChecker();
         result.addRow(Lists.newArrayList(CLUSTER_LOAD, "1"));
         result.addRow(Lists.newArrayList(WORKING_SLOTS,
-                String.valueOf(tabletScheduler.getBackendsWorkingSlots().size())));
+                String.valueOf(tabletScheduler.getDataNodesWorkingSlots().size())));
         result.addRow(Lists.newArrayList(SCHED_STAT, tabletScheduler.getStat().getLastSnapshot() == null ? "0" : "1"));
 
         result.addRow(Lists.newArrayList(PRIORITY_REPAIR, String.valueOf(tabletChecker.getPrioPartitionNum())));

@@ -6,7 +6,7 @@
 //
 //     https://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, software
+// Unless required by applicable law or agreed to in writing, softwareSystemHandler
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
@@ -76,7 +76,7 @@ public class ComputeNode implements IComputable, Writable {
     // to index the state in some cluster
     @SerializedName("backendState")
     private volatile int backendState;
-    // private BackendState backendState;
+    // private DataNodeState backendState;
 
     @SerializedName("heartbeatErrMsg")
     private String heartbeatErrMsg = "";
@@ -113,7 +113,7 @@ public class ComputeNode implements IComputable, Writable {
         this.beRpcPort = 0;
 
         this.ownerClusterName = "";
-        this.backendState = Backend.BackendState.free.ordinal();
+        this.backendState = DataNode.DataNodeState.free.ordinal();
 
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
     }
@@ -133,7 +133,7 @@ public class ComputeNode implements IComputable, Writable {
         this.isDecommissioned = new AtomicBoolean(false);
 
         this.ownerClusterName = "";
-        this.backendState = Backend.BackendState.free.ordinal();
+        this.backendState = DataNode.DataNodeState.free.ordinal();
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
     }
 
@@ -235,7 +235,7 @@ public class ComputeNode implements IComputable, Writable {
         this.host = host;
     }
 
-    public void setBackendState(Backend.BackendState state) {
+    public void setDataNodeState(DataNode.DataNodeState state) {
         this.backendState = state.ordinal();
     }
 
@@ -377,14 +377,14 @@ public class ComputeNode implements IComputable, Writable {
         ownerClusterName = "";
     }
 
-    public Backend.BackendState getBackendState() {
+    public DataNode.DataNodeState getDataNodeState() {
         switch (backendState) {
             case 0:
-                return Backend.BackendState.using;
+                return DataNode.DataNodeState.using;
             case 1:
-                return Backend.BackendState.offline;
+                return DataNode.DataNodeState.offline;
             default:
-                return Backend.BackendState.free;
+                return DataNode.DataNodeState.free;
         }
     }
 
@@ -412,7 +412,7 @@ public class ComputeNode implements IComputable, Writable {
         this.decommissionType = decommissionType;
     }
 
-    public void setBackendState(int backendState) {
+    public void setDataNodeState(int backendState) {
         this.backendState = backendState;
     }
 
@@ -435,7 +435,7 @@ public class ComputeNode implements IComputable, Writable {
      * handle Compute node's heartbeat response.
      * return true if any port changed, or alive state is changed.
      */
-    public boolean handleHbResponse(BackendHbResponse hbResponse, boolean isReplay) {
+    public boolean handleHbResponse(DataNodeHbResponse hbResponse, boolean isReplay) {
         boolean becomeDead = false;
         boolean isChanged = false;
         if (hbResponse.getStatus() == HeartbeatResponse.HbStatus.OK) {
@@ -487,7 +487,7 @@ public class ComputeNode implements IComputable, Writable {
             if (this.cpuCores != hbResponse.getCpuCores()) {
                 isChanged = true;
                 this.cpuCores = hbResponse.getCpuCores();
-                BackendCoreStat.setNumOfHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
+                DataNodeCoreStat.setNumOfHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
             }
 
             heartbeatErrMsg = "";
@@ -527,7 +527,7 @@ public class ComputeNode implements IComputable, Writable {
         }
 
         if (becomeDead) {
-            CoordinatorMonitor.getInstance().addDeadBackend(id);
+            CoordinatorMonitor.getInstance().addDeadDataNode(id);
         }
 
         return isChanged;

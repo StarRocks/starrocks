@@ -100,7 +100,7 @@ public class Tablet {
         info.setPartition_id(partitionId);
         info.setSchema_hash(schemaHash);
         info.setStorage_medium(TStorageMedium.SSD);
-        info.setPath_hash(PseudoBackend.PATH_HASH);
+        info.setPath_hash(PseudoDataNode.PATH_HASH);
         info.setIs_in_memory(false);
         info.setVersion(maxContinuousVersion());
         info.setMin_readable_version(minVersion());
@@ -217,7 +217,7 @@ public class Tablet {
             totalReadFailed.incrementAndGet();
             lastFailedReadVersion = version;
             String msg = String.format("be:%d read tablet:%d version:%d > currentVersion:%d",
-                    PseudoBackend.getCurrentBackend().getId(), id, version, currentVersion);
+                    PseudoDataNode.getCurrentDataNode().getId(), id, version, currentVersion);
             LOG.warn(msg);
             throw new Exception(msg);
         }
@@ -322,8 +322,8 @@ public class Tablet {
         LOG.info("txn: {} tablet:{} rowset commit, version:{} rowset:{} #version:{} #rowset:{}", rowset.txnId, id,
                 version,
                 rowset.id, versions.size(), ev.rowsets.size());
-        if (PseudoBackend.getCurrentBackend() != null) {
-            PseudoBackend.getCurrentBackend().updateDiskUsage(PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
+        if (PseudoDataNode.getCurrentDataNode() != null) {
+            PseudoDataNode.getCurrentDataNode().updateDiskUsage(PseudoDataNode.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
         }
     }
 
@@ -384,7 +384,7 @@ public class Tablet {
                 pendingRowsets.size());
     }
 
-    public synchronized void cloneFrom(Tablet src, long srcBackendId) throws Exception {
+    public synchronized void cloneFrom(Tablet src, long srcDataNodeId) throws Exception {
         if (maxContinuousVersion() >= src.maxContinuousVersion()) {
             LOG.warn("tablet {} clone, nothing to copy src:{} dest:{}", id, src.versionInfo(),
                     versionInfo());
@@ -392,9 +392,9 @@ public class Tablet {
         }
         List<Long> missingVersions = getMissingVersions();
         if (missingVersions.get(0) < src.minVersion()) {
-            LOG.warn(String.format("incremental clone failed src:%d versions:[%d,%d] dest:%d missing::%s", srcBackendId,
+            LOG.warn(String.format("incremental clone failed src:%d versions:[%d,%d] dest:%d missing::%s", srcDataNodeId,
                     src.minVersion(), src.maxContinuousVersion(), id, missingVersions));
-            fullCloneFrom(src, srcBackendId);
+            fullCloneFrom(src, srcDataNodeId);
         } else {
             String oldInfo = versionInfo();
             List<Pair<Long, Rowset>> versionAndRowsets = src.getRowsetsByMissingVersionList(missingVersions);
@@ -405,14 +405,14 @@ public class Tablet {
             totalClone.incrementAndGet();
             cloneExecuted.incrementAndGet();
             String msg =
-                    String.format("tablet:%d incremental clone src:%d %s before:%s after:%s", id, srcBackendId, src.versionInfo(),
-                            oldInfo, versionInfo());
+                    String.format("tablet:%d incremental clone src:%d %s before:%s after:%s", id,
+                            srcDataNodeId, src.versionInfo(), oldInfo, versionInfo());
             System.out.println(msg);
             LOG.info(msg);
         }
     }
 
-    public synchronized void fullCloneFrom(Tablet src, long srcBackendId) throws Exception {
+    public synchronized void fullCloneFrom(Tablet src, long srcDataNodeId) throws Exception {
         String oldInfo = versionInfo();
         // only copy the maxContinuousVersion, not pendingRowsets, to be same as current BE's behavior
         EditVersion srcVersion = src.getMaxContinuousEditVersion();
@@ -420,16 +420,16 @@ public class Tablet {
         destVersion.rowsets = srcVersion.rowsets.stream().map(Rowset::copy).collect(Collectors.toList());
         long oldRowsetCount = numRowsets();
         versions = Lists.newArrayList(destVersion);
-        if (PseudoBackend.getCurrentBackend() != null) {
-            PseudoBackend.getCurrentBackend()
-                    .updateDiskUsage((numRowsets() - oldRowsetCount) * PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
+        if (PseudoDataNode.getCurrentDataNode() != null) {
+            PseudoDataNode.getCurrentDataNode()
+                    .updateDiskUsage((numRowsets() - oldRowsetCount) * PseudoDataNode.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
         }
         nextRssId = destVersion.rowsets.stream().map(Rowset::getId).reduce(Integer::max).orElse(0);
         tryCommitPendingRowsets();
         totalFullClone.incrementAndGet();
         totalClone.incrementAndGet();
         cloneExecuted.incrementAndGet();
-        String msg = String.format("tablet:%d full clone src:%d %s before:%s after:%s", id, srcBackendId, src.versionInfo(),
+        String msg = String.format("tablet:%d full clone src:%d %s before:%s after:%s", id, srcDataNodeId, src.versionInfo(),
                 oldInfo, versionInfo());
         System.out.println(msg);
         LOG.info(msg);

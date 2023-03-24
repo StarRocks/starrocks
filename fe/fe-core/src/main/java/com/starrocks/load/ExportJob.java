@@ -87,7 +87,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.task.AgentClient;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.THdfsProperties;
@@ -303,7 +303,7 @@ public class ExportJob implements Writable {
                 while (iter.hasNext()) {
                     TScanRangeLocations scanRangeLocations = iter.next();
                     long tabletId = scanRangeLocations.getScan_range().getInternal_scan_range().getTablet_id();
-                    long backendId = scanRangeLocations.getLocations().get(0).getBackend_id();
+                    long backendId = scanRangeLocations.getLocations().get(0).getDatanode_id();
                     Replica replica = invertedIndex.getReplica(tabletId, backendId);
                     long dataSize = replica != null ? replica.getDataSize() : 0L;
 
@@ -699,12 +699,12 @@ public class ExportJob implements Writable {
             TNetworkAddress address = snapshotPath.first;
             String host = address.getHostname();
             int port = address.getPort();
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNodeWithBePort(host, port);
             if (backend == null) {
                 continue;
             }
             long backendId = backend.getId();
-            if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
+            if (!GlobalStateMgr.getCurrentSystemInfo().checkDataNodeAvailable(backendId)) {
                 continue;
             }
 
@@ -731,7 +731,7 @@ public class ExportJob implements Writable {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNodeWithBePort(host, port);
                 if (backend == null) {
                     continue;
                 }

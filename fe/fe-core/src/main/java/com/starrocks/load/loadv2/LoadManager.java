@@ -678,10 +678,10 @@ public class LoadManager implements Writable {
     }
 
     public void initJobProgress(Long jobId, TUniqueId loadId, Set<TUniqueId> fragmentIds,
-                                List<Long> relatedBackendIds) {
+                                List<Long> relatedDataNodeIds) {
         LoadJob job = idToLoadJob.get(jobId);
         if (job != null) {
-            job.initLoadProgress(loadId, fragmentIds, relatedBackendIds);
+            job.initLoadProgress(loadId, fragmentIds, relatedDataNodeIds);
         }
     }
 

@@ -332,7 +332,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         long shadowTabletId = shadowTablet.getId();
                         List<Replica> shadowReplicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
                         for (Replica shadowReplica : shadowReplicas) {
-                            long backendId = shadowReplica.getBackendId();
+                            long backendId = shadowReplica.getDataNodeId();
                             countDownLatch.addMark(backendId, shadowTabletId);
                             CreateReplicaTask createReplicaTask = new CreateReplicaTask(
                                     backendId, dbId, tableId, partitionId, shadowIdxId, shadowTabletId,
@@ -497,7 +497,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         long originTabletId = partitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId);
                         for (Replica shadowReplica : ((LocalTablet) shadowTablet).getImmutableReplicas()) {
                             AlterReplicaTask rollupTask = AlterReplicaTask.alterLocalTablet(
-                                    shadowReplica.getBackendId(), dbId, tableId, partitionId,
+                                    shadowReplica.getDataNodeId(), dbId, tableId, partitionId,
                                     shadowIdxId, shadowTabletId, originTabletId, shadowReplica.getId(),
                                     shadowSchemaHash, originSchemaHash, visibleVersion, jobId);
                             schemaChangeBatchTask.addTask(rollupTask);
@@ -1024,7 +1024,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             for (AgentTask agentTask : tasks) {
                 AlterReplicaTask alterTask = (AlterReplicaTask) agentTask;
                 List<String> info = Lists.newArrayList();
-                info.add(String.valueOf(alterTask.getBackendId()));
+                info.add(String.valueOf(alterTask.getDataNodeId()));
                 info.add(String.valueOf(alterTask.getBaseTabletId()));
                 info.add(String.valueOf(alterTask.getSignature()));
                 taskInfos.add(info);

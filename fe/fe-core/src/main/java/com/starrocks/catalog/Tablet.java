@@ -42,7 +42,7 @@ public abstract class Tablet extends MetaObject implements Writable {
 
     public abstract long getRowCount(long version);
 
-    public abstract Set<Long> getBackendIds();
+    public abstract Set<Long> getDataNodeIds();
 
     public abstract void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                               long visibleVersion, long localBeId, int schemaHash);

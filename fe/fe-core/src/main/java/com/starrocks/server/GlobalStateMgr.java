@@ -179,9 +179,9 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AuthUpgradeInfo;
-import com.starrocks.persist.BackendIdsUpdateInfo;
-import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.persist.DataNodeIdsUpdateInfo;
+import com.starrocks.persist.DataNodeTabletsInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -262,7 +262,7 @@ import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
@@ -512,8 +512,8 @@ public class GlobalStateMgr {
     public TNodesInfo createNodesInfo(Integer clusterId) {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = getOrCreateSystemInfo(clusterId);
-        for (Long id : systemInfoService.getBackendIds(false)) {
-            Backend backend = systemInfoService.getBackend(id);
+        for (Long id : systemInfoService.getDataNodeIds(false)) {
+            DataNode backend = systemInfoService.getDataNode(id);
             nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
         }
         return nodesInfo;
@@ -1332,7 +1332,7 @@ public class GlobalStateMgr {
             checksum = loadHeader(dis, checksum);
             checksum = nodeMgr.loadLeaderInfo(dis, checksum);
             checksum = nodeMgr.loadFrontends(dis, checksum);
-            checksum = nodeMgr.loadBackends(dis, checksum);
+            checksum = nodeMgr.loadDataNodes(dis, checksum);
             checksum = localMetastore.loadDb(dis, checksum);
             // ATTN: this should be done after load Db, and before loadAlterJob
             localMetastore.recreateTabletInvertIndex();
@@ -1667,7 +1667,7 @@ public class GlobalStateMgr {
             checksum = saveHeader(dos, replayedJournalId, checksum);
             checksum = nodeMgr.saveLeaderInfo(dos, checksum);
             checksum = nodeMgr.saveFrontends(dos, checksum);
-            checksum = nodeMgr.saveBackends(dos, checksum);
+            checksum = nodeMgr.saveDataNodes(dos, checksum);
             checksum = localMetastore.saveDb(dos, checksum);
             checksum = load.saveLoadJob(dos, checksum);
             checksum = saveAlterJob(dos, checksum);
@@ -3446,8 +3446,8 @@ public class GlobalStateMgr {
         localMetastore.initDefaultCluster();
     }
 
-    public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
-        localMetastore.replayUpdateClusterAndBackends(info);
+    public void replayUpdateClusterAndDataNodes(DataNodeIdsUpdateInfo info) {
+        localMetastore.replayUpdateClusterAndDataNodes(info);
     }
 
     public String dumpImage() {
@@ -3517,8 +3517,8 @@ public class GlobalStateMgr {
         nodeMgr.setFrontendConfig(configs);
     }
 
-    public void replayBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
-        localMetastore.replayBackendTabletsInfo(backendTabletsInfo);
+    public void replayDataNodeTabletsInfo(DataNodeTabletsInfo backendTabletsInfo) {
+        localMetastore.replayDataNodeTabletsInfo(backendTabletsInfo);
     }
 
     public void convertDistributionType(Database db, OlapTable tbl) throws DdlException {

@@ -88,7 +88,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.ResourceDesc;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -341,11 +341,11 @@ public class SparkLoadJob extends BulkLoadJob {
             // fe gets these infos from spark dpp, so we use dummy load id and dummy backend id here
             loadingStatus.setLoadFileInfo((int) dppResult.fileNumber, dppResult.fileSize);
             TUniqueId dummyId = new TUniqueId(0, 0);
-            long dummyBackendId = -1L;
+            long dummyDataNodeId = -1L;
             loadingStatus.getLoadStatistic()
-                    .initLoad(dummyId, Sets.newHashSet(dummyId), Lists.newArrayList(dummyBackendId));
+                    .initLoad(dummyId, Sets.newHashSet(dummyId), Lists.newArrayList(dummyDataNodeId));
             loadingStatus.getLoadStatistic()
-                    .updateLoadProgress(dummyBackendId, dummyId, dummyId, dppResult.scannedRows, true);
+                    .updateLoadProgress(dummyDataNodeId, dummyId, dummyId, dppResult.scannedRows, true);
 
             Map<String, String> counters = loadingStatus.getCounters();
             counters.put(DPP_NORMAL_ALL, String.valueOf(dppResult.normalRows));
@@ -498,9 +498,9 @@ public class SparkLoadJob extends BulkLoadJob {
                                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                         long replicaId = replica.getId();
                                         tabletAllReplicas.add(replicaId);
-                                        long backendId = replica.getBackendId();
-                                        Backend backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo()
-                                                .getBackend(backendId);
+                                        long backendId = replica.getDataNodeId();
+                                        DataNode backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo()
+                                                .getDataNode(backendId);
 
                                         pushTask(backendId, tableId, partitionId, indexId, tabletId,
                                                 replicaId, schemaHash, params, batchTask, tabletMetaStr,
@@ -521,9 +521,9 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
-                                    long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
-                                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().
-                                            getBackend(backendId);
+                                    long backendId = ((LakeTablet) tablet).getPrimaryDataNodeId();
+                                    DataNode backend = GlobalStateMgr.getCurrentSystemInfo().
+                                            getDataNode(backendId);
                                     if (backend == null) {
                                         LOG.warn("replica {} not exists", backendId);
                                         continue;
@@ -571,7 +571,7 @@ public class SparkLoadJob extends BulkLoadJob {
                           PushBrokerReaderParams params,
                           AgentBatchTask batchTask,
                           String tabletMetaStr,
-                          Backend backend, Replica replica, Set<Long> tabletFinishedReplicas,
+                          DataNode backend, Replica replica, Set<Long> tabletFinishedReplicas,
                           TTabletType tabletType)
             throws AnalysisException {
 
@@ -755,7 +755,7 @@ public class SparkLoadJob extends BulkLoadJob {
                     if (pushTask == null) {
                         continue;
                     }
-                    AgentTaskQueue.removeTask(pushTask.getBackendId(), pushTask.getTaskType(), pushTask.getSignature());
+                    AgentTaskQueue.removeTask(pushTask.getDataNodeId(), pushTask.getTaskType(), pushTask.getSignature());
                 }
             }
             // clear job infos that not persist

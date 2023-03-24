@@ -17,7 +17,7 @@ package com.starrocks.sql.analyzer;
 
 
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyDataNodeAddressClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -52,12 +52,12 @@ public class AlterSystemStmtAnalyzerTest {
     }
 
     @Test
-    public void testVisitModifyBackendHostClause() {
+    public void testVisitModifyDataNodeHostClause() {
         mockNet();
         AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
                 new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("test", "fqdn");
-        Void resutl = visitor.visitModifyBackendHostClause(clause, null);
+        ModifyDataNodeAddressClause clause = new ModifyDataNodeAddressClause("test", "fqdn");
+        Void resutl = visitor.visitModifyDataNodeHostClause(clause, null);
         Assert.assertTrue(resutl == null);
     }
 
@@ -72,11 +72,11 @@ public class AlterSystemStmtAnalyzerTest {
     }
 
     @Test(expected = SemanticException.class)
-    public void testVisitModifyBackendHostClauseException() {
+    public void testVisitModifyDataNodeHostClauseException() {
         AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
                 new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.2", "127.0.0.1");
-        visitor.visitModifyBackendHostClause(clause, null);
+        ModifyDataNodeAddressClause clause = new ModifyDataNodeAddressClause("127.0.0.2", "127.0.0.1");
+        visitor.visitModifyDataNodeHostClause(clause, null);
     }
 
     @Test(expected = SemanticException.class)

@@ -77,7 +77,7 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
@@ -182,7 +182,7 @@ public class LeaderImpl {
         TBackend tBackend = request.getBackend();
         String host = tBackend.getHost();
         int bePort = tBackend.getBe_port();
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNodeWithBePort(host, bePort);
         if (backend == null) {
             tStatus.setStatus_code(TStatusCode.CANCELLED);
             List<String> errorMsgs = new ArrayList<>();
@@ -324,12 +324,12 @@ public class LeaderImpl {
             CreateReplicaTask createReplicaTask = (CreateReplicaTask) task;
             if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
                 createReplicaTask.countDownToZero(
-                        task.getBackendId() + ": " + request.getTask_status().getError_msgs().toString());
+                        task.getDataNodeId() + ": " + request.getTask_status().getError_msgs().toString());
             } else {
                 long tabletId = createReplicaTask.getTabletId();
                 if (request.isSetFinish_tablet_infos()) {
                     Replica replica = GlobalStateMgr.getCurrentInvertedIndex()
-                            .getReplica(tabletId, createReplicaTask.getBackendId());
+                            .getReplica(tabletId, createReplicaTask.getDataNodeId());
                     if (replica != null) {
                         replica.setPathHash(request.getFinish_tablet_infos().get(0).getPath_hash());
                         if (createReplicaTask.isRecoverTask()) {
@@ -341,21 +341,21 @@ public class LeaderImpl {
                             replica.setBad(false);
                             LOG.info(
                                     "finish recover create replica task. set replica to good. tablet {}, replica {}, backend {}",
-                                    tabletId, task.getBackendId(), replica.getId());
+                                    tabletId, task.getDataNodeId(), replica.getId());
                         }
                     }
                 }
 
                 // this should be called before 'countDownLatch()'
                 GlobalStateMgr.getCurrentSystemInfo()
-                        .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
+                        .updateDataNodeReportVersion(task.getDataNodeId(), request.getReport_version(), task.getDbId());
 
-                createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
+                createReplicaTask.countDownLatch(task.getDataNodeId(), task.getSignature());
                 LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}",
-                        tabletId, task.getBackendId(), request.getReport_version());
+                        tabletId, task.getDataNodeId(), request.getReport_version());
             }
         } finally {
-            AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CREATE, task.getSignature());
+            AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.CREATE, task.getSignature());
         }
     }
 
@@ -367,14 +367,14 @@ public class LeaderImpl {
             UpdateTabletMetaInfoTask tabletTask = (UpdateTabletMetaInfoTask) task;
             if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
                 tabletTask.countDownToZero(
-                        task.getBackendId() + ": " + request.getTask_status().getError_msgs().toString());
+                        task.getDataNodeId() + ": " + request.getTask_status().getError_msgs().toString());
             } else {
-                tabletTask.countDownLatch(task.getBackendId(), tabletTask.getTablets());
+                tabletTask.countDownLatch(task.getDataNodeId(), tabletTask.getTablets());
                 LOG.debug("finish update tablet meta. tablet id: {}, be: {}", tabletTask.getTablets(),
-                        task.getBackendId());
+                        task.getDataNodeId());
             }
         } finally {
-            AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.UPDATE_TABLET_META_INFO, task.getSignature());
+            AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.UPDATE_TABLET_META_INFO, task.getSignature());
         }
     }
 
@@ -385,7 +385,7 @@ public class LeaderImpl {
         PushTask pushTask = (PushTask) task;
 
         long dbId = pushTask.getDbId();
-        long backendId = pushTask.getBackendId();
+        long backendId = pushTask.getDataNodeId();
         long signature = task.getSignature();
         long transactionId = ((PushTask) task).getTransactionId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -441,7 +441,7 @@ public class LeaderImpl {
 
             // should be done before addReplicaPersistInfos and countDownLatch
             long reportVersion = request.getReport_version();
-            GlobalStateMgr.getCurrentSystemInfo().updateBackendReportVersion(task.getBackendId(), reportVersion,
+            GlobalStateMgr.getCurrentSystemInfo().updateDataNodeReportVersion(task.getDataNodeId(), reportVersion,
                     task.getDbId());
 
             List<Long> tabletIds = finishTabletInfos.stream().map(
@@ -558,7 +558,7 @@ public class LeaderImpl {
                 LOG.warn("could not find tablet {} in rollup index {} ", tabletId, indexId);
                 return null;
             }
-            Replica replica = ((LocalTablet) tablet).getReplicaByBackendId(backendId);
+            Replica replica = ((LocalTablet) tablet).getReplicaByDataNodeId(backendId);
             if (replica == null) {
                 LOG.warn("could not find replica with backend {} in tablet {} in rollup index {} ",
                         backendId, tabletId, indexId);
@@ -570,7 +570,7 @@ public class LeaderImpl {
     private void finishClearAlterTask(AgentTask task, TFinishTaskRequest request) {
         ClearAlterTask clearAlterTask = (ClearAlterTask) task;
         clearAlterTask.setFinished(true);
-        AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        AgentTaskQueue.removeTask(task.getDataNodeId(), task.getTaskType(), task.getSignature());
     }
 
     private void finishPublishVersion(AgentTask task, TFinishTaskRequest request) {
@@ -583,7 +583,7 @@ public class LeaderImpl {
             // report version is required. here we check if set, for compatibility.
             long reportVersion = request.getReport_version();
             GlobalStateMgr.getCurrentSystemInfo()
-                    .updateBackendReportVersion(task.getBackendId(), reportVersion, task.getDbId());
+                    .updateDataNodeReportVersion(task.getDataNodeId(), reportVersion, task.getDbId());
         }
 
         PublishVersionTask publishVersionTask = (PublishVersionTask) task;
@@ -595,7 +595,7 @@ public class LeaderImpl {
                 LOG.error(
                         "new publish mechanism require BE to report tablet version, maybe BE has not upgraded?" +
                                 "db_id: {} tx_id: {} BE: {}",
-                        publishVersionTask.getDbId(), publishVersionTask.getTransactionId(), publishVersionTask.getBackendId());
+                        publishVersionTask.getDbId(), publishVersionTask.getTransactionId(), publishVersionTask.getDataNodeId());
             }
         }
         publishVersionTask.setIsFinished(true);
@@ -608,7 +608,7 @@ public class LeaderImpl {
             // not remove the task from queue and be will retry
             return;
         }
-        AgentTaskQueue.removeTask(publishVersionTask.getBackendId(),
+        AgentTaskQueue.removeTask(publishVersionTask.getDataNodeId(),
                 publishVersionTask.getTaskType(),
                 publishVersionTask.getSignature());
     }
@@ -659,7 +659,7 @@ public class LeaderImpl {
         }
 
         // update replica info
-        Replica replica = tablet.getReplicaByBackendId(backendId);
+        Replica replica = tablet.getReplicaByDataNodeId(backendId);
         if (replica == null) {
             throw new MetaNotFoundException("cannot find replica in tablet[" + tabletId + "], backend[" + backendId
                     + "]");
@@ -672,7 +672,7 @@ public class LeaderImpl {
     }
 
     private void finishDropReplica(AgentTask task) {
-        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.DROP, task.getSignature());
+        AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.DROP, task.getSignature());
     }
 
     private void finishClone(AgentTask task, TFinishTaskRequest request) {
@@ -683,7 +683,7 @@ public class LeaderImpl {
             LOG.warn("invalid clone task, ignore it. {}", task);
         }
 
-        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CLONE, task.getSignature());
+        AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.CLONE, task.getSignature());
     }
 
     private void finishStorageMigration(long backendId, TFinishTaskRequest request) {
@@ -737,13 +737,13 @@ public class LeaderImpl {
 
         GlobalStateMgr.getCurrentState().getConsistencyChecker().handleFinishedConsistencyCheck(checkConsistencyTask,
                 request.getTablet_checksum());
-        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CHECK_CONSISTENCY, task.getSignature());
+        AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.CHECK_CONSISTENCY, task.getSignature());
     }
 
     private void finishMakeSnapshot(AgentTask task, TFinishTaskRequest request) {
         SnapshotTask snapshotTask = (SnapshotTask) task;
         if (GlobalStateMgr.getCurrentState().getBackupHandler().handleFinishedSnapshotTask(snapshotTask, request)) {
-            AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.MAKE_SNAPSHOT, task.getSignature());
+            AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.MAKE_SNAPSHOT, task.getSignature());
         }
 
     }
@@ -751,21 +751,21 @@ public class LeaderImpl {
     private void finishUpload(AgentTask task, TFinishTaskRequest request) {
         UploadTask uploadTask = (UploadTask) task;
         if (GlobalStateMgr.getCurrentState().getBackupHandler().handleFinishedSnapshotUploadTask(uploadTask, request)) {
-            AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.UPLOAD, task.getSignature());
+            AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.UPLOAD, task.getSignature());
         }
     }
 
     private void finishDownloadTask(AgentTask task, TFinishTaskRequest request) {
         DownloadTask downloadTask = (DownloadTask) task;
         if (GlobalStateMgr.getCurrentState().getBackupHandler().handleDownloadSnapshotTask(downloadTask, request)) {
-            AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.DOWNLOAD, task.getSignature());
+            AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.DOWNLOAD, task.getSignature());
         }
     }
 
     private void finishMoveDirTask(AgentTask task, TFinishTaskRequest request) {
         DirMoveTask dirMoveTask = (DirMoveTask) task;
         if (GlobalStateMgr.getCurrentState().getBackupHandler().handleDirMoveTask(dirMoveTask, request)) {
-            AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.MOVE, task.getSignature());
+            AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.MOVE, task.getSignature());
         }
     }
 
@@ -774,19 +774,19 @@ public class LeaderImpl {
             DropAutoIncrementMapTask dropAutoIncrementMapTask = (DropAutoIncrementMapTask) task;
             if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
                 dropAutoIncrementMapTask.countDownToZero(
-                        task.getBackendId() + ": " + request.getTask_status().getError_msgs().toString());
+                        task.getDataNodeId() + ": " + request.getTask_status().getError_msgs().toString());
             } else {
-                dropAutoIncrementMapTask.countDownLatch(task.getBackendId());
+                dropAutoIncrementMapTask.countDownLatch(task.getDataNodeId());
                 LOG.debug("finish drop auto increment map. table id: {}, be: {}",
-                        dropAutoIncrementMapTask.tableId(), task.getBackendId());
+                        dropAutoIncrementMapTask.tableId(), task.getDataNodeId());
             }
         } finally {
-            AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.DROP_AUTO_INCREMENT_MAP, task.getSignature());
+            AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.DROP_AUTO_INCREMENT_MAP, task.getSignature());
         }
     }
 
     private void finishRecoverTablet(AgentTask task) {
-        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.RECOVER_TABLET, task.getSignature());
+        AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.RECOVER_TABLET, task.getSignature());
     }
 
     public TMasterResult report(TReportRequest request) throws TException {
@@ -808,7 +808,7 @@ public class LeaderImpl {
         } else if (alterTask.getJobType() == JobType.SCHEMA_CHANGE) {
             GlobalStateMgr.getCurrentState().getSchemaChangeHandler().handleFinishAlterTask(alterTask);
         }
-        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
+        AgentTaskQueue.removeTask(task.getDataNodeId(), TTaskType.ALTER, task.getSignature());
     }
 
     public TGetTableMetaResponse getTableMeta(TGetTableMetaRequest request) {
@@ -1023,7 +1023,7 @@ public class LeaderImpl {
                         for (Replica replica : localTablet.getImmutableReplicas()) {
                             TReplicaMeta replicaMeta = new TReplicaMeta();
                             replicaMeta.setReplica_id(replica.getId());
-                            replicaMeta.setBackend_id(replica.getBackendId());
+                            replicaMeta.setBackend_id(replica.getDataNodeId());
                             replicaMeta.setSchema_hash(replica.getSchemaHash());
                             replicaMeta.setVersion(replica.getVersion());
                             replicaMeta.setData_size(replica.getDataSize());
@@ -1045,7 +1045,7 @@ public class LeaderImpl {
             }
 
             List<TBackendMeta> backends = new ArrayList<>();
-            for (Backend backend : GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackends()) {
+            for (DataNode backend : GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getDataNodes()) {
                 TBackendMeta backendMeta = new TBackendMeta();
                 backendMeta.setBackend_id(backend.getId());
                 backendMeta.setHost(backend.getHost());
@@ -1053,7 +1053,7 @@ public class LeaderImpl {
                 backendMeta.setRpc_port(backend.getBrpcPort());
                 backendMeta.setHttp_port(backend.getHttpPort());
                 backendMeta.setAlive(backend.isAlive());
-                backendMeta.setState(backend.getBackendState().ordinal());
+                backendMeta.setState(backend.getDataNodeState().ordinal());
                 backends.add(backendMeta);
             }
             response.setStatus(new TStatus(TStatusCode.OK));

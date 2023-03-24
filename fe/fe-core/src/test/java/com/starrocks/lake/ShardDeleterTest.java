@@ -31,7 +31,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -62,7 +62,7 @@ public class ShardDeleterTest {
 
 
     @Mocked
-    private Backend be;
+    private DataNode be;
 
     @Before
     public void setUp() throws Exception {
@@ -112,11 +112,11 @@ public class ShardDeleterTest {
 
         new Expectations() {
             {
-                starOSAgent.getPrimaryBackendIdByShard(anyLong);
+                starOSAgent.getPrimaryDataNodeIdByShard(anyLong);
                 minTimes = 0;
                 result = 1;
 
-                systemInfoService.getBackend(1);
+                systemInfoService.getDataNode(1);
                 minTimes = 0;
                 result = be;
             }

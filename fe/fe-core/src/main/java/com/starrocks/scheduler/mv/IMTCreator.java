@@ -99,7 +99,7 @@ class IMTCreator {
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(columns);
         if (distributionInfo.getBucketNum() == 0) {
-            int numBucket = CatalogUtils.calBucketNumAccordingToBackends();
+            int numBucket = CatalogUtils.calBucketNumAccordingToDataNodes();
             distributionInfo.setBucketNum(numBucket);
         }
 
@@ -218,7 +218,7 @@ class IMTCreator {
             DistributionDesc distributionDesc = new DistributionDesc();
             Preconditions.checkNotNull(distributionDesc);
             HashDistributionInfo distributionInfo = new HashDistributionInfo();
-            distributionInfo.setBucketNum(CatalogUtils.calBucketNumAccordingToBackends());
+            distributionInfo.setBucketNum(CatalogUtils.calBucketNumAccordingToDataNodes());
             distributionInfo.setDistributionColumns(keyColumns);
 
             // TODO(murphy) refine it

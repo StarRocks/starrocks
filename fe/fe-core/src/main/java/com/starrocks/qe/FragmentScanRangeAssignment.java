@@ -57,7 +57,7 @@ class FragmentScanRangeAssignment extends
                     output = e.toString();
                 }
                 sb.append(
-                        String.format("Backend:%s, ScanNode:%s, Hash:%s\n", addr.toString(), scanNodeId.toString(),
+                        String.format("DataNode:%s, ScanNode:%s, Hash:%s\n", addr.toString(), scanNodeId.toString(),
                                 output));
 
             }

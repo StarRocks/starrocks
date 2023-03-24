@@ -166,7 +166,7 @@ public enum ErrorCode {
     ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid value format: '%s'"),
     ERR_REPLICA_NOT_CATCH_UP_WITH_VERSION(5019, new byte[] {'H', 'Y', '0', '0', '0'},
             "Replica does not catch up with version: '%s':'%s'"),
-    ERR_BACKEND_OFFLINE(5021, new byte[] {'H', 'Y', '0', '0', '0'}, "Backend is offline: '%s'"),
+    ERR_BACKEND_OFFLINE(5021, new byte[] {'H', 'Y', '0', '0', '0'}, "DataNode is offline: '%s'"),
     ERR_BAD_PARTS_IN_UNPARTITION_TABLE(5022, new byte[] {'H', 'Y', '0', '0', '0'},
             "Number of partitions in unpartitioned table is not 1"),
     ERR_NO_ALTER_OPERATION(5023, new byte[] {'H', 'Y', '0', '0', '0'},

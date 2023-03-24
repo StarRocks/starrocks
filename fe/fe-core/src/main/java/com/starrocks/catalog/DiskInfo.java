@@ -64,7 +64,7 @@ public class DiskInfo implements Writable {
     private long diskAvailableCapacityB;
     private DiskState state;
 
-    // path hash and storage medium are reported from Backend and no need to persist
+    // path hash and storage medium are reported from DataNode and no need to persist
     private long pathHash = 0;
     private TStorageMedium storageMedium;
 

@@ -172,7 +172,7 @@ public class StarOSAgentTest {
         Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
 
         starosAgent.removeWorker(workerHost);
-        Assert.assertEquals(-1, starosAgent.getWorkerIdByBackendId(5));
+        Assert.assertEquals(-1, starosAgent.getWorkerIdByDataNodeId(5));
     }
 
     @Test
@@ -191,7 +191,7 @@ public class StarOSAgentTest {
         long backendId = 5;
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         starosAgent.addWorker(backendId, workerHost);
-        Assert.assertEquals(workerId1, starosAgent.getWorkerIdByBackendId(backendId));
+        Assert.assertEquals(workerId1, starosAgent.getWorkerIdByDataNodeId(backendId));
 
         final String workerHost2 = "127.0.0.1:8091";
         new Expectations() {
@@ -206,7 +206,7 @@ public class StarOSAgentTest {
             }
         };
         starosAgent.addWorker(backendId, workerHost2);
-        Assert.assertEquals(workerId2, starosAgent.getWorkerIdByBackendId(backendId));
+        Assert.assertEquals(workerId2, starosAgent.getWorkerIdByDataNodeId(backendId));
     }
 
     @Test
@@ -227,7 +227,7 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         starosAgent.addWorker(5, workerHost);
         Assert.assertEquals(6, starosAgent.getWorkerId(workerHost));
-        Assert.assertEquals(6, starosAgent.getWorkerIdByBackendId(5));
+        Assert.assertEquals(6, starosAgent.getWorkerIdByDataNodeId(5));
 
         new Expectations() {
             {
@@ -341,7 +341,7 @@ public class StarOSAgentTest {
 
 
     @Test
-    public void testGetBackendByShard() throws StarClientException, UserException {
+    public void testGetDataNodeByShard() throws StarClientException, UserException {
         ReplicaInfo replica1 = ReplicaInfo.newBuilder()
                 .setReplicaRole(ReplicaRole.PRIMARY)
                 .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(1L).setWorkerState(WorkerState.ON).build())
@@ -368,7 +368,7 @@ public class StarOSAgentTest {
 
         new MockUp<SystemInfoService>() {
             @Mock
-            public long getBackendIdWithStarletPort(String host, int starletPort) {
+            public long getDataNodeIdWithStarletPort(String host, int starletPort) {
                 return -1L;
             }
         };
@@ -389,23 +389,23 @@ public class StarOSAgentTest {
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Map<Long, Long> workerToBackend = Maps.newHashMap();
-        Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
+        Map<Long, Long> workerToDataNode = Maps.newHashMap();
+        Deencapsulation.setField(starosAgent, "workerToDataNode", workerToDataNode);
 
         ExceptionChecker.expectThrowsWithMsg(UserException.class,
                 "Failed to get backend by worker. worker id",
-                () -> starosAgent.getPrimaryBackendIdByShard(10L));
+                () -> starosAgent.getPrimaryDataNodeIdByShard(10L));
 
-        Assert.assertEquals(Sets.newHashSet(), starosAgent.getBackendIdsByShard(10L));
+        Assert.assertEquals(Sets.newHashSet(), starosAgent.getDataNodeIdsByShard(10L));
 
-        workerToBackend.put(1L, 10001L);
-        workerToBackend.put(2L, 10002L);
-        workerToBackend.put(3L, 10003L);
-        Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
+        workerToDataNode.put(1L, 10001L);
+        workerToDataNode.put(2L, 10002L);
+        workerToDataNode.put(3L, 10003L);
+        Deencapsulation.setField(starosAgent, "workerToDataNode", workerToDataNode);
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertEquals(10001L, starosAgent.getPrimaryBackendIdByShard(10L));
-        Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L), starosAgent.getBackendIdsByShard(10L));
+        Assert.assertEquals(10001L, starosAgent.getPrimaryDataNodeIdByShard(10L));
+        Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L), starosAgent.getDataNodeIdsByShard(10L));
     }
 
     @Test

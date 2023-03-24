@@ -62,9 +62,9 @@ public class LakeTabletsProcNodeTest {
                 result = globalStateMgr;
                 globalStateMgr.getStarOSAgent();
                 result = agent;
-                agent.getBackendIdsByShard(tablet1Id);
+                agent.getDataNodeIdsByShard(tablet1Id);
                 result = Sets.newHashSet(10000, 10001);
-                agent.getBackendIdsByShard(tablet2Id);
+                agent.getDataNodeIdsByShard(tablet2Id);
                 result = Sets.newHashSet(10001, 10002);
             }
         };

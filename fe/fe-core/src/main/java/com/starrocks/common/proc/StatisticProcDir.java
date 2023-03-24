@@ -127,7 +127,7 @@ public class StatisticProcDir implements ProcDirInterface {
             }
 
             ++totalDbNum;
-            List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
+            List<Long> aliveBeIdsInCluster = infoService.getDataNodeIds(true);
             db.readLock();
             try {
                 int dbTableNum = 0;

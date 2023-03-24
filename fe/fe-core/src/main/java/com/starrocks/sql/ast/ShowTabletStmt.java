@@ -146,7 +146,7 @@ public class ShowTabletStmt extends ShowStmt {
         return version;
     }
 
-    public long getBackendId() {
+    public long getDataNodeId() {
         return backendId;
     }
 
@@ -166,7 +166,7 @@ public class ShowTabletStmt extends ShowStmt {
         this.version = version;
     }
 
-    public void setBackendId(long backendId) {
+    public void setDataNodeId(long backendId) {
         this.backendId = backendId;
     }
 

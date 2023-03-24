@@ -110,7 +110,7 @@ public class RoutineLoadSchedulerTest {
                 database.getTable(1L);
                 minTimes = 0;
                 result = olapTable;
-                systemInfoService.getBackendIds(true);
+                systemInfoService.getDataNodeIds(true);
                 minTimes = 0;
                 result = beIds;
                 routineLoadManager.getSizeOfIdToRoutineLoadTask();
@@ -162,7 +162,7 @@ public class RoutineLoadSchedulerTest {
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                systemInfoService.getBackendIds(true);
+                systemInfoService.getDataNodeIds(true);
                 minTimes = 0;
                 result = backendIds;
             }

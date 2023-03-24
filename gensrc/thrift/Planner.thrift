@@ -108,7 +108,7 @@ struct TScanRangeLocation {
   // -1 indicates an unknown volume id;
   // only set for TScanRange.hdfs_file_split
   2: optional i32 volume_id = -1
-  3: optional i64 backend_id
+  3: optional i64 datanode_id
 }
 
 // A single scan range plus the hosts that serve it

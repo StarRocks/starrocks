@@ -459,18 +459,18 @@ public class OlapTableSink extends DataSink {
                 for (Tablet tablet : index.getTablets()) {
                     if (table.isCloudNativeTable()) {
                         locationParam.addToTablets(new TTabletLocation(
-                                tablet.getId(), Lists.newArrayList(((LakeTablet) tablet).getPrimaryBackendId())));
+                                tablet.getId(), Lists.newArrayList(((LakeTablet) tablet).getPrimaryDataNodeId())));
                     } else {
                         // we should ensure the replica backend is alive
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                         LocalTablet localTablet = (LocalTablet) tablet;
                         Multimap<Replica, Long> bePathsMap =
-                                localTablet.getNormalReplicaBackendPathMap(table.getClusterId());
+                                localTablet.getNormalReplicaDataNodePathMap(table.getClusterId());
                         if (bePathsMap.keySet().size() < quorum) {
                             throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
                                     "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
                                             + tablet.getId() + ", backends: " +
-                                            Joiner.on(",").join(localTablet.getBackends()));
+                                            Joiner.on(",").join(localTablet.getDataNodes()));
                         }
 
                         List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
@@ -480,21 +480,21 @@ public class OlapTableSink extends DataSink {
                             for (int i = 0; i < replicas.size(); i++) {
                                 Replica replica = replicas.get(i);
                                 if (lowUsageIndex == -1 && !replica.getLastWriteFail()
-                                        && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+                                        && !infoService.getDataNode(replica.getDataNodeId()).getLastWriteFail()) {
                                     lowUsageIndex = i;
                                 }
                                 if (lowUsageIndex != -1
-                                        && bePrimaryMap.getOrDefault(replica.getBackendId(), (long) 0) < bePrimaryMap
-                                        .getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
+                                        && bePrimaryMap.getOrDefault(replica.getDataNodeId(), (long) 0) < bePrimaryMap
+                                        .getOrDefault(replicas.get(lowUsageIndex).getDataNodeId(), (long) 0)
                                         && !replica.getLastWriteFail()
-                                        && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+                                        && !infoService.getDataNode(replica.getDataNodeId()).getLastWriteFail()) {
                                     lowUsageIndex = i;
                                 }
                             }
 
                             if (lowUsageIndex != -1) {
-                                bePrimaryMap.put(replicas.get(lowUsageIndex).getBackendId(),
-                                        bePrimaryMap.getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
+                                bePrimaryMap.put(replicas.get(lowUsageIndex).getDataNodeId(),
+                                        bePrimaryMap.getOrDefault(replicas.get(lowUsageIndex).getDataNodeId(), (long) 0)
                                                 + 1);
                                 // replicas[0] will be the primary replica
                                 Collections.swap(replicas, 0, lowUsageIndex);
@@ -505,10 +505,10 @@ public class OlapTableSink extends DataSink {
 
                         locationParam
                                 .addToTablets(
-                                        new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
+                                        new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getDataNodeId)
                                                 .collect(Collectors.toList())));
                         for (Map.Entry<Replica, Long> entry : bePathsMap.entries()) {
-                            allBePathsMap.put(entry.getKey().getBackendId(), entry.getValue());
+                            allBePathsMap.put(entry.getKey().getDataNodeId(), entry.getValue());
                         }
                     }
                 }

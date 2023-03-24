@@ -90,7 +90,7 @@ public class AdminStmtAnalyzer {
                 throw new SemanticException(PARSER_ERROR_MSG.missingProps("TABLET_ID, BACKEND_ID and STATUS"), pos);
             }
             adminSetReplicaStatusStmt.setTabletId(tabletId);
-            adminSetReplicaStatusStmt.setBackendId(backendId);
+            adminSetReplicaStatusStmt.setDataNodeId(backendId);
             adminSetReplicaStatusStmt.setStatus(status);
             return null;
         }

@@ -137,7 +137,7 @@ public class ColocateTableIndex implements Writable {
     // group id -> group schema
     private Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
     // group_id -> bucketSeq -> backend ids
-    private Map<GroupId, List<List<Long>>> group2BackendsPerBucketSeq = Maps.newHashMap();
+    private Map<GroupId, List<List<Long>>> group2DataNodesPerBucketSeq = Maps.newHashMap();
     // the colocate group is unstable
     private Set<GroupId> unstableGroups = Sets.newHashSet();
     // lake group, in memory
@@ -165,8 +165,8 @@ public class ColocateTableIndex implements Writable {
         this.lock.writeLock().unlock();
     }
 
-    // NOTICE: call 'addTableToGroup()' will not modify 'group2BackendsPerBucketSeq'
-    // 'group2BackendsPerBucketSeq' need to be set manually before or after, if necessary.
+    // NOTICE: call 'addTableToGroup()' will not modify 'group2DataNodesPerBucketSeq'
+    // 'group2DataNodesPerBucketSeq' need to be set manually before or after, if necessary.
     public GroupId addTableToGroup(long dbId, OlapTable tbl, String groupName, GroupId assignedGroupId, boolean isReplay)
             throws DdlException {
         writeLock();
@@ -221,10 +221,10 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    public void addBackendsPerBucketSeq(GroupId groupId, List<List<Long>> backendsPerBucketSeq) {
+    public void addDataNodesPerBucketSeq(GroupId groupId, List<List<Long>> backendsPerBucketSeq) {
         writeLock();
         try {
-            group2BackendsPerBucketSeq.put(groupId, backendsPerBucketSeq);
+            group2DataNodesPerBucketSeq.put(groupId, backendsPerBucketSeq);
         } finally {
             writeUnlock();
         }
@@ -289,7 +289,7 @@ public class ColocateTableIndex implements Writable {
             group2Tables.remove(groupId, tableId);
             if (!group2Tables.containsKey(groupId)) {
                 // all tables of this group are removed, remove the group
-                group2BackendsPerBucketSeq.remove(groupId);
+                group2DataNodesPerBucketSeq.remove(groupId);
                 group2Schema.remove(groupId);
                 unstableGroups.remove(groupId);
                 lakeGroups.remove(groupId);
@@ -396,19 +396,19 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    public Set<Long> getBackendsByGroup(GroupId groupId) {
+    public Set<Long> getDataNodesByGroup(GroupId groupId) {
         readLock();
         try {
-            Set<Long> allBackends = new HashSet<>();
-            List<List<Long>> backendsPerBucketSeq = group2BackendsPerBucketSeq.get(groupId);
+            Set<Long> allDataNodes = new HashSet<>();
+            List<List<Long>> backendsPerBucketSeq = group2DataNodesPerBucketSeq.get(groupId);
             // if create colocate table with empty partition or create colocate table
             // with dynamic_partition will cause backendsPerBucketSeq == null
             if (backendsPerBucketSeq != null) {
                 for (List<Long> bes : backendsPerBucketSeq) {
-                    allBackends.addAll(bes);
+                    allDataNodes.addAll(bes);
                 }
             }
-            return allBackends;
+            return allDataNodes;
         } finally {
             readUnlock();
         }
@@ -445,10 +445,10 @@ public class ColocateTableIndex implements Writable {
         return -1;
     }
 
-    public List<List<Long>> getBackendsPerBucketSeq(GroupId groupId) {
+    public List<List<Long>> getDataNodesPerBucketSeq(GroupId groupId) {
         readLock();
         try {
-            List<List<Long>> backendsPerBucketSeq = group2BackendsPerBucketSeq.get(groupId);
+            List<List<Long>> backendsPerBucketSeq = group2DataNodesPerBucketSeq.get(groupId);
             if (backendsPerBucketSeq == null) {
                 return Lists.newArrayList();
             }
@@ -458,10 +458,10 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    public List<Set<Long>> getBackendsPerBucketSeqSet(GroupId groupId) {
+    public List<Set<Long>> getDataNodesPerBucketSeqSet(GroupId groupId) {
         readLock();
         try {
-            List<List<Long>> backendsPerBucketSeq = group2BackendsPerBucketSeq.get(groupId);
+            List<List<Long>> backendsPerBucketSeq = group2DataNodesPerBucketSeq.get(groupId);
             if (backendsPerBucketSeq == null) {
                 return Lists.newArrayList();
             }
@@ -475,10 +475,10 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    public Set<Long> getTabletBackendsByGroup(GroupId groupId, int tabletOrderIdx) {
+    public Set<Long> getTabletDataNodesByGroup(GroupId groupId, int tabletOrderIdx) {
         readLock();
         try {
-            List<List<Long>> backendsPerBucketSeq = group2BackendsPerBucketSeq.get(groupId);
+            List<List<Long>> backendsPerBucketSeq = group2DataNodesPerBucketSeq.get(groupId);
             if (backendsPerBucketSeq == null) {
                 return Sets.newHashSet();
             }
@@ -549,8 +549,8 @@ public class ColocateTableIndex implements Writable {
 
         writeLock();
         try {
-            if (!group2BackendsPerBucketSeq.containsKey(info.getGroupId())) {
-                group2BackendsPerBucketSeq.put(info.getGroupId(), info.getBackendsPerBucketSeq());
+            if (!group2DataNodesPerBucketSeq.containsKey(info.getGroupId())) {
+                group2DataNodesPerBucketSeq.put(info.getGroupId(), info.getDataNodesPerBucketSeq());
             }
 
             addTableToGroup(info.getGroupId().dbId, tbl, tbl.getColocateGroup(), info.getGroupId(), true /* isReplay */);
@@ -562,8 +562,8 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    public void replayAddBackendsPerBucketSeq(ColocatePersistInfo info) {
-        addBackendsPerBucketSeq(info.getGroupId(), info.getBackendsPerBucketSeq());
+    public void replayAddDataNodesPerBucketSeq(ColocatePersistInfo info) {
+        addDataNodesPerBucketSeq(info.getGroupId(), info.getDataNodesPerBucketSeq());
     }
 
     public void replayMarkGroupUnstable(ColocatePersistInfo info) {
@@ -585,7 +585,7 @@ public class ColocateTableIndex implements Writable {
             groupName2Id.clear();
             group2Tables.clear();
             table2Group.clear();
-            group2BackendsPerBucketSeq.clear();
+            group2DataNodesPerBucketSeq.clear();
             group2Schema.clear();
             unstableGroups.clear();
         } finally {
@@ -658,7 +658,7 @@ public class ColocateTableIndex implements Writable {
             groupSchema.write(out); // group schema
 
             // backend seq
-            List<List<Long>> backendsPerBucketSeq = group2BackendsPerBucketSeq.get(entry.getValue());
+            List<List<Long>> backendsPerBucketSeq = group2DataNodesPerBucketSeq.get(entry.getValue());
             out.writeInt(backendsPerBucketSeq.size());
             for (List<Long> bucket2BEs : backendsPerBucketSeq) {
                 out.writeInt(bucket2BEs.size());
@@ -681,7 +681,7 @@ public class ColocateTableIndex implements Writable {
             Multimap<Long, Long> tmpGroup2Tables = ArrayListMultimap.create();
             Map<Long, Long> tmpTable2Group = Maps.newHashMap();
             Map<Long, Long> tmpGroup2Db = Maps.newHashMap();
-            Map<Long, List<List<Long>>> tmpGroup2BackendsPerBucketSeq = Maps.newHashMap();
+            Map<Long, List<List<Long>>> tmpGroup2DataNodesPerBucketSeq = Maps.newHashMap();
             Set<Long> tmpBalancingGroups = Sets.newHashSet();
 
             for (int i = 0; i < size; i++) {
@@ -721,7 +721,7 @@ public class ColocateTableIndex implements Writable {
                     }
                     bucketBeLists.add(beLists);
                 }
-                tmpGroup2BackendsPerBucketSeq.put(group, bucketBeLists);
+                tmpGroup2DataNodesPerBucketSeq.put(group, bucketBeLists);
             }
 
             size = in.readInt();
@@ -730,7 +730,7 @@ public class ColocateTableIndex implements Writable {
                 tmpBalancingGroups.add(group);
             }
 
-            convertedToNewMembers(tmpGroup2Tables, tmpTable2Group, tmpGroup2Db, tmpGroup2BackendsPerBucketSeq,
+            convertedToNewMembers(tmpGroup2Tables, tmpTable2Group, tmpGroup2Db, tmpGroup2DataNodesPerBucketSeq,
                     tmpBalancingGroups);
         } else {
             for (int i = 0; i < size; i++) {
@@ -757,7 +757,7 @@ public class ColocateTableIndex implements Writable {
                     }
                     backendsPerBucketSeq.add(seq);
                 }
-                group2BackendsPerBucketSeq.put(grpId, backendsPerBucketSeq);
+                group2DataNodesPerBucketSeq.put(grpId, backendsPerBucketSeq);
             }
 
             size = in.readInt();
@@ -769,13 +769,13 @@ public class ColocateTableIndex implements Writable {
 
     private void convertedToNewMembers(Multimap<Long, Long> tmpGroup2Tables, Map<Long, Long> tmpTable2Group,
                                        Map<Long, Long> tmpGroup2Db,
-                                       Map<Long, List<List<Long>>> tmpGroup2BackendsPerBucketSeq,
+                                       Map<Long, List<List<Long>>> tmpGroup2DataNodesPerBucketSeq,
                                        Set<Long> tmpBalancingGroups) {
 
         LOG.debug("debug: tmpGroup2Tables {}", tmpGroup2Tables);
         LOG.debug("debug: tmpTable2Group {}", tmpTable2Group);
         LOG.debug("debug: tmpGroup2Db {}", tmpGroup2Db);
-        LOG.debug("debug: tmpGroup2BackendsPerBucketSeq {}", tmpGroup2BackendsPerBucketSeq);
+        LOG.debug("debug: tmpGroup2DataNodesPerBucketSeq {}", tmpGroup2DataNodesPerBucketSeq);
         LOG.debug("debug: tmpBalancingGroups {}", tmpBalancingGroups);
 
         for (Map.Entry<Long, Long> entry : tmpGroup2Db.entrySet()) {
@@ -801,7 +801,7 @@ public class ColocateTableIndex implements Writable {
                                 ((HashDistributionInfo) tbl.getDefaultDistributionInfo()).getDistributionColumns(),
                                 tbl.getDefaultDistributionInfo().getBucketNum(), optReplicaNum.get());
                         group2Schema.put(groupId, groupSchema);
-                        group2BackendsPerBucketSeq.put(groupId, tmpGroup2BackendsPerBucketSeq.get(groupId.grpId));
+                        group2DataNodesPerBucketSeq.put(groupId, tmpGroup2DataNodesPerBucketSeq.get(groupId.grpId));
                     }
 
                     group2Tables.put(groupId, tblId);
@@ -813,17 +813,17 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    public void setBackendsSetByIdxForGroup(GroupId groupId, int tabletOrderIdx, Set<Long> newBackends) {
+    public void setDataNodesSetByIdxForGroup(GroupId groupId, int tabletOrderIdx, Set<Long> newDataNodes) {
         writeLock();
         try {
-            List<List<Long>> backends = group2BackendsPerBucketSeq.get(groupId);
+            List<List<Long>> backends = group2DataNodesPerBucketSeq.get(groupId);
             if (backends == null) {
                 return;
             }
             Preconditions.checkState(tabletOrderIdx < backends.size(), tabletOrderIdx + " vs. " + backends.size());
-            backends.set(tabletOrderIdx, Lists.newArrayList(newBackends));
-            ColocatePersistInfo info = ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backends);
-            GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info);
+            backends.set(tabletOrderIdx, Lists.newArrayList(newDataNodes));
+            ColocatePersistInfo info = ColocatePersistInfo.createForDataNodesPerBucketSeq(groupId, backends);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateDataNodesPerBucketSeq(info);
         } finally {
             writeUnlock();
         }
@@ -894,7 +894,7 @@ public class ColocateTableIndex implements Writable {
             groupId = changeGroup(db.getId(), table, oldGroup, colocateGroup, assignedGroupId, isReplay);
             if (groupSchema == null) {
                 Preconditions.checkNotNull(backendsPerBucketSeq);
-                addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+                addDataNodesPerBucketSeq(groupId, backendsPerBucketSeq);
             }
 
             // set this group as unstable

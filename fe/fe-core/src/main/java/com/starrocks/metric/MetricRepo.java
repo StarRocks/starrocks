@@ -67,7 +67,7 @@ import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -212,7 +212,7 @@ public final class MetricRepo {
         }
 
         // capacity
-        generateBackendsTabletMetrics();
+        generateDataNodesTabletMetrics();
 
         // connections
         GaugeMetric<Integer> conections = new GaugeMetric<Integer>(
@@ -500,7 +500,7 @@ public final class MetricRepo {
     // to generate the metrics related to tablets of each backends
     // this metric is reentrant, so that we can add or remove metric along with the backend add or remove
     // at runtime.
-    public static void generateBackendsTabletMetrics() {
+    public static void generateDataNodesTabletMetrics() {
         // remove all previous 'tablet' metric
         STARROCKS_METRIC_REGISTER.removeMetrics(TABLET_NUM);
         STARROCKS_METRIC_REGISTER.removeMetrics(TABLET_MAX_COMPACTION_SCORE);
@@ -508,8 +508,8 @@ public final class MetricRepo {
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
 
-        for (Long beId : infoService.getBackendIds(false)) {
-            Backend be = infoService.getBackend(beId);
+        for (Long beId : infoService.getDataNodeIds(false)) {
+            DataNode be = infoService.getDataNode(beId);
             if (be == null) {
                 continue;
             }
@@ -522,7 +522,7 @@ public final class MetricRepo {
                     if (!GlobalStateMgr.getCurrentState().isLeader()) {
                         return 0L;
                     }
-                    return invertedIndex.getTabletNumByBackendId(beId);
+                    return invertedIndex.getTabletNumByDataNodeId(beId);
                 }
             };
             tabletNum.addLabel(new MetricLabel("backend", be.getHost() + ":" + be.getHeartbeatPort()));

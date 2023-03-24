@@ -132,7 +132,7 @@ public class ShowTabletStmtAnalyzer {
             statement.setVersion(version);
             statement.setIndexName(indexName);
             statement.setReplicaState(replicaState);
-            statement.setBackendId(backendId);
+            statement.setDataNodeId(backendId);
             statement.setOrderByPairs(orderByPairs);
             return null;
         }
@@ -207,7 +207,7 @@ public class ShowTabletStmtAnalyzer {
 
             if (!valid) {
                 throw new SemanticException("Where clause should looks like: Version = \"version\","
-                        + " or state = \"NORMAL|ROLLUP|CLONE|DECOMMISSION\", or BackendId = 10000,"
+                        + " or state = \"NORMAL|ROLLUP|CLONE|DECOMMISSION\", or DataNodeId = 10000,"
                         + " indexname=\"rollup_name\" or compound predicate with operator AND");
             }
         }

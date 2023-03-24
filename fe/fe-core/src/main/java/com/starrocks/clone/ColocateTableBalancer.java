@@ -55,7 +55,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -105,7 +105,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
          * record the value of bucket sequence before changed, used to reset current bucket sequence
          * when condition is matched, e.g. the backend that caused colocate relocation before has come alive.
          */
-        private List<List<Long>> lastBackendsPerBucketSeq;
+        private List<List<Long>> lastDataNodesPerBucketSeq;
 
         /**
          * Count the number of tablets which have been successfully scheduled by TabletScheduler after a relocation
@@ -116,10 +116,10 @@ public class ColocateTableBalancer extends LeaderDaemon {
         private Map<Integer, Integer> scheduledTabletNumPerBucket;
 
         public ColocateRelocationInfo(boolean relocationForRepair,
-                                      List<List<Long>> lastBackendsPerBucketSeq,
+                                      List<List<Long>> lastDataNodesPerBucketSeq,
                                       Map<Integer, Integer> scheduledTabletNumPerBucket) {
             this.relocationForRepair = relocationForRepair;
-            this.lastBackendsPerBucketSeq = lastBackendsPerBucketSeq;
+            this.lastDataNodesPerBucketSeq = lastDataNodesPerBucketSeq;
             this.scheduledTabletNumPerBucket = scheduledTabletNumPerBucket;
         }
 
@@ -127,8 +127,8 @@ public class ColocateTableBalancer extends LeaderDaemon {
             return relocationForRepair;
         }
 
-        public List<List<Long>> getLastBackendsPerBucketSeq() {
-            return lastBackendsPerBucketSeq;
+        public List<List<Long>> getLastDataNodesPerBucketSeq() {
+            return lastDataNodesPerBucketSeq;
         }
 
         public synchronized Map<Integer, Integer> getScheduledTabletNumPerBucket() {
@@ -157,7 +157,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
     /*
      * Each round, we do 2 steps:
      * 1. Relocate and balance group:
-     *      Backend is not available, find a new backend to replace it.
+     *      DataNode is not available, find a new backend to replace it.
      *      and after all unavailable has been replaced, balance the group
      *
      * 2. Match group:
@@ -231,7 +231,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
             if (statistic == null) {
                 continue;
             }
-            List<List<Long>> backendsPerBucketSeq = colocateIndex.getBackendsPerBucketSeq(groupId);
+            List<List<Long>> backendsPerBucketSeq = colocateIndex.getDataNodesPerBucketSeq(groupId);
             if (backendsPerBucketSeq.isEmpty()) {
                 continue;
             }
@@ -254,19 +254,19 @@ public class ColocateTableBalancer extends LeaderDaemon {
 
             stat.counterColocateBalanceRound.incrementAndGet();
             List<Long> availableBeIds = getAvailableBeIds(infoService);
-            List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
+            List<List<Long>> balancedDataNodesPerBucketSeq = Lists.newArrayList();
             if (relocateAndBalance(groupId, unavailableBeIdsInGroup, availableBeIds, colocateIndex, infoService,
-                    statistic, balancedBackendsPerBucketSeq)) {
+                    statistic, balancedDataNodesPerBucketSeq)) {
                 group2ColocateRelocationInfo.put(groupId,
                         new ColocateRelocationInfo(!unavailableBeIdsInGroup.isEmpty(),
-                                colocateIndex.getBackendsPerBucketSeq(groupId), Maps.newHashMap()));
-                colocateIndex.addBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
+                                colocateIndex.getDataNodesPerBucketSeq(groupId), Maps.newHashMap()));
+                colocateIndex.addDataNodesPerBucketSeq(groupId, balancedDataNodesPerBucketSeq);
                 ColocatePersistInfo info =
-                        ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
-                globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info);
+                        ColocatePersistInfo.createForDataNodesPerBucketSeq(groupId, balancedDataNodesPerBucketSeq);
+                globalStateMgr.getEditLog().logColocateDataNodesPerBucketSeq(info);
                 LOG.info("balance colocate group {}. now backends per bucket sequence is: {}, " +
-                                "bucket sequence before balance: {}", groupId, balancedBackendsPerBucketSeq,
-                        group2ColocateRelocationInfo.get(groupId).getLastBackendsPerBucketSeq());
+                                "bucket sequence before balance: {}", groupId, balancedDataNodesPerBucketSeq,
+                        group2ColocateRelocationInfo.get(groupId).getLastDataNodesPerBucketSeq());
             } else {
                 // clean historical relocation info if nothing changed after trying to do `relocateAndBalance()`
                 group2ColocateRelocationInfo.remove(groupId);
@@ -278,7 +278,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
     public static boolean needToForceRepair(TabletStatus st, LocalTablet tablet, Set<Long> backendsSet) {
         boolean hasBad = false;
         for (Replica replica : tablet.getImmutableReplicas()) {
-            if (!backendsSet.contains(replica.getBackendId())) {
+            if (!backendsSet.contains(replica.getDataNodeId())) {
                 continue;
             }
             if (replica.isBad()) {
@@ -314,7 +314,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 continue;
             }
 
-            List<Set<Long>> backendBucketsSeq = colocateIndex.getBackendsPerBucketSeqSet(groupId);
+            List<Set<Long>> backendBucketsSeq = colocateIndex.getDataNodesPerBucketSeqSet(groupId);
             if (backendBucketsSeq.isEmpty()) {
                 continue;
             }
@@ -415,7 +415,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                                                 LOG.info("add tablet relocation task to scheduler, tablet id: {}, " +
                                                                 "bucket sequence before: {}, bucket sequence now: {}",
                                                         tableId,
-                                                        info != null ? info.getLastBackendsPerBucketSeq().get(idx) :
+                                                        info != null ? info.getLastDataNodesPerBucketSeq().get(idx) :
                                                                 Lists.newArrayList(),
                                                         bucketsSeq);
                                             }
@@ -462,19 +462,19 @@ public class ColocateTableBalancer extends LeaderDaemon {
      * One group's buckets sequence:
      *
      * Buckets sequence:    0  1  2  3
-     * Backend set:         A  A  A  A
+     * DataNode set:         A  A  A  A
      *                      B  D  F  H
      *                      C  E  G  I
      *
      * Then each backend has different replica num:
      *
-     * Backends:    A B C D E F G H I J
+     * DataNodes:    A B C D E F G H I J
      * Replica num: 4 1 1 1 1 1 1 1 1 0
      *
      * The goal of balance is to evenly distribute replicas on all backends. For this example, we want the
      * following result (one possible result):
      *
-     * Backends:    A B C D E F G H I J
+     * DataNodes:    A B C D E F G H I J
      * Replica num: 2 2 1 1 1 1 1 1 1 1
      *
      * Algorithm:
@@ -484,7 +484,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
      *      A B C D E F G H I J
      * 2. Check the diff of the first backend(A)'s replica num and last backend(J)'s replica num.
      *      If diff is less or equal than 1, we consider this group as balance. Jump to step 5.
-     * 3. Else, Replace the first occurrence of Backend A in flat list with Backend J.
+     * 3. Else, Replace the first occurrence of DataNode A in flat list with DataNode J.
      *      J B C A D E A F G A H I
      * 4. Recalculate the replica num of each backend and go to step 1.
      * 5. We should get the following flat list(one possible result):
@@ -496,24 +496,24 @@ public class ColocateTableBalancer extends LeaderDaemon {
      *  relocate is similar to balance, but choosing unavailable be as src, and move all bucketIds on unavailable be to
      *  low be
      *
-     *  Return true if backends per bucket sequence change and new sequence is saved in balancedBackendsPerBucketSeq.
+     *  Return true if backends per bucket sequence change and new sequence is saved in balancedDataNodesPerBucketSeq.
      *  Return false if nothing changed.
      */
     private boolean relocateAndBalance(GroupId groupId, Set<Long> unavailableBeIds, List<Long> availableBeIds,
                                        ColocateTableIndex colocateIndex, SystemInfoService infoService,
-                                       ClusterLoadStatistic statistic, List<List<Long>> balancedBackendsPerBucketSeq) {
+                                       ClusterLoadStatistic statistic, List<List<Long>> balancedDataNodesPerBucketSeq) {
         ColocateGroupSchema groupSchema = colocateIndex.getGroupSchema(groupId);
         int replicationNum = groupSchema.getReplicationNum();
-        List<List<Long>> backendsPerBucketSeq = Lists.newArrayList(colocateIndex.getBackendsPerBucketSeq(groupId));
+        List<List<Long>> backendsPerBucketSeq = Lists.newArrayList(colocateIndex.getDataNodesPerBucketSeq(groupId));
         // [[A,B,C],[B,C,D]] -> [A,B,C,B,C,D]
-        List<Long> flatBackendsPerBucketSeq =
+        List<Long> flatDataNodesPerBucketSeq =
                 backendsPerBucketSeq.stream().flatMap(List::stream).collect(Collectors.toList());
 
         boolean isChanged = false;
         OUT:
         while (true) {
             // update backends and hosts at each round
-            backendsPerBucketSeq = Lists.partition(flatBackendsPerBucketSeq, replicationNum);
+            backendsPerBucketSeq = Lists.partition(flatDataNodesPerBucketSeq, replicationNum);
             List<List<String>> hostsPerBucketSeq = getHostsPerBucketSeq(backendsPerBucketSeq, infoService);
             Preconditions.checkState(hostsPerBucketSeq != null &&
                     backendsPerBucketSeq.size() == hostsPerBucketSeq.size());
@@ -523,7 +523,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
             boolean hasUnavailableBe = false;
             // first choose the unavailable be as src be
             for (Long beId : unavailableBeIds) {
-                srcBeSeqIndexes = getBeSeqIndexes(flatBackendsPerBucketSeq, beId);
+                srcBeSeqIndexes = getBeSeqIndexes(flatDataNodesPerBucketSeq, beId);
                 if (srcBeSeqIndexes.size() > 0) {
                     srcBeId = beId;
                     hasUnavailableBe = true;
@@ -540,18 +540,18 @@ public class ColocateTableBalancer extends LeaderDaemon {
 
             // Sort backends with replica num in desc order, the list contains only all the *available* backends.
             List<Map.Entry<Long, Long>> backendWithReplicaNum =
-                    getSortedBackendReplicaNumPairs(availableBeIds, unavailableBeIds, statistic,
-                            flatBackendsPerBucketSeq);
-            Set<Long> decommissionedBackends = getDecommissionedBackendsInGroup(infoService, colocateIndex, groupId);
+                    getSortedDataNodeReplicaNumPairs(availableBeIds, unavailableBeIds, statistic,
+                            flatDataNodesPerBucketSeq);
+            Set<Long> decommissionedDataNodes = getDecommissionedDataNodesInGroup(infoService, colocateIndex, groupId);
             if (backendWithReplicaNum.isEmpty() ||
-                    (backendWithReplicaNum.size() == 1 && decommissionedBackends.isEmpty())) {
+                    (backendWithReplicaNum.size() == 1 && decommissionedDataNodes.isEmpty())) {
                 // There is not enough replicas for us to do relocation or balance, because in this case we
                 // can not choose a valid backend to migrate replica to, end the outer loop.
                 break;
             }
 
             int leftBound;
-            if (!hasUnavailableBe || (replicationNum == 1 && decommissionedBackends.isEmpty())) {
+            if (!hasUnavailableBe || (replicationNum == 1 && decommissionedDataNodes.isEmpty())) {
                 // There are two cases:
                 // 1. there is no unavailable bucketId to relocate
                 // 2. there is unavailable(only dead) bucketId to relocate, but the number of replica is one, we can do
@@ -563,7 +563,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 //
                 // In both cases, we change the src be to which that have the most replicas.
                 srcBeId = backendWithReplicaNum.get(0).getKey();
-                srcBeSeqIndexes = getBeSeqIndexes(flatBackendsPerBucketSeq, srcBeId);
+                srcBeSeqIndexes = getBeSeqIndexes(flatDataNodesPerBucketSeq, srcBeId);
                 leftBound = 0;
             } else {
                 leftBound = -1;
@@ -575,16 +575,16 @@ public class ColocateTableBalancer extends LeaderDaemon {
             while (j > leftBound) {
                 // we try to use a low backend to replace the src backend.
                 // if replace failed(eg: both backends are on same host), select next low backend and try(j--)
-                Map.Entry<Long, Long> lowBackend = backendWithReplicaNum.get(j);
+                Map.Entry<Long, Long> lowDataNode = backendWithReplicaNum.get(j);
                 // leftBound == 0 indicates that we don't need to consider the unavailable backends and only do
                 // balance work.
-                if (leftBound == 0 && (srcBeSeqIndexes.size() - lowBackend.getValue()) <= 1) {
+                if (leftBound == 0 && (srcBeSeqIndexes.size() - lowDataNode.getValue()) <= 1) {
                     // balanced
                     break OUT;
                 }
 
-                long destBeId = lowBackend.getKey();
-                Backend destBe = infoService.getBackend(destBeId);
+                long destBeId = lowDataNode.getKey();
+                DataNode destBe = infoService.getDataNode(destBeId);
                 if (destBe == null) {
                     LOG.info("backend {} does not exist", destBeId);
                     return false;
@@ -592,19 +592,19 @@ public class ColocateTableBalancer extends LeaderDaemon {
 
                 for (int seqIndex : srcBeSeqIndexes) {
                     // the bucket index.
-                    // eg: 0 / 3 = 0, so that the bucket index of the 4th backend id in flatBackendsPerBucketSeq is 0.
+                    // eg: 0 / 3 = 0, so that the bucket index of the 4th backend id in flatDataNodesPerBucketSeq is 0.
                     int bucketIndex = seqIndex / replicationNum;
                     List<Long> backendsSet = backendsPerBucketSeq.get(bucketIndex);
                     List<String> hostsSet = hostsPerBucketSeq.get(bucketIndex);
-                    // the replicas of a tablet can not locate in same Backend or same host
+                    // the replicas of a tablet can not locate in same DataNode or same host
                     if (!backendsSet.contains(destBeId) && !hostsSet.contains(destBe.getHost())) {
                         Preconditions.checkState(backendsSet.contains(srcBeId), srcBeId);
-                        flatBackendsPerBucketSeq.set(seqIndex, destBeId);
+                        flatDataNodesPerBucketSeq.set(seqIndex, destBeId);
                         LOG.info("replace backend {} with backend {} in colocate group {}, src be seq index: {}" +
                                         ", bucket index: {}, original backend list: {}",
                                 srcBeId, destBeId, groupId, seqIndex, bucketIndex, backendsSet);
                         // just replace one backend at a time, src and dest BE id should be recalculated because
-                        // flatBackendsPerBucketSeq is changed.
+                        // flatDataNodesPerBucketSeq is changed.
                         isChanged = true;
                         isThisRoundChanged = true;
                         break INNER;
@@ -626,7 +626,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
         }
 
         if (isChanged) {
-            balancedBackendsPerBucketSeq.addAll(Lists.partition(flatBackendsPerBucketSeq, replicationNum));
+            balancedDataNodesPerBucketSeq.addAll(Lists.partition(flatDataNodesPerBucketSeq, replicationNum));
         }
         return isChanged;
     }
@@ -640,7 +640,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
         for (List<Long> backendIds : backendsPerBucketSeq) {
             List<String> hosts = Lists.newArrayList();
             for (Long beId : backendIds) {
-                Backend be = infoService.getBackend(beId);
+                DataNode be = infoService.getDataNode(beId);
                 if (be == null) {
                     // just skip
                     LOG.info("backend {} does not exist", beId);
@@ -653,19 +653,19 @@ public class ColocateTableBalancer extends LeaderDaemon {
         return hostsPerBucketSeq;
     }
 
-    private List<Map.Entry<Long, Long>> getSortedBackendReplicaNumPairs(List<Long> allAvailBackendIds,
-                                                                        Set<Long> unavailBackendIds,
+    private List<Map.Entry<Long, Long>> getSortedDataNodeReplicaNumPairs(List<Long> allAvailDataNodeIds,
+                                                                        Set<Long> unavailDataNodeIds,
                                                                         ClusterLoadStatistic statistic,
-                                                                        List<Long> flatBackendsPerBucketSeq) {
+                                                                        List<Long> flatDataNodesPerBucketSeq) {
         // backend id -> replica num, and sorted by replica num, descending.
-        Map<Long, Long> backendToReplicaNum = flatBackendsPerBucketSeq.stream()
+        Map<Long, Long> backendToReplicaNum = flatDataNodesPerBucketSeq.stream()
                 .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
         // remove unavailable backend
-        for (Long backendId : unavailBackendIds) {
+        for (Long backendId : unavailDataNodeIds) {
             backendToReplicaNum.remove(backendId);
         }
-        // add backends which are not in flatBackendsPerBucketSeq, with replication number 0
-        for (Long backendId : allAvailBackendIds) {
+        // add backends which are not in flatDataNodesPerBucketSeq, with replication number 0
+        for (Long backendId : allAvailDataNodeIds) {
             if (!backendToReplicaNum.containsKey(backendId)) {
                 backendToReplicaNum.put(backendId, 0L);
             }
@@ -678,8 +678,8 @@ public class ColocateTableBalancer extends LeaderDaemon {
                     if (!entry1.getValue().equals(entry2.getValue())) {
                         return (int) (entry2.getValue() - entry1.getValue());
                     }
-                    BackendLoadStatistic beStat1 = statistic.getBackendLoadStatistic(entry1.getKey());
-                    BackendLoadStatistic beStat2 = statistic.getBackendLoadStatistic(entry2.getKey());
+                    DataNodeLoadStatistic beStat1 = statistic.getDataNodeLoadStatistic(entry1.getKey());
+                    DataNodeLoadStatistic beStat2 = statistic.getDataNodeLoadStatistic(entry2.getKey());
                     if (beStat1 == null || beStat2 == null) {
                         return 0;
                     }
@@ -697,51 +697,51 @@ public class ColocateTableBalancer extends LeaderDaemon {
     }
 
     /*
-     * get the array indexes of elements in flatBackendsPerBucketSeq which equals to beId
+     * get the array indexes of elements in flatDataNodesPerBucketSeq which equals to beId
      * eg:
-     * flatBackendsPerBucketSeq:
+     * flatDataNodesPerBucketSeq:
      *      A B C A D E A F G A H I
      * and srcBeId is A.
      * so seqIndexes is:
      *      0 3 6 9
      */
-    private List<Integer> getBeSeqIndexes(List<Long> flatBackendsPerBucketSeq, long beId) {
-        return IntStream.range(0, flatBackendsPerBucketSeq.size()).boxed().filter(
-                idx -> flatBackendsPerBucketSeq.get(idx).equals(beId)).collect(Collectors.toList());
+    private List<Integer> getBeSeqIndexes(List<Long> flatDataNodesPerBucketSeq, long beId) {
+        return IntStream.range(0, flatDataNodesPerBucketSeq.size()).boxed().filter(
+                idx -> flatDataNodesPerBucketSeq.get(idx).equals(beId)).collect(Collectors.toList());
     }
 
     private Set<Long> getUnavailableBeIdsInGroup(SystemInfoService infoService, ColocateTableIndex colocateIndex,
                                                  GroupId groupId) {
-        Set<Long> backends = colocateIndex.getBackendsByGroup(groupId);
+        Set<Long> backends = colocateIndex.getDataNodesByGroup(groupId);
         Set<Long> unavailableBeIds = Sets.newHashSet();
         for (Long backendId : backends) {
-            if (!checkBackendAvailable(backendId, infoService)) {
+            if (!checkDataNodeAvailable(backendId, infoService)) {
                 unavailableBeIds.add(backendId);
             }
         }
         return unavailableBeIds;
     }
 
-    private Set<Long> getDecommissionedBackendsInGroup(SystemInfoService infoService, ColocateTableIndex colocateIndex,
+    private Set<Long> getDecommissionedDataNodesInGroup(SystemInfoService infoService, ColocateTableIndex colocateIndex,
                                                        GroupId groupId) {
-        Set<Long> backends = colocateIndex.getBackendsByGroup(groupId);
-        Set<Long> decommissionedBackends = Sets.newHashSet();
+        Set<Long> backends = colocateIndex.getDataNodesByGroup(groupId);
+        Set<Long> decommissionedDataNodes = Sets.newHashSet();
         for (Long backendId : backends) {
-            Backend be = infoService.getBackend(backendId);
+            DataNode be = infoService.getDataNode(backendId);
             if (be != null && be.isDecommissioned() && be.isAlive()) {
-                decommissionedBackends.add(backendId);
+                decommissionedDataNodes.add(backendId);
             }
         }
-        return decommissionedBackends;
+        return decommissionedDataNodes;
     }
 
     private List<Long> getAvailableBeIds(SystemInfoService infoService) {
-        // get all backends to allBackendIds, and check be availability using checkBackendAvailable
+        // get all backends to allDataNodeIds, and check be availability using checkDataNodeAvailable
         // backend stopped for a short period of time is still considered available
-        List<Long> allBackendIds = infoService.getBackendIds(false);
+        List<Long> allDataNodeIds = infoService.getDataNodeIds(false);
         List<Long> availableBeIds = Lists.newArrayList();
-        for (Long backendId : allBackendIds) {
-            if (checkBackendAvailable(backendId, infoService)) {
+        for (Long backendId : allDataNodeIds) {
+            if (checkDataNodeAvailable(backendId, infoService)) {
                 availableBeIds.add(backendId);
             }
         }
@@ -752,9 +752,9 @@ public class ColocateTableBalancer extends LeaderDaemon {
      * check backend available
      * backend stopped for a short period of time is still considered available
      */
-    private boolean checkBackendAvailable(Long backendId, SystemInfoService infoService) {
+    private boolean checkDataNodeAvailable(Long backendId, SystemInfoService infoService) {
         long currTime = System.currentTimeMillis();
-        Backend be = infoService.getBackend(backendId);
+        DataNode be = infoService.getDataNode(backendId);
         if (be == null) {
             return false;
         } else if (!be.isAvailable()) {
@@ -796,10 +796,10 @@ public class ColocateTableBalancer extends LeaderDaemon {
         }
     }
 
-    public Set<Long> getLastBackendSeqForBucket(TabletSchedCtx ctx) {
+    public Set<Long> getLastDataNodeSeqForBucket(TabletSchedCtx ctx) {
         ColocateRelocationInfo info = group2ColocateRelocationInfo.get(ctx.getColocateGroupId());
         if (info != null) {
-            return Sets.newHashSet(info.getLastBackendsPerBucketSeq().get(ctx.getTabletOrderIdx()));
+            return Sets.newHashSet(info.getLastDataNodesPerBucketSeq().get(ctx.getTabletOrderIdx()));
         } else {
             return Sets.newHashSet();
         }

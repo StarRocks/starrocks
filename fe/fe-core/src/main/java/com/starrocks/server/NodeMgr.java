@@ -566,12 +566,12 @@ public class NodeMgr {
         return checksum;
     }
 
-    public long loadBackends(DataInputStream dis, long checksum) throws IOException {
-        return systemInfo.loadBackends(dis, checksum);
+    public long loadDataNodes(DataInputStream dis, long checksum) throws IOException {
+        return systemInfo.loadDataNodes(dis, checksum);
     }
 
-    public long saveBackends(DataOutputStream dos, long checksum) throws IOException {
-        return systemInfo.saveBackends(dos, checksum);
+    public long saveDataNodes(DataOutputStream dos, long checksum) throws IOException {
+        return systemInfo.saveDataNodes(dos, checksum);
     }
 
     public long loadComputeNodes(DataInputStream dis, long checksum) throws IOException {

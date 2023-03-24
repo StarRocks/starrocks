@@ -55,7 +55,7 @@ public class ReplicaWriteFailTest {
     @Test
     public void test3Replica1FailInsertSuccess() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
-        cluster.getBackend(10001).setWriteFailureRate(1.0f);
+        cluster.getDataNode(10001).setWriteFailureRate(1.0f);
         try {
             int numLoad = 10;
             long startTs = System.nanoTime();
@@ -65,20 +65,20 @@ public class ReplicaWriteFailTest {
             double t = (System.nanoTime() - startTs) / 1e9;
             System.out.printf("numLoad:%d Time: %.2fs, %.2f tps\n", numLoad, t, numLoad / t);
         } finally {
-            cluster.getBackend(10001).setWriteFailureRate(0.0f);
+            cluster.getDataNode(10001).setWriteFailureRate(0.0f);
         }
     }
 
     @Test(expected = SQLException.class)
     public void test3Replica2FailInsertFail() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
-        cluster.getBackend(10001).setWriteFailureRate(1.0f);
-        cluster.getBackend(10002).setWriteFailureRate(1.0f);
+        cluster.getDataNode(10001).setWriteFailureRate(1.0f);
+        cluster.getDataNode(10002).setWriteFailureRate(1.0f);
         try {
             cluster.runSql("test", "insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3);");
         } finally {
-            cluster.getBackend(10001).setWriteFailureRate(0.0f);
-            cluster.getBackend(10002).setWriteFailureRate(0.0f);
+            cluster.getDataNode(10001).setWriteFailureRate(0.0f);
+            cluster.getDataNode(10002).setWriteFailureRate(0.0f);
         }
     }
 

@@ -27,7 +27,7 @@ import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStorageMedium;
@@ -176,14 +176,14 @@ public class TabletStatMgrTest {
         };
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseDataNode(LakeTablet tablet) {
                 return 1000L;
             }
         };
         new Expectations() {
             {
-                systemInfoService.getBackend(anyLong);
-                result = new Backend(1000L, "", 123);
+                systemInfoService.getDataNode(anyLong);
+                result = new DataNode(1000L, "", 123);
 
                 lakeService.getTabletStats((TabletStatRequest) any);
                 minTimes = 1;

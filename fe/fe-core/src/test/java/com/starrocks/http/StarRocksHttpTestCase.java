@@ -61,7 +61,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -100,9 +100,9 @@ public abstract class StarRocksHttpTestCase {
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
 
-    private static long testBackendId1 = 1000;
-    private static long testBackendId2 = 1001;
-    private static long testBackendId3 = 1002;
+    private static long testDataNodeId1 = 1000;
+    private static long testDataNodeId2 = 1001;
+    private static long testDataNodeId3 = 1002;
 
     private static long testReplicaId1 = 2000;
     private static long testReplicaId2 = 2001;
@@ -135,15 +135,15 @@ public abstract class StarRocksHttpTestCase {
         columns.add(k2);
 
         Replica replica1 =
-                new Replica(testReplicaId1, testBackendId1, testStartVersion, testSchemaHash,
+                new Replica(testReplicaId1, testDataNodeId1, testStartVersion, testSchemaHash,
                         1024000L, 2000L,
                         Replica.ReplicaState.NORMAL, -1, 0);
         Replica replica2 =
-                new Replica(testReplicaId2, testBackendId2, testStartVersion, testSchemaHash,
+                new Replica(testReplicaId2, testDataNodeId2, testStartVersion, testSchemaHash,
                         1024000L, 2000L,
                         Replica.ReplicaState.NORMAL, -1, 0);
         Replica replica3 =
-                new Replica(testReplicaId3, testBackendId3, testStartVersion, testSchemaHash,
+                new Replica(testReplicaId3, testDataNodeId3, testStartVersion, testSchemaHash,
                         1024000L, 2000L,
                         Replica.ReplicaState.NORMAL, -1, 0);
 
@@ -346,16 +346,16 @@ public abstract class StarRocksHttpTestCase {
         }
     }
 
-    private static void assignBackends() {
-        Backend backend1 = new Backend(testBackendId1, "node-1", 9308);
+    private static void assignDataNodes() {
+        DataNode backend1 = new DataNode(testDataNodeId1, "node-1", 9308);
         backend1.setBePort(9300);
-        Backend backend2 = new Backend(testBackendId2, "node-2", 9308);
+        DataNode backend2 = new DataNode(testDataNodeId2, "node-2", 9308);
         backend2.setBePort(9300);
-        Backend backend3 = new Backend(testBackendId3, "node-3", 9308);
+        DataNode backend3 = new DataNode(testDataNodeId3, "node-3", 9308);
         backend3.setBePort(9300);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend1);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend2);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend3);
+        GlobalStateMgr.getCurrentSystemInfo().addDataNode(backend1);
+        GlobalStateMgr.getCurrentSystemInfo().addDataNode(backend2);
+        GlobalStateMgr.getCurrentSystemInfo().addDataNode(backend3);
     }
 
     @BeforeClass
@@ -417,7 +417,7 @@ public abstract class StarRocksHttpTestCase {
                 return tabletInvertedIndex;
             }
         };
-        assignBackends();
+        assignDataNodes();
         doSetUp();
     }
 
@@ -467,7 +467,7 @@ public abstract class StarRocksHttpTestCase {
                 return new GlobalTransactionMgr(null);
             } 
         };
-        assignBackends();
+        assignDataNodes();
         doSetUp();
     }
 

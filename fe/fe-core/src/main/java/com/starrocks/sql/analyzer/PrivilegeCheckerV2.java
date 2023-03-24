@@ -135,7 +135,6 @@ import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
-import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
@@ -144,6 +143,7 @@ import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataNodesStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
@@ -813,7 +813,7 @@ public class PrivilegeCheckerV2 {
 
         // ---------------------------------------- Show Node Info Statement-------------------------------
         @Override
-        public Void visitShowBackendsStatement(ShowBackendsStmt statement, ConnectContext context) {
+        public Void visitShowDataNodesStatement(ShowDataNodesStmt statement, ConnectContext context) {
             return checkShowNodePrivilege(context);
         }
 

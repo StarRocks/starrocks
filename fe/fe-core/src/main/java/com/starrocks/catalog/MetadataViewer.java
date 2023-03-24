@@ -46,7 +46,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 
 import java.text.DecimalFormat;
@@ -109,7 +109,7 @@ public class MetadataViewer {
                             List<String> row = Lists.newArrayList();
 
                             ReplicaStatus status = ReplicaStatus.OK;
-                            Backend be = infoService.getBackend(replica.getBackendId());
+                            DataNode be = infoService.getDataNode(replica.getDataNodeId());
                             if (be == null || !be.isAvailable() || replica.isBad()) {
                                 status = ReplicaStatus.DEAD;
                             } else if (replica.getVersion() < visibleVersion
@@ -126,7 +126,7 @@ public class MetadataViewer {
 
                             row.add(String.valueOf(tabletId));
                             row.add(String.valueOf(replica.getId()));
-                            row.add(String.valueOf(replica.getBackendId()));
+                            row.add(String.valueOf(replica.getDataNodeId()));
                             row.add(String.valueOf(replica.getVersion()));
                             row.add(String.valueOf(replica.getLastFailedVersion()));
                             row.add(String.valueOf(replica.getLastSuccessVersion()));
@@ -228,7 +228,7 @@ public class MetadataViewer {
             // backend id -> replica count
             Map<Long, Integer> countMap = Maps.newHashMap();
             // init map
-            List<Long> beIds = infoService.getBackendIds(false);
+            List<Long> beIds = infoService.getDataNodeIds(false);
             for (long beId : beIds) {
                 countMap.put(beId, 0);
             }
@@ -238,7 +238,7 @@ public class MetadataViewer {
                 Partition partition = olapTable.getPartition(partId);
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
-                        for (long beId : tablet.getBackendIds()) {
+                        for (long beId : tablet.getDataNodeIds()) {
                             if (!countMap.containsKey(beId)) {
                                 continue;
                             }

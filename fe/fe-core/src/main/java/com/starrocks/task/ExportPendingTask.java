@@ -43,7 +43,7 @@ import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -124,12 +124,12 @@ public class ExportPendingTask extends PriorityLeaderTask {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNodeWithBePort(host, port);
                 if (backend == null) {
                     return Status.CANCELLED;
                 }
                 long backendId = backend.getId();
-                if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
+                if (!GlobalStateMgr.getCurrentSystemInfo().checkDataNodeAvailable(backendId)) {
                     return Status.CANCELLED;
                 }
                 this.job.setBeStartTime(backendId, backend.getLastStartTime());
@@ -147,7 +147,7 @@ public class ExportPendingTask extends PriorityLeaderTask {
         return Status.OK;
     }
 
-    private Status lockTabletMetadata(TInternalScanRange internalScanRange, Backend backend) {
+    private Status lockTabletMetadata(TInternalScanRange internalScanRange, DataNode backend) {
         try {
             LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
             LockTabletMetadataRequest request = new LockTabletMetadataRequest();

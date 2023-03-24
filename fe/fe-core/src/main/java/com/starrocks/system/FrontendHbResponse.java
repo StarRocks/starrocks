@@ -124,7 +124,7 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         return feVersion;
     }
 
-    public Map<Long, Integer> getBackendId2cpuCores() {
+    public Map<Long, Integer> getDataNodeId2cpuCores() {
         return backendId2cpuCores;
     }
 

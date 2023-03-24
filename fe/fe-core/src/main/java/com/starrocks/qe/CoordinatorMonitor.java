@@ -39,26 +39,26 @@ public class CoordinatorMonitor {
 
     private static final int COMING_DEAD_BACKEND_QUEUE_CAPACITY = 1_000_000;
 
-    private final BlockingQueue<Long> comingDeadBackendIDQueue;
+    private final BlockingQueue<Long> comingDeadDataNodeIDQueue;
     private final AtomicBoolean started;
-    private final DeadBackendAndComputeNodeChecker checker;
+    private final DeadDataNodeAndComputeNodeChecker checker;
 
     public CoordinatorMonitor() {
-        comingDeadBackendIDQueue = Queues.newLinkedBlockingDeque(COMING_DEAD_BACKEND_QUEUE_CAPACITY);
+        comingDeadDataNodeIDQueue = Queues.newLinkedBlockingDeque(COMING_DEAD_BACKEND_QUEUE_CAPACITY);
         started = new AtomicBoolean(false);
-        checker = new DeadBackendAndComputeNodeChecker();
+        checker = new DeadDataNodeAndComputeNodeChecker();
     }
 
     public static CoordinatorMonitor getInstance() {
         return SingletonHolder.INSTANCE;
     }
 
-    public boolean addDeadBackend(Long backendID) {
+    public boolean addDeadDataNode(Long backendID) {
         if (GlobalStateMgr.isCheckpointThread()) {
             return false;
         }
         LOG.info("add backend {} to dead backend queue", backendID);
-        return comingDeadBackendIDQueue.offer(backendID);
+        return comingDeadDataNodeIDQueue.offer(backendID);
     }
 
     public void start() {
@@ -67,29 +67,29 @@ public class CoordinatorMonitor {
         }
     }
 
-    private class DeadBackendAndComputeNodeChecker extends Thread {
+    private class DeadDataNodeAndComputeNodeChecker extends Thread {
         @Override
         public void run() {
-            List<Long> deadBackendIDs = Lists.newArrayList();
+            List<Long> deadDataNodeIDs = Lists.newArrayList();
             Long backendID;
             for (; ; ) {
                 try {
-                    backendID = comingDeadBackendIDQueue.take();
-                    deadBackendIDs.add(backendID);
+                    backendID = comingDeadDataNodeIDQueue.take();
+                    deadDataNodeIDs.add(backendID);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     return;
                 }
 
                 // Try to non-blocking take all the backend IDs from queue.
-                while ((backendID = comingDeadBackendIDQueue.poll()) != null) {
-                    deadBackendIDs.add(backendID);
+                while ((backendID = comingDeadDataNodeIDQueue.poll()) != null) {
+                    deadDataNodeIDs.add(backendID);
                 }
 
                 final List<Coordinator> coordinators = QeProcessorImpl.INSTANCE.getCoordinators();
                 for (Coordinator coord : coordinators) {
-                    boolean isUsingDeadBackend = deadBackendIDs.stream().anyMatch(coord::isUsingBackend);
-                    if (isUsingDeadBackend) {
+                    boolean isUsingDeadDataNode = deadDataNodeIDs.stream().anyMatch(coord::isUsingDataNode);
+                    if (isUsingDeadDataNode) {
                         if (LOG.isWarnEnabled()) {
                             LOG.warn("Cancel query [{}], because some related backend is not alive",
                                     DebugUtil.printId(coord.getQueryId()));
@@ -99,7 +99,7 @@ public class CoordinatorMonitor {
                     }
                 }
 
-                deadBackendIDs.clear();
+                deadDataNodeIDs.clear();
 
                 QueryQueueManager.getInstance().maybeNotify();
             }

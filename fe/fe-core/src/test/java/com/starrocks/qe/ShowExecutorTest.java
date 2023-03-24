@@ -80,13 +80,13 @@ import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthorStmt;
-import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataNodesStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -98,9 +98,9 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.system.Backend;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
+import com.starrocks.system.DataNodeCoreStat;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
@@ -432,7 +432,7 @@ public class ShowExecutorTest {
 
         new MockUp<SystemInfoService>() {
             @Mock
-            public List<Long> getAvailableBackendIds() {
+            public List<Long> getAvailableDataNodeIds() {
                 return Arrays.asList(10001L, 10002L, 10003L);
             }
         };
@@ -740,15 +740,15 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testShowBackends() throws AnalysisException, DdlException {
+    public void testShowDataNodes() throws AnalysisException, DdlException {
         SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
         StarOSAgent starosAgent = new StarOSAgent();
 
         // mock backends
-        Backend backend = new Backend();
+        DataNode backend = new DataNode();
         new Expectations(clusterInfo) {
             {
-                clusterInfo.getBackend(1L);
+                clusterInfo.getDataNode(1L);
                 minTimes = 0;
                 result = backend;
             }
@@ -768,7 +768,7 @@ public class ShowExecutorTest {
 
         new MockUp<SystemInfoService>() {
             @Mock
-            List<Long> getBackendIds(boolean needAlive) {
+            List<Long> getDataNodeIds(boolean needAlive) {
                 List<Long> backends = Lists.newArrayList();
                 backends.add(1L);
                 return backends;
@@ -777,7 +777,7 @@ public class ShowExecutorTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            long getWorkerIdByBackendId(long backendId) {
+            long getWorkerIdByDataNodeId(long backendId) {
                 return 5;
             }
         };
@@ -790,12 +790,12 @@ public class ShowExecutorTest {
         };
 
 
-        ShowBackendsStmt stmt = new ShowBackendsStmt();
+        ShowDataNodesStmt stmt = new ShowDataNodesStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
         Assert.assertEquals(28, resultSet.getMetaData().getColumnCount());
-        Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("DataNodeId", resultSet.getMetaData().getColumn(0).getName());
         Assert.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(23).getName());
         Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(24).getName());
         Assert.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(25).getName());
@@ -828,7 +828,7 @@ public class ShowExecutorTest {
             }
         };
 
-        new MockUp<BackendCoreStat>() {
+        new MockUp<DataNodeCoreStat>() {
             @Mock
             int getCoresOfBe(long beId) {
                 return 16;

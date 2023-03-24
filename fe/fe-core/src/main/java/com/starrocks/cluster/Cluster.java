@@ -133,7 +133,7 @@ public class Cluster implements Writable {
         return Lists.newArrayList(computeNodeIdSet);
     }
 
-    public void setBackendIdList(List<Long> backendIdList) {
+    public void setDataNodeIdList(List<Long> backendIdList) {
         if (backendIdList == null) {
             return;
         }
@@ -145,7 +145,7 @@ public class Cluster implements Writable {
         computeNodeIdSet.add(computeNodeId);
     }
 
-    public void addBackend(long backendId) {
+    public void addDataNode(long backendId) {
         backendIdSet.add(backendId);
     }
 
@@ -153,8 +153,8 @@ public class Cluster implements Writable {
         computeNodeIdSet.remove((Long) removedComputeNodeId);
     }
 
-    public void removeBackend(long removedBackendId) {
-        backendIdSet.remove((Long) removedBackendId);
+    public void removeDataNode(long removedDataNodeId) {
+        backendIdSet.remove((Long) removedDataNodeId);
     }
 
     public static Cluster read(DataInput in) throws IOException {

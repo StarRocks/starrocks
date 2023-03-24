@@ -172,10 +172,10 @@ public class RestoreJobTest {
 
         new Expectations() {
             {
-                systemInfoService.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean);
+                systemInfoService.seqChooseDataNodeIds(anyInt, anyBoolean, anyBoolean);
                 minTimes = 0;
                 result = new Delegate() {
-                    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAlive,
+                    public synchronized List<Long> seqChooseDataNodeIds(int backendNum, boolean needAlive,
                                                                        boolean isCreate, String clusterName) {
                         List<Long> beIds = Lists.newArrayList();
                         beIds.add(CatalogMocker.BACKEND1_ID);
@@ -304,8 +304,8 @@ public class RestoreJobTest {
             SnapshotTask task = (SnapshotTask) agentTask;
             String snapshotPath = "/path/to/snapshot/" + System.currentTimeMillis();
             TStatus taskStatus = new TStatus(TStatusCode.OK);
-            TBackend tBackend = new TBackend("", 0, 1);
-            TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
+            TBackend tDataNode = new TBackend("", 0, 1);
+            TFinishTaskRequest request = new TFinishTaskRequest(tDataNode, TTaskType.MAKE_SNAPSHOT,
                     task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
             Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
@@ -337,8 +337,8 @@ public class RestoreJobTest {
         List<Long> downloadedTabletIds = Lists.newArrayList();
         for (AgentTask agentTask : downloadTasks) {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
-            TBackend tBackend = new TBackend("", 0, 1);
-            TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
+            TBackend tDataNode = new TBackend("", 0, 1);
+            TFinishTaskRequest request = new TFinishTaskRequest(tDataNode, TTaskType.MAKE_SNAPSHOT,
                     agentTask.getSignature(), taskStatus);
             request.setDownloaded_tablet_ids(downloadedTabletIds);
             Assert.assertTrue(job.finishTabletDownloadTask((DownloadTask) agentTask, request));
@@ -369,8 +369,8 @@ public class RestoreJobTest {
 
         for (AgentTask agentTask : dirMoveTasks) {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
-            TBackend tBackend = new TBackend("", 0, 1);
-            TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
+            TBackend tDataNode = new TBackend("", 0, 1);
+            TFinishTaskRequest request = new TFinishTaskRequest(tDataNode, TTaskType.MAKE_SNAPSHOT,
                     agentTask.getSignature(), taskStatus);
             job.finishDirMoveTask((DirMoveTask) agentTask, request);
         }

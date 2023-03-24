@@ -40,8 +40,8 @@ public class DynamicPartitionSchedulerTest {
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_strict_storage_medium_check = false;
         UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);

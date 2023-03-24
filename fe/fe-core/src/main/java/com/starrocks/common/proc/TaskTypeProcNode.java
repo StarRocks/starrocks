@@ -46,7 +46,7 @@ import java.util.List;
 public class TaskTypeProcNode implements ProcDirInterface {
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("BackendId").add("FailedNum").add("TotalNum")
+            .add("DataNodeId").add("FailedNum").add("TotalNum")
             .build();
 
     private TTaskType type;
@@ -67,7 +67,7 @@ public class TaskTypeProcNode implements ProcDirInterface {
 
         int totalFailedNum = 0;
         int totalTaskNum = 0;
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds(false);
         for (Long backendId : backendIds) {
             int failedNum = AgentTaskQueue.getTaskNum(backendId, type, true);
             int taskNum = AgentTaskQueue.getTaskNum(backendId, type, false);

@@ -178,8 +178,8 @@ public class AuthUpgraderTest {
         // default is old privilege
         GlobalStateMgr.getCurrentState().initAuth(false);
         UtFrameUtils.setUpForPersistTest();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db0");
         starRocksAssert.withDatabase("db1");

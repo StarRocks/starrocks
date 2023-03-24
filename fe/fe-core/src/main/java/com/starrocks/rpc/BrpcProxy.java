@@ -29,7 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class BrpcProxy {
     private final RpcClient rpcClient;
     // TODO: Eviction
-    private final ConcurrentHashMap<TNetworkAddress, PBackendService> backendServiceMap;
+    private final ConcurrentHashMap<TNetworkAddress, PDataNodeService> backendServiceMap;
     private final ConcurrentHashMap<TNetworkAddress, LakeService> lakeServiceMap;
 
     static {
@@ -68,8 +68,8 @@ public class BrpcProxy {
         BrpcProxy.SingletonHolder.INSTANCE = proxy;
     }
 
-    public static PBackendService getBackendService(TNetworkAddress address) {
-        return getInstance().getBackendServiceImpl(address);
+    public static PDataNodeService getDataNodeService(TNetworkAddress address) {
+        return getInstance().getDataNodeServiceImpl(address);
     }
 
     public static LakeService getLakeService(TNetworkAddress address) {
@@ -80,16 +80,16 @@ public class BrpcProxy {
         return getInstance().getLakeServiceImpl(new TNetworkAddress(host, port));
     }
 
-    protected PBackendService getBackendServiceImpl(TNetworkAddress address) {
-        return backendServiceMap.computeIfAbsent(address, this::createBackendService);
+    protected PDataNodeService getDataNodeServiceImpl(TNetworkAddress address) {
+        return backendServiceMap.computeIfAbsent(address, this::createDataNodeService);
     }
 
     protected LakeService getLakeServiceImpl(TNetworkAddress address) {
         return lakeServiceMap.computeIfAbsent(address, this::createLakeService);
     }
 
-    private PBackendService createBackendService(TNetworkAddress address) {
-        ProtobufRpcProxy<PBackendService> proxy = new ProtobufRpcProxy<>(rpcClient, PBackendService.class);
+    private PDataNodeService createDataNodeService(TNetworkAddress address) {
+        ProtobufRpcProxy<PDataNodeService> proxy = new ProtobufRpcProxy<>(rpcClient, PDataNodeService.class);
         proxy.setHost(address.getHostname());
         proxy.setPort(address.getPort());
         return proxy.proxy();

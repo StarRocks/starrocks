@@ -66,8 +66,8 @@ public class AuthorizationManagerTest {
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.setUpForPersistTest();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
         // create db.tbl0 ~ tbl3
         String createTblStmtStr = "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "

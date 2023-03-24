@@ -45,8 +45,8 @@ public class ScheduleRule {
 
     private static int deadBeCount() {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        int total = systemInfoService.getTotalBackendNumber();
-        int alive = systemInfoService.getAliveBackendNumber();
+        int total = systemInfoService.getTotalDataNodeNumber();
+        int alive = systemInfoService.getAliveDataNodeNumber();
         return total - alive;
     }
 

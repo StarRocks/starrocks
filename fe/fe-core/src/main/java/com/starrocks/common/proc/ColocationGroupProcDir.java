@@ -73,8 +73,8 @@ public class ColocationGroupProcDir implements ProcDirInterface {
 
         GroupId groupId = new GroupId(dbId, grpId);
         ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
-        List<List<Long>> beSeqs = index.getBackendsPerBucketSeq(groupId);
-        return new ColocationGroupBackendSeqsProcNode(beSeqs);
+        List<List<Long>> beSeqs = index.getDataNodesPerBucketSeq(groupId);
+        return new ColocationGroupDataNodeSeqsProcNode(beSeqs);
     }
 
     @Override

@@ -1062,8 +1062,8 @@ public class Config extends ConfigBase {
     public static String locale = "zh_CN.UTF-8";
 
     /**
-     * 'storage_high_watermark_usage_percent' limit the max capacity usage percent of a Backend storage path.
-     * 'storage_min_left_capacity_bytes' limit the minimum left capacity of a Backend storage path.
+     * 'storage_high_watermark_usage_percent' limit the max capacity usage percent of a DataNode storage path.
+     * 'storage_min_left_capacity_bytes' limit the minimum left capacity of a DataNode storage path.
      * If both limitations are reached, this storage path can not be chosen as tablet balance destination.
      * But for tablet recovery, we may exceed these limit for keeping data integrity as much as possible.
      */
@@ -1560,7 +1560,7 @@ public class Config extends ConfigBase {
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:
-     * 1. N hosts with N Backends and N Frontends deployed.
+     * 1. N hosts with N DataNodes and N Frontends deployed.
      * 2. The data has N replicas.
      * 3. High concurrency queries are sent to all Frontends evenly
      * In this case, all Frontends can only use local replicas to do the query.

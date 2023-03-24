@@ -646,7 +646,7 @@ public class PlanFragmentBuilder {
                 long localBeId = -1;
                 if (Config.enable_local_replica_selection) {
                     localBeId = GlobalStateMgr.getCurrentSystemInfo()
-                            .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
+                            .getDataNodeIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
                 List<Long> selectedNonEmptyPartitionIds = node.getSelectedPartitionId().stream().filter(p -> {
@@ -1236,7 +1236,7 @@ public class PlanFragmentBuilder {
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpression.getStatistics());
             try {
-                scanNode.assignBackends();
+                scanNode.assignDataNodes();
             } catch (UserException e) {
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
@@ -1409,7 +1409,7 @@ public class PlanFragmentBuilder {
             SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
             boolean enableLocalShuffleAgg = sessionVariable.isEnableLocalShuffleAgg()
                     && sessionVariable.isEnablePipelineEngine()
-                    && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                    && GlobalStateMgr.getCurrentSystemInfo().isSingleDataNodeAndComputeNode();
             if (!enableLocalShuffleAgg) {
                 return inputFragment;
             }

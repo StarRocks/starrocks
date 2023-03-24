@@ -298,7 +298,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         LakeTablet lakeTablet = ((LakeTablet) shadowTablet);
-                        Long backendId = Utils.chooseBackend(lakeTablet);
+                        Long backendId = Utils.chooseDataNode(lakeTablet);
                         if (backendId == null) {
                             throw new AlterCancelException("No alive backend");
                         }
@@ -372,7 +372,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
-                        Long backendId = Utils.chooseBackend((LakeTablet) shadowTablet);
+                        Long backendId = Utils.chooseDataNode((LakeTablet) shadowTablet);
                         if (backendId == null) {
                             throw new AlterCancelException("No alive backend");
                         }

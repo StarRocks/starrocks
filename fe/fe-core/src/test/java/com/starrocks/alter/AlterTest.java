@@ -137,8 +137,8 @@ public class AlterTest {
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_strict_storage_medium_check = false;
         UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockDataNode(10002);
+        UtFrameUtils.addMockDataNode(10003);
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -1029,8 +1029,8 @@ public class AlterTest {
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L, 20006L),
                         Lists.newArrayList(20007L, 20008L, 20009L));
-                agent.getPrimaryBackendIdByShard(anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+                agent.getPrimaryDataNodeIdByShard(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds(true).get(0);
             }
         };
 
@@ -1119,8 +1119,8 @@ public class AlterTest {
                         Lists.newArrayList(30010L, 30011L, 30012L),
                         Lists.newArrayList(30013L, 30014L, 30015L),
                         Lists.newArrayList(30016L, 30017L, 30018L));
-                agent.getPrimaryBackendIdByShard(anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+                agent.getPrimaryDataNodeIdByShard(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds(true).get(0);
             }
         };
 
@@ -1180,14 +1180,14 @@ public class AlterTest {
     }
 
     @Test
-    public void testAddBackend() throws Exception {
+    public void testAddDataNode() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
 
-        String addBackendSql = "ALTER SYSTEM ADD BACKEND \"192.168.1.1:8080\",\"192.168.1.2:8080\"";
-        AlterSystemStmt addBackendStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(addBackendSql, ctx);
+        String addDataNodeSql = "ALTER SYSTEM ADD BACKEND \"192.168.1.1:8080\",\"192.168.1.2:8080\"";
+        AlterSystemStmt addDataNodeStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(addDataNodeSql, ctx);
 
-        String dropBackendSql = "ALTER SYSTEM DROP BACKEND \"192.168.1.1:8080\",\"192.168.1.2:8080\"";
-        AlterSystemStmt dropBackendStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(dropBackendSql, ctx);
+        String dropDataNodeSql = "ALTER SYSTEM DROP BACKEND \"192.168.1.1:8080\",\"192.168.1.2:8080\"";
+        AlterSystemStmt dropDataNodeStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(dropDataNodeSql, ctx);
 
         String addObserverSql = "ALTER SYSTEM ADD OBSERVER \"192.168.1.1:8080\"";
         AlterSystemStmt addObserverStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(addObserverSql, ctx);
@@ -2065,8 +2065,8 @@ public class AlterTest {
                 agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L));
-                agent.getPrimaryBackendIdByShard(anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+                agent.getPrimaryDataNodeIdByShard(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds(true).get(0);
             }
         };
 

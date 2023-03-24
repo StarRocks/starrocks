@@ -113,7 +113,7 @@ public class CreateTableAutoTabletTest {
         } finally {
             db.readUnlock();
         }
-        Assert.assertEquals(GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size(), 10);
+        Assert.assertEquals(GlobalStateMgr.getCurrentSystemInfo().getDataNodeIds().size(), 10);
         Assert.assertEquals(bucketNum, 20);
     }
 

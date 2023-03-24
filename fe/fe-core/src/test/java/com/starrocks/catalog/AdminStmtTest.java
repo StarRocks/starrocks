@@ -90,19 +90,19 @@ public class AdminStmtTest {
         OlapTable tbl = (OlapTable) db.getTable("tbl1");
         Assert.assertNotNull(tbl);
         // tablet id, backend id
-        List<Pair<Long, Long>> tabletToBackendList = Lists.newArrayList();
+        List<Pair<Long, Long>> tabletToDataNodeList = Lists.newArrayList();
         for (Partition partition : tbl.getPartitions()) {
             for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 for (Tablet tablet : index.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                        tabletToBackendList.add(Pair.create(tablet.getId(), replica.getBackendId()));
+                        tabletToDataNodeList.add(Pair.create(tablet.getId(), replica.getDataNodeId()));
                     }
                 }
             }
         }
-        Assert.assertEquals(3, tabletToBackendList.size());
-        long tabletId = tabletToBackendList.get(0).first;
-        long backendId = tabletToBackendList.get(0).second;
+        Assert.assertEquals(3, tabletToDataNodeList.size());
+        long tabletId = tabletToDataNodeList.get(0).first;
+        long backendId = tabletToDataNodeList.get(0).second;
         Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);
         Assert.assertFalse(replica.isBad());
 
@@ -142,7 +142,7 @@ public class AdminStmtTest {
             DataInputStream in = new DataInputStream(new FileInputStream(file));
 
             SetReplicaStatusOperationLog readLog = SetReplicaStatusOperationLog.read(in);
-            Assert.assertEquals(log.getBackendId(), readLog.getBackendId());
+            Assert.assertEquals(log.getDataNodeId(), readLog.getDataNodeId());
             Assert.assertEquals(log.getTabletId(), readLog.getTabletId());
             Assert.assertEquals(log.getReplicaStatus(), readLog.getReplicaStatus());
 
