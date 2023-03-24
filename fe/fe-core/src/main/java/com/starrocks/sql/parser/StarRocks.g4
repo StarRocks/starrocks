@@ -1636,13 +1636,11 @@ relationPrimary
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
     | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
-    | tableFunctionCall (AS? alias=identifier columnAliases?)?                          #tableFunction
-    | TABLE '(' tableFunctionCall ')' (AS? alias=identifier columnAliases?)?            #tableFunctionTable
+    | qualifiedName '(' expressionList ')'
+        (AS? alias=identifier columnAliases?)?                                          #tableFunction
+    | TABLE '(' qualifiedName '(' expressionList ')' ')'
+        (AS? alias=identifier columnAliases?)?                                          #normalizedTableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
-    ;
-
-tableFunctionCall
-    : qualifiedName '(' expressionList ')'
     ;
 
 joinRelation
