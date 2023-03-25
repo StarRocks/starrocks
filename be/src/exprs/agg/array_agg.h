@@ -32,20 +32,20 @@ namespace starrocks {
 struct ArrayAggAggregateState {
     void update(FunctionContext* ctx, const Column& column, size_t index, size_t offset, size_t count) {
         if (UNLIKELY(index >= data_columns->size())) {
-            ctx->set_error(
-                    (std::string(fmt::format("index {} is larger than column size {}.", index, data_columns->size())))
-                            .c_str(),
-                    false);
+            if (ctx != nullptr) {
+                auto s = fmt::format("index {} is larger than column size {}.", index, data_columns->size());
+                ctx->set_error(s.c_str(), false);
+            }
             return;
         }
         (*data_columns)[index]->append(column, offset, count);
     }
     void update_nulls(FunctionContext* ctx, size_t index, size_t count) {
         if (UNLIKELY(index >= data_columns->size())) {
-            ctx->set_error(
-                    std::string(fmt::format("index {} is larger than column size {}.", index, data_columns->size()))
-                            .c_str(),
-                    false);
+            if (ctx != nullptr) {
+                auto s = fmt::format("index {} is larger than column size {}.", index, data_columns->size());
+                ctx->set_error(s.c_str(), false);
+            }
             return;
         }
         DCHECK((*data_columns)[index]->is_nullable());
