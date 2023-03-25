@@ -167,10 +167,14 @@ ConnectorChunkSource::~ConnectorChunkSource() {
 Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
+<<<<<<< HEAD
     _ck_acc.set_max_size(state->chunk_size());
     if (config::connector_min_max_predicate_from_runtime_filter_enable) {
         _data_source->parse_runtime_filters(state);
     }
+=======
+    _data_source->parse_runtime_filters(state);
+>>>>>>> 0c73ae000 ([Refactor] clean some be configs rarely modified (#20290))
     return Status::OK();
 }
 
@@ -201,12 +205,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
         if (_status.ok()) {
             if (tmp->num_rows() == 0) continue;
             _ck_acc.push(tmp);
-            if (config::connector_chunk_source_accumulate_chunk_enable) {
-                if (_ck_acc.has_output()) break;
-            } else {
-                _ck_acc.finalize();
-                break;
-            }
+            if (_ck_acc.has_output()) break;
         } else if (!_status.is_end_of_file()) {
             if (_status.is_time_out()) {
                 Status t = _status;
