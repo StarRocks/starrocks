@@ -1734,7 +1734,6 @@ TEST_F(AggregateTest, test_exchange_bytes) {
     ASSERT_EQ(data_column_bigint->byte_size() + data_column->byte_size(), result_column->get_data()[0]);
 }
 
-
 TEST_F(AggregateTest, test_array_agg) {
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
@@ -1957,9 +1956,7 @@ TEST_F(AggregateTest, test_array_agg) {
         auto agg_state = (ArrayAggAggregateState*)(state->state());
         ASSERT_EQ(agg_state->data_columns->size(), 2);
         // data_columns in state are nullable
-        ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(),
-                         "[NULL, NULL]"),
-                  0);
+        ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(), "[NULL, NULL]"), 0);
         ASSERT_EQ(strcmp((*agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3]"), 0);
 
         TypeDescriptor type_array_char;
@@ -1978,9 +1975,7 @@ TEST_F(AggregateTest, test_array_agg) {
         type_struct_char_int.field_names.emplace_back("int");
         auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
-        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
-                         "[{vchar:[NULL,NULL],int:[3,3]}]"),
-                  0);
+        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(), "[{vchar:[NULL,NULL],int:[3,3]}]"), 0);
 
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);

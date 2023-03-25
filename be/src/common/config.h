@@ -740,15 +740,14 @@ CONF_Bool(object_storage_endpoint_use_https, "false");
 // https://hadoop.apache.org/docs/current2/hadoop-aws/tools/hadoop-aws/index.html
 CONF_Bool(object_storage_endpoint_path_style_access, "false");
 
+// orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
 CONF_Int32(orc_file_cache_max_size, "8388608");
 CONF_Int32(orc_natural_read_size, "8388608");
 CONF_mBool(orc_coalesce_read_enable, "true");
 
-// parquet reader, each column will reserve X bytes for read
-// but with coalesce read enabled, this value is not used.
-CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
+// parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_mInt32(parquet_header_max_size, "16384");
 CONF_Bool(parquet_late_materialization_enable, "true");
@@ -758,9 +757,6 @@ CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 CONF_Int32(io_tasks_per_scan_operator, "4");
-CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
-CONF_Bool(connector_dynamic_chunk_buffer_limiter_enable, "true");
-CONF_Bool(connector_min_max_predicate_from_runtime_filter_enable, "true");
 CONF_Bool(scan_node_always_shared_scan, "false");
 CONF_Bool(connector_scan_node_always_shared_scan, "true");
 

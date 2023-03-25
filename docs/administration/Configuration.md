@@ -374,7 +374,6 @@ BE dynamic parameters are as follows.
 | max_runnings_transactions_per_txn_map | 100 | N/A | The maximum number of transactions that can run concurrently in each partition. |
 | tablet_max_pending_versions | 1000 | N/A | The maximum number of pending versions that are tolerable in a Primary Key table. Pending versions refer to versions that are committed but not applied yet. |
 | max_hdfs_file_handle | 1000 | N/A | The maximum number of HDFS file descriptors that can be opened. |
-| parquet_buffer_stream_reserve_size | 1048576 | Byte | The size of buffer that Parquet reader reserves for each column while reading data. |
 | be_exit_after_disk_write_hang_second | 60 | second | The length of time that the BE waits to exit after the disk hangs. |
 | min_cumulative_compaction_failure_interval_sec | 30 | second | The minimum time interval at which Cumulative Compaction retries upon failures. |
 | size_tiered_level_num | 7 | N/A | The number of levels for the Size-tiered Compaction strategy. At most one rowset is reserved for each level. Therefore, under a stable condition, there are, at most, as many rowsets as the level number specified in this configuration item. |
