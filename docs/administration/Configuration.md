@@ -485,7 +485,6 @@ BE static parameters are as follows.
 | compaction_max_memory_limit | -1 | N/A | |
 | compaction_max_memory_limit_percent | 100 | N/A | |
 | compaction_memory_limit_per_worker | 2147483648 | N/A | |
-| connector_io_tasks_per_scan_operator | 16 | N/A | |
 | consistency_max_memory_limit | 10G | N/A | |
 | consistency_max_memory_limit_percent | 20 | N/A | |
 | cumulative_compaction_num_threads_per_disk | 1 | N/A | |
