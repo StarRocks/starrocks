@@ -754,9 +754,8 @@ CONF_Bool(parquet_late_materialization_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
-
-CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 CONF_Int32(io_tasks_per_scan_operator, "4");
+
 CONF_Bool(scan_node_always_shared_scan, "false");
 CONF_Bool(connector_scan_node_always_shared_scan, "true");
 

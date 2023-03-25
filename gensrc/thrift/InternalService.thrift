@@ -181,7 +181,7 @@ struct TQueryOptions {
   75: optional i64 spill_operator_min_bytes;
   76: optional TSpillMode spill_mode;
   77: optional i64 rpc_http_min_size;
-
+  78: optional i32 io_tasks_per_scan_operator = 4;
 }
 
 
