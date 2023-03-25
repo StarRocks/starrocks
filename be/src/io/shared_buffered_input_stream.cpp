@@ -20,7 +20,7 @@ namespace starrocks::io {
 
 SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream,
                                                      const std::string& filename, size_t size)
-        : _stream(stream), _size(size) {}
+        : _stream(stream), _filename(filename), _size(size) {}
 
 Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges) {
     if (ranges.size() == 0) {
@@ -117,9 +117,7 @@ StatusOr<SharedBufferedInputStream::SharedBuffer*> SharedBufferedInputStream::_f
     return &sb;
 }
 
-Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) {
-    ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(offset, *nbytes));
-    SharedBuffer& sb = *ret;
+Status SharedBufferedInputStream::_get_bytes(SharedBuffer& sb, const uint8_t** buffer, size_t offset, size_t* nbytes) {
     if (sb.buffer.capacity() == 0) {
         SCOPED_RAW_TIMER(&_shared_io_timer);
         _shared_io_count += 1;
@@ -145,17 +143,17 @@ void SharedBufferedInputStream::release_to_offset(int64_t offset) {
 }
 
 Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
-    if (_map.size() == 0) {
+    auto st = _find_shared_buffer(offset, count);
+    if (!st.ok()) {
         SCOPED_RAW_TIMER(&_direct_io_timer);
         _direct_io_count += 1;
         _direct_io_bytes += count;
         RETURN_IF_ERROR(_stream->read_at_fully(offset, out, count));
         return Status::OK();
     }
-
     const uint8_t* buffer = nullptr;
     size_t nbytes = count;
-    RETURN_IF_ERROR(get_bytes(&buffer, offset, &nbytes));
+    RETURN_IF_ERROR(_get_bytes(*(st.value()), &buffer, offset, &nbytes));
     strings::memcpy_inlined(out, buffer, count);
     return Status::OK();
 }
@@ -176,7 +174,7 @@ StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
     if (ret->buffer.capacity() == 0) return Status::NotSupported("peek shared buffer empty");
     const uint8_t* buf = nullptr;
     size_t nbytes = count;
-    RETURN_IF_ERROR(get_bytes(&buf, _offset, &nbytes));
+    RETURN_IF_ERROR(_get_bytes(*ret, &buf, _offset, &nbytes));
     return std::string_view((const char*)buf, count);
 }
 

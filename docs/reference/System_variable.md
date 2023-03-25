@@ -476,3 +476,9 @@ SELECT /*+ SET_VAR
 * sql_dialect
 
   The SQL dialect that is used. For example, you can run the `set sql_dialect = 'trino';` command to set the SQL dialect to Trino, so you can use Trino-specific SQL syntax and functions in your queries.
+
+* io_tasks_per_scan_operator
+
+  The number of io tasks issued by a scan operator simutaneously. Increase this value when accessing remote storage system like HDFS/S3 if latency is high. However the higher this value, the more memory consumption.
+
+  The value is an interger. Default value: 4.
