@@ -36,7 +36,7 @@ public:
         int64_t max_buffer_size = 8 * MB;
     };
 
-    SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename, size_t size);
+    SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename, size_t file_size);
     ~SharedBufferedInputStream() override = default;
 
     Status seek(int64_t position) override {
@@ -85,7 +85,7 @@ private:
     std::map<int64_t, SharedBuffer> _map;
     CoalesceOptions _options;
     int64_t _offset = 0;
-    int64_t _size = 0;
+    int64_t _file_size = 0;
     int64_t _shared_io_count = 0;
     int64_t _shared_io_bytes = 0;
     int64_t _shared_io_timer = 0;

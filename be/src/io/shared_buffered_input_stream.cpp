@@ -19,19 +19,18 @@
 namespace starrocks::io {
 
 SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream,
-                                                     const std::string& filename, size_t size)
-        : _stream(stream), _filename(filename), _size(size) {}
+                                                     const std::string& filename, size_t file_size)
+        : _stream(stream), _filename(filename), _file_size(file_size) {}
 
 void SharedBufferedInputStream::SharedBuffer::align(int64_t align_size, int64_t file_size) {
     if (align_size != 0) {
         offset = raw_offset / align_size * align_size;
-        int64_t end = (raw_offset + raw_size + align_size - 1) / align_size * align_size;
+        int64_t end = std::min((raw_offset + raw_size + align_size - 1) / align_size * align_size, file_size);
         size = end - offset;
     } else {
         offset = raw_offset;
         size = raw_size;
     }
-    size = std::min(size, file_size);
 }
 
 Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges) {
@@ -60,7 +59,7 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
     for (const IORange& r : check) {
         if (r.size > _options.max_buffer_size) {
             SharedBuffer sb = SharedBuffer{.raw_offset = r.offset, .raw_size = r.size, .ref_count = 1};
-            sb.align(_align_size, _size);
+            sb.align(_align_size, _file_size);
             _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
         } else {
             small_ranges.emplace_back(r);
@@ -75,7 +74,7 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
             SharedBuffer sb = SharedBuffer{.raw_offset = small_ranges[from].offset,
                                            .raw_size = end - small_ranges[from].offset,
                                            .ref_count = ref_count};
-            sb.align(_align_size, _size);
+            sb.align(_align_size, _file_size);
             _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
         };
 
@@ -153,7 +152,7 @@ Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64
 }
 
 StatusOr<int64_t> SharedBufferedInputStream::get_size() {
-    return _size;
+    return _file_size;
 }
 
 StatusOr<int64_t> SharedBufferedInputStream::read(void* data, int64_t count) {
