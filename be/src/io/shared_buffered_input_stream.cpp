@@ -121,16 +121,24 @@ Status SharedBufferedInputStream::_read_stream_buffer(SharedBuffer& sb, size_t o
         int64_t old_size = sb.buffer.size();
         int64_t tail_size = old_size - adv;
 
+        DCHECK(adv >= 0) << ", sb.stream_offset = " << sb.stream_offset << ", offset = " << offset;
+        // total buffer is skipped.
+        if (tail_size < 0) tail_size = 0;
+
         // move tail data to head.
-        if (adv > 0) {
+        if (adv > 0 && tail_size > 0) {
             uint8_t* data = sb.buffer.data();
             std::memmove(data, data + adv, tail_size);
-            sb.stream_offset = offset;
         }
+
+        // reset stream offset.
+        sb.stream_offset = offset;
 
         // resize buffer.
         int64_t new_size = std::max((int64_t)count, _options.min_stream_size);
         new_size = std::min(new_size, sb.size + sb.offset - sb.stream_offset);
+        DCHECK(new_size >= count) << ", sb.stream_offset = " << sb.stream_offset << ", sb.offset = " << sb.offset
+                                  << ", sb.size = " << sb.size << ", new_size = " << new_size << ", count = " << count;
         sb.buffer.resize(new_size);
 
         // load data to buf.
@@ -142,6 +150,9 @@ Status SharedBufferedInputStream::_read_stream_buffer(SharedBuffer& sb, size_t o
             RETURN_IF_ERROR(_stream->read_at_fully(offset + tail_size, sb.buffer.data() + tail_size, read_size));
         }
     }
+    DCHECK((offset + count) <= (sb.stream_offset + sb.buffer.size()))
+            << ", sb.stream_offset = " << sb.stream_offset << ", offset = " << offset << ", count = " << count
+            << ", buffer_size = " << sb.buffer.size();
     return Status::OK();
 }
 
@@ -162,7 +173,6 @@ Status SharedBufferedInputStream::_get_bytes(const uint8_t** buffer, size_t offs
         sb.buffer.reserve(sb.size);
         RETURN_IF_ERROR(_stream->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
     }
-
     *buffer = sb.buffer.data() + offset - sb.offset;
     return Status::OK();
 }
@@ -210,7 +220,7 @@ StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
     if (ret->buffer.capacity() == 0) return Status::NotSupported("peek shared buffer empty");
     const uint8_t* buf = nullptr;
     RETURN_IF_ERROR(_get_bytes(&buf, _offset, count));
-    return std::string_view((const char*)buf, count);
+    return Status::OK();
 }
 
 } // namespace starrocks::io
