@@ -33,18 +33,6 @@ void SharedBufferedInputStream::SharedBuffer::align(int64_t align_size, int64_t 
     }
 }
 
-void SharedBufferedInputStream::SharedBuffer::align(int64_t align_size, int64_t file_size) {
-    if (align_size != 0) {
-        offset = raw_offset / align_size * align_size;
-        int64_t end = (raw_offset + raw_size + align_size - 1) / align_size * align_size;
-        size = end - offset;
-    } else {
-        offset = raw_offset;
-        size = raw_size;
-    }
-    size = std::min(size, file_size);
-}
-
 Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges) {
     if (ranges.size() == 0) {
         return Status::OK();
