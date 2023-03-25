@@ -114,7 +114,7 @@ Status ExternalScanContextMgr::clear_scan_context(const std::string& context_id)
     }
     if (context != nullptr) {
         // cancel pipeline
-        auto fragment_instance_id = context->fragment_instance_id;
+        const auto& fragment_instance_id = context->fragment_instance_id;
         if (auto query_ctx = _exec_env->query_context_mgr()->get(context->query_id); query_ctx != nullptr) {
             if (auto fragment_ctx = query_ctx->fragment_mgr()->get(fragment_instance_id); fragment_ctx != nullptr) {
                 std::stringstream msg;
