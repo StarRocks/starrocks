@@ -26,7 +26,11 @@ struct ColumnReaderOptions {
     int chunk_size = 0;
     vectorized::HdfsScanStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
+<<<<<<< HEAD
     SharedBufferedInputStream* sb_stream = nullptr;
+=======
+    io::SharedBufferedInputStream* sb_stream = nullptr;
+>>>>>>> b99403eac ([Enhancement] put `io_task_per_scan_operator` to session variable (#20289))
     tparquet::RowGroup* row_group_meta = nullptr;
     ColumnReaderContext* context = nullptr;
 };

@@ -564,8 +564,16 @@ void ConnectorScanNode::_init_counter() {
     _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/connector_scan_node.cpp
 int ConnectorScanNode::io_tasks_per_scan_operator() const {
     return config::connector_io_tasks_per_scan_operator;
 }
 
 } // namespace starrocks::vectorized
+=======
+bool ConnectorScanNode::always_shared_scan() const {
+    return _data_source_provider->always_shared_scan();
+}
+
+} // namespace starrocks
+>>>>>>> b99403eac ([Enhancement] put `io_task_per_scan_operator` to session variable (#20289)):be/src/exec/connector_scan_node.cpp

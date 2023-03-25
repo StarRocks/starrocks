@@ -35,8 +35,12 @@ public:
 
     connector::DataSourceProvider* data_source_provider() { return _data_source_provider.get(); }
     connector::ConnectorType connector_type() { return _connector_type; }
+<<<<<<< HEAD:be/src/exec/vectorized/connector_scan_node.h
 
     int io_tasks_per_scan_operator() const override;
+=======
+    bool always_shared_scan() const override;
+>>>>>>> b99403eac ([Enhancement] put `io_task_per_scan_operator` to session variable (#20289)):be/src/exec/connector_scan_node.h
 
 private:
     RuntimeState* _runtime_state = nullptr;

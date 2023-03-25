@@ -59,6 +59,8 @@ public:
     ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs) : ExecNode(pool, tnode, descs) {}
     ~ScanNode() override = default;
 
+    Status init(const TPlanNode& tnode, RuntimeState* state) override;
+
     // Set up counters
     Status prepare(RuntimeState* state) override;
 
