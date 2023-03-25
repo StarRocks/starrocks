@@ -160,7 +160,7 @@ Status GroupReader::_init_column_readers() {
     opts.file = _param.file;
     opts.row_group_meta = _row_group_metadata.get();
     opts.context = _obj_pool.add(new ColumnReaderContext);
-
+    opts.sb_stream = _param.sb_stream;
     for (const auto& column : _param.read_cols) {
         RETURN_IF_ERROR(_create_column_reader(column));
     }

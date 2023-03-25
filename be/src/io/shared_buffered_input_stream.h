@@ -55,7 +55,6 @@ public:
 
     Status set_io_ranges(const std::vector<IORange>& ranges);
     void release_to_offset(int64_t offset);
-    Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes);
     void release();
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
     void set_align_size(int64_t size) { _align_size = size; }
