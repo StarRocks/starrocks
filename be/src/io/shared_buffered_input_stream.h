@@ -35,6 +35,7 @@ public:
         int64_t max_dist_size = 1 * MB;
         int64_t max_buffer_size = 8 * MB;
         int64_t min_stream_size = 4 * MB;
+        bool enable_stream_read = true;
     };
 
     SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename,

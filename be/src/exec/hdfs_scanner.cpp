@@ -226,7 +226,8 @@ Status HdfsScanner::open_random_access_file() {
         io::SharedBufferedInputStream::CoalesceOptions options = {
                 .max_dist_size = config::io_coalesce_read_max_distance_size,
                 .max_buffer_size = config::io_coalesce_read_max_buffer_size,
-                .min_stream_size = config::io_coalesce_read_min_stream_size};
+                .min_stream_size = config::io_coalesce_read_min_stream_size,
+                .enable_stream_read = config::io_coalesce_enable_stream_read};
         _shared_buffered_input_stream->set_coalesce_options(options);
         input_stream = _shared_buffered_input_stream;
 
