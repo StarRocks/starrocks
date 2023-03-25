@@ -30,6 +30,7 @@
 #include "storage/column_block.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
+#include "util/once.h"
 
 namespace starrocks {
 
@@ -49,7 +50,7 @@ class IndexedColumnIterator;
 
 class BitmapIndexReader {
 public:
-    BitmapIndexReader() : _state(kUnloaded), _has_null(false) {}
+    BitmapIndexReader() : _load_once(), _has_null(false) {}
 
     // Load index data into memory.
     //
@@ -82,7 +83,7 @@ public:
         return size;
     }
 
-    bool loaded() const { return _state.load(std::memory_order_acquire) == kLoaded; }
+    bool loaded() const { return invoked(_load_once); }
 
 private:
     friend class BitmapIndexIterator;
@@ -96,7 +97,7 @@ private:
     Status do_load(fs::BlockManager* fs, const std::string& filename, const BitmapIndexPB& meta, bool use_page_cache,
                    bool kept_in_memory, MemTracker* mem_tracker);
 
-    std::atomic<State> _state;
+    OnceFlag _load_once;
     TypeInfoPtr _typeinfo;
     std::unique_ptr<IndexedColumnReader> _dict_column_reader;
     std::unique_ptr<IndexedColumnReader> _bitmap_column_reader;
