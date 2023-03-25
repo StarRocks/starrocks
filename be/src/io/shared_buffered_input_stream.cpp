@@ -137,14 +137,14 @@ void SharedBufferedInputStream::release_to_offset(int64_t offset) {
 }
 
 Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
-    if (_map.size() == 0) {
+    auto st = _find_shared_buffer(offset, count);
+    if (!st.ok()) {
         SCOPED_RAW_TIMER(&_direct_io_timer);
         _direct_io_count += 1;
         _direct_io_bytes += count;
         RETURN_IF_ERROR(_stream->read_at_fully(offset, out, count));
         return Status::OK();
     }
-
     const uint8_t* buffer = nullptr;
     RETURN_IF_ERROR(_get_bytes(&buffer, offset, count));
     strings::memcpy_inlined(out, buffer, count);
