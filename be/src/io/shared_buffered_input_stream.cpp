@@ -22,6 +22,18 @@ SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInp
                                                      const std::string& filename, size_t size)
         : _stream(stream), _filename(filename), _size(size) {}
 
+void SharedBufferedInputStream::SharedBuffer::align(int64_t align_size, int64_t file_size) {
+    if (align_size != 0) {
+        offset = raw_offset / align_size * align_size;
+        int64_t end = (raw_offset + raw_size + align_size - 1) / align_size * align_size;
+        size = end - offset;
+    } else {
+        offset = raw_offset;
+        size = raw_size;
+    }
+    size = std::min(size, file_size);
+}
+
 Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges) {
     if (ranges.size() == 0) {
         return Status::OK();
@@ -36,26 +48,6 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
         }
         return a.size < b.size;
     });
-    if (_align_size != 0) {
-        const int64_t sz = _align_size;
-        // do alignment and compaction
-        for (int i = 0; i < check.size(); i++) {
-            int64_t start = check[i].offset / sz * sz;
-            int64_t end = std::min((check[i].offset + check[i].size + sz - 1) / sz * sz, _size);
-            check[i].offset = start;
-            check[i].size = end - start;
-        }
-        int j = 0;
-        for (int i = 1; i < check.size(); i++) {
-            if (check[i].offset <= (check[j].offset + check[j].size)) {
-                check[j].size = (check[i].offset + check[i].size - check[j].offset);
-            } else {
-                j++;
-                check[j] = check[i];
-            }
-        }
-        check.resize(j + 1);
-    }
 
     // check io range is not overlapped.
     for (size_t i = 1; i < check.size(); i++) {
@@ -67,8 +59,9 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
     std::vector<IORange> small_ranges;
     for (const IORange& r : check) {
         if (r.size > _options.max_buffer_size) {
-            SharedBuffer sb = SharedBuffer{.offset = r.offset, .size = r.size, .ref_count = 1};
-            _map.insert(std::make_pair(r.offset + r.size, sb));
+            SharedBuffer sb = SharedBuffer{.raw_offset = r.offset, .raw_size = r.size, .ref_count = 1};
+            sb.align(_align_size, _size);
+            _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
         } else {
             small_ranges.emplace_back(r);
         }
@@ -79,10 +72,11 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
             // merge from [unmerge, i-1]
             int64_t ref_count = (to - from + 1);
             int64_t end = (small_ranges[to].offset + small_ranges[to].size);
-            SharedBuffer sb = SharedBuffer{.offset = small_ranges[from].offset,
-                                           .size = end - small_ranges[from].offset,
+            SharedBuffer sb = SharedBuffer{.raw_offset = small_ranges[from].offset,
+                                           .raw_size = end - small_ranges[from].offset,
                                            .ref_count = ref_count};
-            _map.insert(std::make_pair(sb.offset + sb.size, sb));
+            sb.align(_align_size, _size);
+            _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
         };
 
         size_t unmerge = 0;

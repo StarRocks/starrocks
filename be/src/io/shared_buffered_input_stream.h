@@ -70,10 +70,13 @@ public:
 private:
     struct SharedBuffer {
     public:
+        int64_t raw_offset;
+        int64_t raw_size;
         int64_t offset;
         int64_t size;
         int64_t ref_count;
         std::vector<uint8_t> buffer;
+        void align(int64_t align_size, int64_t file_size);
     };
     Status _get_bytes(SharedBuffer& sb, const uint8_t** buffer, size_t offset, size_t* nbytes);
     StatusOr<SharedBuffer*> _find_shared_buffer(size_t offset, size_t count);
