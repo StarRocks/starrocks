@@ -135,6 +135,7 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
 
     int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
+<<<<<<< HEAD:be/src/exec/vectorized/connector_scan_node.cpp
     if (mem_limit > 0) {
         // port from olap scan node. to control chunk buffer usage, we can control memory consumption to avoid OOM.
         size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
@@ -155,6 +156,19 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
                                                 is_stream_pipeline);
 >>>>>>> 0c73ae000 ([Refactor] clean some be configs rarely modified (#20290)):be/src/exec/connector_scan_node.cpp
     }
+=======
+
+    // port from olap scan node. to control chunk buffer usage, we can control memory consumption to avoid OOM.
+    size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
+    size_t default_buffer_capacity = max_buffer_capacity;
+    pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
+            max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
+    scan_op = !stream_data_source
+                      ? std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this, dop,
+                                                                                 std::move(buffer_limiter))
+                      : std::make_shared<pipeline::StreamScanOperatorFactory>(
+                                context->next_operator_id(), this, dop, std::move(buffer_limiter), is_stream_pipeline);
+>>>>>>> 05b9589f7 (fix to avoid scan op is nullptr when memlimit is 0 (#20300)):be/src/exec/connector_scan_node.cpp
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
