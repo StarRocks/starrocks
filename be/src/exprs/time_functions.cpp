@@ -1118,11 +1118,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-<<<<<<< HEAD
-    ColumnViewer<TYPE_INT> data_column(columns[0]);
-=======
     ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
->>>>>>> 78fa0816c ([Enhancement] unixtime related functions support int64 (#20119))
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
@@ -1133,11 +1129,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
         }
 
         auto date = data_column.value(row);
-<<<<<<< HEAD
-        if (date < 0 || date > INT_MAX) {
-=======
         if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
->>>>>>> 78fa0816c ([Enhancement] unixtime related functions support int64 (#20119))
             result.append_null();
             continue;
         }
@@ -1155,8 +1147,6 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-<<<<<<< HEAD
-=======
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
     int func_version = context->state()->func_version();
     if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
@@ -1166,7 +1156,6 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime(FunctionContext* contex
     }
 }
 
->>>>>>> 78fa0816c ([Enhancement] unixtime related functions support int64 (#20119))
 std::string TimeFunctions::convert_format(const Slice& format) {
     switch (format.get_size()) {
     case 8:
