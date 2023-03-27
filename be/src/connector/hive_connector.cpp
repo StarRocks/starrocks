@@ -22,8 +22,8 @@
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
 #include "exprs/expr.h"
-#include "storage/chunk_helper.h"
 #include "runtime/current_thread.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
 
