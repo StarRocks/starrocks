@@ -202,6 +202,7 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
         }
         _tablet_meta = new_tablet_meta;
     } while (false);
+    CHECK_MUTEX_HELD_EXCLUSIVE(_meta_lock);
 
     for (auto& version : versions_to_delete) {
         auto it = _rs_version_map.find(version);
@@ -284,6 +285,7 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
 void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const std::vector<RowsetSharedPtr>& to_delete,
                             std::vector<RowsetSharedPtr>* to_replace) {
     CHECK(!_updates) << "updatable tablet should not call modify_rowsets";
+    CHECK_MUTEX_HELD_EXCLUSIVE(_meta_lock);
     // the compaction process allow to compact the single version, eg: version[4-4].
     // this kind of "single version compaction" has same "input version" and "output version".
     // which means "to_add->version()" equals to "to_delete->version()".
@@ -331,6 +333,7 @@ void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const st
 // snapshot manager may call this api to check if version exists, so that
 // the version maybe not exist
 RowsetSharedPtr Tablet::get_rowset_by_version(const Version& version) const {
+    CHECK_MUTEX_HELD_SHARED(_meta_lock);
     auto iter = _rs_version_map.find(version);
     if (iter == _rs_version_map.end()) {
         VLOG(3) << "no rowset for version:" << version << ", tablet: " << full_name();
@@ -343,6 +346,7 @@ RowsetSharedPtr Tablet::get_rowset_by_version(const Version& version) const {
 // It will be called under protected of _meta_lock(SnapshotManager will fetch it manually),
 // so it is no need to lock here.
 RowsetSharedPtr Tablet::get_inc_rowset_by_version(const Version& version) const {
+    CHECK_MUTEX_HELD_SHARED(_meta_lock);
     if (_updates != nullptr) {
         DCHECK_EQ(version.first, version.second);
         return _updates->get_delta_rowset(version.second);
@@ -357,6 +361,7 @@ RowsetSharedPtr Tablet::get_inc_rowset_by_version(const Version& version) const 
 
 // Already under _meta_lock
 RowsetSharedPtr Tablet::rowset_with_max_version() const {
+    CHECK_MUTEX_HELD_SHARED(_meta_lock);
     Version max_version = _tablet_meta->max_version();
     if (max_version.first == -1) {
         return nullptr;
@@ -469,6 +474,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     if (!contain_status.ok()) {
         return contain_status;
     }
+    CHECK_MUTEX_HELD_EXCLUSIVE(_meta_lock);
 
     _tablet_meta->add_rs_meta(rowset->rowset_meta());
     _tablet_meta->add_inc_rs_meta(rowset->rowset_meta());
@@ -497,6 +503,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
 }
 
 void Tablet::_delete_inc_rowset_by_version(const Version& version) {
+    CHECK_MUTEX_HELD_EXCLUSIVE(_meta_lock);
     // delete incremental rowset from map
     _inc_rs_version_map.erase(version);
 
@@ -578,6 +585,7 @@ void Tablet::delete_expired_stale_rowset() {
             PathVersionListSharedPtr version_path = _timestamped_version_tracker.fetch_and_delete_path_by_id(path_id);
             stale_version_paths.emplace_back(std::move(version_path));
         }
+        CHECK_MUTEX_HELD_EXCLUSIVE(_meta_lock);
 
         old_stale_rs_size = _stale_rs_version_map.size();
         stale_rowsets.reserve(old_stale_rs_size);
@@ -650,6 +658,7 @@ Status Tablet::check_version_integrity(const Version& version) {
 
 void Tablet::list_versions(vector<Version>* versions) const {
     DCHECK(versions != nullptr && versions->empty());
+    CHECK_MUTEX_HELD_SHARED(_meta_lock);
 
     versions->reserve(_rs_version_map.size());
     // versions vector is not sorted.
@@ -673,6 +682,7 @@ Status Tablet::capture_consistent_rowsets(const Version& spec_version, std::vect
 Status Tablet::_capture_consistent_rowsets_unlocked(const std::vector<Version>& version_path,
                                                     std::vector<RowsetSharedPtr>* rowsets) const {
     DCHECK(rowsets != nullptr && rowsets->empty());
+    CHECK_MUTEX_HELD_SHARED(_meta_lock);
     rowsets->reserve(version_path.size());
     for (auto& version : version_path) {
         bool is_find = false;
@@ -890,6 +900,7 @@ void Tablet::calculate_cumulative_point() {
 
 // NOTE: only used when create_table, so it is sure that there is no concurrent reader and writer.
 void Tablet::delete_all_files() {
+    CHECK_MUTEX_HELD_EXCLUSIVE(_meta_lock);
     // Release resources like memory and disk space.
     // we have to call list_versions first, or else error occurs when
     // removing hash_map item and iterating hash_map concurrently.
@@ -953,6 +964,7 @@ Status Tablet::contains_version(const Version& version) {
 }
 
 Status Tablet::_contains_version(const Version& version) {
+    CHECK_MUTEX_HELD_SHARED(_meta_lock);
     // check if there exist a rowset contains the added rowset
     const auto& lower = _rs_version_map.lower_bound(version);
     for (auto it = lower; it != _rs_version_map.end(); it++) {
@@ -1149,6 +1161,7 @@ bool Tablet::rowset_meta_is_useful(const RowsetMetaSharedPtr& rowset_meta) {
 }
 
 bool Tablet::_contains_rowset(const RowsetId rowset_id) {
+    CHECK_MUTEX_HELD_SHARED(_meta_lock);
     CHECK(!_updates);
     for (auto& version_rowset : _rs_version_map) {
         if (version_rowset.second->rowset_id() == rowset_id) {

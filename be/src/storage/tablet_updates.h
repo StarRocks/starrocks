@@ -25,6 +25,7 @@
 #include "storage/edit_version.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_writer.h"
+#include "util/assert_mutex.h"
 #include "util/blocking_queue.hpp"
 
 namespace starrocks {
@@ -54,6 +55,12 @@ struct CompactionInfo {
     std::vector<uint32_t> inputs;
     uint32_t output = UINT32_MAX;
 };
+
+#if !defined(BE_TEST) && !defined(NDEBUG)
+using TabletUpdatesMutex = AssertHeldMutex;
+#else
+using TabletUpdatesMutex = std::mutex;
+#endif
 
 // maintain all states for updatable tablets
 class TabletUpdates {
@@ -313,7 +320,8 @@ private:
 
     // wait a version to be applied, so reader can read this version
     // assuming _lock already hold
-    Status _wait_for_version(const EditVersion& version, int64_t timeout_ms, std::unique_lock<std::mutex>& lock);
+    Status _wait_for_version(const EditVersion& version, int64_t timeout_ms,
+                             std::unique_lock<TabletUpdatesMutex>& lock);
 
     Status _commit_compaction(std::unique_ptr<CompactionInfo>* info, const RowsetSharedPtr& rowset,
                               EditVersion* commit_version);
@@ -369,12 +377,12 @@ private:
     Tablet& _tablet;
 
     // |_lock| protects |_edit_version_infos|, |_next_rowset_id|, |_next_log_id|, |_apply_version_idx|, |_pending_commits|.
-    mutable std::mutex _lock;
+    mutable TabletUpdatesMutex _lock;
     std::vector<std::unique_ptr<EditVersionInfo>> _edit_version_infos;
     uint32_t _next_rowset_id = 0;
     uint64_t _next_log_id = 0;
     size_t _apply_version_idx = 0;
-    std::condition_variable _apply_version_changed;
+    std::condition_variable_any _apply_version_changed;
     // stores non-continous pending rowset commits, so temporary non-contious
     // commits can success when doing schema-change, currently it's not persistent meta yet,
     // so after BE restart those "committed" will be lost.
@@ -392,7 +400,7 @@ private:
 
     // used to stop apply thread when shutting-down this tablet
     std::atomic<bool> _apply_stopped = false;
-    std::condition_variable _apply_stopped_cond;
+    std::condition_variable_any _apply_stopped_cond;
 
     BlockingQueue<RowsetSharedPtr> _unused_rowsets;
 

@@ -402,6 +402,7 @@ void TabletUpdates::_sync_apply_version_idx(const EditVersion& edit_version) {
     // usually applied version is at the end of _edit_version_infos vector
     // so search from the back
     // assuming _lock held
+    CHECK_MUTEX_HELD(_lock);
     for (ssize_t i = _edit_version_infos.size() - 1; i >= 0; i--) {
         if (_edit_version_infos[i]->version == edit_version) {
             _apply_version_idx = i;
@@ -416,6 +417,7 @@ void TabletUpdates::_sync_apply_version_idx(const EditVersion& edit_version) {
 }
 
 void TabletUpdates::_redo_edit_version_log(const EditVersionMetaPB& edit_version_meta_pb) {
+    CHECK_MUTEX_HELD(_lock);
     std::unique_ptr<EditVersionInfo> edit_version_info = std::make_unique<EditVersionInfo>();
     edit_version_info->version =
             EditVersion(edit_version_meta_pb.version().major(), edit_version_meta_pb.version().minor());
@@ -485,7 +487,7 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
     }
     Status st;
     {
-        std::unique_lock<std::mutex> ul(_lock);
+        std::unique_lock ul(_lock);
         if (_edit_version_infos.empty()) {
             string msg = strings::Substitute("tablet deleted when rowset_commit tablet:$0", _tablet.tablet_id());
             LOG(WARNING) << msg;
@@ -549,6 +551,7 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
 }
 
 Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetSharedPtr& rowset) {
+    CHECK_MUTEX_HELD(_lock);
     auto span =
             Tracer::Instance().start_trace_txn_tablet("rowset_commit_unlocked", rowset->txn_id(), _tablet.tablet_id());
     span->SetAttribute("version", version);
@@ -621,6 +624,7 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     return Status::OK();
 }
 void TabletUpdates::_check_creation_time_increasing() {
+    CHECK_MUTEX_HELD(_lock);
     if (_edit_version_infos.size() >= 2) {
         auto last2 = _edit_version_infos[_edit_version_infos.size() - 2].get();
         auto last1 = _edit_version_infos[_edit_version_infos.size() - 1].get();
@@ -633,6 +637,7 @@ void TabletUpdates::_check_creation_time_increasing() {
 }
 
 void TabletUpdates::_try_commit_pendings_unlocked() {
+    CHECK_MUTEX_HELD(_lock);
     if (_pending_commits.size() > 0) {
         int64_t current_version = _edit_version_infos.back()->version.major();
         for (auto itr = _pending_commits.begin(); itr != _pending_commits.end();) {
@@ -1145,7 +1150,8 @@ RowsetSharedPtr TabletUpdates::_get_rowset(uint32_t rowset_id) {
 }
 
 Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t timeout_ms,
-                                        std::unique_lock<std::mutex>& ul) {
+                                        std::unique_lock<TabletUpdatesMutex>& ul) {
+    CHECK_MUTEX_HELD(_lock);
     if (_edit_version_infos.empty()) {
         string msg = strings::Substitute("tablet deleted when _wait_for_version tablet:$0", _tablet.tablet_id());
         LOG(WARNING) << msg;
@@ -1321,7 +1327,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     EditVersion version;
     RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
     // already committed, so we can ignore timeout error here
-    std::unique_lock<std::mutex> ul(_lock);
+    std::unique_lock ul(_lock);
     _wait_for_version(version, 120000, ul);
     return Status::OK();
 }
@@ -2382,7 +2388,7 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                 strings::Substitute("get_applied_rowsets failed, tablet updates is in error state: tablet:$0 $1",
                                     _tablet.tablet_id(), _error_msg));
     }
-    std::unique_lock<std::mutex> ul(_lock);
+    std::unique_lock ul(_lock);
     // wait for version timeout 55s, should smaller than exec_plan_fragment rpc timeout(60s)
     RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000, ul));
     if (_edit_version_infos.empty()) {
@@ -3121,6 +3127,7 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
 }
 
 void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
+    CHECK_MUTEX_HELD(_lock);
     updates_pb->Clear();
     for (const auto& version : _edit_version_infos) {
         EditVersionMetaPB* version_pb = updates_pb->add_versions();
