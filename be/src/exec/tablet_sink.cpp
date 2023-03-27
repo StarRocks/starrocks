@@ -1680,7 +1680,7 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     ColumnPtr& data_col = std::dynamic_pointer_cast<NullableColumn>(col)->data_column();
     std::vector<uint8_t> filter(std::dynamic_pointer_cast<NullableColumn>(col)->immutable_null_column_data());
 
-    if (_keys_type == TKeysType::PRIMARY_KEYS) {
+    if (_keys_type == TKeysType::PRIMARY_KEYS && _output_tuple_desc->slots().back()->col_name() == "__op") {
         size_t op_column_id = chunk->num_columns() - 1;
         ColumnPtr& op_col = chunk->get_column_by_index(op_column_id);
         const uint8_t* ops = std::dynamic_pointer_cast<NullableColumn>(op_col)->raw_data();
