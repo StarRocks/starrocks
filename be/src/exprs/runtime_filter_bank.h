@@ -47,8 +47,9 @@ public:
     // ==================================
     // serialization and deserialization.
     static size_t max_runtime_filter_serialized_size(const JoinRuntimeFilter* rf);
-    static size_t serialize_runtime_filter(const JoinRuntimeFilter* rf, uint8_t* data);
-    static void deserialize_runtime_filter(ObjectPool* pool, JoinRuntimeFilter** rf, const uint8_t* data, size_t size);
+    static size_t serialize_runtime_filter(RuntimeState* state, const JoinRuntimeFilter* rf, uint8_t* data);
+    static size_t serialize_runtime_filter(int serialize_version, const JoinRuntimeFilter* rf, uint8_t* data);
+    static int deserialize_runtime_filter(ObjectPool* pool, JoinRuntimeFilter** rf, const uint8_t* data, size_t size);
     static JoinRuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type);
 
     // ====================================
