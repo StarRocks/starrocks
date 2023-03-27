@@ -111,6 +111,8 @@ set(EXEC_FILES
     schema_scanner/schema_materialized_views_scanner.cpp
     schema_scanner/schema_tasks_scanner.cpp
     schema_scanner/schema_task_runs_scanner.cpp
+    schema_scanner/schema_loads_scanner.cpp
+    schema_scanner/schema_load_tracking_logs_scanner.cpp
     schema_scanner/schema_user_privileges_scanner.cpp
     schema_scanner/schema_schema_privileges_scanner.cpp
     schema_scanner/schema_table_privileges_scanner.cpp
@@ -119,6 +121,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_tablets_scanner.cpp
     schema_scanner/schema_be_txns_scanner.cpp
     schema_scanner/schema_be_configs_scanner.cpp
+    schema_scanner/schema_fe_tablet_schedules_scanner.cpp
     schema_scanner/schema_helper.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp

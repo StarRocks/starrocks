@@ -1351,6 +1351,7 @@ public class StmtExecutor {
         long estimateScanRows = -1;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
         boolean insertError = false;
+        String trackingSql = "";
         try {
             if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
@@ -1396,6 +1397,7 @@ public class StmtExecutor {
                     type,
                     ConnectContext.get().getSessionVariable().getQueryTimeoutS());
             coord.setJobId(jobId);
+            trackingSql = "select tracking_log from information_schema.load_tracking_logs where job_id=" + jobId;
 
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
             coord.exec();
@@ -1441,8 +1443,7 @@ public class StmtExecutor {
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
-                                        + coord.getTrackingUrl()
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql
                         );
                     } else if (targetTable instanceof SchemaTable) {
                         // schema table does not need txn
@@ -1450,13 +1451,12 @@ public class StmtExecutor {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(),
                                 transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
-                                        + coord.getTrackingUrl(),
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql,
                                 TabletFailInfo.fromThrift(coord.getFailInfos())
                         );
                     }
-                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " +
-                            transactionId + " tracking_url = " + coord.getTrackingUrl());
+                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " + transactionId +
+                            " tracking sql = " + trackingSql);
                     insertError = true;
                     return;
                 }
@@ -1548,7 +1548,7 @@ public class StmtExecutor {
             // if not using old load usage pattern, error will be returned directly to user
             StringBuilder sb = new StringBuilder(t.getMessage() == null ? "Unknown reason" : t.getMessage());
             if (coord != null && !Strings.isNullOrEmpty(coord.getTrackingUrl())) {
-                sb.append(". url: ").append(coord.getTrackingUrl());
+                sb.append(". tracking sql: ").append(trackingSql);
             }
             context.getState().setError(sb.toString());
 

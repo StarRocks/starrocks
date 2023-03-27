@@ -62,8 +62,21 @@ public class SchemaTable extends Table {
         return name.startsWith("be_");
     }
 
+    public static boolean isFeSchemaTable(String name) {
+        // currently, it only stands for single FE leader, because only FE leader has related info
+        return name.startsWith("fe_");
+    }
+
     public boolean isBeSchemaTable() {
         return SchemaTable.isBeSchemaTable(getName());
+    }
+
+    public boolean isFeSchemaTable() {
+        return SchemaTable.isFeSchemaTable(getName());
+    }
+
+    public boolean requireOperatePrivilege() {
+        return isBeSchemaTable() || isFeSchemaTable();
     }
 
     @Override
@@ -550,6 +563,40 @@ public class SchemaTable extends Table {
                                             .column("MATERIALIZED_VIEW_DEFINITION",
                                                     ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .build()))
+                    .put("loads", new SchemaTable(
+                            SystemId.LOADS_ID,
+                            "loads",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("LABEL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("DATABASE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PROGRESS", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PRIORITY", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("ETL_INFO", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TASK_INFO", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("ETL_START_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("ETL_FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("LOAD_START_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("LOAD_FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("JOB_DETAILS", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("ERROR_MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TRACKING_URL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TRACKING_SQL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
+                    .put("load_tracking_logs", new SchemaTable(
+                            SystemId.LOAD_TRACKING_LOGS_ID,
+                            "load_tracking_logs",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("LABEL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("DATABASE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TRACKING_LOG", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                    .build()))
                     .put("tables_config",
                             new SchemaTable(
                                     SystemId.TABLES_CONFIG_ID,
@@ -626,6 +673,27 @@ public class SchemaTable extends Table {
                                     .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
                                     .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("VALUE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
+                    .put("fe_tablet_schedules", new SchemaTable(
+                            SystemId.FE_SCHEDULES_ID,
+                            "fe_tablet_schedules",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("TABLE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("PARTITION_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TABLET_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PRIORITY", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLET_STATUS", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DOUBLE))
+                                    .column("SCHEDULE_TIME", ScalarType.createType(PrimitiveType.DOUBLE))
+                                    .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DOUBLE))
+                                    .column("CLONE_SRC", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CLONE_DEST", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CLONE_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CLONE_DURATION", ScalarType.createType(PrimitiveType.DOUBLE))
+                                    .column("MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .build()))
                     .build();
 
@@ -717,14 +785,16 @@ public class SchemaTable extends Table {
         SCH_TASK_RUNS("TASK_RUNS", "TASK_RUNS", TSchemaTableType.SCH_TASK_RUNS),
         SCH_VERBOSE_SESSION_VARIABLES("VERBOSE_SESSION_VARIABLES", "VERBOSE_SESSION_VARIABLES",
                 TSchemaTableType.SCH_VERBOSE_SESSION_VARIABLES),
+        SCH_LOADS("LOADS", "LOADS", TSchemaTableType.SCH_LOADS),
+        SCH_LOAD_TRACKING_LOGS("LOAD_TRACKING_LOGS", "LOAD_TRACKING_LOGS", TSchemaTableType.SCH_LOAD_TRACKING_LOGS),
         SCH_BE_TABLETS("BE_TABLETS", "BE_TABLETS",
                 TSchemaTableType.SCH_BE_TABLETS),
         SCH_BE_METRICS("BE_METRICS", "BE_METRICS",
                 TSchemaTableType.SCH_BE_METRICS),
         SCH_BE_TXNS("BE_TXNS", "BE_TXNS",
                 TSchemaTableType.SCH_BE_TXNS),
-
-        SCH_BE_CONFIGS("BE_CONFIGS", "BE_CONFIGS", TSchemaTableType.SCH_BE_CONFIGS);
+        SCH_BE_CONFIGS("BE_CONFIGS", "BE_CONFIGS", TSchemaTableType.SCH_BE_CONFIGS),
+        SCH_FE_TABLET_SCHEDULES("FE_TABLET_SCHEDULES", "FE_TABLET_SCHEDULES", TSchemaTableType.SCH_FE_TABLET_SCHEDULES);
 
         private final String description;
         private final String tableName;

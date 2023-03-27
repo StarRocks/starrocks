@@ -580,12 +580,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context, List<ColumnDef> columnDefs) {
         List<PartitionDesc> partitionDescList = new ArrayList<>();
         if (context.functionCall() != null) {
+            String currentGranularity = null;
             for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
                 final PartitionDesc rangePartitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
+                if (!(rangePartitionDesc instanceof MultiRangePartitionDesc)) {
+                    throw new ParsingException("Automatic partition table creation only supports " +
+                            "batch create partition syntax");
+                }
+                MultiRangePartitionDesc multiRangePartitionDesc = (MultiRangePartitionDesc) rangePartitionDesc;
+                String descGranularity = multiRangePartitionDesc.getTimeUnit().toLowerCase();
+                if (currentGranularity == null) {
+                    currentGranularity = descGranularity;
+                } else if (!currentGranularity.equals(descGranularity)) {
+                    throw new ParsingException("The partition granularity of automatic partition table " +
+                            "batch creation in advance should be consistent");
+                }
                 partitionDescList.add(rangePartitionDesc);
             }
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
             List<String> columnList = checkAndExtractPartitionCol(functionCallExpr, columnDefs);
+            checkGranularity(functionCallExpr, currentGranularity);
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
             return new ExpressionPartitionDesc(rangePartitionDesc, functionCallExpr);
         }
@@ -607,6 +621,28 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
         }
         return partitionDesc;
+    }
+
+    private void checkGranularity(FunctionCallExpr functionCallExpr, String prePartitionGranularity) {
+        if (prePartitionGranularity == null) {
+            return;
+        }
+        String functionName = functionCallExpr.getFnName().getFunction();
+        if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)) {
+            Expr expr = functionCallExpr.getParams().exprs().get(0);
+            String functionGranularity = ((StringLiteral) expr).getStringValue();
+            if (!prePartitionGranularity.equalsIgnoreCase(functionGranularity)) {
+                throw new ParsingException("The partition granularity of automatic partition table " +
+                        "batch creation in advance should be consistent");
+            }
+        } else if (FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName)) {
+            Expr expr = functionCallExpr.getParams().exprs().get(2);
+            String functionGranularity = ((StringLiteral) expr).getStringValue();
+            if (!prePartitionGranularity.equalsIgnoreCase(functionGranularity)) {
+                throw new ParsingException("The partition granularity of automatic partition table " +
+                        "batch creation in advance should be consistent");
+            }
+        }
     }
 
     private void checkPartitionColumnTypeValid(List<ColumnDef> columnDefs, String partitionColumnName, String fmt) {
@@ -3601,7 +3637,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             for (SelectListItem item : selectItemsVirtual) {
                 if (item.getExpr() instanceof SlotRef) {
                     SlotRef exprRef = (SlotRef) item.getExpr();
-                    String columnName = exprRef.getColumnName();
+                    String columnName = item.getAlias() == null ? exprRef.getColumnName() : item.getAlias();
                     SlotRef resultSlotRef = new SlotRef(qualifyTableName, columnName);
                     selectItemsOuter.add(new SelectListItem(resultSlotRef, null));
                 } else {
