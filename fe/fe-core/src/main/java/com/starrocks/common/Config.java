@@ -138,7 +138,7 @@ public class Config extends ConfigBase {
 
     /**
      * dump_log_dir:
-     * This specifies FE dump log dir.
+     * This specifies the FE dump log dir.
      * Dump log fe.dump.log contains all dump information which query has Exception
      * <p>
      * dump_log_roll_num:
