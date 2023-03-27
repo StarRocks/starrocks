@@ -3,6 +3,9 @@ commands_restrictions:
   backport:
     conditions:
       - sender-permission>=read
+  rebase:
+    conditions:
+      - sender-permission>=read
 
 pull_request_rules:
   - name: assign PRs with the pr author
@@ -12,10 +15,18 @@ pull_request_rules:
       assign:
         add_users: 
           - "{{author}}"
+
+  - name: assign backport PRs with the pr author
+    conditions:
+      - -merged
+    actions:
+      backport:
+        assignees: 
+          - "{{author}}"
+  
   - name: close pr when conflict
     conditions:
       - label=conflicts
-      - author=mergify
     actions:
       close:
         message:
