@@ -925,8 +925,7 @@ public class ExpressionAnalyzer {
                         nullsFirst.add(elem.getNullsFirstParam());
                     }
                 }
-                for (int i = 0; i < argumentTypes.length; ++i) {
-                    // TODO: support nested type
+                for (int i = 1; i < argumentTypes.length; ++i) {
                     if (argumentTypes[i].isComplexType()) {
                         throw new SemanticException("array_agg can't support inputs of nested types, " +
                                 "but " + i + "-th input is " + argumentTypes[i].toSql());

@@ -36,7 +36,6 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -46,7 +45,6 @@ import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.util.Strings;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -460,27 +458,6 @@ public class FunctionSet {
                     .add(Type.DECIMALV2)
                     .addAll(Type.FLOAT_TYPES)
                     .build();
-
-    private static final Map<Type, Type> ARRAY_AGG_TYPES = ImmutableMap.<Type, Type>builder()
-            .put(Type.BOOLEAN, Type.ARRAY_BOOLEAN)
-            .put(Type.TINYINT, Type.ARRAY_TINYINT)
-            .put(Type.SMALLINT, Type.ARRAY_SMALLINT)
-            .put(Type.INT, Type.ARRAY_INT)
-            .put(Type.BIGINT, Type.ARRAY_BIGINT)
-            .put(Type.LARGEINT, Type.ARRAY_LARGEINT)
-            .put(Type.FLOAT, Type.ARRAY_FLOAT)
-            .put(Type.DOUBLE, Type.ARRAY_DOUBLE)
-            .put(Type.VARCHAR, Type.ARRAY_VARCHAR)
-            .put(Type.CHAR, Type.ARRAY_VARCHAR)
-            .put(Type.DATE, Type.ARRAY_DATE)
-            .put(Type.DATETIME, Type.ARRAY_DATETIME)
-            .put(Type.DECIMAL32, Type.ARRAY_DECIMAL32)
-            .put(Type.DECIMAL64, Type.ARRAY_DECIMAL64)
-            .put(Type.DECIMAL128, Type.ARRAY_DECIMAL128)
-            .put(Type.TIME, Type.ARRAY_DATETIME) // ??
-            .put(Type.JSON, Type.ARRAY_JSON) 
-            .put(Type.ANY_ELEMENT, Type.ANY_ARRAY)
-            .build();
 
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
