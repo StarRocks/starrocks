@@ -1193,8 +1193,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         result.setCreate_time(createTime / 1000.0);
         result.setSchedule_time(lastSchedTime / 1000.0);
         result.setFinish_time(finishedTime / 1000.0);
-        result.setClone_src(srcReplica == null ? -1 : srcReplica.getBackendId());
-        result.setClone_dest(destBackendId);
+        result.setClone_src(srcReplica == null ? -1 : srcReplica.getDataNodeId());
+        result.setClone_dest(destDataNodeId);
         result.setClone_bytes(copySize);
         result.setClone_duration(copyTimeMs / 1000.0);
         result.setError_msg(errMsg);

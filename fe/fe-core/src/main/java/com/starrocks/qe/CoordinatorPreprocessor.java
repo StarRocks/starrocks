@@ -1036,12 +1036,12 @@ public class CoordinatorPreprocessor {
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                     scanNode instanceof FileTableScanNode) {
 
-                HDFSBackendSelector selector =
-                        new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
+                HDFSDataNodeSelector selector =
+                        new HDFSDataNodeSelector(scanNode, locations, assignment, addressToDataNodeID, usedDataNodeIDs,
                                 getSelectorComputeNodes(hasComputeNode),
                                 hasComputeNode,
                                 sv.getForceScheduleLocal(),
-                                sv.getHDFSBackendSelectorScanRangeShuffle());
+                                sv.getHDFSDataNodeSelectorScanRangeShuffle());
                 selector.computeScanRangeAssignment();
             } else {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());

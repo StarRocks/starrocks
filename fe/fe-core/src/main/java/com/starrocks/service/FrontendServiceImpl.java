@@ -1779,7 +1779,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         errorStatus.setError_msgs(Lists.newArrayList(
                                 "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
                                         + tablet.getId() + ", backends: " +
-                                        Joiner.on(",").join(localTablet.getBackends())));
+                                        Joiner.on(",").join(localTablet.getDataNodes())));
                         result.setStatus(errorStatus);
                         return result;
                     }
