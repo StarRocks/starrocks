@@ -80,6 +80,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
             }
         };
 
+        new MockUp<PlanTestBase>() {
+            @Mock
+            boolean isIgnoreExplicitColRefIds() {
+                return true;
+            }
+        };
+
         if (!starRocksAssert.databaseExist("_statistics_")) {
             starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.STATISTICS_DB_NAME)
                     .useDatabase(StatsConstants.STATISTICS_DB_NAME);
