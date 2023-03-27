@@ -614,7 +614,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
             List<String> columnList = checkAndExtractPartitionCol(functionCallExpr, columnDefs);
-            checkGranularity(functionCallExpr, currentGranularity);
+            checkAutoPartitionTableLimit(functionCallExpr, currentGranularity);
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
             return new ExpressionPartitionDesc(rangePartitionDesc, functionCallExpr);
         }
@@ -638,7 +638,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return partitionDesc;
     }
 
-    private void checkGranularity(FunctionCallExpr functionCallExpr, String prePartitionGranularity) {
+    private void checkAutoPartitionTableLimit(FunctionCallExpr functionCallExpr, String prePartitionGranularity) {
         if (prePartitionGranularity == null) {
             return;
         }
@@ -651,12 +651,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         "batch creation in advance should be consistent", functionCallExpr.getPos());
             }
         } else if (FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName)) {
-            Expr expr = functionCallExpr.getParams().exprs().get(2);
-            String functionGranularity = ((StringLiteral) expr).getStringValue();
-            if (!prePartitionGranularity.equalsIgnoreCase(functionGranularity)) {
-                throw new ParsingException("The partition granularity of automatic partition table " +
-                        "batch creation in advance should be consistent", functionCallExpr.getPos());
-            }
+            throw new ParsingException("time_slice does not support pre-created partitions", functionCallExpr.getPos());
         }
     }
 

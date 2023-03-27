@@ -45,7 +45,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
     private final String partitionBegin;
     private final String partitionEnd;
     private Long step;
-    private String timeUnit;
+    private final String timeUnit;
     private static final SimpleDateFormat DATEKEY_SDF = new SimpleDateFormat("yyyyMMdd");
     private final ImmutableSet<TimestampArithmeticExpr.TimeUnit> supportedTimeUnitType = ImmutableSet.of(
             TimestampArithmeticExpr.TimeUnit.HOUR,
@@ -55,15 +55,6 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             TimestampArithmeticExpr.TimeUnit.YEAR
     );
 
-    public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long offset) {
-        this(partitionBegin, partitionEnd, offset, null, NodePosition.ZERO);
-    }
-
-    public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long step,
-                                   String timeUnit) {
-        this(partitionBegin, partitionEnd, step, timeUnit, NodePosition.ZERO);
-    }
-
     public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long step,
                                    String timeUnit, NodePosition pos) {
         super(pos);
@@ -72,8 +63,6 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         this.step = step;
         this.timeUnit = timeUnit;
     }
-
-
 
     public Long getStep() {
         return step;
@@ -87,7 +76,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         return timeUnit;
     }
 
-    public List<SingleRangePartitionDesc> convertToSingle(Type firstPartitionColumnType,
+    public List<SingleRangePartitionDesc> convertToSingle(boolean isAutoPartitionTable, Type firstPartitionColumnType,
                                                           Map<String, String> properties) throws AnalysisException {
 
         if (this.getStep() <= 0) {
@@ -95,7 +84,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         }
 
         if (firstPartitionColumnType.isDateType()) {
-            return buildDateTypePartition(firstPartitionColumnType, properties);
+            return buildDateTypePartition(isAutoPartitionTable, firstPartitionColumnType, properties);
         } else if (firstPartitionColumnType.isIntegerType()) {
             return buildNumberTypePartition();
         } else {
@@ -103,7 +92,8 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         }
     }
 
-    private List<SingleRangePartitionDesc> buildDateTypePartition(Type firstPartitionColumnType,
+    private List<SingleRangePartitionDesc> buildDateTypePartition(boolean isAutoPartitionTable,
+                                                                  Type firstPartitionColumnType,
                                                                   Map<String, String> properties)
             throws AnalysisException {
         // int type does not support datekey int type
@@ -131,6 +121,11 @@ public class MultiRangePartitionDesc extends PartitionDesc {
 
         if (timeUnit == null) {
             throw new AnalysisException("Unknown timeunit for batch build partition.");
+        }
+
+        if (isAutoPartitionTable && timeInterval != 1) {
+            throw new AnalysisException("Automatically create partition tables and create partitions in advance " +
+                    "only supports an interval of 1");
         }
 
         String partitionName;
@@ -187,7 +182,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             outputDateFormat = DateUtils.DATE_TIME_FORMATTER;
         }
 
-        if (!Config.enable_create_partial_partition_in_batch) {
+        if (isAutoPartitionTable || !Config.enable_create_partial_partition_in_batch) {
             LocalDateTime standardBeginTime;
             LocalDateTime standardEndTime;
             String extraMsg = "";
@@ -237,8 +232,11 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                 String msg = "Batch build partition range [" + partitionBegin + "," + partitionEnd + ")" +
                         " should be a standard unit of time (" + timeUnitType + ") " + extraMsg + ". suggest range ["
                         + standardBeginTime.format(outputDateFormat) + "," + standardEndTime.format(outputDateFormat)
-                        + "). If you want to create partial partitions in batch, you can turn off this check by " +
-                        "setting the FE config enable_create_partial_partition_in_batch=true.";
+                        + ")";
+                if (!isAutoPartitionTable) {
+                    msg += "If you want to create partial partitions in batch, you can turn off this check by " +
+                            "setting the FE config enable_create_partial_partition_in_batch=true";
+                }
                 throw new AnalysisException(msg);
             }
         }
@@ -297,7 +295,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             PartitionValue upperPartitionValue = new PartitionValue(beginTime.format(outputDateFormat));
             PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(Lists.newArrayList(lowerPartitionValue),
                     Lists.newArrayList(upperPartitionValue));
-            // properties is from table, do not use in new SingleRangePartitionDesc.
+            // properties are from table, do not use in new SingleRangePartitionDesc.
             SingleRangePartitionDesc singleRangePartitionDesc = new SingleRangePartitionDesc(false,
                     partitionName, partitionKeyDesc, null);
             singleRangePartitionDescs.add(singleRangePartitionDesc);
@@ -340,7 +338,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             PartitionValue upperPartitionValue = new PartitionValue(Long.toString(beginNum));
             PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(Lists.newArrayList(lowerPartitionValue),
                     Lists.newArrayList(upperPartitionValue));
-            // properties is from table, do not use in new SingleRangePartitionDesc.
+            // properties are from table, do not use in new SingleRangePartitionDesc.
             SingleRangePartitionDesc singleRangePartitionDesc = new SingleRangePartitionDesc(false,
                     partitionName, partitionKeyDesc, null);
             singleRangePartitionDescs.add(singleRangePartitionDesc);

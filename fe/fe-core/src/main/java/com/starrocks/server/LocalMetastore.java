@@ -44,6 +44,8 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -60,6 +62,8 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DynamicPartitionProperty;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InfoSchemaDb;
@@ -797,27 +801,33 @@ public class LocalMetastore implements ConnectorMetadata {
     @Override
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
+        db.readLock();
+        Map<String, String> tableProperties;
+        OlapTable olapTable;
+        PartitionInfo partitionInfo;
+        try {
+            Table table = db.getTable(tableName);
+            CatalogUtils.checkTableExist(db, tableName);
+            CatalogUtils.checkNativeTable(db, table);
+            olapTable = (OlapTable) table;
+            tableProperties = olapTable.getTableProperty().getProperties();
+            partitionInfo = olapTable.getPartitionInfo();
+
+        } finally {
+            db.readUnlock();
+        }
         PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
         if (partitionDesc instanceof SingleItemListPartitionDesc
                 || partitionDesc instanceof MultiItemListPartitionDesc
                 || partitionDesc instanceof SingleRangePartitionDesc) {
-            addPartitions(db, tableName, ImmutableList.of(partitionDesc),
-                    addPartitionClause);
-        } else if (partitionDesc instanceof MultiRangePartitionDesc) {
-            db.readLock();
-            RangePartitionInfo rangePartitionInfo;
-            Map<String, String> tableProperties;
-            try {
-                Table table = db.getTable(tableName);
-                CatalogUtils.checkTableExist(db, tableName);
-                CatalogUtils.checkNativeTable(db, table);
-                OlapTable olapTable = (OlapTable) table;
-                tableProperties = olapTable.getTableProperty().getProperties();
-                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            } finally {
-                db.readUnlock();
+            if (partitionInfo.getType() == PartitionType.EXPR_RANGE && !partitionDesc.isSystem()) {
+                throw new DdlException("Automatically partitioned tables only support the syntax " +
+                        "for adding partitions in batches.");
             }
+            addPartitions(db, tableName, ImmutableList.of(partitionDesc), addPartitionClause);
+        } else if (partitionDesc instanceof MultiRangePartitionDesc) {
+            RangePartitionInfo rangePartitionInfo;
+            rangePartitionInfo = (RangePartitionInfo) partitionInfo;
 
             if (rangePartitionInfo == null) {
                 throw new DdlException("Alter batch get partition info failed.");
@@ -830,6 +840,16 @@ public class LocalMetastore implements ConnectorMetadata {
 
             Column firstPartitionColumn = partitionColumns.get(0);
             MultiRangePartitionDesc multiRangePartitionDesc = (MultiRangePartitionDesc) partitionDesc;
+            boolean isAutoPartitionTable = false;
+            if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
+                isAutoPartitionTable = true;
+                ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+                Expr expr = exprRangePartitionInfo.getPartitionExprs().get(0);
+                if (expr instanceof FunctionCallExpr) {
+                    FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                    checkAutoPartitionTableLimit(functionCallExpr, multiRangePartitionDesc);
+                }
+            }
             Map<String, String> properties = addPartitionClause.getProperties();
             if (properties == null) {
                 properties = Maps.newHashMap();
@@ -839,12 +859,30 @@ public class LocalMetastore implements ConnectorMetadata {
                         tableProperties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
             }
             List<SingleRangePartitionDesc> singleRangePartitionDescs = multiRangePartitionDesc
-                    .convertToSingle(firstPartitionColumn.getType(), properties);
-            List<PartitionDesc> partitionDescs = singleRangePartitionDescs.stream().map(item -> {
-                PartitionDesc desc = item;
-                return desc;
-            }).collect(Collectors.toList());
+                    .convertToSingle(isAutoPartitionTable, firstPartitionColumn.getType(), properties);
+            List<PartitionDesc> partitionDescs = singleRangePartitionDescs.stream()
+                    .map(item -> (PartitionDesc) item).collect(Collectors.toList());
             addPartitions(db, tableName, partitionDescs, addPartitionClause);
+        }
+    }
+
+    private void checkAutoPartitionTableLimit(FunctionCallExpr functionCallExpr,
+                                              MultiRangePartitionDesc multiRangePartitionDesc) throws DdlException {
+        String descGranularity = multiRangePartitionDesc.getTimeUnit();
+        String functionName = functionCallExpr.getFnName().getFunction();
+        if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)) {
+            Expr expr = functionCallExpr.getParams().exprs().get(0);
+            String functionGranularity = ((StringLiteral) expr).getStringValue();
+            if (!descGranularity.equalsIgnoreCase(functionGranularity)) {
+                throw new DdlException("The granularity of the auto-partitioned table granularity(" +
+                        functionGranularity + ") should be consistent with the increased partition granularity(" +
+                        descGranularity + ").");
+            }
+        } else if (FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName)) {
+            throw new DdlException("time_slice does not support pre-created partitions");
+        }
+        if (multiRangePartitionDesc.getStep() > 1) {
+            throw new DdlException("The step of the auto-partitioned table should be 1");
         }
     }
 

@@ -715,7 +715,7 @@ public class AnalyzerUtils {
 
                 SingleRangePartitionDesc singleRangePartitionDesc =
                         new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
-
+                singleRangePartitionDesc.setSystem(true);
                 AddPartitionClause addPartitionClause =
                         new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
                                 partitionProperties, false);
