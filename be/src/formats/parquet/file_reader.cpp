@@ -94,7 +94,9 @@ Status FileReader::_parse_footer() {
 
     tparquet::FileMetaData t_metadata;
     // deserialize footer
-    RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) + footer_buffer.size() - PARQUET_FOOTER_SIZE - metadata_length, &metadata_length, TProtocolType::COMPACT, &t_metadata));
+    RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) + footer_buffer.size() -
+                                                   PARQUET_FOOTER_SIZE - metadata_length,
+                                           &metadata_length, TProtocolType::COMPACT, &t_metadata));
     _file_metadata.reset(new FileMetaData());
     RETURN_IF_ERROR(_file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
     return Status::OK();
@@ -104,7 +106,9 @@ StatusOr<uint32_t> FileReader::_get_footer_read_size() const {
     if (_file_size == 0) {
         return Status::Corruption("Parquet file size is 0 bytes");
     } else if (_file_size < PARQUET_FOOTER_SIZE) {
-        return Status::Corruption(strings::Substitute("Parquet file size is $0 bytes, smaller than the minimum parquet file footer ($1 bytes)", _file_size, PARQUET_FOOTER_SIZE));
+        return Status::Corruption(strings::Substitute(
+                "Parquet file size is $0 bytes, smaller than the minimum parquet file footer ($1 bytes)", _file_size,
+                PARQUET_FOOTER_SIZE));
     }
     return std::min(_file_size, DEFAULT_FOOTER_BUFFER_SIZE);
 }
@@ -121,7 +125,9 @@ StatusOr<uint32_t> FileReader::_parse_metadata_length(const std::vector<char>& f
 
     uint32_t metadata_length = decode_fixed32_le(reinterpret_cast<const uint8_t*>(footer_buff.data()) + size - 8);
     if (metadata_length > _file_size - PARQUET_FOOTER_SIZE) {
-        return Status::Corruption(strings::Substitute("Parquet file size is $0 bytes, smaller than the size reported by footer's ($1 bytes)", _file_size, metadata_length));
+        return Status::Corruption(strings::Substitute(
+                "Parquet file size is $0 bytes, smaller than the size reported by footer's ($1 bytes)", _file_size,
+                metadata_length));
     }
     return metadata_length;
 }
