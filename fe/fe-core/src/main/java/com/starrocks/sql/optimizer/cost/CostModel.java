@@ -405,7 +405,12 @@ public class CostModel {
 
             // Right cross join could not be parallelized, so apply more punishment
             if (join.getJoinType().isRightJoin()) {
-                cpuCost *= StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                // Add more punishment when right size is 10x greater than left size.
+                if (rightSize > 10 * leftSize) {
+                    cpuCost *= StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                } else {
+                    cpuCost += StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                }
                 memCost += rightSize;
             }
             if (join.getJoinType().isOuterJoin() || join.getJoinType().isSemiJoin() ||
