@@ -1506,7 +1506,11 @@ public class CoordinatorPreprocessor {
             commonParams.setProtocol_version(InternalServiceVersion.V1);
             commonParams.setFragment(fragment.toThrift());
             commonParams.setDesc_tbl(descTable);
+<<<<<<< HEAD
             commonParams.setFunc_version(4);
+=======
+            commonParams.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_2.getValue());
+>>>>>>> 121a95b5d ([BugFix] Fix runtime filter compatible problem (#20225))
             commonParams.setCoord(coordAddress);
 
             commonParams.setParams(new TPlanFragmentExecParams());
