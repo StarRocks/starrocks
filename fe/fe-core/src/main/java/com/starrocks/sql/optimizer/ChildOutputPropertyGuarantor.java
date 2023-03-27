@@ -111,8 +111,9 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                 return false;
             }
 
-            ColocateTableIndex.GroupId groupId = colocateIndex.getGroup(leftTableId);
-            if (colocateIndex.isGroupUnstable(groupId)) {
+            ColocateTableIndex.GroupId leftGroupId = colocateIndex.getGroup(leftTableId);
+            ColocateTableIndex.GroupId rightGroupId = colocateIndex.getGroup(rightTableId);
+            if (colocateIndex.isGroupUnstable(leftGroupId) || colocateIndex.isGroupUnstable(rightGroupId)) {
                 return false;
             }
 
