@@ -87,6 +87,7 @@ StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor
 
     ASSIGN_OR_RETURN(auto chunk, _reader->restore(state, executor, guard));
     chunk->check_or_die();
+    COUNTER_UPDATE(_metrics.restore_rows, chunk->num_rows());
     _restore_read_rows += chunk->num_rows();
 
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
