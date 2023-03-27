@@ -179,7 +179,7 @@ public:
 
         if (_need_inline_value()) {
             using ItemType = CompactChunkItem<Slice>;
-            using Container = std::vector<Slice>;
+            using Container = typename BinaryColumnBase<T>::Container;
 
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
                 return lhs.inline_value.compare(rhs.inline_value);
@@ -199,8 +199,8 @@ public:
             auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
                 auto left_column = down_cast<const ColumnType*>(_vertical_columns[lhs.chunk_index].get());
                 auto right_column = down_cast<const ColumnType*>(_vertical_columns[rhs.chunk_index].get());
-                auto left_value = left_column->get_data()[lhs.index_in_chunk];
-                auto right_value = right_column->get_data()[rhs.index_in_chunk];
+                auto left_value = left_column->get_slice(lhs.index_in_chunk);
+                auto right_value = right_column->get_slice(rhs.index_in_chunk);
                 return SorterComparator<Slice>::compare(left_value, right_value);
             };
 
@@ -492,11 +492,7 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
     return Status::OK();
 }
 
-void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm) {
-    if (chunks.empty() || perm.empty()) {
-        return;
-    }
-
+void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const PermutationView& perm) {
     std::vector<const Chunk*> src;
     src.reserve(chunks.size());
     for (auto& chunk : chunks) {
@@ -509,7 +505,7 @@ void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, cons
     append_by_permutation(dst, src, perm);
 }
 
-void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const Permutation& perm) {
+void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const PermutationView& perm) {
     if (chunks.empty() || perm.empty()) {
         return;
     }

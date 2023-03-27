@@ -53,7 +53,7 @@ bool TieIterator::next() {
 // Append permutation to column, implements `append_by_permutation` function
 class ColumnAppendPermutation final : public ColumnVisitorMutableAdapter<ColumnAppendPermutation> {
 public:
-    explicit ColumnAppendPermutation(const Columns& columns, const Permutation& perm)
+    explicit ColumnAppendPermutation(const Columns& columns, const PermutationView& perm)
             : ColumnVisitorMutableAdapter(this), _columns(columns), _perm(perm) {}
 
     Status do_visit(NullableColumn* dst) {
@@ -197,10 +197,10 @@ public:
 
 private:
     const Columns& _columns;
-    const Permutation& _perm;
+    const PermutationView& _perm;
 };
 
-void append_by_permutation(Column* dst, const Columns& columns, const Permutation& perm) {
+void append_by_permutation(Column* dst, const Columns& columns, const PermutationView& perm) {
     ColumnAppendPermutation visitor(columns, perm);
     Status st = dst->accept_mutable(&visitor);
     CHECK(st.ok());
