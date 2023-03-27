@@ -333,10 +333,14 @@ Status Compaction::modify_rowsets() {
         return Status::InternalError("Process is going to quit. The compaction will stop.");
     }
 
+    std::vector<RowsetSharedPtr> to_replace;
     std::unique_lock wrlock(_tablet->get_header_lock());
-    _tablet->modify_rowsets({_output_rowset}, _input_rowsets);
+    _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
     _tablet->save_meta();
     Rowset::close_rowsets(_input_rowsets);
+    for (auto& rs : to_replace) {
+        StorageEngine::instance()->add_unused_rowset(rs);
+    }
 
     return Status::OK();
 }

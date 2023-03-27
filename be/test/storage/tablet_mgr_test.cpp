@@ -403,7 +403,7 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
         RowsetSharedPtr src_rowset = *rowset_writer->build();
         to_add.push_back(std::move(src_rowset));
     }
-    tablet->modify_rowsets(to_add, to_remove);
+    tablet->modify_rowsets(to_add, to_remove, nullptr);
     tmp_list.clear();
     tablet->list_versions(&tmp_list);
     debug = "";
