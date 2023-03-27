@@ -20,7 +20,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 set(EXPR_FILES 
   agg/factory/aggregate_factory.cpp
   agg/factory/aggregate_resolver_approx.cpp
-  agg/factory/aggregate_resolver_array.cpp
   agg/factory/aggregate_resolver_avg.cpp
   agg/factory/aggregate_resolver_minmaxany.cpp
   agg/factory/aggregate_resolver_others.cpp
