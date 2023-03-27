@@ -614,9 +614,6 @@ void* StorageEngine::_update_cache_evict_thread_callback(void* arg) {
             continue;
         }
         _update_manager->evict_cache(memory_urgent_level, memory_high_level);
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        ExecEnv::GetInstance()->lake_update_manager()->evict_cache(memory_urgent_level, memory_high_level);
-#endif
     }
     return nullptr;
 }
