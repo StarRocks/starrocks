@@ -96,7 +96,7 @@ std::vector<std::unique_ptr<SpillerReader> > Spiller::get_partition_spill_reader
         std::shared_ptr<SpillInputStream> stream;
         // TODO check return status
         CHECK(_writer->acquire_stream(partition, &stream).ok());
-        res.back()->acquire_tasks(std::move(stream));
+        res.back()->set_stream(std::move(stream));
     }
 
     return res;
@@ -106,7 +106,7 @@ Status Spiller::_acquire_input_stream(RuntimeState* state) {
     std::shared_ptr<SpillInputStream> input_stream;
 
     RETURN_IF_ERROR(_writer->acquire_stream(&input_stream));
-    RETURN_IF_ERROR(_reader->acquire_tasks(std::move(input_stream)));
+    RETURN_IF_ERROR(_reader->set_stream(std::move(input_stream)));
 
     return Status::OK();
 }

@@ -41,7 +41,7 @@ public:
 
     virtual ~SpillerReader() = default;
 
-    Status acquire_tasks(std::shared_ptr<SpillInputStream> stream) {
+    Status set_stream(std::shared_ptr<SpillInputStream> stream) {
         std::lock_guard guard(_mutex);
         _current_stream = std::move(stream);
         return Status::OK();
@@ -198,6 +198,8 @@ struct SpilledPartition : public SpillPartitionInfo {
 
 class PartitionedSpillerWriter final : public SpillerWriter {
 public:
+    static const constexpr auto max_partition_size = 1024;
+    static const constexpr auto max_partition_level = 6;
     PartitionedSpillerWriter(Spiller* spiller, RuntimeState* state);
 
     Status prepare(RuntimeState* state) override;

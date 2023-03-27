@@ -131,7 +131,7 @@ PartitionedSpillerWriter::PartitionedSpillerWriter(Spiller* spiller, RuntimeStat
 
 Status PartitionedSpillerWriter::prepare(RuntimeState* state) {
     DCHECK_GT(options().init_partition_nums, 0);
-    _partition_set.resize(1024);
+    _partition_set.resize(max_partition_size);
     RETURN_IF_ERROR(_init_with_partition_nums(state, options().init_partition_nums));
     for (auto [_, partition] : _id_to_partitions) {
         RETURN_IF_ERROR(partition->spill_writer->prepare(state));

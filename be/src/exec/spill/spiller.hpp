@@ -267,7 +267,7 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, TaskExecutor&& execu
         for (const auto& [pid, partition] : _id_to_partitions) {
             const auto& mem_table = partition->spill_writer->mem_table();
             // partition not in memory
-            if (!partition->in_mem && partition->level < 6 &&
+            if (!partition->in_mem && partition->level < max_partition_level &&
                 mem_table->mem_usage() + partition->bytes > options().max_memory_size_each_partition) {
                 RETURN_IF_ERROR(mem_table->done());
                 partition->in_mem = false;
@@ -335,7 +335,7 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, TaskExecutor&& execu
                 RETURN_IF_ERROR(partition->spill_writer->acquire_stream(&stream));
 
                 auto reader = std::make_unique<SpillerReader>(_spiller);
-                reader->acquire_tasks(std::move(stream));
+                reader->set_stream(std::move(stream));
 
                 // split process may be generate many small chunks. we should fix it
                 auto st = _split_partition(spill_ctx, reader.get(), partition, left.get(), right.get(), guard);
