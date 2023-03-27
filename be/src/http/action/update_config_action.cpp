@@ -86,9 +86,6 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         _config_callback.emplace("update_memory_limit_percent", [&]() {
             StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
                     config::update_memory_limit_percent);
-#if defined(USE_STAROS) && !defined(BE_TEST)
-            _exec_env->lake_update_manager()->update_primary_index_memory_limit(config::update_memory_limit_percent);
-#endif
         });
     });
 
