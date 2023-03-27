@@ -131,6 +131,16 @@ Status SchemaHelper::get_task_runs(const std::string& ip, const int32_t port, co
                                                        });
 }
 
+Status SchemaHelper::get_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
+                               TGetLoadsResult* var_result, int timeout_ms) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port,
+            [&var_params, &var_result](FrontendServiceConnection& client) {
+                client->getLoads(*var_result, var_params);
+            },
+            timeout_ms);
+}
+
 Status SchemaHelper::get_tablet_schedules(const std::string& ip, const int32_t port,
                                           const TGetTabletScheduleRequest& request,
                                           TGetTabletScheduleResponse* response) {

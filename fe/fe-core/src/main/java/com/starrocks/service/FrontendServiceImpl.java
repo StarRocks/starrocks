@@ -82,6 +82,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.UnauthorizedException;
 import com.starrocks.leader.LeaderImpl;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.streamload.StreamLoadInfo;
@@ -148,6 +149,8 @@ import com.starrocks.thrift.TGetDBPrivsParams;
 import com.starrocks.thrift.TGetDBPrivsResult;
 import com.starrocks.thrift.TGetDbsParams;
 import com.starrocks.thrift.TGetDbsResult;
+import com.starrocks.thrift.TGetLoadsParams;
+import com.starrocks.thrift.TGetLoadsResult;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.TGetTablePrivsParams;
@@ -168,6 +171,7 @@ import com.starrocks.thrift.TGetUserPrivsResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListTableStatusResult;
+import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TLoadTxnBeginRequest;
 import com.starrocks.thrift.TLoadTxnBeginResult;
@@ -1853,6 +1857,41 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
+    public TGetLoadsResult getLoads(TGetLoadsParams request) throws TException {
+        LOG.debug("Recieve getLoads: {}", request);
+
+        TGetLoadsResult result = new TGetLoadsResult();
+        List<TLoadInfo> loads = Lists.newArrayList();
+        try {
+            if (request.isSetJob_id()) {
+                LoadJob job = GlobalStateMgr.getCurrentState().getLoadManager().getLoadJob(request.getJob_id());
+                loads.add(job.toThrift());
+            } else if (request.isSetDb()) {
+                long dbId = GlobalStateMgr.getCurrentState().getDb(request.getDb()).getId();
+                if (request.isSetLabel()) {
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobsByDb(
+                            dbId, request.getLabel(), true).stream().map(LoadJob::toThrift).collect(Collectors.toList()));
+                } else {
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobsByDb(
+                            dbId, null, false).stream().map(LoadJob::toThrift).collect(Collectors.toList()));
+                }
+            } else {
+                if (request.isSetLabel()) {
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobs(request.getLabel())
+                            .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
+                } else {
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobs(null)
+                            .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
+                }
+            }
+            result.setLoads(loads);
+        } catch (Exception e) {
+            LOG.warn("Failed to getLoads", e);
+            throw e;
+        }
+        return result;
+    }
+
     public TGetTabletScheduleResponse getTabletSchedule(TGetTabletScheduleRequest request) throws TException {
         TGetTabletScheduleResponse response = GlobalStateMgr.getCurrentState().getTabletScheduler().getTabletSchedule(request);
         LOG.info("getTabletSchedule: {} return {} TabletSchedule", request, response.getTablet_schedulesSize());
