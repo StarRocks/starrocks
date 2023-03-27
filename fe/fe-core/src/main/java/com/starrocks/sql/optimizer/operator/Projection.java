@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -60,6 +59,12 @@ public class Projection {
         return new ArrayList<>(columnRefMap.keySet());
     }
 
+    public ColumnRefSet getUsedColumns() {
+        final ColumnRefSet usedColumns = new ColumnRefSet();
+        columnRefMap.values().stream().forEach(e -> usedColumns.union(e.getUsedColumns()));
+        return usedColumns;
+    }
+
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
         return columnRefMap;
     }
@@ -71,41 +76,10 @@ public class Projection {
     // For sql: select *, to_bitmap(S_SUPPKEY) from table, we needn't apply global dict optimization
     // This method differ from `couldApplyStringDict` method is for ColumnRefOperator, we return false.
     public boolean needApplyStringDict(Set<Integer> childDictColumns) {
-        Preconditions.checkState(!childDictColumns.isEmpty());
-        ColumnRefSet dictSet = new ColumnRefSet();
-        for (Integer id : childDictColumns) {
-            dictSet.union(id);
-        }
+        ColumnRefSet dictSet = ColumnRefSet.createByIds(childDictColumns);
 
         for (ScalarOperator operator : columnRefMap.values()) {
             if (!operator.isColumnRef() && couldApplyStringDict(operator, dictSet, childDictColumns)) {
-                return true;
-            }
-        }
-
-        for (ScalarOperator operator : commonSubOperatorMap.values()) {
-            if (!operator.isColumnRef() && couldApplyStringDict(operator, dictSet, childDictColumns)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
-        Preconditions.checkState(!childDictColumns.isEmpty());
-        ColumnRefSet dictSet = new ColumnRefSet();
-        for (Integer id : childDictColumns) {
-            dictSet.union(id);
-        }
-
-        for (ScalarOperator operator : columnRefMap.values()) {
-            if (couldApplyStringDict(operator, dictSet, childDictColumns)) {
-                return true;
-            }
-        }
-
-        for (ScalarOperator operator : commonSubOperatorMap.values()) {
-            if (couldApplyStringDict(operator, dictSet, childDictColumns)) {
                 return true;
             }
         }
@@ -137,17 +111,6 @@ public class Projection {
                 fillDisableDictOptimizeColumns(v, columnRefSet, sids);
             }
         });
-    }
-
-    public boolean hasUnsupportedDictOperator(Set<Integer> stringColumnIds, Set<Integer> sids) {
-        ColumnRefSet stringColumnRefSet = new ColumnRefSet();
-        for (Integer stringColumnId : stringColumnIds) {
-            stringColumnRefSet.union(stringColumnId);
-        }
-
-        ColumnRefSet columnRefSet = new ColumnRefSet();
-        this.fillDisableDictOptimizeColumns(columnRefSet, sids);
-        return columnRefSet.isIntersect(stringColumnRefSet);
     }
 
     private void fillDisableDictOptimizeColumns(ScalarOperator operator, ColumnRefSet columnRefSet, Set<Integer> sids) {
