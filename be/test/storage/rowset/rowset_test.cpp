@@ -900,11 +900,11 @@ TEST_F(RowsetTest, SegmentDeleteWriteTest) {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto& cols = chunk->columns();
         for (auto i = 0; i < num_rows; i++) {
-            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(Datum(static_cast<int32_t>(1)));
-            cols[3]->append_datum(Datum(static_cast<int32_t>(1)));
-            cols[4]->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
+            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
+            cols[4]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
             if (i % 2 == 1) {
                 deletes.append(i);
             }
