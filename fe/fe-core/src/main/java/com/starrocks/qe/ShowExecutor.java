@@ -483,14 +483,12 @@ public class ShowExecutor {
                     }
                 }
             }
-
-            List<List<String>> rowSets = listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
-            resultSet = new ShowResultSet(stmt.getMetaData(), rowSets);
-        } catch (Exception e) {
-            LOG.warn("listMaterializedViews failed:", e);
         } finally {
             db.readUnlock();
         }
+
+        List<List<String>> rowSets = listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
+        resultSet = new ShowResultSet(stmt.getMetaData(), rowSets);
     }
 
     public static List<List<String>> listMaterializedViewStatus(
