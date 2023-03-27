@@ -165,8 +165,8 @@ void UpdateManager::expire_cache() {
 }
 
 void UpdateManager::evict_cache(int64_t memory_urgent_level, int64_t memory_high_level) {
-    int64_t capacity = _update_state_cache.capacity();
-    int64_t size = _update_state_cache.size();
+    int64_t capacity = _index_cache.capacity();
+    int64_t size = _index_cache.size();
     int64_t memory_urgent = capacity * memory_urgent_level / 100;
     int64_t memory_high = capacity * memory_high_level / 100;
 
