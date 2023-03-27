@@ -177,11 +177,11 @@ public class JournalWriter {
 
     private boolean shouldCommitNow() {
         // 1. check if is an emergency journal
-        if (currentJournal.getBetterCommitBeforeTime() > 0) {
-            long delayMillis = (System.nanoTime() - currentJournal.getBetterCommitBeforeTime()) / 1000000;
-            if (delayMillis >= 0) {
-                LOG.warn("journal expect commit before {} is delayed {} mills, will commit now",
-                        currentJournal.getBetterCommitBeforeTime(), delayMillis);
+        if (currentJournal.getBetterCommitBeforeTimeInNano() > 0) {
+            long delayNanos = System.nanoTime() - currentJournal.getBetterCommitBeforeTimeInNano();
+            if (delayNanos >= 0) {
+                LOG.warn("journal expect commit before {} is delayed {} nanos, will commit now",
+                        currentJournal.getBetterCommitBeforeTimeInNano(), delayNanos);
                 return true;
             }
         }
