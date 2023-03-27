@@ -307,8 +307,7 @@ public class LakeRestoreJob extends RestoreJob {
             FilePathInfo pathInfo = globalStateMgr.getStarOSAgent().allocateFilePath(remoteOlapTbl.getId());
             LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
             StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
-            remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.isEnableStorageCache(),
-                    storageInfo.getStorageCacheTtlS(), storageInfo.isEnableAsyncWriteBack());
+            remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.getStorageCacheInfo());
             remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
         } catch (DdlException e) {
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());

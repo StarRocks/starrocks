@@ -109,6 +109,7 @@ import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.AddPartitionsInfo;
@@ -1906,40 +1907,16 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     void setLakeStorageInfo(OlapTable table, Map<String, String> properties) throws DdlException {
-        // storage cache property
-        boolean enableStorageCache =
-                PropertyAnalyzer.analyzeBooleanProp(properties,
-                        PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, true);
-        long storageCacheTtlS = 0;
+        StorageCacheInfo storageCacheInfo = null;
         try {
-            storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(properties,
-                    PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
-                    Config.lake_default_storage_cache_ttl_seconds);
+            storageCacheInfo = PropertyAnalyzer.analyzeStorageCacheInfo(properties);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
-        }
-        if (storageCacheTtlS < -1) {
-            throw new DdlException("Storage cache ttl should not be less than -1");
-        }
-        if (!enableStorageCache && storageCacheTtlS != 0 &&
-                storageCacheTtlS != Config.lake_default_storage_cache_ttl_seconds) {
-            throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
-        }
-        if (enableStorageCache && storageCacheTtlS == 0) {
-            throw new DdlException("Storage cache ttl should not be 0 when cache is enabled");
-        }
-
-        // set to false if absent
-        boolean enableAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
-                properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
-
-        if (!enableStorageCache && enableAsyncWriteBack) {
-            throw new DdlException("enable_async_write_back can't be turned on when cache is disabled");
         }
 
         // get service shard storage info from StarMgr
         FilePathInfo pathInfo = stateMgr.getStarOSAgent().allocateFilePath(table.getId());
-        table.setStorageInfo(pathInfo, enableStorageCache, storageCacheTtlS, enableAsyncWriteBack);
+        table.setStorageInfo(pathInfo, storageCacheInfo);
     }
 
     void registerTable(Database db, Table table, CreateTableStmt stmt) throws DdlException {
