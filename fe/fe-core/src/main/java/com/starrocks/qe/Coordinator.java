@@ -1396,7 +1396,7 @@ public class Coordinator {
     }
 
     public void updateFragmentExecStatus(TReportExecStatusParams params) {
-        DataNodeExecState execState = backendExecStates.get(params.backend_id);
+        DataNodeExecState execState = backendExecStates.get(params.backend_num);
         if (execState == null) {
             LOG.warn("unknown backend number: {}, valid backend numbers: {}", params.backend_id,
                     backendExecStates.keySet());
