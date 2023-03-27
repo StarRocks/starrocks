@@ -34,6 +34,19 @@ public class PartitionDesc implements ParseNode {
 
     protected PartitionType type;
 
+<<<<<<< HEAD
+=======
+    protected final NodePosition pos;
+    protected boolean isSystem = false;
+    public PartitionDesc() {
+        this(NodePosition.ZERO);
+    }
+
+    protected PartitionDesc(NodePosition pos) {
+        this.pos = pos;
+    }
+
+>>>>>>> f74f520dd ([Enhancement] Add more restrictions on automatic partition table creation (#20282))
     public PartitionType getType() {
         return type;
     }
@@ -88,5 +101,13 @@ public class PartitionDesc implements ParseNode {
 
     public StorageCacheInfo getStorageCacheInfo() throws NotImplementedException {
         throw new NotImplementedException();
+    }
+
+    public boolean isSystem() {
+        return isSystem;
+    }
+
+    public void setSystem(boolean system) {
+        isSystem = system;
     }
 }
