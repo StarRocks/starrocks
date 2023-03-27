@@ -57,6 +57,11 @@ const i32 INVALID_PLAN_NODE_ID = -1
 // Constant default partition ID, must be < 0 to avoid collisions
 const i64 DEFAULT_PARTITION_ID = -1;
 
+// constants for function version
+enum TFunctionVersion {
+    RUNTIME_FILTER_SERIALIZE_VERSION_2 = 6,
+}
+
 enum TQueryType {
     SELECT,
     LOAD,
