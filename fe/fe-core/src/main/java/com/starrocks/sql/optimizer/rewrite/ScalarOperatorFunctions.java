@@ -295,19 +295,11 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createBigint(value);
     }
 
-<<<<<<< HEAD
-    @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR)
-    public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
-        // if unixTime < 0, we should return null, throw a exception and let BE process
-        if (unixTime.getInt() < 0) {
-            throw new AnalysisException("unixtime should larger than zero");
-=======
     @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR)
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
         long value = unixTime.getBigint();
         if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
             throw new AnalysisException("unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
->>>>>>> 78fa0816c ([Enhancement] unixtime related functions support int64 (#20119))
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
                 LocalDateTime.ofInstant(Instant.ofEpochSecond(unixTime.getInt()), TimeUtils.getTimeZone().toZoneId()));
