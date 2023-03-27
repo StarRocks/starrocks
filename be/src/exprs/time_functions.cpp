@@ -1108,12 +1108,8 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now(FunctionContext* context, con
 /*
  * definition for from_unix operators
  */
-<<<<<<< HEAD
-StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
-=======
 template <LogicalType TIMESTAMP_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
->>>>>>> 78fa0816c ([Enhancement] unixtime related functions support int64 (#20119))
     DCHECK_EQ(columns.size(), 1);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
