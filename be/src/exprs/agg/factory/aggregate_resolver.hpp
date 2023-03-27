@@ -80,7 +80,8 @@ public:
         return pair->second.get();
     }
 
-    const AggregateFunction* get_general_info(const std::string& name, const bool is_window_function, const bool is_null) const {
+    const AggregateFunction* get_general_info(const std::string& name, const bool is_window_function,
+                                              const bool is_null) const {
         auto pair = _general_mapping.find(std::make_tuple(name, is_window_function, is_null));
         if (pair == _general_mapping.end()) {
             return nullptr;

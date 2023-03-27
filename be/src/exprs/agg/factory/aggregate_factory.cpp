@@ -121,7 +121,7 @@ static const AggregateFunction* get_function(const std::string& name, LogicalTyp
 
     if (binary_type == TFunctionBinaryType::BUILTIN) {
         auto func = AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type,
-                                                                           is_window_function, is_null);
+                                                                          is_window_function, is_null);
         if (func != nullptr) {
             return func;
         }
