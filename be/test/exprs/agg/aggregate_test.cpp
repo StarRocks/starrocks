@@ -1257,6 +1257,55 @@ TEST_F(AggregateTest, test_percentile_cont) {
     ASSERT_EQ(3, result_column->get_data()[0]);
 }
 
+TEST_F(AggregateTest, test_percentile_disc) {
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DOUBLE)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DOUBLE))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DOUBLE));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("percentile_disc", TYPE_DOUBLE, TYPE_DOUBLE, false);
+
+    // update input column 1
+    auto state1 = ManagedAggrState::create(ctx, func);
+
+    auto data_column1 = DoubleColumn::create();
+    auto const_colunm1 = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.1, 1);
+    data_column1->append(3.0);
+    data_column1->append(4.0);
+
+    std::vector<const Column*> raw_columns1;
+    raw_columns1.resize(2);
+    raw_columns1[0] = data_column1.get();
+    raw_columns1[1] = const_colunm1.get();
+
+    func->update_batch_single_state(local_ctx.get(), data_column1->size(), raw_columns1.data(), state1->state());
+
+    // update input column 2
+    auto state2 = ManagedAggrState::create(ctx, func);
+
+    auto data_column2 = DoubleColumn::create();
+    auto const_colunm2 = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.1, 1);
+    data_column2->append(6.0);
+
+    std::vector<const Column*> raw_columns2;
+    raw_columns2.resize(2);
+    raw_columns2[0] = data_column2.get();
+    raw_columns2[1] = const_colunm2.get();
+
+    func->update_batch_single_state(local_ctx.get(), data_column2->size(), raw_columns2.data(), state2->state());
+
+    // merge column 1 and column 2
+    ColumnPtr serde_column = BinaryColumn::create();
+    auto result_column = DoubleColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column.get());
+    func->merge(local_ctx.get(), serde_column.get(), state2->state(), 0);
+    func->finalize_to_column(local_ctx.get(), state2->state(), result_column.get());
+
+    // [3,4,6], rate = 0.1 -> 4
+    ASSERT_EQ(4, result_column->get_data()[0]);
+}
+
 TEST_F(AggregateTest, test_intersect_count) {
     const AggregateFunction* group_concat_function =
             get_aggregate_function("intersect_count", TYPE_INT, TYPE_BIGINT, false);
