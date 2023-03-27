@@ -623,7 +623,7 @@ private:
 
     template <PrimitiveType TIMESTAMP_TYPE>
     static ColumnPtr _t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
-                                                    const starrocks::Columns& columns);
+                                                    const Columns& columns);
 
     static ColumnPtr convert_tz_general(FunctionContext* context, const Columns& columns);
 
