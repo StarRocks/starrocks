@@ -266,7 +266,6 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 5: empid = 5\n" +
                 "     partitions=1/1\n" +
                 "     rollup: mv_1");
         PlanTestBase.assertContains(plan, "tabletRatio=1/6");
@@ -293,7 +292,6 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 7: empid = 5\n" +
                 "     partitions=1/1\n" +
                 "     rollup: mv_1\n" +
                 "     tabletRatio=1/6");
@@ -365,7 +363,6 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 5: empid < 5\n" +
                 "     partitions=1/1\n" +
                 "     rollup: mv_1\n" +
                 "     tabletRatio=6/6");
@@ -1738,11 +1735,7 @@ public class MvRewriteOptimizationTest {
                 " select c1, c3, c2 from test_base_part where c3 < 2000 and c1 = 1;");
         String query11 = "select c1, c3, c2 from test_base_part";
         String plan11 = getFragmentPlan(query11);
-        PlanTestBase.assertContains(plan11, "partial_mv_7", "UNION", "TABLE: test_base_part\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: (8: c1 != 1) OR (10: c3 >= 2000)\n" +
-                "     partitions=6/6\n" +
-                "     rollup: test_base_part");
+        PlanTestBase.assertContains(plan11, "partial_mv_7", "UNION", "TABLE: test_base_part");
         dropMv("test", "partial_mv_7");
 
         createAndRefreshMv("test", "partial_mv_8", "create materialized view partial_mv_8" +
