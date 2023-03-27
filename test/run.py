@@ -149,6 +149,10 @@ if __name__ == "__main__":
         sys.exit(4)
     argv += ["--process-timeout=%s" % timeout]
 
+    # test xml
+    if not record:
+        argv += ["--with-xunitmp"]
+
     if collect:
         argv += ["--collect-only"]
 
