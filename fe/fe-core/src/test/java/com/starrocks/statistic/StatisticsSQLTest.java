@@ -80,8 +80,8 @@ public class StatisticsSQLTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
 
         Assert.assertEquals(3, StringUtils.countMatches(plan, "OlapScanNode"));
-        assertCContains(plan, "left(");
-        assertCContains(plan, "count * 1024");
+        assertContains(plan, "left(");
+        assertContains(plan, "count * 1024");
     }
 
     @Test
@@ -100,10 +100,10 @@ public class StatisticsSQLTest extends PlanTestBase {
         Assert.assertEquals(1, sqls.get(1).size());
         starRocksAssert.useDatabase("_statistics_");
         String plan = getFragmentPlan(sqls.get(0).get(0));
-        assertCContains(plan, "count * 1024");
+        assertContains(plan, "count * 1024");
 
         plan = getFragmentPlan(sqls.get(1).get(0));
-        assertCContains(plan, "left(");
-        assertCContains(plan, "char_length(");
+        assertContains(plan, "left(");
+        assertContains(plan, "char_length(");
     }
 }
