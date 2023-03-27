@@ -45,6 +45,7 @@ INTO TABLE <table_name>
 [PARTITION (<partition_name>[, <partition_name> ...])]
 [FORMAT AS "CSV | Parquet | ORC"]
 [COLUMNS TERMINATED BY "<column_separator>"]
+[ROWS TERMINATED BY "<row_separator>"]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
 [SET <k1=f1(v1)>[, <k2=f2(v2)> ...]]
@@ -106,6 +107,12 @@ INTO TABLE <table_name>
   >
   > - StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
   > - 空值 (null) 用 `\N` 表示。比如，数据文件一共有三列，其中某行数据的第一列、第三列数据分别为 `a` 和 `b`，第二列没有数据，则第二列需要用 `\N` 来表示空值，写作 `a,\N,b`，而不是 `a,,b`。`a,,b` 表示第二列是一个空字符串。
+
+- `ROWS TERMINATED BY`
+
+  用于指定源数据文件中的行分隔符。如果不指定该参数，则默认行分隔符为 `\n`，即换行符。必须确保这里指定的行分隔符与源数据文件中的行分隔符一致；否则，导入作业会因数据质量错误而失败，作业状态 (`State`) 会显示为 `CANCELLED`。该参数从 2.5.4 版本开始支持。
+
+  其他注意事项和使用条件与上文通过 `COLUMNS TERMINATED BY` 指定列分隔符相同。
 
 - `column_list`
 
