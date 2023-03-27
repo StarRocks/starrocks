@@ -392,7 +392,7 @@ private:
     do {                                        \
         TRY_CATCH_ALLOC_SCOPE_START() { stmt; } \
         TRY_CATCH_ALLOC_SCOPE_END()             \
-     } while (0)
+    } while (0)
 
 #define TRY_CATCH_ALL(result, stmt)                                                      \
     do {                                                                                 \
