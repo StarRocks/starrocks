@@ -85,7 +85,8 @@ static void dump_trace_info() {
         // dump query_id and fragment id
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
-        char buffer[256] = {};
+        const std::string lake_filename = CurrentThread::current().get_lake_filename();
+        char buffer[512] = {};
 
         // write build version
         int res = get_build_version(buffer, sizeof(buffer));
@@ -97,6 +98,14 @@ static void dump_trace_info() {
         res = sprintf(buffer + res, "fragment_instance:") + res;
         res = print_unique_id(buffer + res, fragment_instance_id) + res;
         res = sprintf(buffer + res, "\n") + res;
+
+        // print for lake filename
+        if (!lake_filename.empty()) {
+            res = sprintf(buffer + res, "lake filename: ") + res;
+            res = sprintf(buffer + res, "%s", lake_filename.c_str()) + res;
+            res = sprintf(buffer + res, "\n") + res;
+        }
+
         wt = write(STDERR_FILENO, buffer, res);
         // dump memory usage
         // copy trackers

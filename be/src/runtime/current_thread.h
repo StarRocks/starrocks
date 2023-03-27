@@ -157,6 +157,10 @@ public:
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
 
+    void set_lake_filename(const std::string filename) { _lake_filename = filename; }
+
+    std::string get_lake_filename() const { return _lake_filename; }
+
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
         mem_tracker_ctx_shift();
@@ -257,6 +261,7 @@ private:
     // Store in TLS for diagnose coredump easier
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
+    std::string _lake_filename{};
     int32_t _driver_id = 0;
     bool _is_catched = false;
     bool _check = true;
@@ -383,10 +388,12 @@ private:
         return Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));                                       \
     }
 
-#define TRY_CATCH_BAD_ALLOC(stmt)               \
-    do {                                        \
-        TRY_CATCH_ALLOC_SCOPE_START() { stmt; } \
-        TRY_CATCH_ALLOC_SCOPE_END()             \
+#define TRY_CATCH_BAD_ALLOC(stmt)       \
+    do {                                \
+        TRY_CATCH_ALLOC_SCOPE_START() { \
+            stmt;                       \
+        }                               \
+        TRY_CATCH_ALLOC_SCOPE_END()     \
     } while (0)
 
 #define TRY_CATCH_ALL(result, stmt)                                                      \

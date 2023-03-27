@@ -23,6 +23,7 @@
 #include "exec/jni_scanner.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks::connector {
 
@@ -423,6 +424,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     FSOptions fsOptions =
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
+
+    // Use to print file path in be.out when coredump
+    tls_thread_status.set_lake_filename(native_file_path);
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
 
