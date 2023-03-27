@@ -235,6 +235,12 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     _update_profile_by_level(query_ctx, fragment_ctx, done);
     auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, status, done);
     auto fe_addr = fragment_ctx->fe_addr();
+    if (fe_addr.hostname.empty()) {
+        // query executed by external connectors, like spark and flink connector,
+        // does not need to report exec state to FE, so return if fe addr is empty.
+        return;
+    }
+
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto fragment_id = fragment_ctx->fragment_instance_id();
 
