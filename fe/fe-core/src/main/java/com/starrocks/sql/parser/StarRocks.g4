@@ -1636,9 +1636,13 @@ relationPrimary
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
     | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
-    | qualifiedName '(' expressionList ')'
-        (AS? alias=identifier columnAliases?)?                                          #tableFunction
+    | tableFunctionCall (AS? alias=identifier columnAliases?)?                          #tableFunction
+    | TABLE '(' tableFunctionCall ')' (AS? alias=identifier columnAliases?)?            #tableFunctionTable
     | '(' relations ')'                                                                 #parenthesizedRelation
+    ;
+
+tableFunctionCall
+    : qualifiedName '(' expressionList ')'
     ;
 
 joinRelation
@@ -1834,6 +1838,7 @@ aggregationFunction
     | MAX '(' DISTINCT? expression ')'
     | MIN '(' DISTINCT? expression ')'
     | SUM '(' DISTINCT? expression ')'
+    | ARRAY_AGG '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
     ;
 
 userVariable

@@ -402,10 +402,9 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         size_t attachment_size = request.attachment.size();
         closure->cntl.request_attachment().append(&attachment_size, sizeof(attachment_size));
         closure->cntl.request_attachment().append(request.attachment);
-        if (_rpc_http_min_size == kRpcHttpMinSize) { // logging only in default value
-            LOG(INFO) << "issue a http rpc, attachment's size = " << attachment_size
-                      << " , total size = " << closure->cntl.request_attachment().size();
-        }
+        VLOG_ROW << "issue a http rpc, attachment's size = " << attachment_size
+                 << " , total size = " << closure->cntl.request_attachment().size();
+
         if (UNLIKELY(expected_iobuf_size != closure->cntl.request_attachment().size())) {
             LOG(WARNING) << "http rpc expected iobuf size " << expected_iobuf_size << " != "
                          << " real iobuf size " << closure->cntl.request_attachment().size();

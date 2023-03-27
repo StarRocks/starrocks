@@ -321,6 +321,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
+    public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
 
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
@@ -362,8 +363,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
 
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
-
-    public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
@@ -876,6 +875,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
     private boolean useScanBlockCache = false;
 
+    @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
+    private int ioTasksPerScanOperator = 4;
+
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateBlockCache = true;
 
@@ -884,6 +886,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getUseScanBlockCache() {
         return useScanBlockCache;
+    }
+
+    public int getIoTasksPerScanOperator() {
+        return ioTasksPerScanOperator;
     }
 
     @VarAttr(name = ENABLE_QUERY_CACHE)
@@ -967,9 +973,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SQL_QUOTE_SHOW_CREATE)
     private boolean quoteShowCreate = true; // Defined but unused now, for compatibility with MySQL
 
-    @VariableMgr.VarAttr(name = ACTIVATE_ALL_ROLES_ON_LOGIN)
-    private String activateAllRolesOnLogin = "OFF";
-
     @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
     private long groupConcatMaxLen = 65535;
 
@@ -1032,18 +1035,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableDistinctColumnBucketization() {
         return enableDistinctColumnBucketization;
-    }
-
-    public boolean isActivateAllRolesOnLogin() {
-        return activateAllRolesOnLogin.equals("ON");
-    }
-
-    public void setActivateAllRolesOnLogin(boolean activateAll) {
-        if (activateAll) {
-            activateAllRolesOnLogin = "ON";
-        } else {
-            activateAllRolesOnLogin = "OFF";
-        }
     }
 
     public boolean getEnablePopulateBlockCache() {
@@ -1386,7 +1377,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return transactionVisibleWaitTimeout;
     }
 
-    public boolean isForceScheduleLocal() {
+    public boolean getForceScheduleLocal() {
         return forceScheduleLocal;
     }
 

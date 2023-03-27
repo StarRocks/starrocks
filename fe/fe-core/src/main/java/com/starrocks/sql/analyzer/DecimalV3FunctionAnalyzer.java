@@ -206,6 +206,7 @@ public class DecimalV3FunctionAnalyzer {
         return newFn;
     }
 
+
     // This function is used to convert the sum(distinct) function to the multi_distinct_sum function in
     // optimizing phase and PlanFragment building phase.
     // Decimal types of multi_distinct_sum must be rectified because the function signature registered in
@@ -453,13 +454,6 @@ public class DecimalV3FunctionAnalyzer {
             }
             case FunctionSet.ARRAYS_OVERLAP: {
                 newFn.setArgsType(argumentTypes);
-                return newFn;
-            }
-            case FunctionSet.ARRAY_AGG: {
-                Type returnType = new ArrayType(argumentTypes[0]);
-                newFn.setArgsType(argumentTypes);
-                newFn.setRetType(returnType);
-                ((AggregateFunction) newFn).setIntermediateType(returnType);
                 return newFn;
             }
             default:

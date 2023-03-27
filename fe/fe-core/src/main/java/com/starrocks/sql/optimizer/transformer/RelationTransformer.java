@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -603,11 +604,13 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             LogicalPlan leftPlan = visit(node.getLeft());
             LogicalPlan rightPlan = visit(node.getRight(), leftPlan.getRootBuilder().getExpressionMapping());
 
+
+            List<ColumnRefOperator> leftFieldMappings = leftPlan.getRootBuilder().getFieldMappings();
+            List<ColumnRefOperator> rightFieldMappings = rightPlan.getRootBuilder().getFieldMappings();
+
             ExpressionMapping expressionMapping = new ExpressionMapping(new Scope(RelationId.of(node),
-                    node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields())),
-                    Streams.concat(leftPlan.getRootBuilder().getFieldMappings().stream(),
-                                    rightPlan.getRootBuilder().getFieldMappings().stream())
-                            .collect(Collectors.toList()));
+                        node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields())),
+                        Streams.concat(leftFieldMappings.stream(), rightFieldMappings.stream()).collect(Collectors.toList()));
 
             Operator root = LogicalApplyOperator.builder().setCorrelationColumnRefs(correlation)
                     .setNeedCheckMaxRows(false)
@@ -730,6 +733,15 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return new LogicalPlan(new OptExprBuilder(root, Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputColumns)),
                 null, null);
+    }
+
+    @Override
+    public LogicalPlan visitNormalizedTableFunction(NormalizedTableFunctionRelation node, ExpressionMapping context) {
+        LogicalPlan plan = visitJoin(node, context);
+        // Column prune, only the table function columns should be returned.
+        OptExprBuilder rootBuilder = plan.getRootBuilder();
+        rootBuilder.setExpressionMapping(rootBuilder.getInputs().get(1).getExpressionMapping());
+        return plan;
     }
 
     /**

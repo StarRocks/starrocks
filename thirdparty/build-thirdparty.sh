@@ -413,6 +413,19 @@ build_lz4() {
     INCLUDEDIR=$TP_INCLUDE_DIR/lz4/ BUILD_SHARED=no
 }
 
+# lzo
+build_lzo2() {
+    check_if_source_exist $LZO2_SOURCE
+    cd $TP_SOURCE_DIR/$LZO2_SOURCE
+
+    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
+        LDFLAGS="-L${TP_LIB_DIR}" \
+        ./configure --prefix="${TP_INSTALL_DIR}" --disable-shared --enable-static
+
+    make -j "${PARALLEL}"
+    make install
+}
+
 # bzip
 build_bzip() {
     check_if_source_exist $BZIP_SOURCE
@@ -1053,6 +1066,7 @@ export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=1
 build_libevent
 build_zlib
 build_lz4
+build_lzo2
 build_bzip
 build_openssl
 build_boost # must before thrift
