@@ -83,13 +83,11 @@ public class LakeMaterializedView extends MaterializedView {
     }
 
     @Override
-    public void setStorageInfo(FilePathInfo pathInfo, boolean enableCache, long cacheTtlS, boolean asyncWriteBack) {
-        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
-                .setAsyncWriteBack(asyncWriteBack).build();
+    public void setStorageInfo(FilePathInfo pathInfo, StorageCacheInfo storageCacheInfo) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.setStorageInfo(new StorageInfo(pathInfo, cacheInfo));
+        tableProperty.setStorageInfo(new StorageInfo(pathInfo, storageCacheInfo.getCacheInfo()));
     }
 
     @Override

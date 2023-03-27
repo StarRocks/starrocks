@@ -260,14 +260,12 @@ public class CreateLakeTableTest {
             long partition2Id = lakeTable.getPartition("p2").getId();
             StorageCacheInfo partition2StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
             Assert.assertFalse(partition2StorageCacheInfo.isEnableStorageCache());
-            Assert.assertEquals(Config.lake_default_storage_cache_ttl_seconds,
-                    partition2StorageCacheInfo.getStorageCacheTtlS());
+            Assert.assertEquals(0L, partition2StorageCacheInfo.getStorageCacheTtlS());
         }
     }
 
     @Test
     public void testCreateLakeTableException() {
-
         // storage_cache disabled but enable_async_write_back = true
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "enable_async_write_back can't be turned on when cache is disabled",
@@ -276,5 +274,13 @@ public class CreateLakeTableTest {
                         "distributed by hash(key1) buckets 3\n" +
                         " properties('enable_storage_cache' = 'false', 'storage_cache_ttl' = '0'," +
                         "'enable_async_write_back' = 'true');"));
+
+        // storage_cache disabled but storage_cache_ttl is not 0
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Storage cache ttl should be 0 when cache is disabled",
+                () -> createTable(
+                        "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
+                                "distributed by hash(key1) buckets 3\n" +
+                                " properties('enable_storage_cache' = 'false', 'storage_cache_ttl' = '2592000');"));
     }
 }
