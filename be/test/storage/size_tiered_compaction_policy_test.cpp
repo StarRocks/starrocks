@@ -1362,4 +1362,4 @@ TEST_F(SizeTieredCompactionPolicyTest, test_delete_limit) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

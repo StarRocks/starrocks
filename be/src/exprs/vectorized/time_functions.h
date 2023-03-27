@@ -623,12 +623,12 @@ private:
 
     template <PrimitiveType TIMESTAMP_TYPE>
     static ColumnPtr _t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
-                                                              const starrocks::Columns& columns);
+                                                    const starrocks::Columns& columns);
 
     static ColumnPtr convert_tz_general(FunctionContext* context, const Columns& columns);
 
-    static ColumnPtr convert_tz_const(FunctionContext* context, const Columns& columns,
-                                                const cctz::time_zone& from, const cctz::time_zone& to);
+    static ColumnPtr convert_tz_const(FunctionContext* context, const Columns& columns, const cctz::time_zone& from,
+                                      const cctz::time_zone& to);
 
 public:
     static TimestampValue start_of_time_slice;
