@@ -727,4 +727,28 @@ public class ReplayFromDumpTest {
                 "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)" +
                 ""));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testPushDownDistinctAggBelowWindowRewrite() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/pushdown_distinct_agg_below_window"), null,
+                        TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: sum[([3: gross, DECIMAL128(10,2), false]); args: DECIMAL128; " +
+                "result: DECIMAL128(38,2); args nullable: false; result nullable: true]\n" +
+                "  |  group by: [2: trans_date, DATE, false], [1: country, VARCHAR, true]\n" +
+                "  |  cardinality: 49070\n"));
+    }
+
+    @Test
+    public void testSSBRightOuterJoinCase() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/right_outer_join_case"), null,
+                        TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second.contains("4:NESTLOOP JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN"));
+    }
+>>>>>>> 98a1b20d4 ([BugFix] Add more punishment when right size is 10x greater than left size (#19965))
 }
