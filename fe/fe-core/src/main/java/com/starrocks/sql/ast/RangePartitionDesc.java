@@ -41,6 +41,7 @@ public class RangePartitionDesc extends PartitionDesc {
     private final List<String> partitionColNames;
     private final List<SingleRangePartitionDesc> singleRangePartitionDescs;
     private final List<MultiRangePartitionDesc> multiRangePartitionDescs;
+    private boolean isAutoPartitionTable = false;
 
     public RangePartitionDesc(List<String> partitionColNames, List<PartitionDesc> partitionDescs) {
         this(partitionColNames, partitionDescs, NodePosition.ZERO);
@@ -122,7 +123,7 @@ public class RangePartitionDesc extends PartitionDesc {
                             "partition column as DATETIME type");
                 }
                 this.singleRangePartitionDescs.addAll(multiRangePartitionDesc.
-                        convertToSingle(firstPartitionColumn.getType(), otherProperties));
+                        convertToSingle(isAutoPartitionTable, firstPartitionColumn.getType(), otherProperties));
             }
         }
 
@@ -146,6 +147,10 @@ public class RangePartitionDesc extends PartitionDesc {
             }
             desc.analyze(columnDefs.size(), givenProperties);
         }
+    }
+
+    public void setAutoPartitionTable(boolean autoPartitionTable) {
+        this.isAutoPartitionTable = autoPartitionTable;
     }
 
     @Override
