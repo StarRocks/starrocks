@@ -483,9 +483,10 @@ public class ShowExecutor {
                     }
                 }
             }
+
             List<List<String>> rowSets = listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
             resultSet = new ShowResultSet(stmt.getMetaData(), rowSets);
-        } catch (Exception e){
+        } catch (Exception e) {
             LOG.warn("listMaterializedViews failed:", e);
         } finally {
             db.readUnlock();
@@ -504,10 +505,8 @@ public class ShowExecutor {
         //  2. Table's type is OLAP, this is the old MV type which the MV table is associated with the base
         //     table and only supports single table in MV definition.
         // TODO: Unify the two cases into one.
-        Map<String, TaskRunStatus> mvNameTaskMap;
-        if (materializedViews.isEmpty()) {
-            mvNameTaskMap = Maps.newHashMap();
-        } else {
+        Map<String, TaskRunStatus> mvNameTaskMap = Maps.newHashMap();
+        if (!materializedViews.isEmpty()) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             TaskManager taskManager = globalStateMgr.getTaskManager();
             mvNameTaskMap = taskManager.showMVLastRefreshTaskRunStatus(dbName);
