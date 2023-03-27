@@ -14,8 +14,34 @@
 
 #include "exprs/runtime_filter.h"
 
+#include "types/logical_type_infra.h"
 #include "util/compression/stream_compression.h"
+
 namespace starrocks {
+// TODO: remove it
+LogicalType RuntimeFilterSerializeType::from_serialize_type(RuntimeFilterSerializeType::PrimitiveType ptype) {
+    switch (ptype) {
+#define CONVERT_PTYPE(type_name)                       \
+    case RuntimeFilterSerializeType::TYPE_##type_name: \
+        return LogicalType::TYPE_##type_name;
+        APPLY_FOR_SCALAR_THRIFT_TYPE(CONVERT_PTYPE);
+#undef CONVERT_PTYPE
+    default:
+        return TYPE_UNKNOWN;
+    }
+}
+
+RuntimeFilterSerializeType::PrimitiveType RuntimeFilterSerializeType::to_serialize_type(LogicalType type) {
+    switch (type) {
+#define CONVERT_TYPE(type_name)         \
+    case LogicalType::TYPE_##type_name: \
+        return RuntimeFilterSerializeType::TYPE_##type_name;
+        APPLY_FOR_SCALAR_THRIFT_TYPE(CONVERT_TYPE);
+#undef CONVERT_TYPE
+    default:
+        return RuntimeFilterSerializeType::TYPE_NULL;
+    }
+}
 
 void SimdBlockFilter::init(size_t nums) {
     nums = std::max(1UL, nums);
@@ -130,7 +156,7 @@ size_t JoinRuntimeFilter::max_serialized_size() const {
     return size;
 }
 
-size_t JoinRuntimeFilter::serialize(uint8_t* data) const {
+size_t JoinRuntimeFilter::serialize(int serialize_version, uint8_t* data) const {
     size_t offset = 0;
 #define JRF_COPY_FIELD(field)                     \
     memcpy(data + offset, &field, sizeof(field)); \
@@ -152,7 +178,7 @@ size_t JoinRuntimeFilter::serialize(uint8_t* data) const {
     return offset;
 }
 
-size_t JoinRuntimeFilter::deserialize(const uint8_t* data) {
+size_t JoinRuntimeFilter::deserialize(int serialize_version, const uint8_t* data) {
     size_t offset = 0;
 #define JRF_COPY_FIELD(field)                     \
     memcpy(&field, data + offset, sizeof(field)); \

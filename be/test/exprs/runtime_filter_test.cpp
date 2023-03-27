@@ -187,13 +187,14 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterSerialize) {
     RuntimeBloomFilter<TYPE_INT> bf0;
     JoinRuntimeFilter* rf0 = &bf0;
     bf0.init(100);
+    int rf_version = RF_VERSION_V2;
     for (int i = 0; i <= 200; i += 17) {
         bf0.insert(&i);
     }
 
     size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf0);
     std::vector<uint8_t> buffer(max_size, 0);
-    size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf0, buffer.data());
+    size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, rf0, buffer.data());
     buffer.resize(actual_size);
 
     JoinRuntimeFilter* rf1 = nullptr;
@@ -226,17 +227,19 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterSerialize2) {
     EXPECT_EQ(bf1.min_value(), values[0]);
     EXPECT_EQ(bf1.max_value(), values[values.size() - 1]);
 
+    int rf_version = RF_VERSION_V2;
+
     ObjectPool pool;
     size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf0);
     std::vector<uint8_t> buffer0(max_size, 0);
-    size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf0, buffer0.data());
+    size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, rf0, buffer0.data());
     buffer0.resize(actual_size);
     JoinRuntimeFilter* rf2 = nullptr;
     RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf2, buffer0.data(), actual_size);
 
     max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf1);
     buffer0.assign(max_size, 0);
-    actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf1, buffer0.data());
+    actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, rf1, buffer0.data());
     buffer0.resize(actual_size);
     JoinRuntimeFilter* rf3 = nullptr;
     RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf3, buffer0.data(), actual_size);
@@ -323,6 +326,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge3) {
     RuntimeBloomFilter<TYPE_VARCHAR> bf0;
     JoinRuntimeFilter* rf0 = &bf0;
     ObjectPool pool;
+    int rf_version = RF_VERSION_V2;
     {
         std::vector<std::string> data = {"bb", "cc", "dd"};
         std::vector<Slice> values;
@@ -336,7 +340,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge3) {
 
         size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf0);
         std::string buf(max_size, 0);
-        size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf0, (uint8_t*)buf.data());
+        size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, rf0, (uint8_t*)buf.data());
         buf.resize(actual_size);
 
         RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf0, (const uint8_t*)buf.data(), actual_size);
@@ -361,7 +365,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge3) {
 
         size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf1);
         std::string buf(max_size, 0);
-        size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf1, (uint8_t*)buf.data());
+        size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, rf1, (uint8_t*)buf.data());
         buf.resize(actual_size);
         RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf1, (const uint8_t*)buf.data(), actual_size);
     }
@@ -405,11 +409,14 @@ void test_grf_helper_template(size_t num_rows, size_t num_partitions, const Part
         bfs[hash_values[i]].insert(&slice);
     }
 
+    int rf_version = RF_VERSION_V2;
+
     std::vector<std::string> serialized_rfs(num_partitions);
     for (auto p = 0; p < num_partitions; ++p) {
         size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rfs[p]);
         serialized_rfs[p].resize(max_size, 0);
-        size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rfs[p], (uint8_t*)serialized_rfs[p].data());
+        size_t actual_size =
+                RuntimeFilterHelper::serialize_runtime_filter(rf_version, rfs[p], (uint8_t*)serialized_rfs[p].data());
         serialized_rfs[p].resize(actual_size);
     }
 
