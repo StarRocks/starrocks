@@ -802,6 +802,8 @@ public class MvUtils {
                         columnRefFactory);
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
                 partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);
+            } else {
+                continue;
             }
             if (partitionPredicate == null) {
                 return null;
