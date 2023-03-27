@@ -98,7 +98,7 @@ DISTRIBUTED BY HASH(user_id) BUCKETS 8;
 
 在这些场景中，数据查询和导入，具有以下特点：
 
-- 多为汇总类查询，比如 SUM、COUNT、MAX 等类型的查询。
+- 多为汇总类查询，比如 SUM、MAX、MIN等类型的查询。
 
 - 不需要查询原始的明细数据。
 
