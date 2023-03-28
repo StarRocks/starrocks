@@ -472,3 +472,8 @@ SELECT /*+ SET_VAR
 * sql_dialect
 
   设置生效的 SQL 语法。例如，执行 `set sql_dialect = 'trino';` 命令可以切换为 Trino 语法，这样您就可以在查询中使用 Trino 特有的 SQL 语法和函数。
+
+* range_pruner_max_predicate
+  
+  设置进行 Range 分区裁剪时，最多能使用的 IN 谓词的个数，默认值：100。如果超过该值，会扫描全部 tablet，降低查询性能。
+  
