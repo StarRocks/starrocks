@@ -139,7 +139,7 @@ public class BasicStatsMeta implements Writable {
         // 3. If there are many updated partitions, the health needs to be calculated based on partitions
         if (updatePartitionRowCount == 0 || updatePartitionCount == 0) {
             return 1;
-        } else if (updatePartitionCount < StatsConstants.STATISTICS_HEALTH_LAST_PARTITIONS) {
+        } else if (updatePartitionCount < StatsConstants.STATISTICS_PARTITION_UPDATED_THRESHOLD) {
             updateRatio = (updateRows * 1.0) / updatePartitionRowCount;
         } else {
             double rowUpdateRatio = (updateRows * 1.0) / updatePartitionRowCount;
