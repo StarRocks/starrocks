@@ -26,8 +26,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
@@ -74,7 +74,7 @@ public class FrontendServiceImplTest {
         QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
 
-        Backend backend = new Backend(0, "127.0.0.1", 80);
+        DataNode backend = new DataNode(0, "127.0.0.1", 80);
         ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
 
         new MockUp<SystemInfoService>() {
