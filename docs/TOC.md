@@ -69,6 +69,7 @@
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
 + Administration
   + Deployment
+    + [Deploy a shared-data StarRocks cluster](./administration/deploy_shared_data.md)
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
     + [Deploy StarRocks in Docker](./administration/deploy_with_docker.md)
     + [Compile StarRocks](./administration/Build_in_docker.md)
