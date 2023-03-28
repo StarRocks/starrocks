@@ -257,13 +257,20 @@ public class CostModel {
             }
 
             ColumnStatistic distColStat = inputStatistics.getColumnStatistic(skewInfo.getSkewColumnRef());
-            ColumnStatistic groupByColStat = inputStatistics.getColumnStatistic(node.getGroupBys().get(0));
+            List<ColumnStatistic> groupByStats = node.getGroupBys().subList(0, node.getGroupBys().size() - 1)
+                    .stream().map(inputStatistics::getColumnStatistic).collect(Collectors.toList());
 
-            if (distColStat.isUnknownValue() || distColStat.isUnknown() || groupByColStat.isUnknown() ||
-                    groupByColStat.isUnknownValue()) {
+            if (distColStat.isUnknownValue() || distColStat.isUnknown() ||
+                    groupByStats.stream().anyMatch(groupStat -> groupStat.isUnknown() || groupStat.isUnknownValue())) {
                 return 1.5;
             }
-            double groupByColDistinctValues = Math.max(1, groupByColStat.getDistinctValuesCount());
+            double groupByColDistinctValues = 1.0;
+            for (ColumnStatistic groupStat : groupByStats) {
+                groupByColDistinctValues *= groupStat.getDistinctValuesCount();
+            }
+            groupByColDistinctValues =
+                    Math.max(1.0, Math.min(groupByColDistinctValues, inputStatistics.getOutputRowCount()));
+
             final double groupByColDistinctHighWaterMark = 10000;
             final double groupByColDistinctLowWaterMark = 100;
             final double distColDistinctValuesCountWaterMark = 10000000;

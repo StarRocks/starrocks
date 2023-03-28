@@ -145,20 +145,25 @@ public class LogicalAggregationOperator extends LogicalOperator {
     }
 
     public boolean checkGroupByCountDistinct() {
-        if (groupingKeys.size() != 1 || aggregations.size() != 1) {
+        if (groupingKeys.isEmpty() || aggregations.size() != 1) {
             return false;
         }
         CallOperator call = aggregations.values().stream().iterator().next();
         if (call.isDistinct() && call.getFnName().equalsIgnoreCase(FunctionSet.COUNT) &&
                 call.getChildren().size() == 1 && call.getChild(0).isColumnRef() &&
-                !groupingKeys.get(0).equals(call.getChild(0))) {
+                groupingKeys.stream().noneMatch(groupCol -> call.getChild(0).equals(groupCol))) {
             return true;
         }
         return false;
     }
 
+    public boolean hasSkew() {
+        return this.getAggregations().values().stream().anyMatch(call ->
+                call.isDistinct() && call.getFnName().equals(FunctionSet.COUNT) && call.getHints().contains("skew"));
+    }
+
     public boolean checkGroupByCountDistinctWithSkewHint() {
-        return checkGroupByCountDistinct() && aggregations.values().iterator().next().getHints().contains("skew");
+        return checkGroupByCountDistinct() && hasSkew();
     }
 
     @Override
