@@ -157,9 +157,9 @@ public:
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
 
-    void set_lake_filename(const std::string filename) { _lake_filename = filename; }
+    void set_scan_file_path(const std::string scan_file_path) { _scan_file_path = scan_file_path; }
 
-    std::string get_lake_filename() const { return _lake_filename; }
+    std::string get_scan_file_path() const { return _scan_file_path; }
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
@@ -261,7 +261,7 @@ private:
     // Store in TLS for diagnose coredump easier
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
-    std::string _lake_filename{};
+    std::string _scan_file_path{};
     int32_t _driver_id = 0;
     bool _is_catched = false;
     bool _check = true;

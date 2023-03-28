@@ -426,7 +426,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
     // Use to print file path in be.out when coredump
-    tls_thread_status.set_lake_filename(native_file_path);
+    tls_thread_status.set_scan_file_path(native_file_path);
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
 

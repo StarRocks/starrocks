@@ -85,8 +85,9 @@ static void dump_trace_info() {
         // dump query_id and fragment id
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
-        const std::string lake_filename = CurrentThread::current().get_lake_filename();
-        char buffer[512] = {};
+        const std::string scan_file_path = CurrentThread::current().get_scan_file_path();
+        const uint32_t MAX_BUFFER_SIZE = 512;
+        char buffer[MAX_BUFFER_SIZE] = {};
 
         // write build version
         int res = get_build_version(buffer, sizeof(buffer));
@@ -100,10 +101,9 @@ static void dump_trace_info() {
         res = sprintf(buffer + res, "\n") + res;
 
         // print for lake filename
-        if (!lake_filename.empty()) {
-            res = sprintf(buffer + res, "lake filename: ") + res;
-            res = sprintf(buffer + res, "%s", lake_filename.c_str()) + res;
-            res = sprintf(buffer + res, "\n") + res;
+        if (!scan_file_path.empty()) {
+            // Avoid buffer overflow, because url's length in not fixed
+            res = snprintf(buffer + res, MAX_BUFFER_SIZE - res, "Scan file path: %s\n", scan_file_path.c_str()) + res;
         }
 
         wt = write(STDERR_FILENO, buffer, res);
