@@ -358,8 +358,8 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                 ColumnRefOperator newColumnRef;
 
                 if (arg0.isColumnRef()) {
-                    // if arg0 is a ColumnRef and exists in the oldPreAggProjections,
-                    // we don't need to create a new ColumnRef
+                    // if arg0 is a ColumnRef, we don't need to create a new ColumnRef,
+                    // just make sure it occurs in newPreAggProjections
                     newColumnRef = (ColumnRefOperator) arg0;
                     if (!oldPreAggProjections.containsKey(arg0)) {
                         newPreAggProjections.put((ColumnRefOperator) arg0, arg0);
