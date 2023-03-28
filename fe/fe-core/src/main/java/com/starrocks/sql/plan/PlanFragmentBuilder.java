@@ -1109,6 +1109,7 @@ public class PlanFragmentBuilder {
                             ConstantOperator constantOperator = (ConstantOperator) predicate.getChildren().get(1);
                             switch (columnRefOperator.getName()) {
                                 case "TABLE_SCHEMA":
+                                case "DATABASE_NAME":
                                     scanNode.setSchemaDb(constantOperator.getVarchar());
                                     break;
                                 case "TABLE_NAME":
@@ -1128,6 +1129,17 @@ public class PlanFragmentBuilder {
                                     break;
                                 case "TXN_ID":
                                     scanNode.setTxnId(constantOperator.getBigint());
+                                    break;
+                                case "LABEL":
+                                    scanNode.setLabel(constantOperator.getVarchar());
+                                    break;
+                                case "JOB_ID":
+                                    scanNode.setJobId(constantOperator.getBigint());
+                                case "TYPE":
+                                    scanNode.setType(constantOperator.getVarchar());
+                                    break;
+                                case "STATE":
+                                    scanNode.setState(constantOperator.getVarchar());
                                     break;
                                 default:
                                     break;

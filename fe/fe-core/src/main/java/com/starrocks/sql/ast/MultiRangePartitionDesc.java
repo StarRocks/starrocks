@@ -80,7 +80,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         return timeUnit;
     }
 
-    public List<SingleRangePartitionDesc> convertToSingle(Type firstPartitionColumnType,
+    public List<SingleRangePartitionDesc> convertToSingle(boolean isAutoPartitionTable, Type firstPartitionColumnType,
                                                           Map<String, String> properties) throws AnalysisException {
 
         if (this.getStep() <= 0) {
@@ -88,7 +88,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         }
 
         if (firstPartitionColumnType.isDateType()) {
-            return buildDateTypePartition(firstPartitionColumnType, properties);
+            return buildDateTypePartition(isAutoPartitionTable, firstPartitionColumnType, properties);
         } else if (firstPartitionColumnType.isIntegerType()) {
             return buildNumberTypePartition(properties);
         } else {
@@ -96,7 +96,8 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         }
     }
 
-    private List<SingleRangePartitionDesc> buildDateTypePartition(Type firstPartitionColumnType,
+    private List<SingleRangePartitionDesc> buildDateTypePartition(boolean isAutoPartitionTable,
+                                                                  Type firstPartitionColumnType,
                                                                   Map<String, String> properties)
             throws AnalysisException {
         // int type does not support datekey int type
@@ -124,6 +125,11 @@ public class MultiRangePartitionDesc extends PartitionDesc {
 
         if (timeUnit == null) {
             throw new AnalysisException("Unknown timeunit for batch build partition.");
+        }
+
+        if (isAutoPartitionTable && timeInterval != 1) {
+            throw new AnalysisException("Automatically create partition tables and create partitions in advance " +
+                    "only supports an interval of 1");
         }
 
         String partitionName;
@@ -180,7 +186,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             outputDateFormat = DateUtils.DATE_TIME_FORMATTER;
         }
 
-        if (!Config.enable_create_partial_partition_in_batch) {
+        if (isAutoPartitionTable || !Config.enable_create_partial_partition_in_batch) {
             LocalDateTime standardBeginTime;
             LocalDateTime standardEndTime;
             String extraMsg = "";
@@ -230,8 +236,11 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                 String msg = "Batch build partition range [" + partitionBegin + "," + partitionEnd + ")" +
                         " should be a standard unit of time (" + timeUnitType + ") " + extraMsg + ". suggest range ["
                         + standardBeginTime.format(outputDateFormat) + "," + standardEndTime.format(outputDateFormat)
-                        + "). If you want to create partial partitions in batch, you can turn off this check by " +
-                        "setting the FE config enable_create_partial_partition_in_batch=true.";
+                        + ")";
+                if (!isAutoPartitionTable) {
+                    msg += "If you want to create partial partitions in batch, you can turn off this check by " +
+                            "setting the FE config enable_create_partial_partition_in_batch=true";
+                }
                 throw new AnalysisException(msg);
             }
         }

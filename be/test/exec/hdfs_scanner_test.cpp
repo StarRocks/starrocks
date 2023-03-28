@@ -200,7 +200,7 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     status = scanner->open(_runtime_state);
     ASSERT_TRUE(status.ok());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(chunk->num_rows(), 4);
@@ -1073,7 +1073,7 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     EXPECT_TRUE(status.ok());
 
