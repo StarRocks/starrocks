@@ -43,7 +43,7 @@ public class BackendHbResponseTest {
 
         // json serialize
         String json = GsonUtils.GSON.toJson(resp);
-        BackendHbResponse respJson = GsonUtils.GSON.fromJson(json, BackendHbResponse.class);
+        DataNodeHbResponse respJson = GsonUtils.GSON.fromJson(json, DataNodeHbResponse.class);
         Assert.assertEquals(beId, respJson.getBeId());
         Assert.assertEquals(bePort, respJson.getBePort());
         Assert.assertEquals(httpPort, respJson.getHttpPort());
