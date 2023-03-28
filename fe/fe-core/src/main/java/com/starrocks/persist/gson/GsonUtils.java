@@ -120,8 +120,8 @@ import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.system.DataNodeHbResponse;
 import com.starrocks.system.BrokerHbResponse;
+import com.starrocks.system.DataNodeHbResponse;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.system.HeartbeatResponse;
 
