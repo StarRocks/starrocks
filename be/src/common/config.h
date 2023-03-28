@@ -738,12 +738,18 @@ CONF_Bool(parquet_late_materialization_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
+<<<<<<< HEAD
 
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 CONF_Int32(io_tasks_per_scan_operator, "4");
 CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
 CONF_Bool(connector_dynamic_chunk_buffer_limiter_enable, "true");
 CONF_Bool(connector_min_max_predicate_from_runtime_filter_enable, "true");
+=======
+CONF_Int32(io_tasks_per_scan_operator, "4");
+CONF_Bool(scan_node_always_shared_scan, "false");
+CONF_Bool(connector_scan_node_always_shared_scan, "true");
+>>>>>>> fb2c98068 ([BugFix] fix shared buffer io coalesce (#20384))
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
