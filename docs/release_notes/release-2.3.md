@@ -1,5 +1,27 @@
 # StarRocks version 2.3
 
+## 2.3.11
+
+Release date: March 28, 2023
+
+### Improvements
+
+- Executing complex queries that contain many expressions usually generates a large number of `ColumnRefOperators`. Originally, StarRocks uses `BitSet` to store `ColumnRefOperator::id`, which consumes a large amount of memory. In order to reduce memory usage, StarRocks now uses `RoaringBitMap` to store `ColumnRefOperator::id`. [#16499](https://github.com/StarRocks/starrocks/pull/16499)
+- A new I/O scheduling strategy is introduced to reduce the performance impact of large queries on small queries. To enable the new I/O scheduling strategy, configure the BE static parameter `pipeline_scan_queue_mode=1` in **be.conf** and then restart BEs. [#19009](https://github.com/StarRocks/starrocks/pull/19009)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- A table whose expired data is not properly recycled occupies a relatively large portion of disk space. [#19796](https://github.com/StarRocks/starrocks/pull/19796)
+- The error message displayed in the following scenario is not informative: A Broker Load job loads Parquet files into StarRocks and a `NULL` value is loaded into a NOT NULL column. [#19885](https://github.com/StarRocks/starrocks/pull/19885)
+- Frequently creating a large number of temporary partitions to replace existing partitions leads to memory leaks and Full GC on the FE nodes. [#19283](https://github.com/StarRocks/starrocks/pull/19283)
+- For Colocation tables, the replica status can be manually specified as `bad` by using statements like `ADMIN SET REPLICA STATUS PROPERTIES ("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");`. If the number of BEs is less than or equal to the number of replicas, the corrupted replica cannot be repaired. [#19443](https://github.com/StarRocks/starrocks/pull/19443)
+- When the request `INSERT INTO SELECT` is sent to a Follower FE, the parameter `parallel_fragment_exec_instance_num` does not take effect. [#18841](https://github.com/StarRocks/starrocks/pull/18841)
+- When the operator `<=>` is used to compare a value with a `NULL` value, the comparison result is incorrect. [#19210](https://github.com/StarRocks/starrocks/pull/19210)
+- The query concurrency metric decreases slowly when the concurrency limit of a resource group is continuously reached. [#19363](https://github.com/StarRocks/starrocks/pull/19363)
+- Highly concurrent data load jobs may cause the error `"get database read lock timeout, database=xxx"`. [#16748](https://github.com/StarRocks/starrocks/pull/16748) [#18992](https://github.com/StarRocks/starrocks/pull/18992)
+
 ## 2.3.10
 
 Release date: March 9, 2023
