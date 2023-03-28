@@ -57,7 +57,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CloneTask;
@@ -448,7 +448,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     public boolean containsBE(long beId, boolean forColocate) {
         String host = infoService.getBackend(beId).getHost();
         for (Replica replica : tablet.getImmutableReplicas()) {
-            Backend be = infoService.getBackend(replica.getBackendId());
+            DataNode be = infoService.getBackend(replica.getBackendId());
             if (be == null) {
                 // BE has been dropped, skip it
                 continue;
@@ -540,7 +540,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 continue;
             }
 
-            Backend be = infoService.getBackend(replica.getBackendId());
+            DataNode be = infoService.getBackend(replica.getBackendId());
             if (be == null || !be.isAlive()) {
                 // backend which is in decommission can still be the source backend
                 continue;
@@ -630,7 +630,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 continue;
             }
 
-            Backend be = infoService.getBackend(replica.getBackendId());
+            DataNode be = infoService.getBackend(replica.getBackendId());
             // NOTE: be in decommission can also be the destination,
             // or the version incomplete replica will block the decommission process
             if (be == null || !be.isAlive()) {
@@ -772,13 +772,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     // database lock should be held.
     public CloneTask createCloneReplicaAndTask() throws SchedException {
-        Backend srcBe = infoService.getBackend(srcReplica.getBackendId());
+        DataNode srcBe = infoService.getBackend(srcReplica.getBackendId());
         if (srcBe == null) {
             throw new SchedException(Status.UNRECOVERABLE,
                     "src backend " + srcReplica.getBackendId() + " does not exist");
         }
 
-        Backend destBe = infoService.getBackend(destBackendId);
+        DataNode destBe = infoService.getBackend(destBackendId);
         if (destBe == null) {
             throw new SchedException(Status.UNRECOVERABLE,
                     "dest backend " + destBackendId + " does not exist");

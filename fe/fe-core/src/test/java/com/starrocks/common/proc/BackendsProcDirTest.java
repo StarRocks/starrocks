@@ -38,7 +38,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -48,8 +48,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 public class BackendsProcDirTest {
-    private Backend b1;
-    private Backend b2;
+    private DataNode b1;
+    private DataNode b2;
 
     @Mocked
     private SystemInfoService systemInfoService;
@@ -62,20 +62,20 @@ public class BackendsProcDirTest {
 
     @Before
     public void setUp() {
-        b1 = new Backend(1000, "host1", 10000);
+        b1 = new DataNode(1000, "host1", 10000);
         b1.updateOnce(10001, 10003, 10005);
-        b2 = new Backend(1001, "host2", 20000);
+        b2 = new DataNode(1001, "host2", 20000);
         b2.updateOnce(20001, 20003, 20005);
 
         new Expectations() {
             {
-                editLog.logAddBackend((Backend) any);
+                editLog.logAddBackend((DataNode) any);
                 minTimes = 0;
 
-                editLog.logDropBackend((Backend) any);
+                editLog.logDropBackend((DataNode) any);
                 minTimes = 0;
 
-                editLog.logBackendStateChange((Backend) any);
+                editLog.logBackendStateChange((DataNode) any);
                 minTimes = 0;
 
                 globalStateMgr.getNextId();

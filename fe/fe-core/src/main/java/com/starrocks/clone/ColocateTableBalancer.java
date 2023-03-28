@@ -55,7 +55,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -584,7 +584,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 }
 
                 long destBeId = lowBackend.getKey();
-                Backend destBe = infoService.getBackend(destBeId);
+                DataNode destBe = infoService.getBackend(destBeId);
                 if (destBe == null) {
                     LOG.info("backend {} does not exist", destBeId);
                     return false;
@@ -640,7 +640,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
         for (List<Long> backendIds : backendsPerBucketSeq) {
             List<String> hosts = Lists.newArrayList();
             for (Long beId : backendIds) {
-                Backend be = infoService.getBackend(beId);
+                DataNode be = infoService.getBackend(beId);
                 if (be == null) {
                     // just skip
                     LOG.info("backend {} does not exist", beId);
@@ -727,7 +727,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
         Set<Long> backends = colocateIndex.getBackendsByGroup(groupId);
         Set<Long> decommissionedBackends = Sets.newHashSet();
         for (Long backendId : backends) {
-            Backend be = infoService.getBackend(backendId);
+            DataNode be = infoService.getBackend(backendId);
             if (be != null && be.isDecommissioned() && be.isAlive()) {
                 decommissionedBackends.add(backendId);
             }
@@ -754,7 +754,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
      */
     private boolean checkBackendAvailable(Long backendId, SystemInfoService infoService) {
         long currTime = System.currentTimeMillis();
-        Backend be = infoService.getBackend(backendId);
+        DataNode be = infoService.getBackend(backendId);
         if (be == null) {
             return false;
         } else if (!be.isAvailable()) {

@@ -36,7 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class HDFSBackendSelectorTest {
+public class HDFSDataNodeSelectorTest {
     @Mocked
     private HdfsScanNode hdfsScanNode;
     @Mocked

@@ -46,7 +46,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TxnFinishState;
 import org.apache.logging.log4j.LogManager;
@@ -208,7 +208,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         List<String> backends = new ArrayList<String>();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
-            Backend backend = infoService.getBackend(replica.getBackendId());
+            DataNode backend = infoService.getBackend(replica.getBackendId());
             if (backend == null) {
                 continue;
             }
@@ -516,7 +516,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         Replica needFurtherRepairReplica = null;
         Set<String> hosts = Sets.newHashSet();
         for (Replica replica : replicas) {
-            Backend backend = systemInfoService.getBackend(replica.getBackendId());
+            DataNode backend = systemInfoService.getBackend(replica.getBackendId());
             if (backend == null || !backend.isAlive() || replica.getState() == ReplicaState.CLONE
                     || replica.getState() == ReplicaState.DECOMMISSION
                     || replica.isBad() || !hosts.add(backend.getHost())) {
@@ -783,7 +783,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                                 replicas.size()));
                         empty = false;
                     }
-                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                    DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
                     sb.append(String.format(" %s:%d%s",
                             backend == null ? Long.toString(replica.getBackendId()) : backend.getHost(), replicaVersion,
                             replica.getState() == ReplicaState.ALTER ? "ALTER" : ""));

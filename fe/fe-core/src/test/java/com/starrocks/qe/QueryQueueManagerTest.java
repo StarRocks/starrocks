@@ -25,8 +25,8 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResultSinkType;
 import mockit.Expectations;
@@ -233,7 +233,7 @@ public class QueryQueueManagerTest {
     @Test
     public void testCanRunMore() {
         QueryQueueManager manager = QueryQueueManager.getInstance();
-        ComputeNode be1 = new Backend();
+        ComputeNode be1 = new DataNode();
         be1.setAlive(true);
         be1.setId(1);
         ComputeNode be2 = new ComputeNode();

@@ -46,7 +46,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
@@ -138,7 +138,7 @@ public class TabletInvertedIndex {
         }
 
         int backendStorageTypeCnt = -1;
-        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        DataNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (be != null) {
             backendStorageTypeCnt = be.getAvailableBackendStorageTypeCnt();
         }

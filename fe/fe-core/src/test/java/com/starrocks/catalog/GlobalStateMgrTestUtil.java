@@ -46,7 +46,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 
@@ -92,9 +92,9 @@ public class GlobalStateMgrTestUtil {
         GlobalStateMgr globalStateMgr = constructor.newInstance();
         globalStateMgr.setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
-        Backend backend1 = createBackend(testBackendId1, "host1", 123, 124, 125);
-        Backend backend2 = createBackend(testBackendId2, "host2", 123, 124, 125);
-        Backend backend3 = createBackend(testBackendId3, "host3", 123, 124, 125);
+        DataNode backend1 = createBackend(testBackendId1, "host1", 123, 124, 125);
+        DataNode backend2 = createBackend(testBackendId2, "host2", 123, 124, 125);
+        DataNode backend3 = createBackend(testBackendId3, "host3", 123, 124, 125);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend1);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend2);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend3);
@@ -258,8 +258,8 @@ public class GlobalStateMgrTestUtil {
         db.createTable(esTable);
     }
 
-    public static Backend createBackend(long id, String host, int heartPort, int bePort, int httpPort) {
-        Backend backend = new Backend(id, host, heartPort);
+    public static DataNode createBackend(long id, String host, int heartPort, int bePort, int httpPort) {
+        DataNode backend = new DataNode(id, host, heartPort);
         backend.setAlive(true);
         return backend;
     }

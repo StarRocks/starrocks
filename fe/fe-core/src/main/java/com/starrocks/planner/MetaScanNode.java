@@ -26,7 +26,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TMetaScanNode;
@@ -105,7 +105,7 @@ public class MetaScanNode extends ScanNode {
                 Collections.shuffle(allQueryableReplicas);
                 boolean tabletIsNull = true;
                 for (Replica replica : allQueryableReplicas) {
-                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                    DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
                     if (backend == null) {
                         LOG.debug("replica {} not exists", replica.getBackendId());
                         continue;

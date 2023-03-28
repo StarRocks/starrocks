@@ -41,7 +41,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -52,8 +52,8 @@ import java.util.List;
 
 public class StorageMediumInferTest {
     private static ConnectContext connectContext;
-    private static Backend be1;
-    private static Backend be2;
+    private static DataNode be1;
+    private static DataNode be2;
 
     @BeforeClass
     public static void init() throws Exception {

@@ -36,8 +36,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.load.BrokerFileGroup;
-import com.starrocks.load.Load;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -46,7 +44,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerScanRangeParams;
@@ -85,7 +83,7 @@ public class LoadPlannerTest {
     private int maxBrokerConcurrency;
 
     // backends
-    private ImmutableMap<Long, Backend> idToBackend;
+    private ImmutableMap<Long, DataNode> idToBackend;
 
     private static ConnectContext ctx;
     private boolean strictMode = false;
@@ -114,11 +112,11 @@ public class LoadPlannerTest {
         maxBrokerConcurrency = Config.max_broker_concurrency;
 
         // backends
-        Map<Long, Backend> idToBackendTmp = Maps.newHashMap();
-        Backend b1 = new Backend(0L, "host0", 9050);
+        Map<Long, DataNode> idToBackendTmp = Maps.newHashMap();
+        DataNode b1 = new DataNode(0L, "host0", 9050);
         b1.setAlive(true);
         idToBackendTmp.put(0L, b1);
-        Backend b2 = new Backend(1L, "host1", 9050);
+        DataNode b2 = new DataNode(1L, "host1", 9050);
         b2.setAlive(true);
         idToBackendTmp.put(1L, b2);
         idToBackend = ImmutableMap.copyOf(idToBackendTmp);

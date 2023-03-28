@@ -37,7 +37,7 @@ package com.starrocks.common.publish;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TAgentPublishRequest;
@@ -76,14 +76,14 @@ public class ClusterStatePublisher {
     }
 
     public void publish(ClusterStateUpdate state, Listener listener, int timeoutMs) {
-        Collection<Backend> nodesToPublish = clusterInfoService.getIdToBackend().values();
+        Collection<DataNode> nodesToPublish = clusterInfoService.getIdToBackend().values();
         AckResponseHandler handler = new AckResponseHandler(nodesToPublish, listener);
-        for (Backend node : nodesToPublish) {
+        for (DataNode node : nodesToPublish) {
             executor.submit(new PublishWorker(state, node, handler));
         }
         try {
             if (!handler.awaitAllInMs(timeoutMs)) {
-                Backend[] backends = handler.pendingNodes();
+                DataNode[] backends = handler.pendingNodes();
                 if (backends.length > 0) {
                     LOG.warn("timed out waiting for all nodes to publish. (pending nodes: {})",
                             Arrays.toString(backends));
@@ -96,10 +96,10 @@ public class ClusterStatePublisher {
 
     public class PublishWorker implements Runnable {
         private ClusterStateUpdate stateUpdate;
-        private Backend node;
+        private DataNode node;
         private ResponseHandler handler;
 
-        public PublishWorker(ClusterStateUpdate stateUpdate, Backend node, ResponseHandler handler) {
+        public PublishWorker(ClusterStateUpdate stateUpdate, DataNode node, ResponseHandler handler) {
             this.stateUpdate = stateUpdate;
             this.node = node;
             this.handler = handler;

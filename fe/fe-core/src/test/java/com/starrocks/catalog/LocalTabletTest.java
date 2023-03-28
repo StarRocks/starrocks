@@ -39,7 +39,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
@@ -98,8 +98,8 @@ public class LocalTabletTest {
         tablet.addReplica(replica3);
 
         infoService = GlobalStateMgr.getCurrentSystemInfo();
-        infoService.addBackend(new Backend(10001L, "host1", 9050));
-        infoService.addBackend(new Backend(10002L, "host2", 9050));
+        infoService.addBackend(new DataNode(10001L, "host1", 9050));
+        infoService.addBackend(new DataNode(10002L, "host2", 9050));
 
     }
 
