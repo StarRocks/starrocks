@@ -755,7 +755,6 @@ CONF_Bool(parquet_late_materialization_enable, "true");
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 CONF_Int32(io_tasks_per_scan_operator, "4");
-
 CONF_Bool(scan_node_always_shared_scan, "false");
 CONF_Bool(connector_scan_node_always_shared_scan, "true");
 
@@ -881,6 +880,8 @@ CONF_Int64(block_cache_max_concurrent_inserts, "1000000");
 // Once this is reached, requests will be rejected until the parcel memory usage gets under the limit.
 CONF_Int64(block_cache_max_parcel_memory_mb, "256");
 CONF_Bool(block_cache_report_stats, "false");
+// cachelib, starcache
+CONF_String(block_cache_engine, "starcache");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
