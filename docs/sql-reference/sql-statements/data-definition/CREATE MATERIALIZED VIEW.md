@@ -22,7 +22,7 @@ In StarRocks v2.5, asynchronous async refresh materialized views support query r
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
 [distribution_desc]
-[REFRESH refresh_scheme_desc]
+[REFRESH refresh_moment refresh_scheme_desc]
 [partition_expression]
 [COMMENT ""]
 [PROPERTIES ("key"="value", ...)]
@@ -82,6 +82,13 @@ SELECT select_expr[, select_expr ...]
 
 The bucketing strategy of the materialized view, in the form of `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`.
 
+**refresh_moment** (optional)
+
+The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid values:
+
+- `IMMEDIATE`: Refresh the materialized view immediately after it is created.
+- `DEFERRED`: The materialized view is not refreshed after it is created. You can manually refresh the materialized view or schedule regular refresh tasks.
+
 **refresh_scheme_desc** (optional)
 
 The refresh strategy of the materialized view. This parameter supports the following values:
@@ -127,6 +134,14 @@ When a query is executed with a materialized view, the original query statement 
 | count                                                  | count                                           |
 | bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                    |
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                       |
+
+
+## Relavant session variables
+
+The following variables control the behaviour of materialized view:
+
+- `analyze_mv`: Whether and how to analyze the materialized view after refresh. Valid values are an empty string (Do not analyze), `sample` (Sampled statistics collection), and `full` (Full statistics collection). Default is `sample`.
+- `enable_materialized_view_rewrite`: Whether to enable the automatic rewrite for materialized view. Valid values are `true` (Default since v2.5) and `false`.
 
 ## Usage notes
 
