@@ -35,6 +35,22 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     return ctx;
 }
 
+FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* pool,
+                                                 const FunctionContext::TypeDesc& return_type,
+                                                 const std::vector<FunctionContext::TypeDesc>& arg_types,
+                                                 const std::vector<bool>& is_asc_order,
+                                                 const std::vector<bool>& nulls_first) {
+    auto* ctx = new FunctionContext();
+    ctx->_state = state;
+    ctx->_mem_pool = pool;
+    ctx->_return_type = return_type;
+    ctx->_arg_types = arg_types;
+    ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
+    ctx->_is_asc_order = is_asc_order;
+    ctx->_nulls_first = nulls_first;
+    return ctx;
+}
+
 FunctionContext* FunctionContext::create_test_context() {
     auto* context = new FunctionContext();
     context->_state = nullptr;
@@ -110,12 +126,12 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
     }
 }
 
-void FunctionContext::set_error(const char* error_msg) {
+void FunctionContext::set_error(const char* error_msg, const bool is_udf) {
     std::lock_guard<std::mutex> lock(_error_msg_mutex);
     if (_error_msg.empty()) {
         _error_msg = error_msg;
         std::stringstream ss;
-        ss << "UDF ERROR: " << error_msg;
+        ss << (is_udf ? "UDF ERROR: " : "") << error_msg;
         if (_state != nullptr) {
             _state->set_process_status(ss.str());
         }
