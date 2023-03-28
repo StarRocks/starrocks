@@ -175,8 +175,12 @@ StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
     ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(_offset, count));
     if (ret->buffer.capacity() == 0) return Status::NotSupported("peek shared buffer empty");
     const uint8_t* buf = nullptr;
+<<<<<<< HEAD
     size_t nbytes = count;
     RETURN_IF_ERROR(get_bytes(&buf, _offset, &nbytes));
+=======
+    RETURN_IF_ERROR(_get_bytes(&buf, _offset, count));
+>>>>>>> 4510123ac ([BugFix] fix return value of peek in ShareBufferedInputStream (#20408))
     return std::string_view((const char*)buf, count);
 }
 
