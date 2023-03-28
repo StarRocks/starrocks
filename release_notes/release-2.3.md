@@ -1,5 +1,27 @@
 # StarRocks version 2.3
 
+## 2.3.11
+
+发布日期： 2023 年 3 月 28 日
+
+### 功能优化
+
+- 复杂查询会导致大量 `ColumnRefOperators`。原先通过 `BitSet` 来存储 `ColumnRefOperator::id`，会占用较多内存。为了减少内存占用，现在用 `RoaringBitMap` 取代原来的 `BitSet` 来存储  `ColumnRefOperator::id`。[#16499](https://github.com/StarRocks/starrocks/pull/16499)
+- 增加新的 I/O 调度策略，降低大查询对小查询的性能影响。如果需要开启新的 I/O 调度策略，则需要在 **be.conf** 中设置 BE 静态参数 `pipeline_scan_queue_mode=1` 并重启 BE。[#19009](https://github.com/StarRocks/starrocks/pull/19009)
+
+### 问题修复
+
+修复了如下问题：
+
+- 当表的过期数据未正常回收时，该表会占用较高的磁盘容量。[#19796](https://github.com/StarRocks/starrocks/pull/19796)
+- 使用 Broker Load 导入 Parquet 文件，导入 `NULL` 值至 NOT NULL 的列时，报错提示不明确。[#19885](https://github.com/StarRocks/starrocks/pull/19885)
+- 频繁创建大量临时分区以替换原有分区时，导致 FE 内存泄露和 Full GC。[#19283](https://github.com/StarRocks/starrocks/pull/19283)
+- 对于 Colocation 表，可以通过命令手动指定副本状态为 bad  `ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");`，如果 BE 数量小于等于副本数量，则该副本无法被修复。[#19443](https://github.com/StarRocks/starrocks/pull/19443)
+- 向 Follower FE 发起 INSERT INTO SELECT 请求时，参数 `parallel_fragment_exec_instance_num` 不生效。[#18841](https://github.com/StarRocks/starrocks/pull/18841)
+- 使用运算符 `<=>` 对某个值和 `NULL` 值进行比较时，比较结果不正确。[#19210](https://github.com/StarRocks/starrocks/pull/19210)
+- 在持续触发资源隔离的并发限制时，查询并发数量指标下降缓慢。[#19363](https://github.com/StarRocks/starrocks/pull/19363)
+- 高并发导入时可能报错 `"get database read lock timeout, database=xxx"`。[#16748](https://github.com/StarRocks/starrocks/pull/16748) [#18992](https://github.com/StarRocks/starrocks/pull/18992)
+
 ## 2.3.10
 
 发布日期： 2023 年 3 月 9 日
