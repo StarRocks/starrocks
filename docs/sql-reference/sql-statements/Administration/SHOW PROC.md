@@ -167,15 +167,25 @@ Example 5: Shows the statistics of each database in the cluster.
 
 ```Plain
 mysql> SHOW PROC '/statistic';
-+---------+------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+
-| DbId    | DbName                 | TableNum | PartitionNum | IndexNum | TabletNum | ReplicaNum | UnhealthyTabletNum | InconsistentTabletNum | CloningTabletNum |
-+---------+------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+
-| 1275196 | _statistics_           | 3        | 3            | 3        | 30        | 90         | 30                 | 0                     | 0                |
-| 108518  | db2222                 | 25       | 25           | 25       | 298       | 318        | 298                | 0                     | 0                |
-| 836881  | example_db             | 7        | 10           | 13       | 409       | 409        | 409                | 0                     | 0                |
-| 1849142 | g1                     | 3        | 3            | 3        | 30        | 90         | 30                 | 10                    | 0                |
-| Total   | 41                     | 366      | 4771         | 4774     | 98628     | 167553     | 98628              | 11                    | 0                |
-+---------+------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+
++--------+----------------------------------------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+---------------------+
+| DbId   | DbName                                                   | TableNum | PartitionNum | IndexNum | TabletNum | ReplicaNum | UnhealthyTabletNum | InconsistentTabletNum | CloningTabletNum | ErrorStateTabletNum |
++--------+----------------------------------------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+---------------------+
+| 10004  | _statistics_                                             | 3        | 3            | 3        | 30        | 60         | 0                  | 0                     | 0                | 0                   |
+| 1      | information_schema                                       | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     | 0                | 0                   |
+| 92498  | stream_load_test_db_03afc714_b1cb_11ed_a82c_00163e237e98 | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     | 0                | 0                   |
+| 92542  | stream_load_test_db_79876e92_b1da_11ed_b50e_00163e237e98 | 1        | 1            | 1        | 3         | 3          | 0                  | 0                     | 0                | 0                   |
+| 115476 | testdb                                                   | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     | 0                | 0                   |
+| 10002  | zq_test                                                  | 8        | 8            | 8        | 5043      | 7063       | 0                  | 0                     | 0                | 2                   |
+| Total  | 6                                                        | 12       | 12           | 12       | 5076      | 7126       | 0                  | 0                     | 0                | 2                   |
++--------+----------------------------------------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+---------------------+
+7 rows in set (0.01 sec)
+
+mysql> show proc '/statistic/10002';
++------------------+---------------------+----------------+-------------------+
+| UnhealthyTablets | InconsistentTablets | CloningTablets | ErrorStateTablets |
++------------------+---------------------+----------------+-------------------+
+| []               | []                  | []             | [116703, 116706]  |
++------------------+---------------------+----------------+-------------------+
 ```
 
 | **Return**            | **Description**                                              |
@@ -189,7 +199,9 @@ mysql> SHOW PROC '/statistic';
 | ReplicaNum            | Number of replicas in the database.                          |
 | UnhealthyTabletNum    | Number of unfinished (unhealthy) tablets in the database during data redistribution. |
 | InconsistentTabletNum | Number of inconsistent tablets in the database.              |
-| CloningTabletNum      | Number of tablets that are being cloned in the database      |
+| CloningTabletNum      | Number of tablets that are being cloned in the database.     |
+| ErrorStateTabletNum   | In a Primary Key type table, the number of tablets in Error state. |
+| ErrorStateTablets     | In a Primary Key type table, the IDs of the tablets in Error state. |
 
 Example 6: Shows the total number of all generic tasks and the failed tasks in the cluster.
 
