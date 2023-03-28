@@ -65,8 +65,4 @@ public class OptimizerTraceInfo {
     public boolean isTraceOptimizer() {
         return traceOptimizer;
     }
-
-    public void setTraceOptimizer(boolean traceOptimizer) {
-        this.traceOptimizer = traceOptimizer;
-    }
 }
