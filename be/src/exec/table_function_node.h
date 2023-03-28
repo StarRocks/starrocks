@@ -36,6 +36,10 @@ public:
     Status reset(RuntimeState* state) override;
     Status close(RuntimeState* state) override;
 
+    Status build_chunk(ChunkPtr* chunk, const std::vector<ColumnPtr>& output_columns);
+
+    Status get_next_input_chunk(RuntimeState* state, bool* eos);
+
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
 
@@ -50,6 +54,14 @@ private:
     //Slots of table function input parameters
     std::vector<SlotId> _param_slots;
 
+    //Input chunk currently being processed
+    ChunkPtr _input_chunk_ptr = nullptr;
+    //The current chunk is processed to which row
+    int _input_chunk_seek_rows = 0;
+    //The current outer line needs to be repeated several times
+    int _outer_column_remain_repeat_times = 0;
+    //table function result
+    std::pair<Columns, ColumnPtr> _table_function_result;
     //table function param and return offset
     TableFunctionState* _table_function_state = nullptr;
 
