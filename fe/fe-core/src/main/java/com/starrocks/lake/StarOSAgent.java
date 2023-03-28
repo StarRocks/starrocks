@@ -47,7 +47,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -454,7 +454,7 @@ public class StarOSAgent {
                         //  saveImage(). Refer to: https://starrocks.atlassian.net/browse/SR-16340
                         if (workerInfo.getWorkerPropertiesMap().containsKey("be_port")) {
                             int bePort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_port"));
-                            Backend be = GlobalStateMgr.getCurrentSystemInfo()
+                            DataNode be = GlobalStateMgr.getCurrentSystemInfo()
                                     .getBackendWithBePort(pair[0], bePort);
                             if (be == null) {
                                 LOG.warn("can't find backendId with bePort:{} for {}.", bePort, workerAddr);
