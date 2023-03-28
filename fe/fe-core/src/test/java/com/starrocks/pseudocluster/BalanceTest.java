@@ -63,7 +63,7 @@ public class BalanceTest {
         while (true) {
             boolean balanceFinished = true;
             for (Long beId : beIds) {
-                PseudoBackend backend = cluster.getBackend(beId);
+                PseudoDataNode backend = cluster.getBackend(beId);
                 // we have 10 tables with 6 tablets and 18 replicas, so the final state should be
                 // every backends having 30 tablets
                 if (backend.getTabletManager().getNumTablet() != 30) {
