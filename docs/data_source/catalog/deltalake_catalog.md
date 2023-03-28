@@ -2,7 +2,7 @@
 
 A Delta Lake catalog is a kind of external catalog that enables you to query data from Apache Delta Lake without ingestion.
 
-Also, you can directly transform and load data from Delta Lake based on this Delta Lake catalog.
+Also, you can directly transform and load data from Delta Lake by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Delta Lake catalogs. StarRocks supports Delta Lake catalogs from v2.5 onwards.
 
 To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cluster needs to integrate with two important components:
 
