@@ -1586,21 +1586,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return keysNum;
     }
 
-    public boolean convertRandomDistributionToHashDistribution() {
-        boolean hasChanged = false;
-        List<Column> baseSchema = getBaseSchema();
-        if (defaultDistributionInfo.getType() == DistributionInfoType.RANDOM) {
-            defaultDistributionInfo =
-                    ((RandomDistributionInfo) defaultDistributionInfo).toHashDistributionInfo(baseSchema);
-            hasChanged = true;
-        }
-
-        for (Partition partition : idToPartition.values()) {
-            if (partition.convertRandomDistributionToHashDistribution(baseSchema)) {
-                hasChanged = true;
-            }
-        }
-        return hasChanged;
+    public boolean isKeySet(Set<String> keyColumns) {
+        Set<String> tableKeyColumns = getKeyColumns().stream()
+                .map(column -> column.getName().toLowerCase()).collect(Collectors.toSet());
+        return tableKeyColumns.equals(keyColumns);
     }
 
     public void setReplicationNum(Short replicationNum) {

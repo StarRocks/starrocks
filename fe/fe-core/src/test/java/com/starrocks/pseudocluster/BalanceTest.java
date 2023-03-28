@@ -2,9 +2,12 @@
 
 package com.starrocks.pseudocluster;
 
+import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TGetTabletScheduleRequest;
+import com.starrocks.thrift.TGetTabletScheduleResponse;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -62,6 +65,10 @@ public class BalanceTest {
             }
             cluster.runSql("test", insertSqls[rand.nextInt(numTable)]);
             Thread.sleep(2000);
+            TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
+            TGetTabletScheduleResponse response =
+                    tabletScheduler.getTabletSchedule(new TGetTabletScheduleRequest());
+            System.out.printf("current tablet schedule size: %d\n", response.tablet_schedules.size());
         }
         System.out.println("balance finished");
     }
