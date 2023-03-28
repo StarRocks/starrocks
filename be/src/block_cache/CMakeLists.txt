@@ -1,4 +1,4 @@
-# Copyright 2023-present StarRocks, Inc. All rights reserved.
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,22 +20,15 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/block_cache")
 
 set(CACHE_FILES
   block_cache.cpp
-  star_cachelib.cpp
+  fb_cachelib.cpp
 )
-
-if (${WITH_CACHELIB} STREQUAL "ON")
-    list(APPEND CACHE_FILES fb_cachelib.cpp)
-endif()
 
 add_library(BlockCache STATIC
     ${CACHE_FILES}
 )
 
-if (${WITH_CACHELIB} STREQUAL "ON")
-    set(CACHELIB_DIR ${THIRDPARTY_DIR}/cachelib)
-    link_directories(${CACHELIB_DIR}/deps/lib64)
+set(CACHELIB_DIR ${THIRDPARTY_DIR}/cachelib)
+link_directories(${CACHELIB_DIR}/deps/lib64)
 
-    include_directories(AFTER ${CACHELIB_DIR}/include)
-    include_directories(AFTER ${CACHELIB_DIR}/deps/include)
-endif()
-
+include_directories(AFTER ${CACHELIB_DIR}/include)
+include_directories(AFTER ${CACHELIB_DIR}/deps/include)
