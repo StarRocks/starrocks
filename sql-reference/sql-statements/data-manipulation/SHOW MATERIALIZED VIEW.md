@@ -33,18 +33,26 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | **返回**                   | **说明**                                                    |
 | -------------------------- | --------------------------------------------------------- |
 | id                         | 物化视图 ID。                                               |
-| name                       | 物化视图名称。                                              |
-| database_name              | 物化视图所属的数据库名称。                                    |
-| refresh_type               | 物化视图的更新方式，包括 ROLLUP、MANNUL、ASYNC、INCREMENTAL。        |
-| is_active                  | 物化视图状态是否为 active。                                       |
-| last_refresh_start_time    | 物化视图上一次刷新开始时间。                              |
-| last_refresh_finished_time | 物化视图上一次刷新结束时间。                             |
-| last_refresh_duration      | 物化视图上一次刷新耗时（单位秒）。                          |
+| database_name              | 物化视图所属的数据库名称。                                     |
+| name                       | 物化视图名称。                                               |
+| refresh_type               | 物化视图的更新方式，包括 ROLLUP、MANNUL、ASYNC、INCREMENTAL。   |
+| is_active                  | 物化视图状态是否为 active。有效值：`true` 和 `false`。          |
+| partition_type             | 物化视图的分区类型，包括 RANGE 和 UNPARTITIONED。|
+| task_id                    | 物化视图的刷新任务 ID。                                       |
+| task_name                  | 物化视图的刷新任务名称。                                       |
+| last_refresh_start_time    | 物化视图上一次刷新开始时间。                                    |
+| last_refresh_finished_time | 物化视图上一次刷新结束时间。                                    |
+| last_refresh_duration      | 物化视图上一次刷新耗时（单位秒）。                               |
 | last_refresh_state         | 物化视图上一次刷新的状态，包括 PENDING、RUNNING、FAILED、SUCCESS。 |
-| inactive_code              | 物化视图上一次刷新失败的 ErrorCode（如果物化视图状态不为 active）。       |
-| inactive_reason            | 物化视图上一次刷新失败的ErrorMessage（如果物化视图状态不为 active）。 |
-| text                       | 创建物化视图的查询语句。                                     |
-| rows                       | 物化视图中数据行数。                                         |
+| last_refresh_force_refresh | 物化视图上一次刷新是否为强制（FORCE）刷新。                      ｜
+| last_refresh_start_partition | 上一次刷新开始的物化视图分区。                                ｜
+| last_refresh_end_partition | 上一次刷新结束的物化视图分区。                                  ｜
+| last_refresh_base_refresh_partitions | 上一次刷新基表更新的分区。                            ｜
+| last_refresh_mv_refresh_partitions | 上一次刷新物化视图刷新的分区。                          ｜
+| last_refresh_error_code    | 物化视图上一次刷新失败的 ErrorCode（如果物化视图状态不为 active）。 |
+| last_refresh_error_message | 物化视图上一次刷新失败的 ErrorMessage（如果物化视图状态不为 active）。 |
+| rows                       | 物化视图中数据行数。                                           |
+| text                       | 创建物化视图的查询语句。                                        |
 
 ## 示例
 
