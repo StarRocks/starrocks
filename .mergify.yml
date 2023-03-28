@@ -18,9 +18,10 @@ pull_request_rules:
 
   - name: assign backport PRs with the pr author
     conditions:
-      - -merged
+      - merged
     actions:
       backport:
+        bot_account: "{{author}}"
         assignees: 
           - "{{author}}"
   
@@ -30,4 +31,4 @@ pull_request_rules:
     actions:
       close:
         message:
-          "Backport conflict, please reslove the conflict and resubmit the pr"
+          "@{{author}}: Backport conflict, please reslove the conflict and resubmit the pr"
