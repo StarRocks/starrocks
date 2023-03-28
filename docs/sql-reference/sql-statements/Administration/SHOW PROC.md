@@ -200,8 +200,8 @@ mysql> show proc '/statistic/10002';
 | UnhealthyTabletNum    | Number of unfinished (unhealthy) tablets in the database during data redistribution. |
 | InconsistentTabletNum | Number of inconsistent tablets in the database.              |
 | CloningTabletNum      | Number of tablets that are being cloned in the database.     |
-| ErrorStateTabletNum   | Number of tablets in Error state.                            |
-| ErrorStateTablets     | IDs of the tablets in Error state.                           |
+| ErrorStateTabletNum   | In a Primary Key type table, the number of tablets in Error state. |
+| ErrorStateTablets     | In a Primary Key type table, the IDs of the tablets in Error state. |
 
 Example 6: Shows the total number of all generic tasks and the failed tasks in the cluster.
 
