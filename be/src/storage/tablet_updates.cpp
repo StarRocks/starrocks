@@ -2794,7 +2794,8 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
     return rowset_writer->flush();
 }
 
-Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version) {
+Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
+                                   ChunkChanger* chunk_changer) {
     OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << "tablet state is not TABLET_NOTREADY, reorder_from is not allowed"
@@ -2823,6 +2824,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                      << " request_version:" << request_version << " reason:" << status;
         return status;
     }
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
 
     // disable compaction temporarily when tablet just loaded
     _last_compaction_time_ms = UnixMillis();
@@ -2898,8 +2900,12 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                     }
                 }
 
-                for (auto i = 0; i < base_chunk->num_columns(); ++i) {
-                    base_chunk->get_column_by_index(i)->swap_column(*new_chunk->get_column_by_index(i));
+                if (!chunk_changer->change_chunk_v2(base_chunk, new_chunk, base_schema, new_schema, mem_pool.get())) {
+                    std::string err_msg =
+                            strings::Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
+                                                base_tablet->tablet_id(), _tablet.tablet_id());
+                    LOG(WARNING) << err_msg;
+                    return Status::InternalError(err_msg);
                 }
 
                 total_bytes += static_cast<double>(new_chunk->memory_usage());

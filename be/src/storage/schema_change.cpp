@@ -549,15 +549,25 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         const auto& base_sort_key_idxes = base_tablet->tablet_schema().sort_key_idxes();
         const auto& new_sort_key_idxes = new_tablet->tablet_schema().sort_key_idxes();
-        if (std::mismatch(new_sort_key_idxes.begin(), new_sort_key_idxes.end(), base_sort_key_idxes.begin()).first !=
-            new_sort_key_idxes.end()) {
+        std::vector<int32_t> base_sort_key_unique_ids;
+        std::vector<int32_t> new_sort_key_unique_ids;
+        for (auto idx : base_sort_key_idxes) {
+            base_sort_key_unique_ids.emplace_back(base_tablet->tablet_schema().column(idx).unique_id());
+        }
+        for (auto idx : new_sort_key_idxes) {
+            new_sort_key_unique_ids.emplace_back(new_tablet->tablet_schema().column(idx).unique_id());
+        }
+        if (std::mismatch(new_sort_key_unique_ids.begin(), new_sort_key_unique_ids.end(),
+                          base_sort_key_unique_ids.begin())
+                    .first != new_sort_key_unique_ids.end()) {
             sc_params.sc_directly = !(sc_params.sc_sorting = true);
         }
         if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request.alter_version,
                                                          sc_params.chunk_changer.get());
         } else if (sc_params.sc_sorting) {
-            status = new_tablet->updates()->reorder_from(base_tablet, request.alter_version);
+            status = new_tablet->updates()->reorder_from(base_tablet, request.alter_version,
+                                                         sc_params.chunk_changer.get());
         } else {
             status = new_tablet->updates()->link_from(base_tablet.get(), request.alter_version);
         }
