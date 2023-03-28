@@ -87,7 +87,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.task.AgentClient;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.THdfsProperties;
@@ -699,7 +699,7 @@ public class ExportJob implements Writable {
             TNetworkAddress address = snapshotPath.first;
             String host = address.getHostname();
             int port = address.getPort();
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
             if (backend == null) {
                 continue;
             }
@@ -731,7 +731,7 @@ public class ExportJob implements Writable {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
                 if (backend == null) {
                     continue;
                 }

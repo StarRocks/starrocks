@@ -100,8 +100,8 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
@@ -475,17 +475,17 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_ADD_BACKEND: {
-                    Backend be = (Backend) journal.getData();
+                    DataNode be = (DataNode) journal.getData();
                     GlobalStateMgr.getCurrentSystemInfo().replayAddBackend(be);
                     break;
                 }
                 case OperationType.OP_DROP_BACKEND: {
-                    Backend be = (Backend) journal.getData();
+                    DataNode be = (DataNode) journal.getData();
                     GlobalStateMgr.getCurrentSystemInfo().replayDropBackend(be);
                     break;
                 }
                 case OperationType.OP_BACKEND_STATE_CHANGE: {
-                    Backend be = (Backend) journal.getData();
+                    DataNode be = (DataNode) journal.getData();
                     GlobalStateMgr.getCurrentSystemInfo().updateBackendState(be);
                     break;
                 }
@@ -1273,7 +1273,7 @@ public class EditLog {
         logEdit(OperationType.OP_ADD_COMPUTE_NODE, computeNode);
     }
 
-    public void logAddBackend(Backend be) {
+    public void logAddBackend(DataNode be) {
         logEdit(OperationType.OP_ADD_BACKEND, be);
     }
 
@@ -1281,7 +1281,7 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_COMPUTE_NODE, log);
     }
 
-    public void logDropBackend(Backend be) {
+    public void logDropBackend(DataNode be) {
         logEdit(OperationType.OP_DROP_BACKEND, be);
     }
 
@@ -1329,7 +1329,7 @@ public class EditLog {
         logEdit(OperationType.OP_META_VERSION_V2, metaVersion);
     }
 
-    public void logBackendStateChange(Backend be) {
+    public void logBackendStateChange(DataNode be) {
         logEdit(OperationType.OP_BACKEND_STATE_CHANGE, be);
     }
 

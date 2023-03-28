@@ -97,8 +97,8 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.codec.binary.Hex;
@@ -257,12 +257,12 @@ public class UtFrameUtils {
         createMinStarRocksCluster(false);
     }
 
-    public static Backend addMockBackend(int backendId) throws Exception {
+    public static DataNode addMockBackend(int backendId) throws Exception {
         // start be
         MockedBackend backend = new MockedBackend("127.0.0.1");
 
         // add be
-        Backend be = new Backend(backendId, backend.getHost(), backend.getHeartBeatPort());
+        DataNode be = new DataNode(backendId, backend.getHost(), backend.getHeartBeatPort());
         Map<String, DiskInfo> disks = Maps.newHashMap();
         DiskInfo diskInfo1 = new DiskInfo(backendId + "/path1");
         diskInfo1.setTotalCapacityB(1000000);

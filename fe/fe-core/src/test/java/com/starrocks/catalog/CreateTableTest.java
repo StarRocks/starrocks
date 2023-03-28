@@ -46,7 +46,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -63,7 +63,7 @@ public class CreateTableTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        Backend be = UtFrameUtils.addMockBackend(10002);
+        DataNode be = UtFrameUtils.addMockBackend(10002);
         be.setIsDecommissioned(true);
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);

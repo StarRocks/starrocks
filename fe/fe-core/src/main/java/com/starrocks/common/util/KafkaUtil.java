@@ -50,7 +50,7 @@ import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PStringPair;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -182,7 +182,7 @@ public class KafkaUtil {
                     throw new LoadException("Failed to send proxy request. No alive backends");
                 }
                 Collections.shuffle(backendIds);
-                Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
+                DataNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info

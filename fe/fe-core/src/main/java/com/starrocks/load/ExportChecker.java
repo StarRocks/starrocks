@@ -40,7 +40,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.task.ExportExportingTask;
 import com.starrocks.task.ExportPendingTask;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -172,7 +172,7 @@ public final class ExportChecker extends LeaderDaemon {
         boolean beHasErr = false;
         String errMsg = "";
         for (Long beId : job.getBeStartTimeMap().keySet()) {
-            Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+            DataNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
             if (null == be) {
                 // The current implementation, if the be in the job is not found, 
                 // the job will be cancelled

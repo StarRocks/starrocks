@@ -113,7 +113,7 @@ public class ComputeNode implements IComputable, Writable {
         this.beRpcPort = 0;
 
         this.ownerClusterName = "";
-        this.backendState = Backend.BackendState.free.ordinal();
+        this.backendState = DataNode.BackendState.free.ordinal();
 
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
     }
@@ -133,7 +133,7 @@ public class ComputeNode implements IComputable, Writable {
         this.isDecommissioned = new AtomicBoolean(false);
 
         this.ownerClusterName = "";
-        this.backendState = Backend.BackendState.free.ordinal();
+        this.backendState = DataNode.BackendState.free.ordinal();
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
     }
 
@@ -235,7 +235,7 @@ public class ComputeNode implements IComputable, Writable {
         this.host = host;
     }
 
-    public void setBackendState(Backend.BackendState state) {
+    public void setBackendState(DataNode.BackendState state) {
         this.backendState = state.ordinal();
     }
 
@@ -377,14 +377,14 @@ public class ComputeNode implements IComputable, Writable {
         ownerClusterName = "";
     }
 
-    public Backend.BackendState getBackendState() {
+    public DataNode.BackendState getBackendState() {
         switch (backendState) {
             case 0:
-                return Backend.BackendState.using;
+                return DataNode.BackendState.using;
             case 1:
-                return Backend.BackendState.offline;
+                return DataNode.BackendState.offline;
             default:
-                return Backend.BackendState.free;
+                return DataNode.BackendState.free;
         }
     }
 

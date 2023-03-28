@@ -42,7 +42,7 @@ import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletSchedCtx.Type;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -70,8 +70,8 @@ public class TabletSchedCtxTest {
 
     private static int TABLET_ID_1 = 50000;
 
-    private Backend be1;
-    private Backend be2;
+    private DataNode be1;
+    private DataNode be2;
 
     private GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
     private SystemInfoService systemInfoService;
@@ -83,7 +83,7 @@ public class TabletSchedCtxTest {
     @Before
     public void setUp() {
         // be1
-        be1 = new Backend(10001, "192.168.0.1", 9051);
+        be1 = new DataNode(10001, "192.168.0.1", 9051);
         Map<String, DiskInfo> disks = Maps.newHashMap();
         DiskInfo diskInfo1 = new DiskInfo("/path1");
         diskInfo1.setTotalCapacityB(1000000);
@@ -95,7 +95,7 @@ public class TabletSchedCtxTest {
         be1.setAlive(true);
 
         // be2
-        be2 = new Backend(10002, "192.168.0.2", 9052);
+        be2 = new DataNode(10002, "192.168.0.2", 9052);
         disks = Maps.newHashMap();
         diskInfo1 = new DiskInfo("/path1");
         diskInfo1.setTotalCapacityB(2000000);

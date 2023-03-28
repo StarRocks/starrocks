@@ -30,7 +30,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -106,9 +106,9 @@ public class Utils {
         List<Long> txnIds = Lists.newArrayList(txnId);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<Backend> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
+        List<DataNode> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            Backend backend = systemInfoService.getBackend(entry.getKey());
+            DataNode backend = systemInfoService.getBackend(entry.getKey());
             if (backend == null) {
                 throw new NoAliveBackendException("Backend been dropped while building publish version request");
             }
@@ -156,9 +156,9 @@ public class Utils {
         }
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Future<PublishLogVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<Backend> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
+        List<DataNode> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            Backend backend = systemInfoService.getBackend(entry.getKey());
+            DataNode backend = systemInfoService.getBackend(entry.getKey());
             if (backend == null) {
                 throw new NoAliveBackendException("Backend been dropped while building publish version request");
             }

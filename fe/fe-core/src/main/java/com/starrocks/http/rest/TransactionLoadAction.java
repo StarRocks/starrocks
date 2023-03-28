@@ -45,7 +45,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionStatus;
 import io.netty.handler.codec.http.HttpMethod;
@@ -268,7 +268,7 @@ public class TransactionLoadAction extends RestBaseAction {
             throw new UserException("transaction with op " + op + " label " + label + " has no backend");
         }
 
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendID);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendID);
         if (backend == null) {
             throw new UserException("Backend " + backendID + " is not alive");
         }

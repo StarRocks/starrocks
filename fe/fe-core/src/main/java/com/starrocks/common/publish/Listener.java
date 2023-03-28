@@ -17,12 +17,12 @@
 
 package com.starrocks.common.publish;
 
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 
 // Used to
 public interface Listener {
     // Called when publish
-    public void onResponse(Backend node);
+    public void onResponse(DataNode node);
 
-    public void onFailure(Backend node, Throwable t);
+    public void onFailure(DataNode node, Throwable t);
 }
