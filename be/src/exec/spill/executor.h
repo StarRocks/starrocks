@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <tuple>
 #include <utility>
 
 #include "common/compiler_util.h"
@@ -41,28 +42,39 @@ struct MemTrackerGuard {
     mutable MemTracker* old_tracker = nullptr;
 };
 
-struct QueryCtxMemTrackerGuard {
-    QueryCtxMemTrackerGuard(const pipeline::QueryContextPtr& query_ctx_, MemTracker* scope_tracker_)
-            : query_ctx(query_ctx_->weak_from_this()), scope_tracker(scope_tracker_) {}
+template <class... WeakPtrs>
+struct ResourceMemTrackerGuard {
+    ResourceMemTrackerGuard(MemTracker* scope_tracker_, WeakPtrs&&... args)
+            : scope_tracker(scope_tracker_), resources(std::make_tuple(args...)) {}
 
     bool scoped_begin() const {
-        captured_ctx = query_ctx.lock();
-        if (captured_ctx == nullptr) {
+        auto res = capture(resources);
+        if (!res.has_value()) {
             return false;
         }
+        captured = std::move(res.value());
         old_tracker = tls_thread_status.set_mem_tracker(scope_tracker);
         return true;
     }
 
-    void scoped_end() const {
-        tls_thread_status.set_mem_tracker(old_tracker);
-        captured_ctx = nullptr;
+    void scoped_end() const { tls_thread_status.set_mem_tracker(old_tracker); }
+
+private:
+    auto capture(const std::tuple<WeakPtrs...>& weak_tup) const
+            -> std::optional<std::tuple<std::shared_ptr<typename WeakPtrs::element_type>...>> {
+        auto shared_ptrs = std::make_tuple(std::get<WeakPtrs>(weak_tup).lock()...);
+        bool all_locked = ((std::get<WeakPtrs>(weak_tup).lock() != nullptr) && ...);
+        if (all_locked) {
+            return shared_ptrs;
+        } else {
+            return std::nullopt;
+        }
     }
 
-    std::weak_ptr<pipeline::QueryContext> query_ctx;
     MemTracker* scope_tracker;
+    std::tuple<WeakPtrs...> resources;
 
-    mutable std::shared_ptr<pipeline::QueryContext> captured_ctx;
+    mutable std::tuple<std::shared_ptr<typename WeakPtrs::element_type>...> captured;
     mutable MemTracker* old_tracker = nullptr;
 };
 

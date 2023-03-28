@@ -135,7 +135,7 @@ public:
         _writer->get_spill_partitions(parititons);
     }
 
-    std::vector<std::unique_ptr<SpillerReader>> get_partition_spill_readers(
+    std::vector<std::shared_ptr<SpillerReader>> get_partition_spill_readers(
             const std::vector<const SpillPartitionInfo*>& parititons);
 
     const std::unique_ptr<SpillerWriter>& writer() { return _writer; }
