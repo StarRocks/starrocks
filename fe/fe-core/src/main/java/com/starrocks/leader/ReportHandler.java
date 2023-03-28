@@ -71,9 +71,8 @@ import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
-import com.starrocks.system.Backend.BackendStatus;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -165,7 +164,7 @@ public class ReportHandler extends Daemon {
         String host = tBackend.getHost();
         int bePort = tBackend.getBe_port();
         long beId;
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
         if (backend != null) {
             beId = backend.getId();
         } else {
@@ -439,9 +438,9 @@ public class ReportHandler extends Daemon {
         handleSetTabletBinlogConfig(backendId, backendTablets);
 
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
-        Backend reportBackend = currentSystemInfo.getBackend(backendId);
+        DataNode reportBackend = currentSystemInfo.getBackend(backendId);
         if (reportBackend != null) {
-            BackendStatus backendStatus = reportBackend.getBackendStatus();
+            DataNode.BackendStatus backendStatus = reportBackend.getBackendStatus();
             backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(start);
         }
 
@@ -499,7 +498,7 @@ public class ReportHandler extends Daemon {
     private static void diskReport(long backendId, Map<String, TDisk> backendDisks) {
         LOG.debug("begin to handle disk report from backend {}", backendId);
         long start = System.currentTimeMillis();
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
             LOG.warn("backend doesn't exist. id: " + backendId);
             return;
@@ -516,7 +515,7 @@ public class ReportHandler extends Daemon {
     private static void workgroupReport(long backendId, List<TWorkGroup> workGroups) {
         LOG.debug("begin to handle workgroup report from backend{}", backendId);
         long start = System.currentTimeMillis();
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
             LOG.warn("backend does't exist. id: " + backendId);
         }

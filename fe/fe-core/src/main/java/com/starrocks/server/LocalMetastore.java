@@ -44,6 +44,8 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -60,6 +62,8 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DynamicPartitionProperty;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InfoSchemaDb;
@@ -109,6 +113,7 @@ import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.AddPartitionsInfo;
@@ -194,7 +199,7 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -796,27 +801,33 @@ public class LocalMetastore implements ConnectorMetadata {
     @Override
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
+        db.readLock();
+        Map<String, String> tableProperties;
+        OlapTable olapTable;
+        PartitionInfo partitionInfo;
+        try {
+            Table table = db.getTable(tableName);
+            CatalogUtils.checkTableExist(db, tableName);
+            CatalogUtils.checkNativeTable(db, table);
+            olapTable = (OlapTable) table;
+            tableProperties = olapTable.getTableProperty().getProperties();
+            partitionInfo = olapTable.getPartitionInfo();
+
+        } finally {
+            db.readUnlock();
+        }
         PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
         if (partitionDesc instanceof SingleItemListPartitionDesc
                 || partitionDesc instanceof MultiItemListPartitionDesc
                 || partitionDesc instanceof SingleRangePartitionDesc) {
-            addPartitions(db, tableName, ImmutableList.of(partitionDesc),
-                    addPartitionClause);
-        } else if (partitionDesc instanceof MultiRangePartitionDesc) {
-            db.readLock();
-            RangePartitionInfo rangePartitionInfo;
-            Map<String, String> tableProperties;
-            try {
-                Table table = db.getTable(tableName);
-                CatalogUtils.checkTableExist(db, tableName);
-                CatalogUtils.checkNativeTable(db, table);
-                OlapTable olapTable = (OlapTable) table;
-                tableProperties = olapTable.getTableProperty().getProperties();
-                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            } finally {
-                db.readUnlock();
+            if (partitionInfo.getType() == PartitionType.EXPR_RANGE && !partitionDesc.isSystem()) {
+                throw new DdlException("Automatically partitioned tables only support the syntax " +
+                        "for adding partitions in batches.");
             }
+            addPartitions(db, tableName, ImmutableList.of(partitionDesc), addPartitionClause);
+        } else if (partitionDesc instanceof MultiRangePartitionDesc) {
+            RangePartitionInfo rangePartitionInfo;
+            rangePartitionInfo = (RangePartitionInfo) partitionInfo;
 
             if (rangePartitionInfo == null) {
                 throw new DdlException("Alter batch get partition info failed.");
@@ -829,6 +840,16 @@ public class LocalMetastore implements ConnectorMetadata {
 
             Column firstPartitionColumn = partitionColumns.get(0);
             MultiRangePartitionDesc multiRangePartitionDesc = (MultiRangePartitionDesc) partitionDesc;
+            boolean isAutoPartitionTable = false;
+            if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
+                isAutoPartitionTable = true;
+                ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+                Expr expr = exprRangePartitionInfo.getPartitionExprs().get(0);
+                if (expr instanceof FunctionCallExpr) {
+                    FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                    checkAutoPartitionTableLimit(functionCallExpr, multiRangePartitionDesc);
+                }
+            }
             Map<String, String> properties = addPartitionClause.getProperties();
             if (properties == null) {
                 properties = Maps.newHashMap();
@@ -838,12 +859,30 @@ public class LocalMetastore implements ConnectorMetadata {
                         tableProperties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
             }
             List<SingleRangePartitionDesc> singleRangePartitionDescs = multiRangePartitionDesc
-                    .convertToSingle(firstPartitionColumn.getType(), properties);
-            List<PartitionDesc> partitionDescs = singleRangePartitionDescs.stream().map(item -> {
-                PartitionDesc desc = item;
-                return desc;
-            }).collect(Collectors.toList());
+                    .convertToSingle(isAutoPartitionTable, firstPartitionColumn.getType(), properties);
+            List<PartitionDesc> partitionDescs = singleRangePartitionDescs.stream()
+                    .map(item -> (PartitionDesc) item).collect(Collectors.toList());
             addPartitions(db, tableName, partitionDescs, addPartitionClause);
+        }
+    }
+
+    private void checkAutoPartitionTableLimit(FunctionCallExpr functionCallExpr,
+                                              MultiRangePartitionDesc multiRangePartitionDesc) throws DdlException {
+        String descGranularity = multiRangePartitionDesc.getTimeUnit();
+        String functionName = functionCallExpr.getFnName().getFunction();
+        if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)) {
+            Expr expr = functionCallExpr.getParams().exprs().get(0);
+            String functionGranularity = ((StringLiteral) expr).getStringValue();
+            if (!descGranularity.equalsIgnoreCase(functionGranularity)) {
+                throw new DdlException("The granularity of the auto-partitioned table granularity(" +
+                        functionGranularity + ") should be consistent with the increased partition granularity(" +
+                        descGranularity + ").");
+            }
+        } else if (FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName)) {
+            throw new DdlException("time_slice does not support pre-created partitions");
+        }
+        if (multiRangePartitionDesc.getStep() > 1) {
+            throw new DdlException("The step of the auto-partitioned table should be 1");
         }
     }
 
@@ -1854,7 +1893,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 for (Map.Entry<Long, Long> mark : firstThree) {
                     sb.append(mark.getValue()); // TabletId
                     sb.append('(');
-                    Backend backend = stateMgr.getClusterInfo().getBackend(mark.getKey());
+                    DataNode backend = stateMgr.getClusterInfo().getBackend(mark.getKey());
                     sb.append(backend != null ? backend.getHost() : "N/A");
                     sb.append(") ");
                 }
@@ -1906,40 +1945,16 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     void setLakeStorageInfo(OlapTable table, Map<String, String> properties) throws DdlException {
-        // storage cache property
-        boolean enableStorageCache =
-                PropertyAnalyzer.analyzeBooleanProp(properties,
-                        PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, true);
-        long storageCacheTtlS = 0;
+        StorageCacheInfo storageCacheInfo = null;
         try {
-            storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(properties,
-                    PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
-                    Config.lake_default_storage_cache_ttl_seconds);
+            storageCacheInfo = PropertyAnalyzer.analyzeStorageCacheInfo(properties);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
-        }
-        if (storageCacheTtlS < -1) {
-            throw new DdlException("Storage cache ttl should not be less than -1");
-        }
-        if (!enableStorageCache && storageCacheTtlS != 0 &&
-                storageCacheTtlS != Config.lake_default_storage_cache_ttl_seconds) {
-            throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
-        }
-        if (enableStorageCache && storageCacheTtlS == 0) {
-            throw new DdlException("Storage cache ttl should not be 0 when cache is enabled");
-        }
-
-        // set to false if absent
-        boolean enableAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
-                properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
-
-        if (!enableStorageCache && enableAsyncWriteBack) {
-            throw new DdlException("enable_async_write_back can't be turned on when cache is disabled");
         }
 
         // get service shard storage info from StarMgr
         FilePathInfo pathInfo = stateMgr.getStarOSAgent().allocateFilePath(table.getId());
-        table.setStorageInfo(pathInfo, enableStorageCache, storageCacheTtlS, enableAsyncWriteBack);
+        table.setStorageInfo(pathInfo, storageCacheInfo);
     }
 
     void registerTable(Database db, Table table, CreateTableStmt stmt) throws DdlException {
@@ -3774,8 +3789,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
-        final List<Backend> defaultClusterBackends = systemInfoService.getBackends();
-        for (Backend backend : defaultClusterBackends) {
+        final List<DataNode> defaultClusterBackends = systemInfoService.getBackends();
+        for (DataNode backend : defaultClusterBackends) {
             backendList.add(backend.getId());
         }
 
@@ -3784,7 +3799,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // make sure one host hold only one backend.
         Set<String> beHost = Sets.newHashSet();
-        for (Backend be : defaultClusterBackends) {
+        for (DataNode be : defaultClusterBackends) {
             if (beHost.contains(be.getHost())) {
                 // we can not handle this situation automatically.
                 LOG.error("found more than one backends in same host: {}", be.getHost());
@@ -3823,12 +3838,12 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
         for (long id : info.getBackendList()) {
-            final Backend backend = stateMgr.getClusterInfo().getBackend(id);
+            final DataNode backend = stateMgr.getClusterInfo().getBackend(id);
             final Cluster cluster = defaultCluster;
             cluster.removeBackend(id);
             backend.setDecommissioned(false);
             backend.clearClusterName();
-            backend.setBackendState(Backend.BackendState.free);
+            backend.setBackendState(DataNode.BackendState.free);
         }
     }
 
@@ -4465,7 +4480,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public Long allocateAutoIncrementId(Long tableId, Long rows) {
-        Long oldId = tableIdToIncrementId.putIfAbsent(tableId, 0L);
+        Long oldId = tableIdToIncrementId.putIfAbsent(tableId, 1L);
         if (oldId == null) {
             oldId = tableIdToIncrementId.get(tableId);
         }

@@ -1477,12 +1477,32 @@ public class PlanTestBase {
         return gson.toJson(jsonObject);
     }
 
+    /**
+     * Whether ignore explicit column ref ids when checking the expected plans.
+     */
+    protected boolean isIgnoreExplicitColRefIds() {
+        return false;
+    }
+
     private void checkWithIgnoreTabletList(String expect, String actual) {
         expect = Stream.of(expect.split("\n")).
                 filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+        if (isIgnoreExplicitColRefIds()) {
+            checkWithIgnoreTabletListAndColRefIds(expect, actual);
+        } else {
+            expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+            actual = Stream.of(actual.split("\n")).filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+            Assert.assertEquals(expect, actual);
+        }
+    }
 
-        actual = Stream.of(actual.split("\n")).
-                filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+    private void checkWithIgnoreTabletListAndColRefIds(String expect, String actual) {
+        expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList"))
+                .map(str -> str.replaceAll("\\d+", ""))
+                .collect(Collectors.joining("\n"));
+        actual = Stream.of(actual.split("\n")).filter(s -> !s.contains("tabletList"))
+                .map(str -> str.replaceAll("\\d+", ""))
+                .collect(Collectors.joining("\n"));
         Assert.assertEquals(expect, actual);
     }
 

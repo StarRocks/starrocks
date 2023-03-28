@@ -26,8 +26,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
@@ -74,7 +74,7 @@ public class FrontendServiceImplTest {
         QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
 
-        Backend backend = new Backend(0, "127.0.0.1", 80);
+        DataNode backend = new DataNode(0, "127.0.0.1", 80);
         ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
 
         new MockUp<SystemInfoService>() {
@@ -221,9 +221,7 @@ public class FrontendServiceImplTest {
                         "    pv BIGINT DEFAULT '0'\n" +
                         ")\n" +
                         "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
-                        "PARTITION BY time_slice(event_day, interval 5 day) (\n" +
-                        "START (\"2022-01-01\") END (\"2022-01-05\") EVERY (INTERVAL 1 day)\n" +
-                        ")\n" +
+                        "PARTITION BY time_slice(event_day, interval 5 day)\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                         "PROPERTIES(\"replication_num\" = \"1\");");
     }
@@ -380,6 +378,7 @@ public class FrontendServiceImplTest {
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1991-04-24");
+        values.add("1991-04-25");
         partitionValues.add(values);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);

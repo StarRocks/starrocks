@@ -361,8 +361,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
     public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
+    public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
 
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
+    public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
@@ -860,6 +862,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE)
     private boolean enableRewriteSumByAssociativeRule = true;
 
+    @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
+    private boolean enableRewriteSimpleAggToMetaScan = false;
+
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;
     }
@@ -969,6 +974,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
+
+    @VarAttr(name = RANGE_PRUNER_PREDICATES_MAX_LEN)
+    public int rangePrunerPredicateMaxLen = 100;
 
     @VarAttr(name = SQL_QUOTE_SHOW_CREATE)
     private boolean quoteShowCreate = true; // Defined but unused now, for compatibility with MySQL
@@ -1897,12 +1905,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableRewriteSumByAssociativeRule;
     }
 
+    public void setEnableRewriteSimpleAggToMetaScan(boolean enableRewriteSimpleAggToMetaScan) {
+        this.enableRewriteSimpleAggToMetaScan = enableRewriteSimpleAggToMetaScan;
+    }
+
+    public boolean isEnableRewriteSimpleAggToMetaScan() {
+        return this.enableRewriteSimpleAggToMetaScan;
+    }
+
     public boolean getEnablePruneComplexTypes() {
         return this.enablePruneComplexTypes;
     }
 
     public void setEnablePruneComplexTypes(boolean enablePruneComplexTypes) {
         this.enablePruneComplexTypes = enablePruneComplexTypes;
+    }
+
+    public int getRangePrunerPredicateMaxLen() {
+        return rangePrunerPredicateMaxLen;
+    }
+
+    public void setRangePrunerPredicateMaxLen(int rangePrunerPredicateMaxLen) {
+        this.rangePrunerPredicateMaxLen = rangePrunerPredicateMaxLen;
     }
 
     public String getDefaultTableCompression() {

@@ -28,7 +28,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class BackendStmtTest {
+public class DataNodeStmtTest {
 
     private static Analyzer analyzer;
 

@@ -152,7 +152,7 @@ public class LakeTableSchemaChangeJobTest {
         builder.setFullPath("s3://test-bucket/object-1");
         FilePathInfo pathInfo = builder.build();
 
-        table.setStorageInfo(pathInfo, false, 0, false);
+        table.setStorageInfo(pathInfo, new StorageCacheInfo(false, 0, false));
         StorageCacheInfo storageCacheInfo = new StorageCacheInfo(false, 0, false);
         partitionInfo.setStorageCacheInfo(partitionId, storageCacheInfo);
 

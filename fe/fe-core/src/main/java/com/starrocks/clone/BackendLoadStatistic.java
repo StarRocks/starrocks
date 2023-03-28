@@ -46,7 +46,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.monitor.unit.ByteSizeValue;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -250,7 +250,7 @@ public class BackendLoadStatistic {
     }
 
     public void init() throws LoadBalanceException {
-        Backend be = infoService.getBackend(beId);
+        DataNode be = infoService.getBackend(beId);
         if (be == null) {
             throw new LoadBalanceException("backend " + beId + " does not exist");
         }
