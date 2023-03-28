@@ -93,7 +93,8 @@ public:
                                                    uint32_t segment_id,
                                                    std::shared_ptr<const TabletSchema> tablet_schema,
                                                    size_t* footer_length_hint = nullptr,
-                                                   const FooterPointerPB* partial_rowset_footer = nullptr);
+                                                   const FooterPointerPB* partial_rowset_footer = nullptr,
+                                                   bool skip_fill_local_cache = true);
 
     static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer, size_t* footer_length_hint,
                                        const FooterPointerPB* partial_rowset_footer);
@@ -114,7 +115,7 @@ public:
     // TODO: remove this method, create `ColumnIterator` via `ColumnReader`.
     StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t cid);
 
-    Status new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter);
+    Status new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter, bool skip_fill_local_cache);
 
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
@@ -156,7 +157,7 @@ public:
 
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
-    Status load_index();
+    Status load_index(bool skip_fill_local_cache = true);
     bool has_loaded_index() const;
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
@@ -189,7 +190,7 @@ private:
         std::shared_ptr<const TabletSchema> _schema;
     };
 
-    Status _load_index();
+    Status _load_index(bool skip_fill_local_cache);
 
     void _reset();
 
@@ -204,7 +205,7 @@ private:
     }
 
     // open segment file and read the minimum amount of necessary information (footer)
-    Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer);
+    Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
     Status _create_column_readers(SegmentFooterPB* footer);
 
     StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);

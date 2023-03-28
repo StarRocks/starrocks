@@ -44,10 +44,7 @@ namespace starrocks {
 
 using strings::Substitute;
 
-Status IndexedColumnReader::load(bool use_page_cache, bool kept_in_memory) {
-    _use_page_cache = use_page_cache;
-    _kept_in_memory = kept_in_memory;
-
+Status IndexedColumnReader::load() {
     _type_info = get_type_info((LogicalType)_meta.data_type());
     if (_type_info == nullptr) {
         return Status::NotSupported(strings::Substitute("unsupported type=$0", _meta.data_type()));
@@ -56,7 +53,8 @@ Status IndexedColumnReader::load(bool use_page_cache, bool kept_in_memory) {
     RETURN_IF_ERROR(get_block_compression_codec(_meta.compression(), &_compress_codec));
     _validx_key_coder = get_key_coder(_type_info->type());
 
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_file_name));
+    RandomAccessFileOptions file_opts{.skip_fill_local_cache = _opts.skip_fill_local_cache};
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _file_name));
     // read and parse ordinal index page when exists
     if (_meta.has_ordinal_index_meta()) {
         if (_meta.ordinal_index_meta().is_root_data_page()) {
@@ -99,15 +97,16 @@ Status IndexedColumnReader::read_page(RandomAccessFile* read_file, const PagePoi
     opts.codec = _compress_codec;
     OlapReaderStatistics tmp_stats;
     opts.stats = &tmp_stats;
-    opts.use_page_cache = _use_page_cache;
-    opts.kept_in_memory = _kept_in_memory;
+    opts.use_page_cache = _opts.use_page_cache;
+    opts.kept_in_memory = _opts.kept_in_memory;
     opts.encoding_type = _encoding_info->encoding();
 
     return PageIO::read_and_decompress_page(opts, handle, body, footer);
 }
 
 Status IndexedColumnReader::new_iterator(std::unique_ptr<IndexedColumnIterator>* iter) {
-    ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(_file_name));
+    RandomAccessFileOptions file_opts{.skip_fill_local_cache = _opts.skip_fill_local_cache};
+    ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(file_opts, _file_name));
     iter->reset(new IndexedColumnIterator(this, std::move(file)));
     return Status::OK();
 }

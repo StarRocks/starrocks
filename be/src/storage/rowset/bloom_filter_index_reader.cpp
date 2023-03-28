@@ -54,10 +54,9 @@ BloomFilterIndexReader::~BloomFilterIndexReader() {
     MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(), _mem_usage());
 }
 
-StatusOr<bool> BloomFilterIndexReader::load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                                            bool use_page_cache, bool kept_in_memory) {
+StatusOr<bool> BloomFilterIndexReader::load(const IndexReadOptions& opts, const BloomFilterIndexPB& meta) {
     return success_once(_load_once, [&]() {
-        Status st = _do_load(fs, filename, meta, use_page_cache, kept_in_memory);
+        Status st = _do_load(opts, meta);
         if (st.ok()) {
             MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                      _mem_usage() - sizeof(BloomFilterIndexReader));
@@ -68,14 +67,13 @@ StatusOr<bool> BloomFilterIndexReader::load(FileSystem* fs, const std::string& f
     });
 }
 
-Status BloomFilterIndexReader::_do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                                        bool use_page_cache, bool kept_in_memory) {
+Status BloomFilterIndexReader::_do_load(const IndexReadOptions& opts, const BloomFilterIndexPB& meta) {
     _typeinfo = get_type_info(TYPE_VARCHAR);
     _algorithm = meta.algorithm();
     _hash_strategy = meta.hash_strategy();
     const IndexedColumnMetaPB& bf_index_meta = meta.bloom_filter();
-    _bloom_filter_reader = std::make_unique<IndexedColumnReader>(fs, filename, bf_index_meta);
-    RETURN_IF_ERROR(_bloom_filter_reader->load(use_page_cache, kept_in_memory));
+    _bloom_filter_reader = std::make_unique<IndexedColumnReader>(opts, bf_index_meta);
+    RETURN_IF_ERROR(_bloom_filter_reader->load());
     return Status::OK();
 }
 
