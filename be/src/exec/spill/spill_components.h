@@ -275,6 +275,12 @@ private:
     template <class ChunkProvider>
     Status _spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
 
+    // split partition by hash
+    // hash-based partitioning can have significant degradation in the case of heavily skewed data.
+    // TODO:
+    // 1. We can actually split partitions based on blocks (they all belong to the same partition, but
+    // can be executed in splitting out more parallel tasks). Process all blocks that hit this partition while processing the task
+    // 2. If our input is ordered, we can use some sorting-based algorithm to split the partition. This way the probe side can do full streaming of the data
     Status _split_partition(SerdeContext& context, SpillerReader* reader, SpilledPartition* partition,
                             SpilledPartition* left_partition, SpilledPartition* right_partition,
                             const MemTrackerGuard& guard);
