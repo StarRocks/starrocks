@@ -22,7 +22,7 @@ StarRocks 2.5 版本中，异步物化视图支持查询改写、嵌套物化视
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
 [distribution_desc]
-[REFRESH refresh_scheme_desc]
+[REFRESH refresh_moment refresh_scheme_desc]
 [partition_expression]
 [COMMENT ""]
 [PROPERTIES ("key"="value", ...)]
@@ -73,12 +73,19 @@ SELECT select_expr[, select_expr ...]
   物化视图的排序列。
 
   - 排序列的声明顺序必须和 `select_expr` 中列声明顺序一致。
-  - 如果不指定排序列，则系统根据规则自动补充排序列。 如果物化视图是聚合类型，则所有的分组列自动补充为排序列。 如果物化视图是非聚合类型，则前 36 个字节自动补充为排序列。如果自动补充的排序个数小于 3 个，则前三个作为排序列。
+  - 如果不指定排序列，则系统根据规则自动补充排序列。如果物化视图是聚合类型，则所有的分组列自动补充为排序列。如果物化视图是非聚合类型，则前 36 个字节自动补充为排序列。如果自动补充的排序个数小于 3 个，则前三个作为排序列。
   - 如果查询语句中包含分组列，则排序列必须和分组列一致。
 
 **distribution_desc**（建立异步物化视图时为**必填**）
 
 物化视图的分桶方式，形如 `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`。
+
+**refresh_moment**（选填）
+
+物化视图的刷新时刻。默认值：`IMMEDIATE`。有效值：
+
+- `IMMEDIATE`：物化视图创建成功后立即刷新。
+- `DEFERRED`：物化视图创建成功后不进行刷新。您可以通过手动调用或创建定时任务触发刷新。
 
 **refresh_scheme_desc**（选填）
 
@@ -126,6 +133,13 @@ SELECT select_expr[, select_expr ...]
 | count                                                  | count                    |
 | bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union             |
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                |
+
+## 相关 Session 变量
+
+以下变量控制物化视图的行为：
+
+- `analyze_mv`：刷新后是否以及如何分析物化视图。有效值为空字符串（即不分析）、`sample`（抽样采集）或 `full`（全量采集）。默认为 `sample`。
+- `enable_materialized_view_rewrite`：是否开启物化视图的自动改写。有效值为 `true`（自 2.5 版本起为默认值）和 `false`。
 
 ## 注意事项
 
