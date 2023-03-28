@@ -87,7 +87,7 @@ The bucketing strategy of the materialized view, in the form of `DISTRIBUTED BY 
 The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid values:
 
 - `IMMEDIATE`: Refresh the materialized view immediately after it is created.
-- `DEFERRED`: The materialized view is not refreshed after after it is created. You can manually refresh the materialized view or schedule regular refresh tasks.
+- `DEFERRED`: The materialized view is not refreshed after it is created. You can manually refresh the materialized view or schedule regular refresh tasks.
 
 **refresh_scheme_desc** (optional)
 
