@@ -201,7 +201,7 @@ mysql> show proc '/statistic/10002';
 | InconsistentTabletNum | Number of inconsistent tablets in the database.              |
 | CloningTabletNum      | Number of tablets that are being cloned in the database.     |
 | ErrorStateTabletNum   | Number of tablets in Error state.                            |
-| ErrorStateTablets     | ID of the tablets in Error state.                            |
+| ErrorStateTablets     | IDs of the tablets in Error state.                           |
 
 Example 6: Shows the total number of all generic tasks and the failed tasks in the cluster.
 
