@@ -1799,7 +1799,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(olapTable.getClusterId());
         for (Long id : systemInfoService.getBackendIds(false)) {
-            DataNode backend = systemInfoService.getBackend(id);
+            DataNode backend = systemInfoService.getDataNode(id);
             nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
         }
         result.setNodes(nodeInfos);

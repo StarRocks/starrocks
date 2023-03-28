@@ -172,7 +172,7 @@ public final class ExportChecker extends LeaderDaemon {
         boolean beHasErr = false;
         String errMsg = "";
         for (Long beId : job.getBeStartTimeMap().keySet()) {
-            DataNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+            DataNode be = GlobalStateMgr.getCurrentSystemInfo().getDataNode(beId);
             if (null == be) {
                 // The current implementation, if the be in the job is not found, 
                 // the job will be cancelled

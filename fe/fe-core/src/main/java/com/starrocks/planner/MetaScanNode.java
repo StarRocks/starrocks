@@ -105,7 +105,7 @@ public class MetaScanNode extends ScanNode {
                 Collections.shuffle(allQueryableReplicas);
                 boolean tabletIsNull = true;
                 for (Replica replica : allQueryableReplicas) {
-                    DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                    DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(replica.getBackendId());
                     if (backend == null) {
                         LOG.debug("replica {} not exists", replica.getBackendId());
                         continue;

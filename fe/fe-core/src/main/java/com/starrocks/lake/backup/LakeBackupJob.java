@@ -110,7 +110,7 @@ public class LakeBackupJob extends BackupJob {
                                        long visibleVersion, int schemaHash) {
         try {
             DataNode backend = GlobalStateMgr.getCurrentSystemInfo()
-                    .getBackend(((LakeTablet) tablet).getPrimaryBackendId());
+                    .getDataNode(((LakeTablet) tablet).getPrimaryBackendId());
             LakeTableSnapshotInfo snapshotInfo = new LakeTableSnapshotInfo(dbId,
                     tbl.getId(), partition.getId(), index.getId(), tablet.getId(),
                     backend.getId(), schemaHash, visibleVersion);
@@ -132,7 +132,7 @@ public class LakeBackupJob extends BackupJob {
     @Override
     protected void sendSnapshotRequests() {
         for (Map.Entry<SnapshotInfo, LockTabletMetadataRequest> entry : lockRequests.entrySet()) {
-            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey().getBeId());
+            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(entry.getKey().getBeId());
             LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
             Future<LockTabletMetadataResponse> response = lakeService.lockTabletMetadata(entry.getValue());
             lockResponses.put(entry.getKey(), response);
@@ -150,7 +150,7 @@ public class LakeBackupJob extends BackupJob {
             request.tabletId = info.getTabletId();
             request.version = ((LakeTableSnapshotInfo) info).getVersion();
             request.expireTime = (createTime + timeoutMs) / 1000;
-            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(info.getBeId());
+            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(info.getBeId());
             LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(),
                     backend.getBrpcPort());
             lakeService.unlockTabletMetadata(request);
@@ -174,7 +174,7 @@ public class LakeBackupJob extends BackupJob {
             snapshot.destPath = repo.getRepoTabletPathBySnapshotInfo(label, info);
             request.snapshots.put(lakeInfo.getTabletId(), snapshot);
         }
-        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(beId);
         unfinishedTaskIds.put(beId, 1L);
         uploadRequests.put(backend, request);
     }

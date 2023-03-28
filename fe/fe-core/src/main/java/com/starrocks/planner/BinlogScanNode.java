@@ -174,7 +174,7 @@ public class BinlogScanNode extends ScanNode {
                 }
                 for (Replica replica : allQueryableReplicas) {
                     DataNode backend = Preconditions.checkNotNull(
-                            GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId()),
+                            GlobalStateMgr.getCurrentSystemInfo().getDataNode(replica.getBackendId()),
                             "backend not found: " + replica.getBackendId());
                     scanBackendIds.add(backend.getId());
                     TScanRangeLocation replicaLocation = new TScanRangeLocation(backend.getAddress());

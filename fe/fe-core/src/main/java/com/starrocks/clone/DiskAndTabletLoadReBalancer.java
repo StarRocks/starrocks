@@ -431,7 +431,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 destBEPartitionTablets = getPartitionTablets(destBEStat.getBeId(), medium, -1);
             }
 
-            DataNode destBackend = infoService.getBackend(destBEStat.getBeId());
+            DataNode destBackend = infoService.getDataNode(destBEStat.getBeId());
             if (destBackend == null) {
                 destBEIndex++;
                 destBEChanged = true;
@@ -816,7 +816,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     private Map<String, List<Long>> getHostGroups(List<Long> backendIds) {
         Map<String, List<Long>> hostGroups = Maps.newHashMap();
         for (Long backendId : backendIds) {
-            DataNode backend = infoService.getBackend(backendId);
+            DataNode backend = infoService.getDataNode(backendId);
             if (backend == null) {
                 continue;
             }
@@ -1095,7 +1095,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
                     TabletSchedCtx schedCtx = null;
                     if (!isLocalBalance) {
-                        DataNode destBackend = infoService.getBackend(destTablets.first);
+                        DataNode destBackend = infoService.getDataNode(destTablets.first);
                         if (destBackend == null) {
                             continue;
                         }

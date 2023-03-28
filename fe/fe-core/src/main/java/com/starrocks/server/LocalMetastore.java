@@ -1893,7 +1893,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 for (Map.Entry<Long, Long> mark : firstThree) {
                     sb.append(mark.getValue()); // TabletId
                     sb.append('(');
-                    DataNode backend = stateMgr.getClusterInfo().getBackend(mark.getKey());
+                    DataNode backend = stateMgr.getClusterInfo().getDataNode(mark.getKey());
                     sb.append(backend != null ? backend.getHost() : "N/A");
                     sb.append(") ");
                 }
@@ -3857,7 +3857,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayUpdateClusterAndBackends(DataNodeIdsUpdateInfo info) {
         for (long id : info.getBackendList()) {
-            final DataNode backend = stateMgr.getClusterInfo().getBackend(id);
+            final DataNode backend = stateMgr.getClusterInfo().getDataNode(id);
             final Cluster cluster = defaultCluster;
             cluster.removeBackend(id);
             backend.setDecommissioned(false);

@@ -58,7 +58,7 @@ public class StorageMediumInferTest {
     @BeforeClass
     public static void init() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        be1 = GlobalStateMgr.getCurrentSystemInfo().getBackend(10001);
+        be1 = GlobalStateMgr.getCurrentSystemInfo().getDataNode(10001);
         be1.getDisks().get("10001/path1").setPathHash(10001);
         be2 = UtFrameUtils.addMockBackend(10002);
         be2.getDisks().get("10002/path1").setPathHash(10002);

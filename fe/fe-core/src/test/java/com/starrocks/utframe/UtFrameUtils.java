@@ -243,7 +243,7 @@ public class UtFrameUtils {
 
             // sleep to wait first heartbeat
             int retry = 0;
-            while (GlobalStateMgr.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
+            while (GlobalStateMgr.getCurrentSystemInfo().getDataNode(10001).getBePort() == -1 &&
                     retry++ < 600) {
                 Thread.sleep(100);
             }
@@ -288,7 +288,7 @@ public class UtFrameUtils {
     }
 
     public static void dropMockBackend(int backendId) throws DdlException {
-        GlobalStateMgr.getCurrentSystemInfo().dropBackend(backendId);
+        GlobalStateMgr.getCurrentSystemInfo().dropDataNode(backendId);
     }
 
     public static int findValidPort() {

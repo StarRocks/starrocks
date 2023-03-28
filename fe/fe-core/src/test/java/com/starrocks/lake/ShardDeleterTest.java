@@ -116,7 +116,7 @@ public class ShardDeleterTest {
                 minTimes = 0;
                 result = 1;
 
-                systemInfoService.getBackend(1);
+                systemInfoService.getDataNode(1);
                 minTimes = 0;
                 result = be;
             }

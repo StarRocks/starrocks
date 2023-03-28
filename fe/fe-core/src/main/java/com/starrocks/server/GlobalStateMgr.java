@@ -513,7 +513,7 @@ public class GlobalStateMgr {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = getOrCreateSystemInfo(clusterId);
         for (Long id : systemInfoService.getBackendIds(false)) {
-            DataNode backend = systemInfoService.getBackend(id);
+            DataNode backend = systemInfoService.getDataNode(id);
             nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
         }
         return nodesInfo;

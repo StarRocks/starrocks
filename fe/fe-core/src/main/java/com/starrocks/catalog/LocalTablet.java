@@ -208,7 +208,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         List<String> backends = new ArrayList<String>();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
-            DataNode backend = infoService.getBackend(replica.getBackendId());
+            DataNode backend = infoService.getDataNode(replica.getBackendId());
             if (backend == null) {
                 continue;
             }
@@ -516,7 +516,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         Replica needFurtherRepairReplica = null;
         Set<String> hosts = Sets.newHashSet();
         for (Replica replica : replicas) {
-            DataNode backend = systemInfoService.getBackend(replica.getBackendId());
+            DataNode backend = systemInfoService.getDataNode(replica.getBackendId());
             if (backend == null || !backend.isAlive() || replica.getState() == ReplicaState.CLONE
                     || replica.getState() == ReplicaState.DECOMMISSION
                     || replica.isBad() || !hosts.add(backend.getHost())) {
@@ -783,7 +783,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                                 replicas.size()));
                         empty = false;
                     }
-                    DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                    DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(replica.getBackendId());
                     sb.append(String.format(" %s:%d%s",
                             backend == null ? Long.toString(replica.getBackendId()) : backend.getHost(), replicaVersion,
                             replica.getState() == ReplicaState.ALTER ? "ALTER" : ""));

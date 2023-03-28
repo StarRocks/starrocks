@@ -62,7 +62,7 @@ public class DiskUsageSimTest {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         // test default value
         Assert.assertEquals(PseudoDataNode.DEFAULT_TOTA_CAP_B,
-                systemInfoService.getBackend(10001).getTotalCapacityB());
+                systemInfoService.getDataNode(10001).getTotalCapacityB());
         PseudoDataNode backend1 = cluster.getBackend(10001);
         backend1.setInitialCapacity(10 * bytesOneGB, 8 * bytesOneGB, 2 * bytesOneGB);
         PseudoDataNode backend2 = cluster.getBackend(10002);
@@ -70,13 +70,13 @@ public class DiskUsageSimTest {
         // wait for the disk info to be reported
         Thread.sleep(PseudoDataNode.reportIntervalMs + 1000);
         Assert.assertEquals(10 * bytesOneGB,
-                systemInfoService.getBackend(10001).getTotalCapacityB());
+                systemInfoService.getDataNode(10001).getTotalCapacityB());
         Assert.assertEquals(20 * bytesOneGB,
-                systemInfoService.getBackend(10002).getTotalCapacityB());
+                systemInfoService.getDataNode(10002).getTotalCapacityB());
         Assert.assertEquals(8 * bytesOneGB + 1,
-                systemInfoService.getBackend(10001).getAvailableCapacityB());
+                systemInfoService.getDataNode(10001).getAvailableCapacityB());
         Assert.assertEquals(2 * bytesOneGB,
-                systemInfoService.getBackend(10001).getDataUsedCapacityB());
+                systemInfoService.getDataNode(10001).getDataUsedCapacityB());
     }
 
     @Test
@@ -88,9 +88,9 @@ public class DiskUsageSimTest {
         Thread.sleep(PseudoDataNode.reportIntervalMs + 1000);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         Assert.assertEquals(2 * bytesOneGB + PseudoDataNode.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B,
-                systemInfoService.getBackend(10001).getDataUsedCapacityB());
+                systemInfoService.getDataNode(10001).getDataUsedCapacityB());
         Assert.assertEquals(8 * bytesOneGB - PseudoDataNode.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B + 1,
-                systemInfoService.getBackend(10001).getAvailableCapacityB());
+                systemInfoService.getDataNode(10001).getAvailableCapacityB());
     }
 
     @Test
@@ -100,11 +100,11 @@ public class DiskUsageSimTest {
         PseudoClusterUtils.triggerIncrementalCloneOnce(cluster, 10001);
         Thread.sleep(PseudoDataNode.reportIntervalMs + 1000);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        System.out.println(systemInfoService.getBackend(10001).getDataUsedCapacityB());
+        System.out.println(systemInfoService.getDataNode(10001).getDataUsedCapacityB());
         Assert.assertEquals(2 * bytesOneGB + PseudoDataNode.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 3,
-                systemInfoService.getBackend(10001).getDataUsedCapacityB());
+                systemInfoService.getDataNode(10001).getDataUsedCapacityB());
         Assert.assertEquals(8 * bytesOneGB - PseudoDataNode.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 3 + 1,
-                systemInfoService.getBackend(10001).getAvailableCapacityB());
+                systemInfoService.getDataNode(10001).getAvailableCapacityB());
     }
 
     @Test
@@ -149,9 +149,9 @@ public class DiskUsageSimTest {
         Thread.sleep(PseudoDataNode.reportIntervalMs + 1000);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         Assert.assertEquals(2 * bytesOneGB + PseudoDataNode.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 6,
-                systemInfoService.getBackend(10001).getDataUsedCapacityB());
+                systemInfoService.getDataNode(10001).getDataUsedCapacityB());
         Assert.assertEquals(8 * bytesOneGB - PseudoDataNode.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 6 + 1,
-                systemInfoService.getBackend(10001).getAvailableCapacityB());
+                systemInfoService.getDataNode(10001).getAvailableCapacityB());
     }
 
     @Test
@@ -161,7 +161,7 @@ public class DiskUsageSimTest {
         cluster.runSql("test", "drop table test force");
         Thread.sleep(PseudoDataNode.reportIntervalMs + 1000);
         // The disk usage should return to initial state after the only table dropped.
-        Assert.assertEquals(2 * bytesOneGB, systemInfoService.getBackend(10001).getDataUsedCapacityB());
-        Assert.assertEquals(8 * bytesOneGB + 1, systemInfoService.getBackend(10001).getAvailableCapacityB());
+        Assert.assertEquals(2 * bytesOneGB, systemInfoService.getDataNode(10001).getDataUsedCapacityB());
+        Assert.assertEquals(8 * bytesOneGB + 1, systemInfoService.getDataNode(10001).getAvailableCapacityB());
     }
 }

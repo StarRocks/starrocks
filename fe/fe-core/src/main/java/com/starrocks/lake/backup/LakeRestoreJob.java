@@ -125,7 +125,7 @@ public class LakeRestoreJob extends RestoreJob {
                 Partition part = tbl.getPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
-                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tablet.getPrimaryBackendId());
+                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(tablet.getPrimaryBackendId());
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),
                         backend.getId(), tbl.getSchemaHashByIndexId(index.getId()), -1);
@@ -204,7 +204,7 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected void sendDownloadTasks() {
         for (Map.Entry<Long, RestoreSnapshotsRequest> entry : requests.entrySet()) {
-            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
+            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(entry.getKey());
             LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
             Future<RestoreSnapshotsResponse> response = lakeService.restoreSnapshots(entry.getValue());
             responses.put(entry.getKey(), response);

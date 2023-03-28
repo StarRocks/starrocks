@@ -112,7 +112,7 @@ public class DataNodesProcDir implements ProcDirInterface {
         Stopwatch watch = Stopwatch.createUnstarted();
         List<List<Comparable>> comparableBackendInfos = new LinkedList<>();
         for (long backendId : backendIds) {
-            DataNode backend = clusterInfoService.getBackend(backendId);
+            DataNode backend = clusterInfoService.getDataNode(backendId);
             if (backend == null) {
                 continue;
             }
@@ -240,7 +240,7 @@ public class DataNodesProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid backend id format: " + beIdStr);
         }
 
-        DataNode backend = clusterInfoService.getBackend(backendId);
+        DataNode backend = clusterInfoService.getDataNode(backendId);
         if (backend == null) {
             throw new AnalysisException("Backend[" + backendId + "] does not exist.");
         }

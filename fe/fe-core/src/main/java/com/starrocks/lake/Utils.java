@@ -108,7 +108,7 @@ public class Utils {
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
         List<DataNode> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            DataNode backend = systemInfoService.getBackend(entry.getKey());
+            DataNode backend = systemInfoService.getDataNode(entry.getKey());
             if (backend == null) {
                 throw new NoAliveBackendException("Backend been dropped while building publish version request");
             }
@@ -158,7 +158,7 @@ public class Utils {
         List<Future<PublishLogVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
         List<DataNode> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            DataNode backend = systemInfoService.getBackend(entry.getKey());
+            DataNode backend = systemInfoService.getDataNode(entry.getKey());
             if (backend == null) {
                 throw new NoAliveBackendException("Backend been dropped while building publish version request");
             }

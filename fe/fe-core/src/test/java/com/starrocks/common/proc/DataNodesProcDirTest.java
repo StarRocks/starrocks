@@ -89,15 +89,15 @@ public class DataNodesProcDirTest {
                 globalStateMgr.clear();
                 minTimes = 0;
 
-                systemInfoService.getBackend(1000);
+                systemInfoService.getDataNode(1000);
                 minTimes = 0;
                 result = b1;
 
-                systemInfoService.getBackend(1001);
+                systemInfoService.getDataNode(1001);
                 minTimes = 0;
                 result = b2;
 
-                systemInfoService.getBackend(1002);
+                systemInfoService.getDataNode(1002);
                 minTimes = 0;
                 result = null;
 

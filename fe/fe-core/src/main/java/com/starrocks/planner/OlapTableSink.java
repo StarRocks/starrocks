@@ -480,14 +480,14 @@ public class OlapTableSink extends DataSink {
                             for (int i = 0; i < replicas.size(); i++) {
                                 Replica replica = replicas.get(i);
                                 if (lowUsageIndex == -1 && !replica.getLastWriteFail()
-                                        && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+                                        && !infoService.getDataNode(replica.getBackendId()).getLastWriteFail()) {
                                     lowUsageIndex = i;
                                 }
                                 if (lowUsageIndex != -1
                                         && bePrimaryMap.getOrDefault(replica.getBackendId(), (long) 0) < bePrimaryMap
                                         .getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
                                         && !replica.getLastWriteFail()
-                                        && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+                                        && !infoService.getDataNode(replica.getBackendId()).getLastWriteFail()) {
                                     lowUsageIndex = i;
                                 }
                             }

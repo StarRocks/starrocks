@@ -180,7 +180,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         }
 
         for (Map.Entry<Long, List<Long>> entry : tabletGroup.entrySet()) {
-            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
+            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(entry.getKey());
             if (backend == null) {
                 // It's ok to skip sending abort transaction request.
                 continue;

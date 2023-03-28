@@ -509,7 +509,7 @@ public final class MetricRepo {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
 
         for (Long beId : infoService.getBackendIds(false)) {
-            DataNode be = infoService.getBackend(beId);
+            DataNode be = infoService.getDataNode(beId);
             if (be == null) {
                 continue;
             }

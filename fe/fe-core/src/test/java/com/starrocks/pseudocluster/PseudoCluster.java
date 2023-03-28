@@ -446,7 +446,7 @@ public class PseudoCluster {
             LOG.info("add PseudoDataNode {} {}", beId, host);
         }
         int retry = 0;
-        while (GlobalStateMgr.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
+        while (GlobalStateMgr.getCurrentSystemInfo().getDataNode(10001).getBePort() == -1 &&
                 retry++ < 600) {
             Thread.sleep(100);
         }
@@ -472,7 +472,7 @@ public class PseudoCluster {
             beIds.add(beId);
         }
         int retry = 0;
-        while (GlobalStateMgr.getCurrentSystemInfo().getBackend(beIds.get(0)).getBePort() == -1 &&
+        while (GlobalStateMgr.getCurrentSystemInfo().getDataNode(beIds.get(0)).getBePort() == -1 &&
                 retry++ < 600) {
             try {
                 Thread.sleep(100);
@@ -587,7 +587,7 @@ public class PseudoCluster {
     public static void main(String[] args) throws Exception {
         PseudoCluster.getOrCreate("pseudo_cluster", false, 9030, 4);
         for (int i = 0; i < 4; i++) {
-            System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
+            System.out.println(GlobalStateMgr.getCurrentSystemInfo().getDataNode(10001 + i).getBePort());
         }
         while (true) {
             Thread.sleep(1000);

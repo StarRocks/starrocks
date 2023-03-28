@@ -33,7 +33,7 @@ public class ExecuteScriptExecutor {
     private static final Logger LOG = LogManager.getLogger(ExecuteScriptExecutor.class);
 
     public static void execute(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
-        DataNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(stmt.getBeId());
+        DataNode be = GlobalStateMgr.getCurrentSystemInfo().getDataNode(stmt.getBeId());
         TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
         ExecuteCommandRequestPB request = new ExecuteCommandRequestPB();
         request.command = "execute_script";

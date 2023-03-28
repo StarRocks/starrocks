@@ -541,7 +541,7 @@ public class Repository implements Writable {
 
     public Status getBrokerAddress(Long beId, GlobalStateMgr globalStateMgr, List<FsBroker> brokerAddrs) {
         // get backend
-        DataNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        DataNode be = GlobalStateMgr.getCurrentSystemInfo().getDataNode(beId);
         if (be == null) {
             return new Status(ErrCode.COMMON_ERROR, "backend " + beId + " is missing. "
                     + "failed to send upload snapshot task");

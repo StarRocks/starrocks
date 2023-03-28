@@ -182,7 +182,7 @@ public class TabletStatMgrTest {
         };
         new Expectations() {
             {
-                systemInfoService.getBackend(anyLong);
+                systemInfoService.getDataNode(anyLong);
                 result = new DataNode(1000L, "", 123);
 
                 lakeService.getTabletStats((TabletStatRequest) any);

@@ -119,11 +119,11 @@ public class SystemInfoService {
         pathHashToDishInfoRef = ImmutableMap.<Long, DiskInfo>of();
     }
 
-    public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
+    public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs, boolean withStorage)
             throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
-            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
+            if (getDataNodeWithHeartbeatPort(pair.first, pair.second) != null) {
                 throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
             }
             if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) != null) {
@@ -132,7 +132,7 @@ public class SystemInfoService {
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            addComputeNode(pair.first, pair.second);
+            addComputeNode(pair.first, pair.second, withStorage);
         }
     }
 
@@ -156,8 +156,9 @@ public class SystemInfoService {
     }
 
     // Final entry of adding compute node
-    private void addComputeNode(String host, int heartbeatPort) throws DdlException {
-        ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
+    private void addComputeNode(String host, int heartbeatPort, boolean withStorage) {
+        ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(),
+                host, heartbeatPort, withStorage);
         // update idToComputor
         Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
         copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
@@ -185,10 +186,10 @@ public class SystemInfoService {
      * @param hostPortPairs : backend's host and port
      * @throws DdlException
      */
-    public void addBackends(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
+    public void addDataNodes(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
-            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
+            if (getDataNodeWithHeartbeatPort(pair.first, pair.second) != null) {
                 throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
             }
         }
@@ -199,7 +200,7 @@ public class SystemInfoService {
     }
 
     // for test
-    public void dropBackend(DataNode backend) {
+    public void dropDataNode(DataNode backend) {
         Map<Long, DataNode> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.remove(backend.getId());
         idToBackendRef = ImmutableMap.copyOf(copiedBackends);
@@ -250,7 +251,7 @@ public class SystemInfoService {
         MetricRepo.generateBackendsTabletMetrics();
     }
 
-    public ShowResultSet modifyBackendHost(ModifyBackendAddressClause modifyBackendAddressClause) throws DdlException {
+    public ShowResultSet modifyDataNodeHost(ModifyBackendAddressClause modifyBackendAddressClause) throws DdlException {
         String willBeModifiedHost = modifyBackendAddressClause.getSrcHost();
         String fqdn = modifyBackendAddressClause.getDestHost();
         List<DataNode> candidateBackends = getBackendOnlyWithHost(willBeModifiedHost);
@@ -329,30 +330,30 @@ public class SystemInfoService {
         LOG.info("finished to drop {}", dropComputeNode);
     }
 
-    public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
+    public void dropDataNodes(DropBackendClause dropBackendClause) throws DdlException {
         List<Pair<String, Integer>> hostPortPairs = dropBackendClause.getHostPortPairs();
         boolean needCheckUnforce = !dropBackendClause.isForce();
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
-            if (getBackendWithHeartbeatPort(pair.first, pair.second) == null) {
+            if (getDataNodeWithHeartbeatPort(pair.first, pair.second) == null) {
                 throw new DdlException("backend does not exists[" + pair.first + ":" + pair.second + "]");
             }
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            dropBackend(pair.first, pair.second, needCheckUnforce);
+            dropDataNode(pair.first, pair.second, needCheckUnforce);
         }
     }
 
     // for decommission
-    public void dropBackend(long backendId) throws DdlException {
-        DataNode backend = getBackend(backendId);
+    public void dropDataNode(long backendId) throws DdlException {
+        DataNode backend = getDataNode(backendId);
         if (backend == null) {
             throw new DdlException("Backend[" + backendId + "] does not exist");
         }
 
-        dropBackend(backend.getHost(), backend.getHeartbeatPort(), false);
+        dropDataNode(backend.getHost(), backend.getHeartbeatPort(), false);
     }
 
     private void checkUnforce(DataNode droppedBackend) {
@@ -395,12 +396,12 @@ public class SystemInfoService {
     }
 
     // final entry of dropping backend
-    public void dropBackend(String host, int heartbeatPort, boolean needCheckUnforce) throws DdlException {
-        if (getBackendWithHeartbeatPort(host, heartbeatPort) == null) {
+    public void dropDataNode(String host, int heartbeatPort, boolean needCheckUnforce) throws DdlException {
+        if (getDataNodeWithHeartbeatPort(host, heartbeatPort) == null) {
             throw new DdlException("backend does not exists[" + host + ":" + heartbeatPort + "]");
         }
 
-        DataNode droppedBackend = getBackendWithHeartbeatPort(host, heartbeatPort);
+        DataNode droppedBackend = getDataNodeWithHeartbeatPort(host, heartbeatPort);
         if (needCheckUnforce) {
             try {
                 checkUnforce(droppedBackend);
@@ -452,8 +453,8 @@ public class SystemInfoService {
         idToReportVersionRef = ImmutableMap.<Long, AtomicLong>of();
     }
 
-    public DataNode getBackend(long backendId) {
-        return idToBackendRef.get(backendId);
+    public DataNode getDataNode(long dataNodeId) {
+        return idToBackendRef.get(dataNodeId);
     }
 
     public ComputeNode getComputeNode(long computeNodeId) {
@@ -488,7 +489,7 @@ public class SystemInfoService {
         return null;
     }
 
-    public DataNode getBackendWithHeartbeatPort(String host, int heartPort) {
+    public DataNode getDataNodeWithHeartbeatPort(String host, int heartPort) {
         ImmutableMap<Long, DataNode> idToBackend = idToBackendRef;
         for (DataNode backend : idToBackend.values()) {
             if (backend.getHost().equals(host) && backend.getHeartbeatPort() == heartPort) {
@@ -617,7 +618,7 @@ public class SystemInfoService {
         } else {
             Iterator<Long> iter = backendIds.iterator();
             while (iter.hasNext()) {
-                DataNode backend = this.getBackend(iter.next());
+                DataNode backend = this.getDataNode(iter.next());
                 if (backend == null || !backend.isAlive()) {
                     iter.remove();
                 }
@@ -632,7 +633,7 @@ public class SystemInfoService {
 
         Iterator<Long> iter = backendIds.iterator();
         while (iter.hasNext()) {
-            DataNode backend = this.getBackend(iter.next());
+            DataNode backend = this.getDataNode(iter.next());
             if (backend == null || !backend.isDecommissioned()) {
                 iter.remove();
             }
@@ -646,7 +647,7 @@ public class SystemInfoService {
 
         Iterator<Long> iter = backendIds.iterator();
         while (iter.hasNext()) {
-            DataNode backend = this.getBackend(iter.next());
+            DataNode backend = this.getDataNode(iter.next());
             if (backend == null || !backend.isAvailable()) {
                 iter.remove();
             }
@@ -1042,7 +1043,7 @@ public class SystemInfoService {
 
     public void updateBackendState(DataNode be) {
         long id = be.getId();
-        DataNode memoryBe = getBackend(id);
+        DataNode memoryBe = getDataNode(id);
         if (memoryBe == null) {
             // backend may already be dropped. this may happen when
             // 1. SystemHandler drop the decommission backend

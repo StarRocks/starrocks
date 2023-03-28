@@ -98,7 +98,7 @@ public class ShardDeleter extends LeaderDaemon {
             Set<Long> shards = entry.getValue();
 
             // 1. drop tablet
-            DataNode backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackend(backendId);
+            DataNode backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getDataNode(backendId);
             DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
 

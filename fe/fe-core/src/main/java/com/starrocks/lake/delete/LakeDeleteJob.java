@@ -102,7 +102,7 @@ public class LakeDeleteJob extends DeleteJob {
                     beToTablets.size());
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
             for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-                DataNode backend = systemInfoService.getBackend(entry.getKey());
+                DataNode backend = systemInfoService.getDataNode(entry.getKey());
                 if (backend == null) {
                     throw new DdlException("Backend " + entry.getKey() + " has been dropped");
                 }

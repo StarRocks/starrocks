@@ -94,6 +94,9 @@ public class ComputeNode implements IComputable, Writable {
     @SerializedName("lastWriteFail")
     private volatile boolean lastWriteFail = false;
 
+    @SerializedName("withStorage")
+    private boolean withStorage = false;
+
     private volatile int numRunningQueries = 0;
     private volatile long memLimitBytes = 0;
     private volatile long memUsedBytes = 0;
@@ -137,6 +140,12 @@ public class ComputeNode implements IComputable, Writable {
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
     }
 
+
+    public ComputeNode(long id, String host, int heartbeatPort, boolean withStorage) {
+        this(id, host, heartbeatPort);
+        this.withStorage = withStorage;
+    }
+
     public void setLastWriteFail(boolean lastWriteFail) {
         this.lastWriteFail = lastWriteFail;
     }
@@ -147,6 +156,10 @@ public class ComputeNode implements IComputable, Writable {
 
     public int getStarletPort() {
         return starletPort;
+    }
+
+    public boolean isWithStorage() {
+        return withStorage;
     }
 
     // for test only

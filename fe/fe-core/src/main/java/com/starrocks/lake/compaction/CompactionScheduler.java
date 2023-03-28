@@ -289,7 +289,7 @@ public class CompactionScheduler extends Daemon {
             throws UserException {
         List<Future<CompactResponse>> futures = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            DataNode backend = systemInfoService.getBackend(entry.getKey());
+            DataNode backend = systemInfoService.getDataNode(entry.getKey());
             if (backend == null) {
                 throw new UserException("Backend " + entry.getKey() + " has been dropped");
             }

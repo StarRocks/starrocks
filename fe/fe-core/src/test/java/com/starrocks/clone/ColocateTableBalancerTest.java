@@ -136,31 +136,31 @@ public class ColocateTableBalancerTest {
                             @Mocked ClusterLoadStatistic statistic) {
         new Expectations() {
             {
-                infoService.getBackend(1L);
+                infoService.getDataNode(1L);
                 result = backend1;
                 minTimes = 0;
-                infoService.getBackend(2L);
+                infoService.getDataNode(2L);
                 result = backend2;
                 minTimes = 0;
-                infoService.getBackend(3L);
+                infoService.getDataNode(3L);
                 result = backend3;
                 minTimes = 0;
-                infoService.getBackend(4L);
+                infoService.getDataNode(4L);
                 result = backend4;
                 minTimes = 0;
-                infoService.getBackend(5L);
+                infoService.getDataNode(5L);
                 result = backend5;
                 minTimes = 0;
-                infoService.getBackend(6L);
+                infoService.getDataNode(6L);
                 result = backend6;
                 minTimes = 0;
-                infoService.getBackend(7L);
+                infoService.getDataNode(7L);
                 result = backend7;
                 minTimes = 0;
-                infoService.getBackend(8L);
+                infoService.getDataNode(8L);
                 result = backend8;
                 minTimes = 0;
-                infoService.getBackend(9L);
+                infoService.getDataNode(9L);
                 result = backend9;
                 minTimes = 0;
 
@@ -247,7 +247,7 @@ public class ColocateTableBalancerTest {
         new Expectations() {
             {
                 // backend2 is available
-                infoService.getBackend(2L);
+                infoService.getDataNode(2L);
                 result = myBackend2;
                 minTimes = 0;
                 myBackend2.isAvailable();
@@ -255,7 +255,7 @@ public class ColocateTableBalancerTest {
                 minTimes = 0;
 
                 // backend3 not available, and dead for a long time
-                infoService.getBackend(3L);
+                infoService.getDataNode(3L);
                 result = myBackend3;
                 minTimes = 0;
                 myBackend3.isAvailable();
@@ -269,7 +269,7 @@ public class ColocateTableBalancerTest {
                 minTimes = 0;
 
                 // backend4 not available, and dead for a short time
-                infoService.getBackend(4L);
+                infoService.getDataNode(4L);
                 result = myBackend4;
                 minTimes = 0;
                 myBackend4.isAvailable();
@@ -311,7 +311,7 @@ public class ColocateTableBalancerTest {
         new Expectations() {
             {
                 // backend2 is available
-                infoService.getBackend(2L);
+                infoService.getDataNode(2L);
                 result = myBackend2;
                 minTimes = 0;
                 myBackend2.isAvailable();
@@ -322,7 +322,7 @@ public class ColocateTableBalancerTest {
                 minTimes = 0;
 
                 // backend3 is available
-                infoService.getBackend(3L);
+                infoService.getDataNode(3L);
                 result = myBackend3;
                 minTimes = 0;
                 myBackend3.isAvailable();
@@ -333,7 +333,7 @@ public class ColocateTableBalancerTest {
                 minTimes = 0;
 
                 // backend4 not available, and dead for a short time
-                infoService.getBackend(4L);
+                infoService.getDataNode(4L);
                 result = myBackend4;
                 minTimes = 0;
                 myBackend4.isAvailable();
@@ -411,31 +411,31 @@ public class ColocateTableBalancerTest {
                                           @Mocked ClusterLoadStatistic statistic) {
         new Expectations() {
             {
-                infoService.getBackend(1L);
+                infoService.getDataNode(1L);
                 result = backend1;
                 minTimes = 0;
-                infoService.getBackend(2L);
+                infoService.getDataNode(2L);
                 result = backend2;
                 minTimes = 0;
-                infoService.getBackend(3L);
+                infoService.getDataNode(3L);
                 result = backend3;
                 minTimes = 0;
-                infoService.getBackend(4L);
+                infoService.getDataNode(4L);
                 result = backend4;
                 minTimes = 0;
-                infoService.getBackend(5L);
+                infoService.getDataNode(5L);
                 result = backend5;
                 minTimes = 0;
-                infoService.getBackend(6L);
+                infoService.getDataNode(6L);
                 result = backend6;
                 minTimes = 0;
-                infoService.getBackend(7L);
+                infoService.getDataNode(7L);
                 result = backend7;
                 minTimes = 0;
-                infoService.getBackend(8L);
+                infoService.getDataNode(8L);
                 result = backend8;
                 minTimes = 0;
-                infoService.getBackend(9L);
+                infoService.getDataNode(9L);
                 result = backend9;
                 minTimes = 0;
                 statistic.getBackendLoadStatistic(anyLong);
@@ -553,12 +553,12 @@ public class ColocateTableBalancerTest {
         Set<Long> allBackendsInGroup = Sets.newHashSet(1L, 2L, 3L, 4L, 5L);
         new Expectations() {
             {
-                infoService.getBackend(1L);
+                infoService.getDataNode(1L);
                 result = null;
                 minTimes = 0;
 
                 // backend2 is available
-                infoService.getBackend(2L);
+                infoService.getDataNode(2L);
                 result = myBackend2;
                 minTimes = 0;
                 myBackend2.isAvailable();
@@ -566,7 +566,7 @@ public class ColocateTableBalancerTest {
                 minTimes = 0;
 
                 // backend3 not available, and dead for a long time
-                infoService.getBackend(3L);
+                infoService.getDataNode(3L);
                 result = myBackend3;
                 minTimes = 0;
                 myBackend3.isAvailable();
@@ -580,7 +580,7 @@ public class ColocateTableBalancerTest {
                 minTimes = 0;
 
                 // backend4 not available, and dead for a short time
-                infoService.getBackend(4L);
+                infoService.getDataNode(4L);
                 result = myBackend4;
                 minTimes = 0;
                 myBackend4.isAvailable();
@@ -594,7 +594,7 @@ public class ColocateTableBalancerTest {
                 minTimes = 0;
 
                 // backend5 not available, and in decommission
-                infoService.getBackend(5L);
+                infoService.getDataNode(5L);
                 result = myBackend5;
                 minTimes = 0;
                 myBackend5.isAvailable();
@@ -634,12 +634,12 @@ public class ColocateTableBalancerTest {
                 result = clusterBackendIds;
                 minTimes = 0;
 
-                infoService.getBackend(1L);
+                infoService.getDataNode(1L);
                 result = null;
                 minTimes = 0;
 
                 // backend2 is available
-                infoService.getBackend(2L);
+                infoService.getDataNode(2L);
                 result = myBackend2;
                 minTimes = 0;
                 myBackend2.isAvailable();
@@ -647,7 +647,7 @@ public class ColocateTableBalancerTest {
                 minTimes = 0;
 
                 // backend3 not available, and dead for a long time
-                infoService.getBackend(3L);
+                infoService.getDataNode(3L);
                 result = myBackend3;
                 minTimes = 0;
                 myBackend3.isAvailable();
@@ -661,7 +661,7 @@ public class ColocateTableBalancerTest {
                 minTimes = 0;
 
                 // backend4 available, not alive but dead for a short time
-                infoService.getBackend(4L);
+                infoService.getDataNode(4L);
                 result = myBackend4;
                 minTimes = 0;
                 myBackend4.isAvailable();
@@ -675,7 +675,7 @@ public class ColocateTableBalancerTest {
                 minTimes = 0;
 
                 // backend5 not available, and in decommission
-                infoService.getBackend(5L);
+                infoService.getDataNode(5L);
                 result = myBackend5;
                 minTimes = 0;
                 myBackend5.isAvailable();
@@ -699,32 +699,32 @@ public class ColocateTableBalancerTest {
     public void testDropBackend(@Mocked SystemInfoService infoService, @Mocked ClusterLoadStatistic statistic) {
         new Expectations() {
             {
-                infoService.getBackend(1L);
+                infoService.getDataNode(1L);
                 result = backend1;
                 minTimes = 0;
-                infoService.getBackend(2L);
+                infoService.getDataNode(2L);
                 result = backend2;
                 minTimes = 0;
-                infoService.getBackend(3L);
+                infoService.getDataNode(3L);
                 result = backend3;
                 minTimes = 0;
-                infoService.getBackend(4L);
+                infoService.getDataNode(4L);
                 result = backend4;
                 minTimes = 0;
-                infoService.getBackend(5L);
+                infoService.getDataNode(5L);
                 result = backend5;
                 minTimes = 0;
-                infoService.getBackend(6L);
+                infoService.getDataNode(6L);
                 result = backend6;
                 minTimes = 0;
-                infoService.getBackend(7L);
+                infoService.getDataNode(7L);
                 result = backend7;
                 minTimes = 0;
-                infoService.getBackend(8L);
+                infoService.getDataNode(8L);
                 result = backend8;
                 minTimes = 0;
                 // backend is dropped
-                infoService.getBackend(9L);
+                infoService.getDataNode(9L);
                 result = null;
                 minTimes = 0;
 
@@ -879,7 +879,7 @@ public class ColocateTableBalancerTest {
         new Expectations() {
             {
                 // backend1 is available
-                infoService.getBackend(1L);
+                infoService.getDataNode(1L);
                 result = myBackend1;
                 minTimes = 0;
                 myBackend1.isAvailable();
@@ -889,7 +889,7 @@ public class ColocateTableBalancerTest {
                 result = "192.168.0.111";
 
                 // backend2 is available
-                infoService.getBackend(2L);
+                infoService.getDataNode(2L);
                 result = myBackend2;
                 minTimes = 0;
                 myBackend2.isAvailable();
@@ -899,7 +899,7 @@ public class ColocateTableBalancerTest {
                 result = "192.168.0.112";
 
                 // backend3 is available
-                infoService.getBackend(3L);
+                infoService.getDataNode(3L);
                 result = myBackend3;
                 minTimes = 0;
                 myBackend3.isAvailable();
@@ -909,7 +909,7 @@ public class ColocateTableBalancerTest {
                 result = "192.168.0.113";
 
                 // backend4 is available
-                infoService.getBackend(4L);
+                infoService.getDataNode(4L);
                 result = myBackend4;
                 minTimes = 0;
                 myBackend4.isAvailable();
@@ -919,7 +919,7 @@ public class ColocateTableBalancerTest {
                 result = "192.168.0.114";
 
                 // backend5 not available, and dead for a long time
-                infoService.getBackend(5L);
+                infoService.getDataNode(5L);
                 result = myBackend5;
                 minTimes = 0;
                 myBackend5.isAvailable();

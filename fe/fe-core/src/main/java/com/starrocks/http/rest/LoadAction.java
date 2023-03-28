@@ -100,7 +100,7 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No backend alive.");
         }
 
-        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(backendIds.get(0));
         if (backend == null) {
             throw new DdlException("No backend alive.");
         }

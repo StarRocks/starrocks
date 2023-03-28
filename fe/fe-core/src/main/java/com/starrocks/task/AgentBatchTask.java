@@ -170,7 +170,7 @@ public class AgentBatchTask implements Runnable {
             TNetworkAddress address = null;
             boolean ok = false;
             try {
-                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(backendId);
                 if (backend == null || !backend.isAlive()) {
                     continue;
                 }

@@ -80,7 +80,7 @@ public class ClusterLoadStatisticProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid be id format: " + beIdStr);
         }
 
-        DataNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        DataNode be = GlobalStateMgr.getCurrentSystemInfo().getDataNode(beId);
         if (be == null) {
             throw new AnalysisException("backend " + beId + " does not exist");
         }

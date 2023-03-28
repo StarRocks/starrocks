@@ -207,7 +207,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                 // Synchronize cpu cores of backends when synchronizing master info to other Frontends.
                 // It is non-empty, only when replaying a 'mocked' master Frontend heartbeat response to other Frontends.
                 hbResponse.getBackendId2cpuCores().forEach((backendId, cpuCores) -> {
-                    DataNode be = nodeMgr.getBackend(backendId);
+                    DataNode be = nodeMgr.getDataNode(backendId);
                     if (be != null && be.getCpuCores() != cpuCores) {
                         be.setCpuCores(cpuCores);
                         DataNodeCoreStat.setNumOfHardwareCoresOfBe(backendId, cpuCores);
@@ -222,7 +222,7 @@ public class HeartbeatMgr extends LeaderDaemon {
             }
             case BACKEND: {
                 BackendHbResponse hbResponse = (BackendHbResponse) response;
-                ComputeNode computeNode = nodeMgr.getBackend(hbResponse.getBeId());
+                ComputeNode computeNode = nodeMgr.getDataNode(hbResponse.getBeId());
                 if (computeNode == null) {
                     computeNode = nodeMgr.getComputeNode(hbResponse.getBeId());
                 }

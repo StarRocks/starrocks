@@ -733,7 +733,7 @@ public class TabletScheduler extends LeaderDaemon {
 
             // check the backends of original sequence are all available
             for (Long backendId : lastBackendsSet) {
-                DataNode be = infoService.getBackend(backendId);
+                DataNode be = infoService.getDataNode(backendId);
                 if (!be.isAvailable()) {
                     return;
                 }
@@ -934,7 +934,7 @@ public class TabletScheduler extends LeaderDaemon {
     private boolean deleteBackendDropped(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         for (Replica replica : tabletCtx.getReplicas()) {
             long beId = replica.getBackendId();
-            if (infoService.getBackend(beId) == null) {
+            if (infoService.getDataNode(beId) == null) {
                 deleteReplicaInternal(tabletCtx, replica, "backend dropped", force);
                 return true;
             }
@@ -954,7 +954,7 @@ public class TabletScheduler extends LeaderDaemon {
 
     private boolean deleteBackendUnavailable(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         for (Replica replica : tabletCtx.getReplicas()) {
-            DataNode be = infoService.getBackend(replica.getBackendId());
+            DataNode be = infoService.getDataNode(replica.getBackendId());
             if (be == null) {
                 // this case should be handled in deleteBackendDropped()
                 continue;
@@ -1008,7 +1008,7 @@ public class TabletScheduler extends LeaderDaemon {
         // host -> (replicas on same host)
         Map<String, List<Replica>> hostToReplicas = Maps.newHashMap();
         for (Replica replica : tabletCtx.getReplicas()) {
-            DataNode be = infoService.getBackend(replica.getBackendId());
+            DataNode be = infoService.getDataNode(replica.getBackendId());
             if (be == null) {
                 // this case should be handled in deleteBackendDropped()
                 return false;
@@ -1035,7 +1035,7 @@ public class TabletScheduler extends LeaderDaemon {
 
     private boolean deleteReplicaNotInCluster(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         for (Replica replica : tabletCtx.getReplicas()) {
-            DataNode be = infoService.getBackend(replica.getBackendId());
+            DataNode be = infoService.getDataNode(replica.getBackendId());
             if (be == null) {
                 // this case should be handled in deleteBackendDropped()
                 return false;

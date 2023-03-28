@@ -182,7 +182,7 @@ public class KafkaUtil {
                     throw new LoadException("Failed to send proxy request. No alive backends");
                 }
                 Collections.shuffle(backendIds);
-                DataNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
+                DataNode be = GlobalStateMgr.getCurrentSystemInfo().getDataNode(backendIds.get(0));
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info

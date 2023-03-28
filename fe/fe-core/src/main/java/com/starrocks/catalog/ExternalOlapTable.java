@@ -520,7 +520,7 @@ public class ExternalOlapTable extends OlapTable {
 
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
             for (TBackendMeta backendMeta : backendMetas) {
-                DataNode backend = systemInfoService.getBackend(backendMeta.getBackend_id());
+                DataNode backend = systemInfoService.getDataNode(backendMeta.getBackend_id());
                 if (backend == null) {
                     backend = new DataNode();
                     backend.setId(backendMeta.getBackend_id());

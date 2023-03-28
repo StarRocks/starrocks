@@ -268,7 +268,7 @@ public class TransactionLoadAction extends RestBaseAction {
             throw new UserException("transaction with op " + op + " label " + label + " has no backend");
         }
 
-        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendID);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(backendID);
         if (backend == null) {
             throw new UserException("Backend " + backendID + " is not alive");
         }

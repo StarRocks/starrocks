@@ -500,7 +500,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                         tabletAllReplicas.add(replicaId);
                                         long backendId = replica.getBackendId();
                                         DataNode backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo()
-                                                .getBackend(backendId);
+                                                .getDataNode(backendId);
 
                                         pushTask(backendId, tableId, partitionId, indexId, tabletId,
                                                 replicaId, schemaHash, params, batchTask, tabletMetaStr,
@@ -523,7 +523,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                     // lake tablet
                                     long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
                                     DataNode backend = GlobalStateMgr.getCurrentSystemInfo().
-                                            getBackend(backendId);
+                                            getDataNode(backendId);
                                     if (backend == null) {
                                         LOG.warn("replica {} not exists", backendId);
                                         continue;

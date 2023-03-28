@@ -214,7 +214,7 @@ public class SimpleScheduler {
                             // remove from blacklist if
                             // 1. backend does not exist anymore
                             // 2. backend is alive
-                            if (clusterInfoService.getBackend(backendId) == null
+                            if (clusterInfoService.getDataNode(backendId) == null
                                     || clusterInfoService.checkBackendAvailable(backendId)) {
                                 iterator.remove();
                                 LOG.debug("remove backendID {} which is alive", backendId);

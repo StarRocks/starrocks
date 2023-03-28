@@ -138,7 +138,7 @@ public class TabletInvertedIndex {
         }
 
         int backendStorageTypeCnt = -1;
-        DataNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        DataNode be = GlobalStateMgr.getCurrentSystemInfo().getDataNode(backendId);
         if (be != null) {
             backendStorageTypeCnt = be.getAvailableBackendStorageTypeCnt();
         }

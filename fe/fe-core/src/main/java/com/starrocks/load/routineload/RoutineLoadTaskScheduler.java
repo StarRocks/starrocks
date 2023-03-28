@@ -320,7 +320,7 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
     }
 
     private void submitTask(long beId, TRoutineLoadTask tTask) throws LoadException {
-        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(beId);
         if (backend == null) {
             throw new LoadException("failed to send tasks to backend " + beId + " because not exist");
         }

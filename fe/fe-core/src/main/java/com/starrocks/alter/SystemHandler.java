@@ -46,6 +46,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AddFollowerClause;
@@ -98,7 +99,7 @@ public class SystemHandler extends AlterHandler {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         // check if decommission is finished
         for (Long beId : systemInfoService.getBackendIds(false)) {
-            DataNode backend = systemInfoService.getBackend(beId);
+            DataNode backend = systemInfoService.getDataNode(beId);
             if (backend == null || !backend.isDecommissioned()) {
                 continue;
             }
@@ -106,7 +107,7 @@ public class SystemHandler extends AlterHandler {
             List<Long> backendTabletIds = invertedIndex.getTabletIdsByBackendId(beId);
             if (backendTabletIds.isEmpty() && Config.drop_backend_after_decommission) {
                 try {
-                    systemInfoService.dropBackend(beId);
+                    systemInfoService.dropDataNode(beId);
                     LOG.info("no tablet on decommission backend {}, drop it", beId);
                 } catch (DdlException e) {
                     // does not matter, may be backend not exist
@@ -134,15 +135,33 @@ public class SystemHandler extends AlterHandler {
         if (alterClause instanceof AddBackendClause) {
             // add backend
             AddBackendClause addBackendClause = (AddBackendClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(addBackendClause.getHostPortPairs());
+            // step1: add compute node
+            GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addBackendClause.getHostPortPairs(), true);
+            // step2: add data node
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+                GlobalStateMgr.getCurrentSystemInfo().addDataNodes(addBackendClause.getHostPortPairs());
+            }
         } else if (alterClause instanceof ModifyBackendAddressClause) {
             // update Backend Address
             ModifyBackendAddressClause modifyBackendAddressClause = (ModifyBackendAddressClause) alterClause;
-            return GlobalStateMgr.getCurrentSystemInfo().modifyBackendHost(modifyBackendAddressClause);
+            // modify data node host in SHARED_NOTHING RunMode
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+                return GlobalStateMgr.getCurrentSystemInfo().modifyDataNodeHost(modifyBackendAddressClause);
+            }
+            // TODO: modify compute node host
+
         } else if (alterClause instanceof DropBackendClause) {
             // drop backend
             DropBackendClause dropBackendClause = (DropBackendClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().dropBackends(dropBackendClause);
+            List<Pair<String, Integer>> hostPortPairs = dropBackendClause.getHostPortPairs();
+
+            // step1: drop data node
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+                GlobalStateMgr.getCurrentSystemInfo().dropDataNodes(dropBackendClause);
+            }
+            // step2 : drop compute node
+            GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(hostPortPairs);
+
         } else if (alterClause instanceof DecommissionBackendClause) {
             // decommission
             DecommissionBackendClause decommissionBackendClause = (DecommissionBackendClause) alterClause;
@@ -152,11 +171,16 @@ public class SystemHandler extends AlterHandler {
             // set backend's state as 'decommissioned'
             // for decommission operation, here is no decommission job. the system handler will check
             // all backend in decommission state
-            for (DataNode backend : decommissionBackends) {
-                backend.setDecommissioned(true);
-                GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(backend);
-                LOG.info("set backend {} to decommission", backend.getId());
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+                for (DataNode backend : decommissionBackends) {
+                    backend.setDecommissioned(true);
+                    GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(backend);
+                    LOG.info("set backend {} to decommission", backend.getId());
+                }
             }
+
+            // drop compute node
+            GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(decommissionBackendClause.getHostPortPairs());
 
         } else if (alterClause instanceof AddObserverClause) {
             AddObserverClause clause = (AddObserverClause) alterClause;
@@ -184,7 +208,7 @@ public class SystemHandler extends AlterHandler {
             GlobalStateMgr.getCurrentState().getLoadInstance().setLoadErrorHubInfo(clause.getProperties());
         } else if (alterClause instanceof AddComputeNodeClause) {
             AddComputeNodeClause addComputeNodeClause = (AddComputeNodeClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addComputeNodeClause.getHostPortPairs());
+            GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addComputeNodeClause.getHostPortPairs(), false);
         } else if (alterClause instanceof DropComputeNodeClause) {
             DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) alterClause;
             GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());
@@ -213,7 +237,7 @@ public class SystemHandler extends AlterHandler {
         List<DataNode> decommissionBackends = Lists.newArrayList();
         // check if exist
         for (Pair<String, Integer> pair : hostPortPairs) {
-            DataNode backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
+            DataNode backend = infoService.getDataNodeWithHeartbeatPort(pair.first, pair.second);
             if (backend == null) {
                 throw new DdlException("Backend does not exist[" + pair.first + ":" + pair.second + "]");
             }
@@ -241,7 +265,7 @@ public class SystemHandler extends AlterHandler {
         List<Pair<String, Integer>> hostPortPairs = cancelAlterSystemStmt.getHostPortPairs();
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check if exist
-            DataNode backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
+            DataNode backend = infoService.getDataNodeWithHeartbeatPort(pair.first, pair.second);
             if (backend == null) {
                 throw new DdlException("Backend does not exists[" + pair.first + "]");
             }

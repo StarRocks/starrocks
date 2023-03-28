@@ -244,7 +244,7 @@ public class TabletStatMgr extends LeaderDaemon {
         long start = System.currentTimeMillis();
         try {
             for (Map.Entry<Long, List<TabletInfo>> entry : beToTabletInfos.entrySet()) {
-                DataNode backend = systemInfoService.getBackend(entry.getKey());
+                DataNode backend = systemInfoService.getDataNode(entry.getKey());
                 if (backend == null) {
                     continue;
                 }

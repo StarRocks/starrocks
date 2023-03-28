@@ -250,7 +250,7 @@ public class DataNodeLoadStatistic {
     }
 
     public void init() throws LoadBalanceException {
-        DataNode be = infoService.getBackend(beId);
+        DataNode be = infoService.getDataNode(beId);
         if (be == null) {
             throw new LoadBalanceException("backend " + beId + " does not exist");
         }

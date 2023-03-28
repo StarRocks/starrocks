@@ -748,7 +748,7 @@ public class ShowExecutorTest {
         DataNode backend = new DataNode();
         new Expectations(clusterInfo) {
             {
-                clusterInfo.getBackend(1L);
+                clusterInfo.getDataNode(1L);
                 minTimes = 0;
                 result = backend;
             }

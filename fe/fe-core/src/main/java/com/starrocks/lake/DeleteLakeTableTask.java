@@ -71,7 +71,7 @@ class DeleteLakeTableTask implements Runnable {
         if (beId == null) {
             return;
         }
-        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getDataNode(beId);
         if (backend == null) {
             return;
         }
