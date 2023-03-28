@@ -82,12 +82,12 @@ SELECT select_expr[, select_expr ...]
 
 The bucketing strategy of the materialized view, in the form of `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`.
 
-
 **refresh_moment** (optional)
-The refresh moment of the materialized view, which could be skipped and the default value is `IMMEDIATE`:
-- `IMMEDIATE`: Refresh the materialized view immediately after the creation.
-- `DEFERRED`: Not refresh the materialized view after creation, users could manually refresh the MV or schedule the refresh in background.
 
+The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid values:
+
+- `IMMEDIATE`: Refresh the materialized view immediately after it is created.
+- `DEFERRED`: The materialized view is not refreshed after after it is created. You can manually refresh the materialized view or schedule regular refresh tasks.
 
 **refresh_scheme_desc** (optional)
 
@@ -139,10 +139,9 @@ When a query is executed with a materialized view, the original query statement 
 ## Relavant session variables
 
 Several variables could control the bevavior of materialized view:
-- `analyze_mv`: Whether analyze the materialized view after refresh. Default value if `sample`, available values are empty, `sample`, `full`. 
-- `enable_materialized_view_rewrite`: Whether enable the automatic rewrite for materialized view. Default value is `true` since version `2.5`.
 
-
+- `analyze_mv`: Whether and how to analyze the materialized view after refresh. Valid values are an empty string (Do not analyze), `sample` (Sampled statistics collection), and `full` (Full statistics collection). Default is `sample`.
+- `enable_materialized_view_rewrite`: Whether to enable the automatic rewrite for materialized view. Valid values are `true` (Default since v2.5) and false.
 
 ## Usage notes
 
