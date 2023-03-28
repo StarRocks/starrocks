@@ -343,14 +343,6 @@ public class ColocateMetaService {
             updateBackendPerBucketSeq(groupId, backendsPerBucketSeq);
             LOG.info("the group {} backendsPerBucketSeq meta has been changed to {}", groupId, backendsPerBucketSeq);
 
-            List<ColocateTableIndex.GroupId> colocateWithGroupsInOtherDb =
-                    colocateIndex.getColocateWithGroupsInOtherDb(groupId, groupId.dbId);
-            for (GroupId gid : colocateWithGroupsInOtherDb) {
-                updateBackendPerBucketSeq(gid, backendsPerBucketSeq);
-                LOG.info("the group {} backendsPerBucketSeq meta has been changed to {}",
-                        gid, backendsPerBucketSeq);
-            }
-
             sendResult(request, response);
         }
 
