@@ -166,6 +166,7 @@ set(EXEC_FILES
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
         ./storage/delete_handler_test.cpp
+        ./storage/delta_column_group_test.cpp
         ./storage/file_utils_test.cpp
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp

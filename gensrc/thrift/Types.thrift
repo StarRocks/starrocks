@@ -501,3 +501,8 @@ struct TBinlogOffset {
     2: optional TVersion version
     3: optional i64 lsn
 }
+
+enum TPartialUpdateMode {
+    ROW_MODE = 0;
+    COLUMN_MODE = 1;
+}
