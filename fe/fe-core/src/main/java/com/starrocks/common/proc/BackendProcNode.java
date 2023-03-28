@@ -42,7 +42,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TStorageMedium;
 
 import java.util.List;
@@ -54,20 +54,20 @@ public class BackendProcNode implements ProcNodeInterface {
             .add("TotalCapacity").add("TotalUsedPct").add("State").add("PathHash").add("StorageMedium")
             .add("TabletNum").add("DataTotalCapacity").add("DataUsedPct").build();
 
-    private Backend backend;
+    private DataNode dataNode;
 
-    public BackendProcNode(Backend backend) {
-        this.backend = backend;
+    public BackendProcNode(DataNode dataNode) {
+        this.dataNode = dataNode;
     }
 
     @Override
     public ProcResult fetchResult() throws AnalysisException {
-        Preconditions.checkNotNull(backend);
+        Preconditions.checkNotNull(dataNode);
 
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        for (Map.Entry<String, DiskInfo> entry : backend.getDisks().entrySet()) {
+        for (Map.Entry<String, DiskInfo> entry : dataNode.getDisks().entrySet()) {
             DiskInfo diskInfo = entry.getValue();
             long dataUsedB = diskInfo.getDataUsedCapacityB();
             long availB = diskInfo.getAvailableCapacityB();
@@ -120,7 +120,7 @@ public class BackendProcNode implements ProcNodeInterface {
 
             // tablet num
             info.add(String.valueOf(GlobalStateMgr.getCurrentInvertedIndex().getTabletNumByBackendIdAndPathHash(
-                    backend.getId(), diskInfo.getPathHash())));
+                    dataNode.getId(), diskInfo.getPathHash())));
 
             // data total
             Pair<Double, String> dataTotalUnitPair = DebugUtil.getByteUint(dataTotalB);

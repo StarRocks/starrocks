@@ -48,7 +48,7 @@ import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -214,9 +214,9 @@ public class CurrentQueryInfoProvider {
     }
 
     private TNetworkAddress toBrpcHost(TNetworkAddress host) throws AnalysisException {
-        final Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
+        final DataNode dataNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
-        if (backend == null) {
+        if (dataNode == null) {
             throw new AnalysisException(new StringBuilder("Backend ")
                     .append(host.getHostname())
                     .append(":")
@@ -224,10 +224,10 @@ public class CurrentQueryInfoProvider {
                     .append(" does not exist")
                     .toString());
         }
-        if (backend.getBrpcPort() < 0) {
+        if (dataNode.getBrpcPort() < 0) {
             throw new AnalysisException("BRPC port is't exist.");
         }
-        return new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
+        return new TNetworkAddress(dataNode.getHost(), dataNode.getBrpcPort());
     }
 
     public static class QueryStatistics {

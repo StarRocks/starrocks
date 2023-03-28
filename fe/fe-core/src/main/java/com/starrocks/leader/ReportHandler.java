@@ -71,8 +71,8 @@ import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
-import com.starrocks.system.Backend.BackendStatus;
+import com.starrocks.system.DataNode;
+import com.starrocks.system.DataNode.BackendStatus;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -165,9 +165,9 @@ public class ReportHandler extends Daemon {
         String host = tBackend.getHost();
         int bePort = tBackend.getBe_port();
         long beId;
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
-        if (backend != null) {
-            beId = backend.getId();
+        DataNode dataNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+        if (dataNode != null) {
+            beId = dataNode.getId();
         } else {
             ComputeNode computeNode = null;
             // Compute node only reports resource usage.
@@ -230,8 +230,8 @@ public class ReportHandler extends Daemon {
             reportType = ReportType.TABLET_REPORT;
         }
 
-        if (backend != null && request.isSetTablet_max_compaction_score()) {
-            backend.setTabletMaxCompactionScore(request.getTablet_max_compaction_score());
+        if (dataNode != null && request.isSetTablet_max_compaction_score()) {
+            dataNode.setTabletMaxCompactionScore(request.getTablet_max_compaction_score());
         }
 
         if (request.isSetActive_workgroups()) {
@@ -439,9 +439,9 @@ public class ReportHandler extends Daemon {
         handleSetTabletBinlogConfig(backendId, backendTablets);
 
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
-        Backend reportBackend = currentSystemInfo.getBackend(backendId);
-        if (reportBackend != null) {
-            BackendStatus backendStatus = reportBackend.getBackendStatus();
+        DataNode reportDataNode = currentSystemInfo.getBackend(backendId);
+        if (reportDataNode != null) {
+            BackendStatus backendStatus = reportDataNode.getBackendStatus();
             backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(start);
         }
 
@@ -499,13 +499,13 @@ public class ReportHandler extends Daemon {
     private static void diskReport(long backendId, Map<String, TDisk> backendDisks) {
         LOG.debug("begin to handle disk report from backend {}", backendId);
         long start = System.currentTimeMillis();
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-        if (backend == null) {
+        DataNode dataNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        if (dataNode == null) {
             LOG.warn("backend doesn't exist. id: " + backendId);
             return;
         }
 
-        backend.updateDisks(backendDisks);
+        dataNode.updateDisks(backendDisks);
         long cost = System.currentTimeMillis() - start;
         if (cost > MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS) {
             LOG.info("finished to handle disk report from backend {}, cost: {} ms",
@@ -516,8 +516,8 @@ public class ReportHandler extends Daemon {
     private static void workgroupReport(long backendId, List<TWorkGroup> workGroups) {
         LOG.debug("begin to handle workgroup report from backend{}", backendId);
         long start = System.currentTimeMillis();
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-        if (backend == null) {
+        DataNode dataNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        if (dataNode == null) {
             LOG.warn("backend does't exist. id: " + backendId);
         }
         GlobalStateMgr.getCurrentState().getResourceGroupMgr().saveActiveResourceGroupsForBe(backendId, workGroups);

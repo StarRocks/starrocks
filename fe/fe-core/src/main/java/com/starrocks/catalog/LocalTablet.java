@@ -46,7 +46,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TxnFinishState;
 import org.apache.logging.log4j.LogManager;
@@ -208,11 +208,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         List<String> backends = new ArrayList<String>();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
-            Backend backend = infoService.getBackend(replica.getBackendId());
-            if (backend == null) {
+            DataNode dataNode = infoService.getBackend(replica.getBackendId());
+            if (dataNode == null) {
                 continue;
             }
-            backends.add(backend.getHost());
+            backends.add(dataNode.getHost());
         }
         return backends;
     }
@@ -516,10 +516,10 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         Replica needFurtherRepairReplica = null;
         Set<String> hosts = Sets.newHashSet();
         for (Replica replica : replicas) {
-            Backend backend = systemInfoService.getBackend(replica.getBackendId());
-            if (backend == null || !backend.isAlive() || replica.getState() == ReplicaState.CLONE
+            DataNode dataNode = systemInfoService.getBackend(replica.getBackendId());
+            if (dataNode == null || !dataNode.isAlive() || replica.getState() == ReplicaState.CLONE
                     || replica.getState() == ReplicaState.DECOMMISSION
-                    || replica.isBad() || !hosts.add(backend.getHost())) {
+                    || replica.isBad() || !hosts.add(dataNode.getHost())) {
                 // this replica is not alive,
                 // or if this replica is on same host with another replica, we also treat it as 'dead',
                 // so that Tablet Scheduler will create a new replica on different host.
@@ -538,7 +538,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
             aliveAndVersionComplete++;
 
-            if (!backend.isAvailable()) {
+            if (!dataNode.isAvailable()) {
                 // this replica is alive, version complete, but backend is not available
                 continue;
             }
@@ -783,9 +783,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                                 replicas.size()));
                         empty = false;
                     }
-                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                    DataNode dataNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
                     sb.append(String.format(" %s:%d%s",
-                            backend == null ? Long.toString(replica.getBackendId()) : backend.getHost(), replicaVersion,
+                            dataNode == null ? Long.toString(replica.getBackendId()) : dataNode.getHost(), replicaVersion,
                             replica.getState() == ReplicaState.ALTER ? "ALTER" : ""));
                 }
             }

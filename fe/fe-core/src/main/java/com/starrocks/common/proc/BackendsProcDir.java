@@ -48,7 +48,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -112,8 +112,8 @@ public class BackendsProcDir implements ProcDirInterface {
         Stopwatch watch = Stopwatch.createUnstarted();
         List<List<Comparable>> comparableBackendInfos = new LinkedList<>();
         for (long backendId : backendIds) {
-            Backend backend = clusterInfoService.getBackend(backendId);
-            if (backend == null) {
+            DataNode dataNode = clusterInfoService.getBackend(backendId);
+            if (dataNode == null) {
                 continue;
             }
 
@@ -122,19 +122,19 @@ public class BackendsProcDir implements ProcDirInterface {
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
             backendInfo.add(String.valueOf(backendId));
-            backendInfo.add(backend.getHost());
-            backendInfo.add(String.valueOf(backend.getHeartbeatPort()));
-            backendInfo.add(String.valueOf(backend.getBePort()));
-            backendInfo.add(String.valueOf(backend.getHttpPort()));
-            backendInfo.add(String.valueOf(backend.getBrpcPort()));
-            backendInfo.add(TimeUtils.longToTimeString(backend.getLastStartTime()));
-            backendInfo.add(TimeUtils.longToTimeString(backend.getLastUpdateMs()));
-            backendInfo.add(String.valueOf(backend.isAlive()));
-            if (backend.isDecommissioned() && backend.getDecommissionType() == DecommissionType.ClusterDecommission) {
+            backendInfo.add(dataNode.getHost());
+            backendInfo.add(String.valueOf(dataNode.getHeartbeatPort()));
+            backendInfo.add(String.valueOf(dataNode.getBePort()));
+            backendInfo.add(String.valueOf(dataNode.getHttpPort()));
+            backendInfo.add(String.valueOf(dataNode.getBrpcPort()));
+            backendInfo.add(TimeUtils.longToTimeString(dataNode.getLastStartTime()));
+            backendInfo.add(TimeUtils.longToTimeString(dataNode.getLastUpdateMs()));
+            backendInfo.add(String.valueOf(dataNode.isAlive()));
+            if (dataNode.isDecommissioned() && dataNode.getDecommissionType() == DecommissionType.ClusterDecommission) {
                 backendInfo.add("false");
                 backendInfo.add("true");
-            } else if (backend.isDecommissioned()
-                    && backend.getDecommissionType() == DecommissionType.SystemDecommission) {
+            } else if (dataNode.isDecommissioned()
+                    && dataNode.getDecommissionType() == DecommissionType.SystemDecommission) {
                 backendInfo.add("true");
                 backendInfo.add("false");
             } else {
@@ -145,15 +145,15 @@ public class BackendsProcDir implements ProcDirInterface {
 
             // capacity
             // data used
-            long dataUsedB = backend.getDataUsedCapacityB();
+            long dataUsedB = dataNode.getDataUsedCapacityB();
             Pair<Double, String> usedCapacity = DebugUtil.getByteUint(dataUsedB);
             backendInfo.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(usedCapacity.first) + " " + usedCapacity.second);
             // available
-            long availB = backend.getAvailableCapacityB();
+            long availB = dataNode.getAvailableCapacityB();
             Pair<Double, String> availCapacity = DebugUtil.getByteUint(availB);
             backendInfo.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(availCapacity.first) + " " + availCapacity.second);
             // total
-            long totalB = backend.getTotalCapacityB();
+            long totalB = dataNode.getTotalCapacityB();
             Pair<Double, String> totalCapacity = DebugUtil.getByteUint(totalB);
             backendInfo.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(totalCapacity.first) + " " + totalCapacity.second);
 
@@ -165,14 +165,14 @@ public class BackendsProcDir implements ProcDirInterface {
                 used = (double) (totalB - availB) * 100 / totalB;
             }
             backendInfo.add(String.format("%.2f", used) + " %");
-            backendInfo.add(String.format("%.2f", backend.getMaxDiskUsedPct() * 100) + " %");
+            backendInfo.add(String.format("%.2f", dataNode.getMaxDiskUsedPct() * 100) + " %");
 
-            backendInfo.add(backend.getHeartbeatErrMsg());
-            backendInfo.add(backend.getVersion());
-            backendInfo.add(new Gson().toJson(backend.getBackendStatus()));
+            backendInfo.add(dataNode.getHeartbeatErrMsg());
+            backendInfo.add(dataNode.getVersion());
+            backendInfo.add(new Gson().toJson(dataNode.getBackendStatus()));
 
             // data total
-            long dataTotalB = backend.getDataTotalCapacityB();
+            long dataTotalB = dataNode.getDataTotalCapacityB();
             Pair<Double, String> dataTotalCapacity = DebugUtil.getByteUint(dataTotalB);
             backendInfo.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(dataTotalCapacity.first) + " " +
                     dataTotalCapacity.second);
@@ -189,13 +189,13 @@ public class BackendsProcDir implements ProcDirInterface {
             // Num CPU cores
             backendInfo.add(BackendCoreStat.getCoresOfBe(backendId));
 
-            backendInfo.add(backend.getNumRunningQueries());
-            double memUsedPct = backend.getMemUsedPct();
+            backendInfo.add(dataNode.getNumRunningQueries());
+            double memUsedPct = dataNode.getMemUsedPct();
             backendInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
-            backendInfo.add(String.format("%.1f", backend.getCpuUsedPermille() / 10.0) + " %");
+            backendInfo.add(String.format("%.1f", dataNode.getCpuUsedPermille() / 10.0) + " %");
 
             if (RunMode.allowCreateLakeTable()) {
-                backendInfo.add(String.valueOf(backend.getStarletPort()));
+                backendInfo.add(String.valueOf(dataNode.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(backendId);
                 backendInfo.add(String.valueOf(workerId));
             }
@@ -240,12 +240,12 @@ public class BackendsProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid backend id format: " + beIdStr);
         }
 
-        Backend backend = clusterInfoService.getBackend(backendId);
-        if (backend == null) {
+        DataNode dataNode = clusterInfoService.getBackend(backendId);
+        if (dataNode == null) {
             throw new AnalysisException("Backend[" + backendId + "] does not exist.");
         }
 
-        return new BackendProcNode(backend);
+        return new BackendProcNode(dataNode);
     }
 
 }

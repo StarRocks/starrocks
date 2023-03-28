@@ -88,7 +88,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.ResourceDesc;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -499,12 +499,12 @@ public class SparkLoadJob extends BulkLoadJob {
                                         long replicaId = replica.getId();
                                         tabletAllReplicas.add(replicaId);
                                         long backendId = replica.getBackendId();
-                                        Backend backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo()
+                                        DataNode dataNode = GlobalStateMgr.getCurrentState().getCurrentSystemInfo()
                                                 .getBackend(backendId);
 
                                         pushTask(backendId, tableId, partitionId, indexId, tabletId,
                                                 replicaId, schemaHash, params, batchTask, tabletMetaStr,
-                                                backend, replica, tabletFinishedReplicas, TTabletType.TABLET_TYPE_DISK);
+                                                dataNode, replica, tabletFinishedReplicas, TTabletType.TABLET_TYPE_DISK);
                                     }
 
                                     if (tabletAllReplicas.size() == 0) {
@@ -522,16 +522,16 @@ public class SparkLoadJob extends BulkLoadJob {
                                 } else {
                                     // lake tablet
                                     long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
-                                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().
+                                    DataNode dataNode = GlobalStateMgr.getCurrentSystemInfo().
                                             getBackend(backendId);
-                                    if (backend == null) {
+                                    if (dataNode == null) {
                                         LOG.warn("replica {} not exists", backendId);
                                         continue;
                                     }
 
-                                    pushTask(backend.getId(), tableId, partitionId, indexId, tabletId,
+                                    pushTask(dataNode.getId(), tableId, partitionId, indexId, tabletId,
                                             tabletId, schemaHash, params, batchTask, tabletMetaStr,
-                                            backend, new Replica(tabletId, backendId, -1, NORMAL),
+                                            dataNode, new Replica(tabletId, backendId, -1, NORMAL),
                                             tabletFinishedReplicas, TTabletType.TABLET_TYPE_LAKE);
 
                                     if (tabletFinishedReplicas.contains(tabletId)) {
@@ -571,7 +571,7 @@ public class SparkLoadJob extends BulkLoadJob {
                           PushBrokerReaderParams params,
                           AgentBatchTask batchTask,
                           String tabletMetaStr,
-                          Backend backend, Replica replica, Set<Long> tabletFinishedReplicas,
+                          DataNode dataNode, Replica replica, Set<Long> tabletFinishedReplicas,
                           TTabletType tabletType)
             throws AnalysisException {
 
@@ -600,15 +600,15 @@ public class SparkLoadJob extends BulkLoadJob {
             // update broker address
             if (brokerDesc.hasBroker()) {
                 FsBroker fsBroker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(
-                        brokerDesc.getName(), backend.getHost());
+                        brokerDesc.getName(), dataNode.getHost());
                 tBrokerScanRange.getBroker_addresses().add(
                         new TNetworkAddress(fsBroker.ip, fsBroker.port));
                 LOG.debug("push task for replica {}, broker {}:{}, backendId {}," +
                                 "filePath {}, fileSize {}", replicaId, fsBroker.ip, fsBroker.port,
-                        backend.getId(), tBrokerRangeDesc.path, tBrokerRangeDesc.file_size);
+                        dataNode.getId(), tBrokerRangeDesc.path, tBrokerRangeDesc.file_size);
             } else {
                 LOG.debug("push task for replica {}, backendId {}, filePath {}, fileSize {}",
-                        replicaId, backend.getId(), tBrokerRangeDesc.path,
+                        replicaId, dataNode.getId(), tBrokerRangeDesc.path,
                         tBrokerRangeDesc.file_size);
             }
 

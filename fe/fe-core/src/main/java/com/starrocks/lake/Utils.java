@@ -30,7 +30,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -106,10 +106,10 @@ public class Utils {
         List<Long> txnIds = Lists.newArrayList(txnId);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<Backend> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
+        List<DataNode> dataNodeList = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            Backend backend = systemInfoService.getBackend(entry.getKey());
-            if (backend == null) {
+            DataNode dataNode = systemInfoService.getBackend(entry.getKey());
+            if (dataNode == null) {
                 throw new NoAliveBackendException("Backend been dropped while building publish version request");
             }
             PublishVersionRequest request = new PublishVersionRequest();
@@ -119,12 +119,12 @@ public class Utils {
             request.txnIds = txnIds;
 
             try {
-                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                LakeService lakeService = BrpcProxy.getLakeService(dataNode.getHost(), dataNode.getBrpcPort());
                 Future<PublishVersionResponse> future = lakeService.publishVersion(request);
                 responseList.add(future);
-                backendList.add(backend);
+                dataNodeList.add(dataNode);
             } catch (Throwable e) {
-                throw new RpcException(backend.getHost(), e.getMessage());
+                throw new RpcException(dataNode.getHost(), e.getMessage());
             }
         }
 
@@ -132,14 +132,14 @@ public class Utils {
             try {
                 PublishVersionResponse response = responseList.get(i).get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                    throw new RpcException(backendList.get(i).getHost(),
+                    throw new RpcException(dataNodeList.get(i).getHost(),
                             "Fail to publish version for tablets {}" + response.failedTablets);
                 }
                 if (compactionScores != null && response != null && response.compactionScores != null) {
                     compactionScores.putAll(response.compactionScores);
                 }
             } catch (Exception e) {
-                throw new RpcException(backendList.get(i).getHost(), e.getMessage());
+                throw new RpcException(dataNodeList.get(i).getHost(), e.getMessage());
             }
         }
     }
@@ -156,10 +156,10 @@ public class Utils {
         }
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Future<PublishLogVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<Backend> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
+        List<DataNode> dataNodeList = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            Backend backend = systemInfoService.getBackend(entry.getKey());
-            if (backend == null) {
+            DataNode dataNode = systemInfoService.getBackend(entry.getKey());
+            if (dataNode == null) {
                 throw new NoAliveBackendException("Backend been dropped while building publish version request");
             }
             PublishLogVersionRequest request = new PublishLogVersionRequest();
@@ -168,12 +168,12 @@ public class Utils {
             request.version = version;
 
             try {
-                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                LakeService lakeService = BrpcProxy.getLakeService(dataNode.getHost(), dataNode.getBrpcPort());
                 Future<PublishLogVersionResponse> future = lakeService.publishLogVersion(request);
                 responseList.add(future);
-                backendList.add(backend);
+                dataNodeList.add(dataNode);
             } catch (Throwable e) {
-                throw new RpcException(backend.getHost(), e.getMessage());
+                throw new RpcException(dataNode.getHost(), e.getMessage());
             }
         }
 
@@ -181,11 +181,11 @@ public class Utils {
             try {
                 PublishLogVersionResponse response = responseList.get(i).get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                    throw new RpcException(backendList.get(i).getHost(),
+                    throw new RpcException(dataNodeList.get(i).getHost(),
                             "Fail to publish log version for tablets {}" + response.failedTablets);
                 }
             } catch (Exception e) {
-                throw new RpcException(backendList.get(i).getHost(), e.getMessage());
+                throw new RpcException(dataNodeList.get(i).getHost(), e.getMessage());
             }
         }
     }

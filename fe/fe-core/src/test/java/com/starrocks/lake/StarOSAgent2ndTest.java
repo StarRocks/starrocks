@@ -28,7 +28,7 @@ import com.staros.proto.WorkerState;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -88,31 +88,31 @@ public class StarOSAgent2ndTest {
         Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
 
         { // give a correct starlet port, wrong bePort
-            Backend backend = new Backend(beId, workerHost, 0);
-            backend.setStarletPort(workerStarletPort);
-            backend.setBePort(workerBePort + 1);
-            GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
+            DataNode dataNode = new DataNode(beId, workerHost, 0);
+            dataNode.setStarletPort(workerStarletPort);
+            dataNode.setBePort(workerBePort + 1);
+            GlobalStateMgr.getCurrentSystemInfo().addBackend(dataNode);
             Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId));
-            GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
+            GlobalStateMgr.getCurrentSystemInfo().dropBackend(dataNode);
             workerToBackend.clear();
         }
         { // No starlet port in backend, be port mismatch
-            Backend backend = new Backend(beId, workerHost, 0);
-            backend.setStarletPort(0);
-            backend.setBePort(workerBePort + 1);
-            GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
+            DataNode dataNode = new DataNode(beId, workerHost, 0);
+            dataNode.setStarletPort(0);
+            dataNode.setBePort(workerBePort + 1);
+            GlobalStateMgr.getCurrentSystemInfo().addBackend(dataNode);
             // empty result
             Assert.assertTrue(starosAgent.getBackendIdsByShard(shardId).isEmpty());
-            GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
+            GlobalStateMgr.getCurrentSystemInfo().dropBackend(dataNode);
             workerToBackend.clear();
         }
         { // No starlet port in backend, correct be port, can find the correct backend!
-            Backend backend = new Backend(beId, workerHost, 0);
-            backend.setStarletPort(0);
-            backend.setBePort(workerBePort);
-            GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
+            DataNode dataNode = new DataNode(beId, workerHost, 0);
+            dataNode.setStarletPort(0);
+            dataNode.setBePort(workerBePort);
+            GlobalStateMgr.getCurrentSystemInfo().addBackend(dataNode);
             Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId));
-            GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
+            GlobalStateMgr.getCurrentSystemInfo().dropBackend(dataNode);
             workerToBackend.clear();
         }
     }

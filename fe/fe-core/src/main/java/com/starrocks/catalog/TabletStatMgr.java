@@ -50,7 +50,7 @@ import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -121,24 +121,24 @@ public class TabletStatMgr extends LeaderDaemon {
     }
 
     private void updateLocalTabletStat() {
-        ImmutableMap<Long, Backend> backends = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, DataNode> backends = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         long start = System.currentTimeMillis();
-        for (Backend backend : backends.values()) {
+        for (DataNode dataNode : backends.values()) {
             BackendService.Client client = null;
             TNetworkAddress address = null;
             boolean ok = false;
             try {
-                address = new TNetworkAddress(backend.getHost(), backend.getBePort());
+                address = new TNetworkAddress(dataNode.getHost(), dataNode.getBePort());
                 client = ClientPool.backendPool.borrowObject(address);
                 TTabletStatResult result = client.get_tablet_stat();
 
-                LOG.debug("get tablet stat from backend: {}, num: {}", backend.getId(), result.getTablets_statsSize());
-                updateLocalTabletStat(backend.getId(), result);
+                LOG.debug("get tablet stat from backend: {}, num: {}", dataNode.getId(), result.getTablets_statsSize());
+                updateLocalTabletStat(dataNode.getId(), result);
 
                 ok = true;
             } catch (Exception e) {
-                LOG.warn("task exec error. backend[{}]", backend.getId(), e);
+                LOG.warn("task exec error. backend[{}]", dataNode.getId(), e);
             } finally {
                 if (ok) {
                     ClientPool.backendPool.returnObject(address, client);
@@ -244,14 +244,14 @@ public class TabletStatMgr extends LeaderDaemon {
         long start = System.currentTimeMillis();
         try {
             for (Map.Entry<Long, List<TabletInfo>> entry : beToTabletInfos.entrySet()) {
-                Backend backend = systemInfoService.getBackend(entry.getKey());
-                if (backend == null) {
+                DataNode dataNode = systemInfoService.getBackend(entry.getKey());
+                if (dataNode == null) {
                     continue;
                 }
                 TabletStatRequest request = new TabletStatRequest();
                 request.tabletInfos = entry.getValue();
 
-                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                LakeService lakeService = BrpcProxy.getLakeService(dataNode.getHost(), dataNode.getBrpcPort());
                 Future<TabletStatResponse> responseFuture = lakeService.getTabletStats(request);
                 responseList.add(responseFuture);
             }

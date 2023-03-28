@@ -58,7 +58,7 @@ import com.starrocks.common.Config;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
@@ -114,7 +114,7 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     private boolean needAssignBE;
 
-    private List<Backend> backends;
+    private List<DataNode> dataNodes;
     private int nextBe = 0;
     private final Random random = new Random(System.currentTimeMillis());
     private String dbName;
@@ -240,16 +240,16 @@ public class StreamLoadScanNode extends LoadScanNode {
     }
 
     private void assignBackends() throws UserException {
-        backends = Lists.newArrayList();
-        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+        dataNodes = Lists.newArrayList();
+        for (DataNode be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
             if (be.isAvailable()) {
-                backends.add(be);
+                dataNodes.add(be);
             }
         }
-        if (backends.isEmpty()) {
+        if (dataNodes.isEmpty()) {
             throw new UserException("No available backends");
         }
-        Collections.shuffle(backends, random);
+        Collections.shuffle(dataNodes, random);
     }
 
     private void finalizeParams() throws UserException {
@@ -386,11 +386,11 @@ public class StreamLoadScanNode extends LoadScanNode {
             locations.setScan_range(scanRange);
 
             if (needAssignBE) {
-                Backend selectedBackend = backends.get(nextBe++);
-                nextBe = nextBe % backends.size();
+                DataNode selectedDataNode = dataNodes.get(nextBe++);
+                nextBe = nextBe % dataNodes.size();
                 TScanRangeLocation location = new TScanRangeLocation();
-                location.setBackend_id(selectedBackend.getId());
-                location.setServer(new TNetworkAddress(selectedBackend.getHost(), selectedBackend.getBePort()));
+                location.setBackend_id(selectedDataNode.getId());
+                location.setServer(new TNetworkAddress(selectedDataNode.getHost(), selectedDataNode.getBePort()));
                 locations.addToLocations(location);
             } else {
                 locations.setLocations(Lists.newArrayList());

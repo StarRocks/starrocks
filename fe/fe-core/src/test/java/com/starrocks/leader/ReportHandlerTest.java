@@ -22,7 +22,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBackend;
@@ -145,14 +145,14 @@ public class ReportHandlerTest {
     public void testHandleResourceUsageReport() {
         QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
 
-        Backend backend = new Backend(0, "127.0.0.1", 80);
+        DataNode dataNode = new DataNode(0, "127.0.0.1", 80);
         ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
 
         new MockUp<SystemInfoService>() {
             @Mock
             public ComputeNode getBackendOrComputeNode(long id) {
-                if (id == backend.getId()) {
-                    return backend;
+                if (id == dataNode.getId()) {
+                    return dataNode;
                 }
                 if (id == computeNode.getId()) {
                     return computeNode;
@@ -175,11 +175,11 @@ public class ReportHandlerTest {
         TResourceUsage resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
 
         // For backend, sync to FE followers and notify pending queries.
-        ReportHandler.testHandleResourceUsageReport(backend.getId(), resourceUsage);
-        Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
-        Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
-        Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
-        Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
+        ReportHandler.testHandleResourceUsageReport(dataNode.getId(), resourceUsage);
+        Assert.assertEquals(numRunningQueries, dataNode.getNumRunningQueries());
+        Assert.assertEquals(memLimitBytes, dataNode.getMemLimitBytes());
+        Assert.assertEquals(memUsedBytes, dataNode.getMemUsedBytes());
+        Assert.assertEquals(cpuUsedPermille, dataNode.getCpuUsedPermille());
 
         // For compute node, sync to FE followers and notify pending queries.
         numRunningQueries = 10;
@@ -199,12 +199,12 @@ public class ReportHandlerTest {
     
     @Test
     public void testHandleReport() throws TException {
-        Backend be = new Backend(10001, "host1", 8000);
+        DataNode be = new DataNode(10001, "host1", 8000);
         ComputeNode cn = new ComputeNode(10002, "host2", 8000);
 
         new MockUp<SystemInfoService>() {
             @Mock
-            public Backend getBackendWithBePort(String host, int bePort) {
+            public DataNode getBackendWithBePort(String host, int bePort) {
                 if (host.equals(be.getHost()) && bePort == be.getBePort()) {
                     return be;
                 }

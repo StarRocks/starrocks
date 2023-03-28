@@ -77,7 +77,7 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
@@ -182,8 +182,8 @@ public class LeaderImpl {
         TBackend tBackend = request.getBackend();
         String host = tBackend.getHost();
         int bePort = tBackend.getBe_port();
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
-        if (backend == null) {
+        DataNode dataNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+        if (dataNode == null) {
             tStatus.setStatus_code(TStatusCode.CANCELLED);
             List<String> errorMsgs = new ArrayList<>();
             errorMsgs.add("backend not exist.");
@@ -192,7 +192,7 @@ public class LeaderImpl {
             return result;
         }
 
-        long backendId = backend.getId();
+        long backendId = dataNode.getId();
         TTaskType taskType = request.getTask_type();
         long signature = request.getSignature();
         AgentTask task = AgentTaskQueue.getTask(backendId, taskType, signature);
@@ -214,7 +214,7 @@ public class LeaderImpl {
             if (taskStatus.getStatus_code() != TStatusCode.OK) {
                 task.failed();
                 String errMsg = "task type: " + taskType + ", status_code: " + taskStatus.getStatus_code().toString() +
-                        ", backendId: " + backend + ", signature: " + signature;
+                        ", backendId: " + dataNode + ", signature: " + signature;
                 task.setErrorMsg(errMsg);
                 // We start to let FE perceive the task's error msg
                 if (taskType != TTaskType.MAKE_SNAPSHOT && taskType != TTaskType.UPLOAD
@@ -1045,15 +1045,15 @@ public class LeaderImpl {
             }
 
             List<TBackendMeta> backends = new ArrayList<>();
-            for (Backend backend : GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackends()) {
+            for (DataNode dataNode : GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackends()) {
                 TBackendMeta backendMeta = new TBackendMeta();
-                backendMeta.setBackend_id(backend.getId());
-                backendMeta.setHost(backend.getHost());
-                backendMeta.setBe_port(backend.getBeRpcPort());
-                backendMeta.setRpc_port(backend.getBrpcPort());
-                backendMeta.setHttp_port(backend.getHttpPort());
-                backendMeta.setAlive(backend.isAlive());
-                backendMeta.setState(backend.getBackendState().ordinal());
+                backendMeta.setBackend_id(dataNode.getId());
+                backendMeta.setHost(dataNode.getHost());
+                backendMeta.setBe_port(dataNode.getBeRpcPort());
+                backendMeta.setRpc_port(dataNode.getBrpcPort());
+                backendMeta.setHttp_port(dataNode.getHttpPort());
+                backendMeta.setAlive(dataNode.isAlive());
+                backendMeta.setState(dataNode.getBackendState().ordinal());
                 backends.add(backendMeta);
             }
             response.setStatus(new TStatus(TStatusCode.OK));

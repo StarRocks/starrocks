@@ -40,7 +40,7 @@ import com.starrocks.cluster.Cluster;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.transaction.TransactionState;
 import mockit.Mock;
 import mockit.MockUp;
@@ -79,7 +79,7 @@ public class FakeEditLog extends MockUp<EditLog> {
     }
 
     @Mock
-    public void logBackendStateChange(Backend be) {
+    public void logBackendStateChange(DataNode be) {
     }
 
     @Mock

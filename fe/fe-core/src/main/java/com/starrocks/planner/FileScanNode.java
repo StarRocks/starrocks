@@ -68,7 +68,7 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
@@ -144,7 +144,7 @@ public class FileScanNode extends LoadScanNode {
     private int filesAdded;
 
     // Only used for external table in select statement
-    private List<Backend> backends;
+    private List<DataNode> dataNodes;
     private int nextBe = 0;
 
     private Analyzer analyzer;
@@ -405,8 +405,8 @@ public class FileScanNode extends LoadScanNode {
 
     private TScanRangeLocations newLocations(TBrokerScanRangeParams params, String brokerName, boolean hasBroker)
             throws UserException {
-        Backend selectedBackend = backends.get(nextBe++);
-        nextBe = nextBe % backends.size();
+        DataNode selectedDataNode = dataNodes.get(nextBe++);
+        nextBe = nextBe % dataNodes.size();
 
         // Generate on broker scan range
         TBrokerScanRange brokerScanRange = new TBrokerScanRange();
@@ -415,7 +415,7 @@ public class FileScanNode extends LoadScanNode {
         if (hasBroker) {
             FsBroker broker = null;
             try {
-                broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
+                broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedDataNode.getHost());
             } catch (AnalysisException e) {
                 throw new UserException(e.getMessage());
             }
@@ -433,8 +433,8 @@ public class FileScanNode extends LoadScanNode {
         locations.setScan_range(scanRange);
 
         TScanRangeLocation location = new TScanRangeLocation();
-        location.setBackend_id(selectedBackend.getId());
-        location.setServer(new TNetworkAddress(selectedBackend.getHost(), selectedBackend.getBePort()));
+        location.setBackend_id(selectedDataNode.getId());
+        location.setServer(new TNetworkAddress(selectedDataNode.getHost(), selectedDataNode.getBePort()));
         locations.addToLocations(location);
 
         return locations;
@@ -487,7 +487,7 @@ public class FileScanNode extends LoadScanNode {
         //     backends_size * parallelInstanceNum,
         //     max_broker_concurrency)
         numInstances = (int) (totalBytes / Config.min_bytes_per_broker_scanner);
-        numInstances = Math.min(backends.size() * parallelInstanceNum, numInstances);
+        numInstances = Math.min(dataNodes.size() * parallelInstanceNum, numInstances);
         numInstances = Math.min(numInstances, Config.max_broker_concurrency);
         numInstances = Math.max(1, numInstances);
 
@@ -495,16 +495,16 @@ public class FileScanNode extends LoadScanNode {
     }
 
     private void assignBackends() throws UserException {
-        backends = Lists.newArrayList();
-        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+        dataNodes = Lists.newArrayList();
+        for (DataNode be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
             if (be.isAvailable()) {
-                backends.add(be);
+                dataNodes.add(be);
             }
         }
-        if (backends.isEmpty()) {
+        if (dataNodes.isEmpty()) {
             throw new UserException("No available backends");
         }
-        Collections.shuffle(backends, random);
+        Collections.shuffle(dataNodes, random);
     }
 
     private TFileFormatType formatType(String fileFormat, String path) {
@@ -682,7 +682,7 @@ public class FileScanNode extends LoadScanNode {
             return;
         }
 
-        Set<Long> aliveBes = backends.stream().map(Backend::getId).collect(Collectors.toSet());
+        Set<Long> aliveBes = dataNodes.stream().map(DataNode::getId).collect(Collectors.toSet());
         nextBe = 0;
         for (TScanRangeLocations locations : locationsList) {
             TScanRangeLocation scanRangeLocation = locations.getLocations().get(0);

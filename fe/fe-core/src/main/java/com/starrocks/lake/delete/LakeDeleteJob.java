@@ -46,7 +46,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TabletCommitInfo;
 import org.apache.logging.log4j.LogManager;
@@ -102,8 +102,8 @@ public class LakeDeleteJob extends DeleteJob {
                     beToTablets.size());
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
             for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-                Backend backend = systemInfoService.getBackend(entry.getKey());
-                if (backend == null) {
+                DataNode dataNode = systemInfoService.getBackend(entry.getKey());
+                if (dataNode == null) {
                     throw new DdlException("Backend " + entry.getKey() + " has been dropped");
                 }
                 DeleteDataRequest request = new DeleteDataRequest();
@@ -111,7 +111,7 @@ public class LakeDeleteJob extends DeleteJob {
                 request.txnId = getTransactionId();
                 request.deletePredicate = deletePredicate;
 
-                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                LakeService lakeService = BrpcProxy.getLakeService(dataNode.getHost(), dataNode.getBrpcPort());
                 Future<DeleteDataResponse> responseFuture = lakeService.deleteData(request);
                 responseList.add(responseFuture);
             }

@@ -26,7 +26,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCreatePartitionRequest;
@@ -74,14 +74,14 @@ public class FrontendServiceImplTest {
         QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
 
-        Backend backend = new Backend(0, "127.0.0.1", 80);
+        DataNode dataNode = new DataNode(0, "127.0.0.1", 80);
         ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
 
         new MockUp<SystemInfoService>() {
             @Mock
             public ComputeNode getBackendOrComputeNode(long id) {
-                if (id == backend.getId()) {
-                    return backend;
+                if (id == dataNode.getId()) {
+                    return dataNode;
                 }
                 if (id == computeNode.getId()) {
                     return computeNode;
@@ -106,10 +106,10 @@ public class FrontendServiceImplTest {
 
         // For backend, notify pending queries.
         impl.updateResourceUsage(request);
-        Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
-        Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
-        Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
-        Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
+        Assert.assertEquals(numRunningQueries, dataNode.getNumRunningQueries());
+        Assert.assertEquals(memLimitBytes, dataNode.getMemLimitBytes());
+        Assert.assertEquals(memUsedBytes, dataNode.getMemUsedBytes());
+        Assert.assertEquals(cpuUsedPermille, dataNode.getCpuUsedPermille());
 
         // For compute node, notify pending queries.
         numRunningQueries = 10;
@@ -119,10 +119,10 @@ public class FrontendServiceImplTest {
         request = genUpdateResourceUsageRequest(
                 backendId, numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
         impl.updateResourceUsage(request);
-        Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
-        Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
-        Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
-        Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
+        Assert.assertEquals(numRunningQueries, dataNode.getNumRunningQueries());
+        Assert.assertEquals(memLimitBytes, dataNode.getMemLimitBytes());
+        Assert.assertEquals(memUsedBytes, dataNode.getMemUsedBytes());
+        Assert.assertEquals(cpuUsedPermille, dataNode.getCpuUsedPermille());
 
         // Don't notify, because this BE doesn't exist.
         request.setBackend_id(/* Not Exist */ 1);

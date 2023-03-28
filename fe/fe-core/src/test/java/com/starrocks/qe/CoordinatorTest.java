@@ -36,7 +36,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TNetworkAddress;
@@ -458,9 +458,9 @@ public class CoordinatorTest extends PlanTestBase {
 
         FragmentScanRangeAssignment scanRangeMap =
                 prepare.getFragmentScanRangeAssignment(fragmentId);
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackends().get(0);
+        DataNode dataNode = GlobalStateMgr.getCurrentSystemInfo().getBackends().get(0);
         Assert.assertFalse(scanRangeMap.isEmpty());
-        TNetworkAddress expectedAddress = backend.getAddress();
+        TNetworkAddress expectedAddress = dataNode.getAddress();
         Assert.assertTrue(scanRangeMap.containsKey(expectedAddress));
         Map<Integer, List<TScanRangeParams>> rangesPerNode = scanRangeMap.get(expectedAddress);
         Assert.assertTrue(rangesPerNode.containsKey(planNodeId.asInt()));

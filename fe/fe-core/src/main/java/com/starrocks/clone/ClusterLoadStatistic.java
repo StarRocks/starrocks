@@ -41,7 +41,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.clone.BackendLoadStatistic.Classification;
 import com.starrocks.clone.BackendLoadStatistic.LoadScore;
 import com.starrocks.common.Config;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -78,9 +78,9 @@ public class ClusterLoadStatistic {
     }
 
     public void init() {
-        ImmutableMap<Long, Backend> backends = infoService.getIdToBackend();
-        for (Backend backend : backends.values()) {
-            BackendLoadStatistic beStatistic = new BackendLoadStatistic(backend.getId(),
+        ImmutableMap<Long, DataNode> backends = infoService.getIdToBackend();
+        for (DataNode dataNode : backends.values()) {
+            BackendLoadStatistic beStatistic = new BackendLoadStatistic(dataNode.getId(),
                     SystemInfoService.DEFAULT_CLUSTER, infoService, invertedIndex);
             try {
                 beStatistic.init();

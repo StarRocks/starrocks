@@ -28,7 +28,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.StreamSourceType;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanNode;
@@ -173,12 +173,12 @@ public class BinlogScanNode extends ScanNode {
                     throw new UserException("No queryable replica for tablet " + tabletId);
                 }
                 for (Replica replica : allQueryableReplicas) {
-                    Backend backend = Preconditions.checkNotNull(
+                    DataNode dataNode = Preconditions.checkNotNull(
                             GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId()),
                             "backend not found: " + replica.getBackendId());
-                    scanBackendIds.add(backend.getId());
-                    TScanRangeLocation replicaLocation = new TScanRangeLocation(backend.getAddress());
-                    replicaLocation.setBackend_id(backend.getId());
+                    scanBackendIds.add(dataNode.getId());
+                    TScanRangeLocation replicaLocation = new TScanRangeLocation(dataNode.getAddress());
+                    replicaLocation.setBackend_id(dataNode.getId());
                     locations.addToLocations(replicaLocation);
                 }
 

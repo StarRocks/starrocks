@@ -37,7 +37,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -289,8 +289,8 @@ public class CompactionScheduler extends Daemon {
             throws UserException {
         List<Future<CompactResponse>> futures = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            Backend backend = systemInfoService.getBackend(entry.getKey());
-            if (backend == null) {
+            DataNode dataNode = systemInfoService.getBackend(entry.getKey());
+            if (dataNode == null) {
                 throw new UserException("Backend " + entry.getKey() + " has been dropped");
             }
             CompactRequest request = new CompactRequest();
@@ -298,7 +298,7 @@ public class CompactionScheduler extends Daemon {
             request.txnId = txnId;
             request.version = currentVersion;
 
-            LakeService service = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            LakeService service = BrpcProxy.getLakeService(dataNode.getHost(), dataNode.getBrpcPort());
             futures.add(service.compact(request));
         }
         return futures;

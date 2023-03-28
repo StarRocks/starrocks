@@ -49,7 +49,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRoutineLoadTask;
@@ -320,12 +320,12 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
     }
 
     private void submitTask(long beId, TRoutineLoadTask tTask) throws LoadException {
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
-        if (backend == null) {
+        DataNode dataNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        if (dataNode == null) {
             throw new LoadException("failed to send tasks to backend " + beId + " because not exist");
         }
 
-        TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBePort());
+        TNetworkAddress address = new TNetworkAddress(dataNode.getHost(), dataNode.getBePort());
 
         boolean ok = false;
         BackendService.Client client = null;

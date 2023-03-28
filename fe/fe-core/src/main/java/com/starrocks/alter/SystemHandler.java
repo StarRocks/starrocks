@@ -63,7 +63,7 @@ import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
@@ -98,8 +98,8 @@ public class SystemHandler extends AlterHandler {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         // check if decommission is finished
         for (Long beId : systemInfoService.getBackendIds(false)) {
-            Backend backend = systemInfoService.getBackend(beId);
-            if (backend == null || !backend.isDecommissioned()) {
+            DataNode dataNode = systemInfoService.getBackend(beId);
+            if (dataNode == null || !dataNode.isDecommissioned()) {
                 continue;
             }
 
@@ -147,15 +147,15 @@ public class SystemHandler extends AlterHandler {
             // decommission
             DecommissionBackendClause decommissionBackendClause = (DecommissionBackendClause) alterClause;
             // check request
-            List<Backend> decommissionBackends = checkDecommission(decommissionBackendClause);
+            List<DataNode> decommissionDataNodes = checkDecommission(decommissionBackendClause);
 
             // set backend's state as 'decommissioned'
             // for decommission operation, here is no decommission job. the system handler will check
             // all backend in decommission state
-            for (Backend backend : decommissionBackends) {
-                backend.setDecommissioned(true);
-                GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(backend);
-                LOG.info("set backend {} to decommission", backend.getId());
+            for (DataNode dataNode : decommissionDataNodes) {
+                dataNode.setDecommissioned(true);
+                GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(dataNode);
+                LOG.info("set backend {} to decommission", dataNode.getId());
             }
 
         } else if (alterClause instanceof AddObserverClause) {
@@ -196,7 +196,7 @@ public class SystemHandler extends AlterHandler {
         return null;
     }
 
-    private List<Backend> checkDecommission(DecommissionBackendClause decommissionBackendClause)
+    private List<DataNode> checkDecommission(DecommissionBackendClause decommissionBackendClause)
             throws DdlException {
         return checkDecommission(decommissionBackendClause.getHostPortPairs());
     }
@@ -207,27 +207,27 @@ public class SystemHandler extends AlterHandler {
      * 2. after decommission, the remaining backend num should meet the replication num.
      * 3. after decommission, The remaining space capacity can store data on decommissioned backends.
      */
-    public static List<Backend> checkDecommission(List<Pair<String, Integer>> hostPortPairs)
+    public static List<DataNode> checkDecommission(List<Pair<String, Integer>> hostPortPairs)
             throws DdlException {
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
-        List<Backend> decommissionBackends = Lists.newArrayList();
+        List<DataNode> decommissionDataNodes = Lists.newArrayList();
         // check if exist
         for (Pair<String, Integer> pair : hostPortPairs) {
-            Backend backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
-            if (backend == null) {
+            DataNode dataNode = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
+            if (dataNode == null) {
                 throw new DdlException("Backend does not exist[" + pair.first + ":" + pair.second + "]");
             }
-            if (backend.isDecommissioned()) {
+            if (dataNode.isDecommissioned()) {
                 // already under decommission, ignore it
                 continue;
             }
-            decommissionBackends.add(backend);
+            decommissionDataNodes.add(dataNode);
         }
 
         // TODO(cmy): check if replication num can be met
         // TODO(cmy): check remaining space
 
-        return decommissionBackends;
+        return decommissionDataNodes;
     }
 
     @Override
@@ -237,29 +237,29 @@ public class SystemHandler extends AlterHandler {
 
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         // check if backends is under decommission
-        List<Backend> backends = Lists.newArrayList();
+        List<DataNode> dataNodes = Lists.newArrayList();
         List<Pair<String, Integer>> hostPortPairs = cancelAlterSystemStmt.getHostPortPairs();
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check if exist
-            Backend backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
-            if (backend == null) {
+            DataNode dataNode = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
+            if (dataNode == null) {
                 throw new DdlException("Backend does not exists[" + pair.first + "]");
             }
 
-            if (!backend.isDecommissioned()) {
+            if (!dataNode.isDecommissioned()) {
                 // it's ok. just log
                 LOG.info("backend is not decommissioned[{}]", pair.first);
                 continue;
             }
 
-            backends.add(backend);
+            dataNodes.add(dataNode);
         }
 
-        for (Backend backend : backends) {
-            if (backend.setDecommissioned(false)) {
-                GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(backend);
+        for (DataNode dataNode : dataNodes) {
+            if (dataNode.setDecommissioned(false)) {
+                GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(dataNode);
             } else {
-                LOG.info("backend is not decommissioned[{}]", backend.getHost());
+                LOG.info("backend is not decommissioned[{}]", dataNode.getHost());
             }
         }
     }

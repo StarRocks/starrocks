@@ -38,7 +38,7 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.BackendHbResponse;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
@@ -56,8 +56,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-public class BackendTest {
-    private Backend backend;
+public class DataNodeTest {
+    private DataNode dataNode;
     private long backendId = 9999;
     private String host = "myhost";
     private int heartbeatPort = 21234;
@@ -82,27 +82,27 @@ public class BackendTest {
         FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
         FakeGlobalStateMgr.setSystemInfo(AccessTestUtil.fetchSystemInfoService());
 
-        backend = new Backend(backendId, host, heartbeatPort);
-        backend.updateOnce(bePort, httpPort, beRpcPort);
-        backend.setStarletPort(starletPort);
+        dataNode = new DataNode(backendId, host, heartbeatPort);
+        dataNode.updateOnce(bePort, httpPort, beRpcPort);
+        dataNode.setStarletPort(starletPort);
     }
 
     @Test
     public void getMethodTest() {
-        Assert.assertEquals(backendId, backend.getId());
-        Assert.assertEquals(host, backend.getHost());
-        Assert.assertEquals(heartbeatPort, backend.getHeartbeatPort());
-        Assert.assertEquals(bePort, backend.getBePort());
-        Assert.assertEquals(starletPort, backend.getStarletPort());
+        Assert.assertEquals(backendId, dataNode.getId());
+        Assert.assertEquals(host, dataNode.getHost());
+        Assert.assertEquals(heartbeatPort, dataNode.getHeartbeatPort());
+        Assert.assertEquals(bePort, dataNode.getBePort());
+        Assert.assertEquals(starletPort, dataNode.getStarletPort());
 
         // set new port
         int newBePort = 31235;
         int newHttpPort = 31237;
-        backend.updateOnce(newBePort, newHttpPort, beRpcPort);
-        Assert.assertEquals(newBePort, backend.getBePort());
+        dataNode.updateOnce(newBePort, newHttpPort, beRpcPort);
+        Assert.assertEquals(newBePort, dataNode.getBePort());
 
         // check alive
-        Assert.assertTrue(backend.isAlive());
+        Assert.assertTrue(dataNode.isAlive());
     }
 
     @Test
@@ -118,16 +118,16 @@ public class BackendTest {
         diskInfos.put(disk3.getRoot_path(), disk3);
 
         // first update
-        backend.updateDisks(diskInfos);
+        dataNode.updateDisks(diskInfos);
         Assert.assertEquals(disk1.getDisk_total_capacity() + disk2.getDisk_total_capacity(),
-                backend.getTotalCapacityB());
-        Assert.assertEquals(1, backend.getAvailableCapacityB());
+                dataNode.getTotalCapacityB());
+        Assert.assertEquals(1, dataNode.getAvailableCapacityB());
 
         // second update
         diskInfos.remove(disk1.getRoot_path());
-        backend.updateDisks(diskInfos);
-        Assert.assertEquals(disk2.getDisk_total_capacity(), backend.getTotalCapacityB());
-        Assert.assertEquals(disk2.getDisk_available_capacity() + 1, backend.getAvailableCapacityB());
+        dataNode.updateDisks(diskInfos);
+        Assert.assertEquals(disk2.getDisk_total_capacity(), dataNode.getTotalCapacityB());
+        Assert.assertEquals(disk2.getDisk_available_capacity() + 1, dataNode.getAvailableCapacityB());
     }
 
     @Test
@@ -137,21 +137,21 @@ public class BackendTest {
         file.createNewFile();
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
 
-        List<Backend> list1 = new LinkedList<Backend>();
-        List<Backend> list2 = new LinkedList<Backend>();
+        List<DataNode> list1 = new LinkedList<DataNode>();
+        List<DataNode> list2 = new LinkedList<DataNode>();
 
         for (int count = 0; count < 100; ++count) {
-            Backend backend = new Backend(count, "10.120.22.32" + count, 6000 + count);
-            backend.updateOnce(7000 + count, 9000 + count, beRpcPort);
-            list1.add(backend);
+            DataNode dataNode = new DataNode(count, "10.120.22.32" + count, 6000 + count);
+            dataNode.updateOnce(7000 + count, 9000 + count, beRpcPort);
+            list1.add(dataNode);
         }
         for (int count = 100; count < 200; count++) {
-            Backend backend = new Backend(count, "10.120.22.32" + count, 6000 + count);
-            backend.updateOnce(7000 + count, 9000 + count, beRpcPort);
-            list1.add(backend);
+            DataNode dataNode = new DataNode(count, "10.120.22.32" + count, 6000 + count);
+            dataNode.updateOnce(7000 + count, 9000 + count, beRpcPort);
+            list1.add(dataNode);
         }
-        for (Backend backend : list1) {
-            backend.write(dos);
+        for (DataNode dataNode : list1) {
+            dataNode.write(dos);
         }
         dos.flush();
         dos.close();
@@ -159,18 +159,18 @@ public class BackendTest {
         // 2. Read objects from file
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
         for (int count = 0; count < 100; ++count) {
-            Backend backend = new Backend();
-            backend.readFields(dis);
-            list2.add(backend);
-            Assert.assertEquals(count, backend.getId());
-            Assert.assertEquals("10.120.22.32" + count, backend.getHost());
+            DataNode dataNode = new DataNode();
+            dataNode.readFields(dis);
+            list2.add(dataNode);
+            Assert.assertEquals(count, dataNode.getId());
+            Assert.assertEquals("10.120.22.32" + count, dataNode.getHost());
         }
 
         for (int count = 100; count < 200; ++count) {
-            Backend backend = Backend.read(dis);
-            list2.add(backend);
-            Assert.assertEquals(count, backend.getId());
-            Assert.assertEquals("10.120.22.32" + count, backend.getHost());
+            DataNode dataNode = DataNode.read(dis);
+            list2.add(dataNode);
+            Assert.assertEquals(count, dataNode.getId());
+            Assert.assertEquals("10.120.22.32" + count, dataNode.getHost());
         }
 
         for (int count = 0; count < 200; count++) {
@@ -180,21 +180,21 @@ public class BackendTest {
         Assert.assertFalse(list1.get(1).equals(this));
         Assert.assertTrue(list1.get(1).equals(list1.get(1)));
 
-        Backend back1 = new Backend(1, "a", 1);
+        DataNode back1 = new DataNode(1, "a", 1);
         back1.updateOnce(1, 1, 1);
-        Backend back2 = new Backend(2, "a", 1);
+        DataNode back2 = new DataNode(2, "a", 1);
         back2.updateOnce(1, 1, 1);
         Assert.assertFalse(back1.equals(back2));
 
-        back1 = new Backend(1, "a", 1);
+        back1 = new DataNode(1, "a", 1);
         back1.updateOnce(1, 1, 1);
-        back2 = new Backend(1, "b", 1);
+        back2 = new DataNode(1, "b", 1);
         back2.updateOnce(1, 1, 1);
         Assert.assertFalse(back1.equals(back2));
 
-        back1 = new Backend(1, "a", 1);
+        back1 = new DataNode(1, "a", 1);
         back1.updateOnce(1, 1, 1);
-        back2 = new Backend(1, "a", 2);
+        back2 = new DataNode(1, "a", 2);
         back2.updateOnce(1, 1, 1);
         Assert.assertFalse(back1.equals(back2));
 
@@ -209,42 +209,42 @@ public class BackendTest {
     public void testGetBackendStorageTypeCnt() {
 
         int backendStorageTypeCnt;
-        Backend backend = new Backend(100L, "192.168.1.1", 9050);
-        backendStorageTypeCnt = backend.getAvailableBackendStorageTypeCnt();
+        DataNode dataNode = new DataNode(100L, "192.168.1.1", 9050);
+        backendStorageTypeCnt = dataNode.getAvailableBackendStorageTypeCnt();
         Assert.assertEquals(0, backendStorageTypeCnt);
 
-        backend.setAlive(true);
+        dataNode.setAlive(true);
         DiskInfo diskInfo1 = new DiskInfo("/tmp/abc");
         diskInfo1.setStorageMedium(TStorageMedium.HDD);
         ImmutableMap<String, DiskInfo> disks = ImmutableMap.of("/tmp/abc", diskInfo1);
-        backend.setDisks(disks);
-        backendStorageTypeCnt = backend.getAvailableBackendStorageTypeCnt();
+        dataNode.setDisks(disks);
+        backendStorageTypeCnt = dataNode.getAvailableBackendStorageTypeCnt();
         Assert.assertEquals(1, backendStorageTypeCnt);
 
         DiskInfo diskInfo2 = new DiskInfo("/tmp/abc");
         diskInfo2.setStorageMedium(TStorageMedium.SSD);
         disks = ImmutableMap.of("/tmp/abc", diskInfo1, "/tmp/abcd", diskInfo2);
-        backend.setDisks(disks);
-        backendStorageTypeCnt = backend.getAvailableBackendStorageTypeCnt();
+        dataNode.setDisks(disks);
+        backendStorageTypeCnt = dataNode.getAvailableBackendStorageTypeCnt();
         Assert.assertEquals(2, backendStorageTypeCnt);
 
         diskInfo2.setStorageMedium(TStorageMedium.HDD);
         disks = ImmutableMap.of("/tmp/abc", diskInfo1, "/tmp/abcd", diskInfo2);
-        backend.setDisks(disks);
-        backendStorageTypeCnt = backend.getAvailableBackendStorageTypeCnt();
+        dataNode.setDisks(disks);
+        backendStorageTypeCnt = dataNode.getAvailableBackendStorageTypeCnt();
         Assert.assertEquals(1, backendStorageTypeCnt);
 
         diskInfo1.setState(DiskInfo.DiskState.OFFLINE);
         disks = ImmutableMap.of("/tmp/abc", diskInfo1);
-        backend.setDisks(disks);
-        backendStorageTypeCnt = backend.getAvailableBackendStorageTypeCnt();
+        dataNode.setDisks(disks);
+        backendStorageTypeCnt = dataNode.getAvailableBackendStorageTypeCnt();
         Assert.assertEquals(0, backendStorageTypeCnt);
 
     }
 
     @Test
     public void testHeartbeatOk() throws Exception {
-        Backend be = new Backend();
+        DataNode be = new DataNode();
         BackendHbResponse hbResponse = new BackendHbResponse(1, 9060, 8040, 8060, 8090,
                 System.currentTimeMillis(), "1.0", 64);
         boolean isChanged = be.handleHbResponse(hbResponse, false);

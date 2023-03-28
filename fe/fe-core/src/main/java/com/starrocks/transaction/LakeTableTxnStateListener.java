@@ -31,7 +31,7 @@ import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -180,8 +180,8 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         }
 
         for (Map.Entry<Long, List<Long>> entry : tabletGroup.entrySet()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
-            if (backend == null) {
+            DataNode dataNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
+            if (dataNode == null) {
                 // It's ok to skip sending abort transaction request.
                 continue;
             }
@@ -191,7 +191,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             request.tabletIds = entry.getValue();
 
             try {
-                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                LakeService lakeService = BrpcProxy.getLakeService(dataNode.getHost(), dataNode.getBrpcPort());
                 lakeService.abortTxn(request);
             } catch (Throwable e) {
                 LOG.error(e);

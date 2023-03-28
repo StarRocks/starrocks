@@ -52,7 +52,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -135,21 +135,21 @@ public class UnitTestUtil {
         return db;
     }
 
-    public static Backend createBackend(long id, String host, int heartPort, int bePort, int httpPort) {
-        Backend backend = new Backend(id, host, heartPort);
-        backend.updateOnce(bePort, httpPort, 10000);
-        return backend;
+    public static DataNode createBackend(long id, String host, int heartPort, int bePort, int httpPort) {
+        DataNode dataNode = new DataNode(id, host, heartPort);
+        dataNode.updateOnce(bePort, httpPort, 10000);
+        return dataNode;
     }
 
-    public static Backend createBackend(long id, String host, int heartPort, int bePort, int httpPort,
-                                        long totalCapacityB, long availableCapacityB) {
-        Backend backend = createBackend(id, host, heartPort, bePort, httpPort);
+    public static DataNode createBackend(long id, String host, int heartPort, int bePort, int httpPort,
+                                         long totalCapacityB, long availableCapacityB) {
+        DataNode dataNode = createBackend(id, host, heartPort, bePort, httpPort);
         Map<String, TDisk> backendDisks = new HashMap<String, TDisk>();
         String rootPath = "root_path";
         TDisk disk = new TDisk(rootPath, totalCapacityB, availableCapacityB, true);
         backendDisks.put(rootPath, disk);
-        backend.updateDisks(backendDisks);
-        return backend;
+        dataNode.updateDisks(backendDisks);
+        return dataNode;
     }
 
     public static Method getPrivateMethod(Class c, String methodName, Class[] params) {

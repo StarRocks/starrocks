@@ -43,7 +43,7 @@ import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -124,18 +124,18 @@ public class ExportPendingTask extends PriorityLeaderTask {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
-                if (backend == null) {
+                DataNode dataNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+                if (dataNode == null) {
                     return Status.CANCELLED;
                 }
-                long backendId = backend.getId();
+                long backendId = dataNode.getId();
                 if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
                     return Status.CANCELLED;
                 }
-                this.job.setBeStartTime(backendId, backend.getLastStartTime());
+                this.job.setBeStartTime(backendId, dataNode.getLastStartTime());
                 Status status;
                 if (job.exportLakeTable()) {
-                    status = lockTabletMetadata(internalScanRange, backend);
+                    status = lockTabletMetadata(internalScanRange, dataNode);
                 } else {
                     status = makeSnapshot(internalScanRange, address);
                 }
@@ -147,9 +147,9 @@ public class ExportPendingTask extends PriorityLeaderTask {
         return Status.OK;
     }
 
-    private Status lockTabletMetadata(TInternalScanRange internalScanRange, Backend backend) {
+    private Status lockTabletMetadata(TInternalScanRange internalScanRange, DataNode dataNode) {
         try {
-            LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            LakeService lakeService = BrpcProxy.getLakeService(dataNode.getHost(), dataNode.getBrpcPort());
             LockTabletMetadataRequest request = new LockTabletMetadataRequest();
             request.tabletId = internalScanRange.getTablet_id();
             request.version = Long.parseLong(internalScanRange.getVersion());

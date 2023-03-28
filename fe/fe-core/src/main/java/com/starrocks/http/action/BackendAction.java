@@ -42,7 +42,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -76,29 +76,29 @@ public class BackendAction extends WebBaseAction {
     }
 
     private void appendKnownBackendsInfo(StringBuilder buffer) {
-        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, DataNode> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         List<List<Comparable>> backendInfos = new ArrayList<List<Comparable>>();
-        for (Backend backend : backendMap.values()) {
+        for (DataNode dataNode : backendMap.values()) {
             List<Comparable> backendInfo = new ArrayList<Comparable>();
             InetAddress address = null;
             try {
-                address = InetAddress.getByName(backend.getHost());
+                address = InetAddress.getByName(dataNode.getHost());
             } catch (UnknownHostException e) {
-                LOG.warn("unknown host: " + backend.getHost(), e);
+                LOG.warn("unknown host: " + dataNode.getHost(), e);
                 continue;
             }
             backendInfo.add(address.getHostName());
-            backendInfo.add(backend.getId());
-            backendInfo.add("host: " + backend.getHost()
-                    + ", heart_port: " + backend.getHeartbeatPort()
-                    + ", be_port: " + backend.getBePort()
-                    + ", http_port: " + backend.getHttpPort()
-                    + ", brpc_port: " + backend.getBrpcPort()
-                    + ", state: " + backend.getBackendState()
-                    + ", start_time: " + TimeUtils.longToTimeString(backend.getLastStartTime())
-                    + ", last_report_tablets_time: " + backend.getBackendStatus().lastSuccessReportTabletsTime
-                    + ", version: " + backend.getVersion());
+            backendInfo.add(dataNode.getId());
+            backendInfo.add("host: " + dataNode.getHost()
+                    + ", heart_port: " + dataNode.getHeartbeatPort()
+                    + ", be_port: " + dataNode.getBePort()
+                    + ", http_port: " + dataNode.getHttpPort()
+                    + ", brpc_port: " + dataNode.getBrpcPort()
+                    + ", state: " + dataNode.getBackendState()
+                    + ", start_time: " + TimeUtils.longToTimeString(dataNode.getLastStartTime())
+                    + ", last_report_tablets_time: " + dataNode.getBackendStatus().lastSuccessReportTabletsTime
+                    + ", version: " + dataNode.getVersion());
 
             backendInfos.add(backendInfo);
         }
