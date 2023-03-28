@@ -135,6 +135,7 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status TableFunctionOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    DCHECK(_input_chunk == nullptr || _table_function_state->processed_rows() >= _input_chunk->num_rows());
     _input_chunk = chunk;
     _input_index_of_first_result = 0;
     _next_output_row = 0;
