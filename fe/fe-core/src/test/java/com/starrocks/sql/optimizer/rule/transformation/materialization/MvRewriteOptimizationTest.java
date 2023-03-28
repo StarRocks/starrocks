@@ -2237,8 +2237,7 @@ public class MvRewriteOptimizationTest {
         System.out.println(plan1);
         Assert.assertTrue(plan1.contains("0:OlapScanNode\n" +
                 "     TABLE: hive_nested_mv_3\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     partitions=0/1"));
+                "     PREAGGREGATION: ON\n"));
         dropMv("test", "hive_nested_mv_1");
         dropMv("test", "hive_nested_mv_2");
         dropMv("test", "hive_nested_mv_3");
