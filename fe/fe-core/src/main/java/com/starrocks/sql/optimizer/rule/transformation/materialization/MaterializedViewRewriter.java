@@ -184,6 +184,12 @@ public class MaterializedViewRewriter {
             if (mvTableScanDescs.stream().anyMatch(tableScanDesc -> !tableScanDesc.getTable().isNativeTable())) {
                 return null;
             }
+
+            // NOTE: When queries/mvs have multi same tables in snowflake-schema mode, eg:
+            // MV   : B <-> A <-> D <-> C <-> E <-> A <-> B
+            // QUERY:  A <-> D <-> C <-> E <-> A <-> B
+            // It's not easy to decide which tables are needed to compensate into query,
+            // so iterate the possible permutations to tryRewrite.
             Map<Table, List<TableScanDesc>> mvTableToTableScanDecs = Maps.newHashMap();
             for (TableScanDesc mvTableScanDesc : mvTableScanDescs) {
                 mvTableToTableScanDecs.computeIfAbsent(mvTableScanDesc.getTable(), x -> Lists.newArrayList())
@@ -197,6 +203,13 @@ public class MaterializedViewRewriter {
             }
 
             List<Set<TableScanDesc>> mvDistinctScanDescs = Lists.newArrayList();
+            // `mvExtraTableScanDescLists` may generate duplicated tables, eg:
+            // MV   : B(1) <-> A <-> D <-> C <-> E <-> A <-> B (2)
+            // QUERY:  A <-> D <-> C <-> E <-> A
+            // `mvExtraTableScanDescLists`: [B1, B2], [B1, B2]
+            // `PermutationGenerator` will generate all permutations of input tables:
+            // [B1, B1], [B1, B2], [B2, B1], [B2, B1].
+            // In the next step, remove some redundant permutations below.
             PermutationGenerator generator = new PermutationGenerator(mvExtraTableScanDescLists);
             while (generator.hasNext()) {
                 List<TableScanDesc> mvExtraTableScanDescs = generator.next();
@@ -235,12 +248,12 @@ public class MaterializedViewRewriter {
 
         final Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns = ArrayListMultimap.create();
         final Map<Table, Set<Integer>> compensationRelations = Maps.newHashMap();
-        final Map<Integer, Integer> expectQueryToMVRelationIds = Maps.newHashMap();
+        final Map<Integer, Integer> expectedExtraQueryToMVRelationIds = Maps.newHashMap();
         if (matchMode == MatchMode.VIEW_DELTA) {
             EquivalenceClasses viewEquivalenceClasses = createEquivalenceClasses(mvEqualPredicate);
             if (!compensateViewDelta(viewEquivalenceClasses, mvTableScanDescs, mvExtraTableScanDescs,
                     materializationContext.getQueryRefFactory(), materializationContext.getMvColumnRefFactory(),
-                    compensationJoinColumns, compensationRelations, expectQueryToMVRelationIds)) {
+                    compensationJoinColumns, compensationRelations, expectedExtraQueryToMVRelationIds)) {
                 return null;
             }
         }
@@ -256,7 +269,7 @@ public class MaterializedViewRewriter {
         List<BiMap<Integer, Integer>> relationIdMappings = generateRelationIdMap(
                 materializationContext.getQueryRefFactory(),
                 queryTables, queryExpression, materializationContext.getMvColumnRefFactory(),
-                mvTables, mvExpression, matchMode, compensationRelations, expectQueryToMVRelationIds);
+                mvTables, mvExpression, matchMode, compensationRelations, expectedExtraQueryToMVRelationIds);
         if (relationIdMappings.isEmpty()) {
             return null;
         }
@@ -351,7 +364,7 @@ public class MaterializedViewRewriter {
             ColumnRefFactory mvRefFactory,
             Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns,
             Map<Table, Set<Integer>> compensationRelations,
-            Map<Integer, Integer> expectQueryToMVRelationIds) {
+            Map<Integer, Integer> expectedExtraQueryToMVRelationIds) {
         // use directed graph to construct foreign key join graph
         MutableGraph<TableScanDesc> mvGraph = GraphBuilder.directed().build();
         Map<TableScanDesc, List<ColumnRefOperator>> extraTableColumns = Maps.newHashMap();
@@ -420,7 +433,7 @@ public class MaterializedViewRewriter {
         // should add new tables/columnRefs into query ColumnRefFactory if pass test
         // should collect additional tables and the related columns
         getCompensationRelations(extraTableColumns, queryRefFactory, mvRefFactory,
-                compensationRelations, expectQueryToMVRelationIds);
+                compensationRelations, expectedExtraQueryToMVRelationIds);
         return true;
     }
 
@@ -507,7 +520,7 @@ public class MaterializedViewRewriter {
                                           ColumnRefFactory queryRefFactory,
                                           ColumnRefFactory mvRefFactory,
                                           Map<Table, Set<Integer>> compensationRelations,
-                                          Map<Integer, Integer> expectQueryToMVRelationIds) {
+                                          Map<Integer, Integer> expectedExtraQueryToMVRelationIds) {
         // Extra table should always link with MV's relation id.
         for (Map.Entry<TableScanDesc, List<ColumnRefOperator>> entry : extraTableColumns.entrySet()) {
             int relationId = queryRefFactory.getNextRelationId();
@@ -516,8 +529,6 @@ public class MaterializedViewRewriter {
             for (ColumnRefOperator columnRef : columnRefOperators) {
                 if (mvRelationId == -1) {
                     mvRelationId = mvRefFactory.getRelationId(columnRef.getId());
-                } else {
-                    Preconditions.checkState(mvRelationId == mvRefFactory.getRelationId(columnRef.getId()));
                 }
 
                 OlapTable olapTable = (OlapTable) entry.getKey().getTable();
@@ -530,7 +541,7 @@ public class MaterializedViewRewriter {
             Set<Integer> relationIds =
                     compensationRelations.computeIfAbsent(entry.getKey().getTable(), table -> Sets.newHashSet());
             relationIds.add(relationId);
-            expectQueryToMVRelationIds.put(relationId, mvRelationId);
+            expectedExtraQueryToMVRelationIds.put(relationId, mvRelationId);
         }
     }
 
@@ -1093,7 +1104,7 @@ public class MaterializedViewRewriter {
             ColumnRefFactory queryRefFactory, List<Table> queryTables, OptExpression queryExpression,
             ColumnRefFactory mvRefFactory, List<Table> mvTables, OptExpression mvExpression,
             MatchMode matchMode, Map<Table, Set<Integer>> compensationRelations,
-            Map<Integer, Integer> expectQueryToMVRelationIds) {
+            Map<Integer, Integer> expectedExtraQueryToMVRelationIds) {
         Map<Table, Set<Integer>> queryTableToRelationId =
                 getTableToRelationid(queryExpression, queryRefFactory, queryTables);
         if (matchMode == MatchMode.VIEW_DELTA) {
@@ -1170,19 +1181,20 @@ public class MaterializedViewRewriter {
             }
         }
 
-        if (expectQueryToMVRelationIds.isEmpty()) {
+        if (expectedExtraQueryToMVRelationIds.isEmpty()) {
             return result;
         } else {
             List<BiMap<Integer, Integer>> finalResult = Lists.newArrayList();
             for (BiMap<Integer, Integer> queryToMVRelations : result) {
-                boolean isExpected = true;
-                for (Map.Entry<Integer, Integer> expect : expectQueryToMVRelationIds.entrySet()) {
+                // Ignore permutations which not contain expected extra query to mv relation id mappings.
+                boolean hasExpectedExtraQueryToMVRelationIds = true;
+                for (Map.Entry<Integer, Integer> expect : expectedExtraQueryToMVRelationIds.entrySet()) {
                     if (!queryToMVRelations.get(expect.getKey()).equals(expect.getValue()))  {
-                        isExpected = false;
+                        hasExpectedExtraQueryToMVRelationIds = false;
                         break;
                     }
                 }
-                if (isExpected) {
+                if (hasExpectedExtraQueryToMVRelationIds) {
                     finalResult.add(queryToMVRelations);
                 }
             }
