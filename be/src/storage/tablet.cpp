@@ -1362,6 +1362,9 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     info.create_time = _tablet_meta->creation_time();
     info.state = _state;
     info.type = keys_type();
+    info.data_dir = data_dir()->path();
+    info.shard_id = shard_id();
+    info.schema_hash = schema_hash();
     if (_updates != nullptr) {
         _updates->get_basic_info_extra(info);
     } else {

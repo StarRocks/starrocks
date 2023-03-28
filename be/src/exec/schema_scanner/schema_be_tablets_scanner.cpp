@@ -26,13 +26,15 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeTabletsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},        {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"PARTITION_ID", TYPE_BIGINT, sizeof(int64_t), false}, {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"NUM_VERSION", TYPE_BIGINT, sizeof(int64_t), false},  {"MAX_VERSION", TYPE_BIGINT, sizeof(int64_t), false},
-        {"MIN_VERSION", TYPE_BIGINT, sizeof(int64_t), false},  {"NUM_ROWSET", TYPE_BIGINT, sizeof(int64_t), false},
-        {"NUM_ROW", TYPE_BIGINT, sizeof(int64_t), false},      {"DATA_SIZE", TYPE_BIGINT, sizeof(int64_t), false},
-        {"INDEX_MEM", TYPE_BIGINT, sizeof(int64_t), false},    {"CREATE_TIME", TYPE_BIGINT, sizeof(int64_t), false},
-        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},   {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},         {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"PARTITION_ID", TYPE_BIGINT, sizeof(int64_t), false},  {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"NUM_VERSION", TYPE_BIGINT, sizeof(int64_t), false},   {"MAX_VERSION", TYPE_BIGINT, sizeof(int64_t), false},
+        {"MIN_VERSION", TYPE_BIGINT, sizeof(int64_t), false},   {"NUM_ROWSET", TYPE_BIGINT, sizeof(int64_t), false},
+        {"NUM_ROW", TYPE_BIGINT, sizeof(int64_t), false},       {"DATA_SIZE", TYPE_BIGINT, sizeof(int64_t), false},
+        {"INDEX_MEM", TYPE_BIGINT, sizeof(int64_t), false},     {"CREATE_TIME", TYPE_BIGINT, sizeof(int64_t), false},
+        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},    {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DATA_DIR", TYPE_VARCHAR, sizeof(StringValue), false}, {"SHARD_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"SCHEMA_HASH", TYPE_BIGINT, sizeof(int64_t), false},
 };
 
 SchemaBeTabletsScanner::SchemaBeTabletsScanner()
@@ -89,7 +91,7 @@ Status SchemaBeTabletsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < _infos.size(); _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 14) {
+            if (slot_id < 1 || slot_id > 17) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -164,6 +166,19 @@ Status SchemaBeTabletsScanner::fill_chunk(ChunkPtr* chunk) {
                 // type
                 Slice type = Slice(keys_type_to_string((KeysType)info.type));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&type);
+                break;
+            }
+            case 15: {
+                Slice type = Slice(info.data_dir);
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&type);
+                break;
+            }
+            case 16: {
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.shard_id);
+                break;
+            }
+            case 17: {
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.schema_hash);
                 break;
             }
             default:
