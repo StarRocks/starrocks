@@ -35,11 +35,6 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
     RETURN_IF_ERROR(_build_collect_context(read_params));
     RETURN_IF_ERROR(_init_seg_meta_collecters(read_params));
 
-    if (_collect_context.seg_collecters.size() == 0) {
-        _has_more = false;
-        return Status::OK();
-    }
-
     _collect_context.cursor_idx = 0;
     _is_init = true;
     _has_more = true;
@@ -92,6 +87,7 @@ Status LakeMetaReader::_build_collect_context(const LakeMetaReaderParams& read_p
         } else {
             _collect_context.seg_collecter_params.read_page.emplace_back(false);
         }
+        _has_count_agg |= (collect_field == "count");
     }
     return Status::OK();
 }
