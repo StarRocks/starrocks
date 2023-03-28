@@ -1,4 +1,4 @@
-// Copyright 2023-present StarRocks, Inc. All rights reserved.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,10 +50,10 @@ public:
     size_t block_size() const { return _block_size; }
 
 private:
-    BlockCache() = default;
+    BlockCache();
 
     size_t _block_size = 0;
-    std::unique_ptr<KvCache> _kv_cache = nullptr;
+    std::unique_ptr<KvCache> _kv_cache;
 };
 
 } // namespace starrocks

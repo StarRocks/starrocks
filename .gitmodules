@@ -1,3 +1,0 @@
-[submodule "be/src/submodules/starcache"]
-	path = be/src/submodules/starcache
-	url = https://github.com/StarRocks/starcache.git
