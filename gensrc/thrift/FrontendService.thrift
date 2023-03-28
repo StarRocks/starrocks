@@ -688,7 +688,6 @@ struct TStreamLoadPutRequest {
     29: optional i32 load_dop
     30: optional bool enable_replicated_storage
     31: optional string merge_condition
-    32: optional Types.TPartialUpdateMode partial_update_mode
     // only valid when file type is CSV
     50: optional string rowDelimiter
     // only valid when file type is CSV
@@ -699,6 +698,7 @@ struct TStreamLoadPutRequest {
     53: optional byte enclose
     // only valid when file type is CSV
     54: optional byte escape
+    55: optional Types.TPartialUpdateMode partial_update_mode
 }
 
 struct TStreamLoadPutResult {

@@ -72,7 +72,7 @@ std::string DeltaColumnGroupListSerializer::serialize_delta_column_group_list(co
 }
 
 Status DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(const char* data, size_t length,
-                                                                           DeltaColumnGroupList& dcgs) {
+                                                                           DeltaColumnGroupList* dcgs) {
     DeltaColumnGroupListPB dcgs_pb;
     if (!dcgs_pb.ParseFromArray(data, length)) {
         return Status::Corruption("parse delta column group failed");
@@ -85,7 +85,7 @@ Status DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(const
             column_ids.push_back(cid);
         }
         dcg->init(dcgs_pb.versions(i), column_ids, dcgs_pb.dcgs(i).column_file());
-        dcgs.push_back(dcg);
+        dcgs->push_back(dcg);
     }
     return Status::OK();
 }

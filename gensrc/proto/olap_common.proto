@@ -50,7 +50,7 @@ message EditVersionPB {
 // used in partial update for primary key tablet
 message DeltaColumnGroupPB {
     repeated uint32 column_ids = 1;
-    required string column_file = 2;
+    optional string column_file = 2;
 }
 
 message DeltaColumnGroupListPB {

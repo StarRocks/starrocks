@@ -85,8 +85,9 @@ message FooterPointerPB {
 //   2. conditional update txn may add some meta to describe condition
 //   3. more general read-write txn may add complex expressions
 enum PartialUpdateMode {
-    ROW_MODE = 0;
-    COLUMN_MODE = 1;
+    UNKNOWN_MODE = 0;
+    ROW_MODE = 1;
+    COLUMN_MODE = 2;
 }
 message RowsetTxnMetaPB {
     repeated uint32 partial_update_column_ids = 1;
@@ -99,7 +100,7 @@ message RowsetTxnMetaPB {
 
     optional int32 auto_increment_partial_update_column_id = 5;
     // recode partial update mode
-    optional PartialUpdateMode partial_update_mode = 6;
+    optional PartialUpdateMode partial_update_mode = 6 [default = ROW_MODE];
 }
 
 message RowsetMetaPB {
@@ -229,7 +230,9 @@ message TabletMetaOpPB {
     optional EditVersionPB apply = 3;
 }
 
-message TabletMetaLogPB { repeated TabletMetaOpPB ops = 1; }
+message TabletMetaLogPB { 
+    repeated TabletMetaOpPB ops = 1; 
+}
 
 message TabletUpdatesPB {
     repeated EditVersionMetaPB versions = 1;
@@ -286,6 +289,10 @@ message OLAPIndexHeaderMessage {
     optional bool delete_flag = 7;
 }
 
-message OLAPDataHeaderMessage { required uint32 segment = 2; }
+message OLAPDataHeaderMessage {
+    required uint32 segment = 2;
+}
 
-message OLAPRawDeltaHeaderMessage { required int32 schema_hash = 2; }
+message OLAPRawDeltaHeaderMessage {
+    required int32 schema_hash = 2;
+}

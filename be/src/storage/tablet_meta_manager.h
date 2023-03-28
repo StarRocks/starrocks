@@ -180,10 +180,10 @@ public:
     static StatusOr<DeleteVectorList> list_del_vector(KVStore* meta, TTabletId tablet_id, int64_t max_version);
 
     static Status get_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t segment_id, int64_t version,
-                                         DeltaColumnGroupList& dcgs);
+                                         DeltaColumnGroupList* dcgs);
 
     static Status scan_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,
-                                          int64_t begin_version, int64_t end_version, DeltaColumnGroupList& dcgs);
+                                          int64_t begin_version, int64_t end_version, DeltaColumnGroupList* dcgs);
 
     static Status delete_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t rowset_id, uint32_t segments);
 

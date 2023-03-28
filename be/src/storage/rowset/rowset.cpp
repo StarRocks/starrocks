@@ -256,21 +256,18 @@ Status Rowset::remove() {
 
     for (int i = 0, sz = num_segments(); i < sz; ++i) {
         std::string path = segment_file_path(_rowset_path, rowset_id(), i);
-        VLOG(1) << "Deleting " << path;
         auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
     for (int i = 0, sz = num_delete_files(); i < sz; ++i) {
         std::string path = segment_del_file_path(_rowset_path, rowset_id(), i);
-        VLOG(1) << "Deleting " << path;
         auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
     for (int i = 0, sz = num_update_files(); i < sz; ++i) {
         std::string path = segment_upt_file_path(_rowset_path, rowset_id(), i);
-        VLOG(1) << "Deleting " << path;
         auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
@@ -293,7 +290,7 @@ Status Rowset::_remove_delta_column_group_files(std::shared_ptr<FileSystem> fs) 
             DeltaColumnGroupList list;
             RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
                     tablet->data_dir()->get_meta(), _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id() + i, 0,
-                    INT64_MAX, list));
+                    INT64_MAX, &list));
             for (const auto& dcg : list) {
                 auto st = fs->delete_file(dcg->column_file());
                 if (st.ok() || st.is_not_found()) {
@@ -333,7 +330,8 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id) {
         std::string dst_link_path = segment_upt_file_path(dir, new_rowset_id, i);
         if (link(src_file_path.c_str(), dst_link_path.c_str()) != 0) {
             PLOG(WARNING) << "Fail to link " << src_file_path << " to " << dst_link_path;
-            return Status::RuntimeError("Fail to link segment update file");
+            return Status::RuntimeError(
+                    fmt::format("Fail to link segment update file, src: {}, dst {}", src_file_path, dst_link_path));
         } else {
             LOG(INFO) << "success to link " << src_file_path << " to " << dst_link_path;
         }
@@ -355,13 +353,14 @@ Status Rowset::_link_delta_column_group_files(const std::string& dir, RowsetId n
             DeltaColumnGroupList list;
             RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
                     tablet->data_dir()->get_meta(), _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id() + i, 0,
-                    INT64_MAX, list));
+                    INT64_MAX, &list));
             for (const auto& dcg : list) {
                 std::string src_file_path = dcg->column_file();
                 std::string dst_link_path = delta_column_group_path(dir, new_rowset_id, i, dcg->version());
                 if (link(src_file_path.c_str(), dst_link_path.c_str()) != 0) {
                     PLOG(WARNING) << "Fail to link " << src_file_path << " to " << dst_link_path;
-                    return Status::RuntimeError("Fail to link segment update file");
+                    return Status::RuntimeError(fmt::format("Fail to link segment update file, src: {}, dst {}",
+                                                            src_file_path, dst_link_path));
                 } else {
                     LOG(INFO) << "success to link " << src_file_path << " to " << dst_link_path;
                 }
@@ -380,7 +379,8 @@ Status Rowset::copy_files_to(const std::string& dir) {
         }
         std::string src_path = segment_file_path(_rowset_path, rowset_id(), i);
         if (!fs::copy_file(src_path, dst_path).ok()) {
-            LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path << ", errno=" << Errno::no();
+            LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
+                         << ", errno=" << std::strerror(Errno::no());
             return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path, dst_path,
                                                std::strerror(Errno::no())));
         }
@@ -395,7 +395,7 @@ Status Rowset::copy_files_to(const std::string& dir) {
             }
             if (!fs::copy_file(src_path, dst_path).ok()) {
                 LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
-                             << ", errno=" << Errno::no();
+                             << ", errno=" << std::strerror(Errno::no());
                 return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path,
                                                    dst_path, std::strerror(Errno::no())));
             }
@@ -411,7 +411,7 @@ Status Rowset::copy_files_to(const std::string& dir) {
             }
             if (!fs::copy_file(src_path, dst_path).ok()) {
                 LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
-                             << ", errno=" << Errno::no();
+                             << ", errno=" << std::strerror(Errno::no());
                 return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path,
                                                    dst_path, std::strerror(Errno::no())));
             }

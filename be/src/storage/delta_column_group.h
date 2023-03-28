@@ -68,13 +68,13 @@ class DeltaColumnGroupLoader {
 public:
     DeltaColumnGroupLoader() = default;
     virtual ~DeltaColumnGroupLoader() = default;
-    virtual Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList& pdcgs) = 0;
+    virtual Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs) = 0;
 };
 
 class DeltaColumnGroupListSerializer {
 public:
     static std::string serialize_delta_column_group_list(const DeltaColumnGroupList& dcgs);
-    static Status deserialize_delta_column_group_list(const char* data, size_t length, DeltaColumnGroupList& dcgs);
+    static Status deserialize_delta_column_group_list(const char* data, size_t length, DeltaColumnGroupList* dcgs);
 };
 
 } // namespace starrocks

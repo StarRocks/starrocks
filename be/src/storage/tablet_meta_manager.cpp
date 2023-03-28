@@ -1101,13 +1101,13 @@ Status TabletMetaManager::delete_del_vector_range(KVStore* meta, TTabletId table
 }
 
 Status TabletMetaManager::get_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,
-                                                 int64_t version, DeltaColumnGroupList& dcgs) {
+                                                 int64_t version, DeltaColumnGroupList* dcgs) {
     return scan_delta_column_group(meta, tablet_id, segment_id, 0, version, dcgs);
 }
 
 Status TabletMetaManager::scan_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,
                                                   int64_t begin_version, int64_t end_version,
-                                                  DeltaColumnGroupList& dcgs) {
+                                                  DeltaColumnGroupList* dcgs) {
     std::string lower = encode_delta_column_group_key(tablet_id, segment_id, end_version);
     std::string upper = encode_delta_column_group_key(tablet_id, segment_id, begin_version);
     auto st = meta->iterate_range(META_COLUMN_FAMILY_INDEX, lower, upper,
@@ -1119,7 +1119,8 @@ Status TabletMetaManager::scan_delta_column_group(KVStore* meta, TTabletId table
                                       CHECK(segment_id == dummy_segment_id);
                                       DeltaColumnGroupPtr dcg_ptr = std::make_shared<DeltaColumnGroup>();
                                       CHECK(dcg_ptr->load(decode_version, value.data(), value.size()).ok());
-                                      dcgs.push_back(std::move(dcg_ptr));
+                                      CHECK(dcgs != nullptr);
+                                      dcgs->push_back(std::move(dcg_ptr));
                                       return true;
                                   });
     if (!st.ok()) {

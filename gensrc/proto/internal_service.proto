@@ -64,7 +64,8 @@ message PTransmitDataParams {
     optional PQueryStatistics query_statistics = 8;
 };
 
-message PHttpRequest{};
+message PHttpRequest {
+};
 
 // Transmit vectorized data chunks between Backends.
 // Try to batch enough chunk in one request to reduce each RPC call overhead.
@@ -264,9 +265,11 @@ message PTabletWriterCancelRequest {
     repeated int64 tablet_ids = 6;
 };
 
-message PTabletWriterCancelResult{};
+message PTabletWriterCancelResult {
+};
 
-message PExecPlanFragmentRequest{};
+message PExecPlanFragmentRequest {
+};
 
 message PTabletReaderOpenRequest {
     optional PUniqueId id = 1;
@@ -274,11 +277,17 @@ message PTabletReaderOpenRequest {
     optional int64 version = 3;
 }
 
-message PTabletReaderOpenResult { optional StatusPB status = 1; }
+message PTabletReaderOpenResult {
+    optional StatusPB status = 1;
+}
 
-message PTabletReaderCloseRequest { optional PUniqueId id = 1; }
+message PTabletReaderCloseRequest {
+    optional PUniqueId id = 1;
+}
 
-message PTabletReaderCloseResult { optional StatusPB status = 1; }
+message PTabletReaderCloseResult {
+    optional StatusPB status = 1;
+}
 
 message PTabletReaderMultiGetRequest {
     optional int64 tablet_id = 1;
@@ -323,7 +332,8 @@ message PExecPlanFragmentResult {
     required StatusPB status = 1;
 };
 
-message PExecBatchPlanFragmentsRequest{};
+message PExecBatchPlanFragmentsRequest {
+};
 
 message PExecBatchPlanFragmentsResult {
     optional StatusPB status = 1;
@@ -426,7 +436,9 @@ message PKafkaOffsetProxyResult {
     repeated int64 latest_offsets = 3;
 }
 
-message PKafkaOffsetBatchProxyResult { repeated PKafkaOffsetProxyResult results = 1; }
+message PKafkaOffsetBatchProxyResult {
+    repeated PKafkaOffsetProxyResult results = 1;
+}
 
 message PProxyResult {
     required StatusPB status = 1;
@@ -471,7 +483,9 @@ message PPulsarBacklogProxyResult {
     repeated int64 backlog_nums = 2;
 }
 
-message PPulsarBacklogBatchProxyResult { repeated PPulsarBacklogProxyResult results = 1; }
+message PPulsarBacklogBatchProxyResult {
+    repeated PPulsarBacklogProxyResult results = 1;
+}
 
 message PPulsarProxyResult {
     required StatusPB status = 1;
@@ -480,7 +494,8 @@ message PPulsarProxyResult {
     optional PPulsarBacklogBatchProxyResult pulsar_backlog_batch_result = 102;
 };
 
-message PMVMaintenanceTaskRequest{};
+message PMVMaintenanceTaskRequest {
+};
 
 message PMVMaintenanceTaskResult {
     required StatusPB status = 1;
@@ -499,37 +514,35 @@ message ExecuteCommandResultPB {
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
 service PInternalService {
-    rpc transmit_data(PTransmitDataParams) returns(PTransmitDataResult);
-    rpc exec_plan_fragment(PExecPlanFragmentRequest) returns(PExecPlanFragmentResult);
-    rpc exec_batch_plan_fragments(PExecBatchPlanFragmentsRequest) returns(PExecBatchPlanFragmentsResult);
-    rpc cancel_plan_fragment(PCancelPlanFragmentRequest) returns(PCancelPlanFragmentResult);
-    rpc fetch_data(PFetchDataRequest) returns(PFetchDataResult);
-    rpc tablet_writer_open(PTabletWriterOpenRequest) returns(PTabletWriterOpenResult);
-    rpc tablet_writer_add_batch(PTabletWriterAddBatchRequest) returns(PTabletWriterAddBatchResult);
-    rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns(PTabletWriterCancelResult);
-    rpc trigger_profile_report(PTriggerProfileReportRequest) returns(PTriggerProfileReportResult);
-    rpc collect_query_statistics(PCollectQueryStatisticsRequest) returns(PCollectQueryStatisticsResult);
-    rpc get_info(PProxyRequest) returns(PProxyResult);
-    rpc get_pulsar_info(PPulsarProxyRequest) returns(PPulsarProxyResult);
+    rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
+    rpc exec_plan_fragment(PExecPlanFragmentRequest) returns (PExecPlanFragmentResult);
+    rpc exec_batch_plan_fragments(PExecBatchPlanFragmentsRequest) returns (PExecBatchPlanFragmentsResult);
+    rpc cancel_plan_fragment(PCancelPlanFragmentRequest) returns (PCancelPlanFragmentResult);
+    rpc fetch_data(PFetchDataRequest) returns (PFetchDataResult);
+    rpc tablet_writer_open(PTabletWriterOpenRequest) returns (PTabletWriterOpenResult);
+    rpc tablet_writer_add_batch(PTabletWriterAddBatchRequest) returns (PTabletWriterAddBatchResult);
+    rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns (PTabletWriterCancelResult);
+    rpc trigger_profile_report(PTriggerProfileReportRequest) returns (PTriggerProfileReportResult);
+    rpc collect_query_statistics(PCollectQueryStatisticsRequest) returns (PCollectQueryStatisticsResult);
+    rpc get_info(PProxyRequest) returns (PProxyResult);
+    rpc get_pulsar_info(PPulsarProxyRequest) returns (PPulsarProxyResult);
 
     // Transmit vectorized data between backends.
-    rpc transmit_chunk(PTransmitChunkParams) returns(PTransmitChunkResult);
-    rpc transmit_chunk_via_http(PHttpRequest) returns(PTransmitChunkResult);
-    rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns(starrocks.PTabletWriterAddBatchResult);
-    rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest)
-            returns(starrocks.PTabletWriterAddBatchResult);
-    rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest)
-            returns(starrocks.PTabletWriterAddSegmentResult);
-    rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns(PTransmitRuntimeFilterResult);
+    rpc transmit_chunk(PTransmitChunkParams) returns (PTransmitChunkResult);
+    rpc transmit_chunk_via_http(PHttpRequest) returns (PTransmitChunkResult);
+    rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
+    rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
 
-    rpc submit_mv_maintenance_task(PMVMaintenanceTaskRequest) returns(PMVMaintenanceTaskResult);
+    rpc submit_mv_maintenance_task(PMVMaintenanceTaskRequest) returns (PMVMaintenanceTaskResult);
 
     // local tablet reader
-    rpc local_tablet_reader_open(PTabletReaderOpenRequest) returns(PTabletReaderOpenResult);
-    rpc local_tablet_reader_close(PTabletReaderCloseRequest) returns(PTabletReaderCloseResult);
-    rpc local_tablet_reader_multi_get(PTabletReaderMultiGetRequest) returns(PTabletReaderMultiGetResult);
-    rpc local_tablet_reader_scan_open(PTabletReaderScanOpenRequest) returns(PTabletReaderScanOpenResult);
-    rpc local_tablet_reader_scan_get_next(PTabletReaderScanGetNextRequest) returns(PTabletReaderScanGetNextResult);
+    rpc local_tablet_reader_open(PTabletReaderOpenRequest) returns (PTabletReaderOpenResult);
+    rpc local_tablet_reader_close(PTabletReaderCloseRequest) returns (PTabletReaderCloseResult);
+    rpc local_tablet_reader_multi_get(PTabletReaderMultiGetRequest) returns (PTabletReaderMultiGetResult);
+    rpc local_tablet_reader_scan_open(PTabletReaderScanOpenRequest) returns (PTabletReaderScanOpenResult);
+    rpc local_tablet_reader_scan_get_next(PTabletReaderScanGetNextRequest) returns (PTabletReaderScanGetNextResult);
 
-    rpc execute_command(ExecuteCommandRequestPB) returns(ExecuteCommandResultPB);
+    rpc execute_command(ExecuteCommandRequestPB) returns (ExecuteCommandResultPB);
 };
