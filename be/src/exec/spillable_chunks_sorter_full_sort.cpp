@@ -54,7 +54,7 @@ Status SpillableChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr
     return Status::OK();
 }
 
-Status SpillableChunksSorterFullSort::done(RuntimeState* state) {
+Status SpillableChunksSorterFullSort::do_done(RuntimeState* state) {
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
         return ChunksSorterFullSort::do_done(state);
     }
