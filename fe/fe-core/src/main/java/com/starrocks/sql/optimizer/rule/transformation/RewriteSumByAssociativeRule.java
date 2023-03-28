@@ -145,7 +145,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                 "projection in LogicalAggOperator shouldn't be set in logical rewrite phase");
 
         OptExpression newPreAggProjectOpt = OptExpression.create(new LogicalProjectOperator(newPreAggProjections),
-                input.getInputs().get(0).getInputs().get(0).getInputs());
+                input.getInputs().get(0).getInputs());
 
         OptExpression newAggOpt = OptExpression.create(newAggOperator, newPreAggProjectOpt);
 
@@ -357,10 +357,13 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
 
                 ColumnRefOperator newColumnRef;
 
-                if (arg0.isColumnRef() && oldPreAggProjections.containsKey(arg0)) {
+                if (arg0.isColumnRef()) {
                     // if arg0 is a ColumnRef and exists in the oldPreAggProjections,
                     // we don't need to create a new ColumnRef
                     newColumnRef = (ColumnRefOperator) arg0;
+                    if (!oldPreAggProjections.containsKey(arg0)) {
+                        newPreAggProjections.put((ColumnRefOperator) arg0, arg0);
+                    }
                 } else if (commonArguments.containsKey(arg0)) {
                     // if arg0 has been created by the previous rewriting,
                     // we don't need to create a new ColumnRef
