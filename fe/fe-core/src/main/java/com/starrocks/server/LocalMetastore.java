@@ -4468,7 +4468,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public Long allocateAutoIncrementId(Long tableId, Long rows) {
-        Long oldId = tableIdToIncrementId.putIfAbsent(tableId, 0L);
+        Long oldId = tableIdToIncrementId.putIfAbsent(tableId, 1L);
         if (oldId == null) {
             oldId = tableIdToIncrementId.get(tableId);
         }
