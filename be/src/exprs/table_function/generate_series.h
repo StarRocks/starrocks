@@ -104,19 +104,19 @@ public:
                     count = max_chunk_size - res->size();
                 }
 
+                bool overflow;
                 auto old_size = res->size();
                 resize_column_uninitialized(res.get(), old_size + count);
                 auto* data = res->get_data().data();
                 for (decltype(count) i = 0; i < count; i++) {
                     data[old_size + i] = current;
-#ifdef NDEBUG
-                    current += step;
-#else
-                    CHECK(!add_overflow(current, step, &current));
-#endif
+                    overflow = add_overflow(current, step, &current);
+                    if (overflow) {
+                        break;
+                    }
                 }
 
-                if (current > stop) {
+                if (current > stop || overflow) {
                     move_to_next_row();
                 } else {
                     state->set_offset(current - start);
