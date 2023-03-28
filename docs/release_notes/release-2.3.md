@@ -14,7 +14,7 @@ Release date: March 28, 2023
 The following bugs are fixed:
 
 - A table whose expired data is not properly recycled occupies a relatively large portion of disk space. [#19796](https://github.com/StarRocks/starrocks/pull/19796)
-- The error message displays unclearly when a Broker Load job loads Parquet files into StarRocks and a `NULL` value is loaded into a NOT NULL column. [#19885](https://github.com/StarRocks/starrocks/pull/19885)
+- The error message displayed in the following scenario is not informative: A Broker Load job loads Parquet files into StarRocks and a `NULL` value is loaded into a NOT NULL column. [#19885](https://github.com/StarRocks/starrocks/pull/19885)
 - Frequently creating a large number of temporary partitions to replace existing partitions leads to memory leaks and Full GC on the FE nodes. [#19283](https://github.com/StarRocks/starrocks/pull/19283)
 - For Colocation tables, the replica status can be manually specified as `bad` by using statements like `ADMIN SET REPLICA STATUS PROPERTIES ("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");`. If the number of BEs is less than or equal to the number of replicas, the corrupted replica cannot be repaired. [#19443](https://github.com/StarRocks/starrocks/pull/19443)
 - When the request `INSERT INTO SELECT` is sent to a Follower FE, the parameter `parallel_fragment_exec_instance_num` does not take effect. [#18841](https://github.com/StarRocks/starrocks/pull/18841)
