@@ -27,15 +27,6 @@ Parameters in brackets [] is optional.
 
 ## Returns
 
-<<<<<<< HEAD
-| **Return**    | **Description**                                              |
-| ------------- | ------------------------------------------------------------ |
-| id            | The ID of the materialized view.                             |
-| name          | The name of the materialized view.                           |
-| database_name | The name of the database to which the materialized view resides. |
-| text          | The statement used to create the materialized view.          |
-| rows          | The rows of data in the materialized view.                   |
-=======
 | **Return**                 | **Description**                                              |
 | -------------------------- | ------------------------------------------------------------ |
 | id                         | The ID of the materialized view.                             |
@@ -59,7 +50,6 @@ Parameters in brackets [] is optional.
 | last_refresh_error_message | The reason why the last refresh failed (if the materialized view state is not active). |
 | rows                       | The number of data rows in the materialized view.            |
 | text                       | The statement used to create the materialized view.          |
->>>>>>> 98c2f9641 ([Doc] Update SHOW MV (#20405))
 
 ## Examples
 
