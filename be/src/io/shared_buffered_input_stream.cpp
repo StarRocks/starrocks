@@ -58,12 +58,8 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
     std::vector<IORange> small_ranges;
     for (const IORange& r : check) {
         if (r.size > _options.max_buffer_size) {
-            SharedBuffer sb = SharedBuffer{.raw_offset = r.offset,
-                                           .raw_size = r.size,
-                                           .ref_count = 1,
-                                           .use_stream = _can_use_stream_buffer && _options.enable_stream_read};
+            SharedBuffer sb = SharedBuffer{.raw_offset = r.offset, .raw_size = r.size, .ref_count = 1};
             sb.align(_align_size, _file_size);
-            sb.stream_offset = sb.offset;
             _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
         } else {
             small_ranges.emplace_back(r);
@@ -77,10 +73,8 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
             int64_t end = (small_ranges[to].offset + small_ranges[to].size);
             SharedBuffer sb = SharedBuffer{.raw_offset = small_ranges[from].offset,
                                            .raw_size = end - small_ranges[from].offset,
-                                           .ref_count = ref_count,
-                                           .use_stream = false};
+                                           .ref_count = ref_count};
             sb.align(_align_size, _file_size);
-            sb.stream_offset = sb.offset;
             _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
         };
 
@@ -116,58 +110,9 @@ StatusOr<SharedBufferedInputStream::SharedBuffer*> SharedBufferedInputStream::_f
     return &sb;
 }
 
-Status SharedBufferedInputStream::_read_stream_buffer(SharedBuffer& sb, size_t offset, size_t count) {
-    DCHECK(offset >= sb.stream_offset);
-    if ((offset + count) > (sb.stream_offset + sb.buffer.size())) {
-        int64_t adv = offset - sb.stream_offset;
-        int64_t old_size = sb.buffer.size();
-        int64_t tail_size = old_size - adv;
-
-        DCHECK(adv >= 0) << ", sb.stream_offset = " << sb.stream_offset << ", offset = " << offset;
-        // total buffer is skipped.
-        if (tail_size < 0) tail_size = 0;
-
-        // move tail data to head.
-        if (adv > 0 && tail_size > 0) {
-            uint8_t* data = sb.buffer.data();
-            std::memmove(data, data + adv, tail_size);
-        }
-
-        // reset stream offset.
-        sb.stream_offset = offset;
-
-        // resize buffer.
-        int64_t new_size = std::max((int64_t)count, _options.min_stream_size);
-        new_size = std::min(new_size, sb.size + sb.offset - sb.stream_offset);
-        DCHECK(new_size >= count) << ", sb.stream_offset = " << sb.stream_offset << ", sb.offset = " << sb.offset
-                                  << ", sb.size = " << sb.size << ", new_size = " << new_size << ", count = " << count;
-        sb.buffer.resize(new_size);
-
-        // load data to buf.
-        {
-            SCOPED_RAW_TIMER(&_shared_io_timer);
-            _shared_io_count += 1;
-            size_t read_size = new_size - tail_size;
-            _shared_io_bytes += read_size;
-            RETURN_IF_ERROR(_stream->read_at_fully(offset + tail_size, sb.buffer.data() + tail_size, read_size));
-        }
-    }
-    DCHECK((offset + count) <= (sb.stream_offset + sb.buffer.size()))
-            << ", sb.stream_offset = " << sb.stream_offset << ", offset = " << offset << ", count = " << count
-            << ", buffer_size = " << sb.buffer.size();
-    return Status::OK();
-}
-
 Status SharedBufferedInputStream::_get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes) {
     ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(offset, nbytes));
     SharedBuffer& sb = *ret;
-
-    if (sb.use_stream) {
-        _read_stream_buffer(sb, offset, nbytes);
-        *buffer = sb.buffer.data() + offset - sb.stream_offset;
-        return Status::OK();
-    }
-
     if (sb.buffer.capacity() == 0) {
         SCOPED_RAW_TIMER(&_shared_io_timer);
         _shared_io_count += 1;

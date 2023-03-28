@@ -105,7 +105,6 @@ void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges) {
         bs_io_ranges.emplace_back(io::SharedBufferedInputStream::IORange{.offset = static_cast<int64_t>(r.offset),
                                                                          .size = static_cast<int64_t>(r.size)});
     }
-    _sb_stream->set_can_use_stream_buffer(true);
     Status st = _sb_stream->set_io_ranges(bs_io_ranges);
     if (!st.ok()) {
         auto msg = strings::Substitute("Failed to setIORanges $0: $1", _file->filename(), st.to_string());

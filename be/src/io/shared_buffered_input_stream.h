@@ -34,8 +34,6 @@ public:
         static constexpr int64_t MB = 1024 * 1024;
         int64_t max_dist_size = 1 * MB;
         int64_t max_buffer_size = 8 * MB;
-        int64_t min_stream_size = 4 * MB;
-        bool enable_stream_read = true;
     };
 
     SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename,
@@ -81,11 +79,6 @@ private:
         int64_t offset;
         int64_t size;
         int64_t ref_count;
-
-        // if use stream buffer
-        bool use_stream;
-        int64_t stream_offset;
-
         std::vector<uint8_t> buffer;
         void align(int64_t align_size, int64_t file_size);
     };
@@ -105,7 +98,6 @@ private:
     int64_t _direct_io_bytes = 0;
     int64_t _direct_io_timer = 0;
     int64_t _align_size = 0;
-    bool _can_use_stream_buffer = false;
 };
 
 } // namespace starrocks::io
