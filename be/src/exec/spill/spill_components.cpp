@@ -71,8 +71,8 @@ Status RawSpillerWriter::flush_task(RuntimeState* state, const MemTablePtr& mem_
 
     // TODO: reuse io context
     SerdeContext spill_ctx;
-    // DCHECK(writable != nullptr);
     {
+        TRY_CATCH_ALLOC_SCOPE_START()
         SCOPED_TIMER(_spiller->metrics().write_io_timer);
         // flush all pending result to spilled files
         size_t num_rows_flushed = 0;
@@ -82,13 +82,14 @@ Status RawSpillerWriter::flush_task(RuntimeState* state, const MemTablePtr& mem_
             return Status::OK();
         }));
         TRACE_SPILL_LOG << "spill flush rows:" << num_rows_flushed << ",spiller:" << this;
+        TRY_CATCH_ALLOC_SCOPE_END();
     }
 
     // be careful close method return a not ok status
     // then release the pending memory
     // flush
     RETURN_IF_ERROR(block->flush());
-    _spiller->block_manager()->release_block(block);
+    RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
 
     {
         std::lock_guard<std::mutex> l(_mutex);
@@ -206,7 +207,6 @@ Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, Spill
                 return Status::OK();
             }));
             DCHECK_EQ(left_channel_size, left_partition->num_rows - old_rows);
-            // left->spill_writer->t_spill(state, left_chunk, SyncTaskExecutor{}, guard);
         }
         if (hash_data.size() != left_channel_size) {
             ChunkPtr right_chunk = chunk->clone_empty();

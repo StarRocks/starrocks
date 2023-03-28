@@ -51,8 +51,8 @@ Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&&
 }
 
 template <class Processer, class TaskExecutor, class MemGuard>
-Status Spiller::spill_partitions(RuntimeState* state, const ChunkPtr& chunk, SpillHashColumn* hash_column,
-                                 Processer&& processer, TaskExecutor&& executor, MemGuard&& guard) {
+Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, SpillHashColumn* hash_column,
+                                  Processer&& processer, TaskExecutor&& executor, MemGuard&& guard) {
     SCOPED_TIMER(_metrics.spill_timer);
     RETURN_IF_ERROR(_spilled_task_status);
     DCHECK(!chunk->is_empty());
@@ -254,7 +254,7 @@ Status PartitionedSpillerWriter::_spill_partition(SerdeContext& ctx, SpilledPart
 
     if (partition->spill_writer->block()->size() > options().spill_file_size) {
         RETURN_IF_ERROR(block->flush());
-        _spiller->block_manager()->release_block(block);
+        RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
         block.reset();
     }
     return Status::OK();

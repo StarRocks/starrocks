@@ -54,7 +54,7 @@ public:
             parent->release(_tracker->consumption());
         }
     }
-    bool is_full() { return _tracker->consumption() >= _max_buffer_size; };
+    bool is_full() const { return _tracker->consumption() >= _max_buffer_size; };
     virtual bool is_empty() = 0;
     size_t mem_usage() { return _tracker->consumption(); }
     // append data to mem table

@@ -80,8 +80,8 @@ public:
     Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard);
 
     template <class Processer, class TaskExecutor, class MemGuard>
-    Status spill_partitions(RuntimeState* state, const ChunkPtr& chunk, SpillHashColumn* hash_column,
-                            Processer&& processer, TaskExecutor&& executor, MemGuard&& guard);
+    Status partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, SpillHashColumn* hash_column,
+                             Processer&& processer, TaskExecutor&& executor, MemGuard&& guard);
 
     // restore chunk from spilled chunks
     template <class TaskExecutor, class MemGuard>
@@ -135,7 +135,7 @@ public:
         _writer->get_spill_partitions(parititons);
     }
 
-    std::vector<std::unique_ptr<SpillerReader>> get_partition_spill_reader(
+    std::vector<std::unique_ptr<SpillerReader>> get_partition_spill_readers(
             const std::vector<const SpillPartitionInfo*>& parititons);
 
     const std::unique_ptr<SpillerWriter>& writer() { return _writer; }

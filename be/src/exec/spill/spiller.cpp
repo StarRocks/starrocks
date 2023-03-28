@@ -87,7 +87,7 @@ void Spiller::update_spilled_task_status(Status&& st) {
     }
 }
 
-std::vector<std::unique_ptr<SpillerReader> > Spiller::get_partition_spill_reader(
+std::vector<std::unique_ptr<SpillerReader> > Spiller::get_partition_spill_readers(
         const std::vector<const SpillPartitionInfo*>& partitions) {
     std::vector<std::unique_ptr<SpillerReader> > res;
 

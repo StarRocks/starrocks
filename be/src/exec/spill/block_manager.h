@@ -38,7 +38,7 @@ public:
 
     virtual std::string debug_string() = 0;
 
-    size_t size() { return _size; }
+    size_t size() const { return _size; }
 
 protected:
     size_t _size{};

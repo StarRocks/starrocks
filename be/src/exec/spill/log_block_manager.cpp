@@ -58,7 +58,8 @@ private:
 
 class LogBlockContainer {
 public:
-    LogBlockContainer(Dir* dir, TUniqueId query_id, int32_t plan_node_id, std::string plan_node_name, uint64_t id)
+    LogBlockContainer(Dir* dir, const TUniqueId& query_id, int32_t plan_node_id, std::string plan_node_name,
+                      uint64_t id)
             : _dir(dir),
               _query_id(query_id),
               _plan_node_id(plan_node_id),

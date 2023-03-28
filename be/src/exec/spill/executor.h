@@ -46,8 +46,8 @@ struct QueryCtxMemTrackerGuard {
             : query_ctx(query_ctx_->weak_from_this()), scope_tracker(scope_tracker_) {}
 
     bool scoped_begin() const {
-        captured = query_ctx.lock();
-        if (captured == nullptr) {
+        captured_ctx = query_ctx.lock();
+        if (captured_ctx == nullptr) {
             return false;
         }
         old_tracker = tls_thread_status.set_mem_tracker(scope_tracker);
@@ -56,13 +56,13 @@ struct QueryCtxMemTrackerGuard {
 
     void scoped_end() const {
         tls_thread_status.set_mem_tracker(old_tracker);
-        captured = nullptr;
+        captured_ctx = nullptr;
     }
 
     std::weak_ptr<pipeline::QueryContext> query_ctx;
     MemTracker* scope_tracker;
 
-    mutable std::shared_ptr<pipeline::QueryContext> captured;
+    mutable std::shared_ptr<pipeline::QueryContext> captured_ctx;
     mutable MemTracker* old_tracker = nullptr;
 };
 
