@@ -54,7 +54,6 @@ public:
     }
 
     Status set_io_ranges(const std::vector<IORange>& ranges);
-    void set_can_use_stream_buffer(bool v) { _can_use_stream_buffer = v; }
     void release_to_offset(int64_t offset);
     void release();
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
