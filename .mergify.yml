@@ -21,7 +21,6 @@ pull_request_rules:
       - merged
     actions:
       backport:
-        bot_account: "{{author}}"
         assignees: 
           - "{{author}}"
   
