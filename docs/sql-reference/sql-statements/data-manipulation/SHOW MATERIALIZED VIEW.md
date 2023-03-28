@@ -43,7 +43,7 @@ Parameters in brackets [] is optional.
 | last_refresh_force_refresh | Whether the last refresh is a FORCE refresh.                 |
 | last_refresh_start_partition | The start partition of the last refresh in the materialized view. |
 | last_refresh_end_partition | The end partition of the last refresh in the materialized view. |
-| last_refresh_base_refresh_partitions | The updated partition of the base table in the last refresh. |
+| last_refresh_base_refresh_partitions | The base table partitions that were refreshed in the last refresh. |
 | last_refresh_mv_refresh_partitions | The materialized view partitions that were refreshed in the last refresh. |
 | last_refresh_error_code    | The error code for the last failed refresh of the materialized view (if the materialized view state is not active). |
 | last_refresh_error_message | The reason why the last refresh failed (if the materialized view state is not active). |
