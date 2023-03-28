@@ -18,7 +18,7 @@
 package com.starrocks.common.publish;
 
 import com.google.common.collect.Sets;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 
 import java.util.Collection;
 import java.util.Set;
@@ -27,21 +27,21 @@ import java.util.concurrent.TimeUnit;
 
 // Handler which will be call back by processor.
 public class ResponseHandler {
-    private Set<Backend> nodes;
+    private Set<DataNode> nodes;
     private CountDownLatch latch;
 
-    public ResponseHandler(Collection<Backend> nodes) {
+    public ResponseHandler(Collection<DataNode> nodes) {
         this.nodes = Sets.newConcurrentHashSet(nodes);
         latch = new CountDownLatch(nodes.size());
     }
 
-    public void onResponse(Backend node) {
+    public void onResponse(DataNode node) {
         if (nodes.remove(node)) {
             latch.countDown();
         }
     }
 
-    public void onFailure(Backend node, Throwable t) {
+    public void onFailure(DataNode node, Throwable t) {
         if (nodes.remove(node)) {
             latch.countDown();
         }
@@ -51,7 +51,7 @@ public class ResponseHandler {
         return latch.await(millions, TimeUnit.MILLISECONDS);
     }
 
-    public Backend[] pendingNodes() {
-        return nodes.toArray(new Backend[0]);
+    public DataNode[] pendingNodes() {
+        return nodes.toArray(new DataNode[0]);
     }
 }

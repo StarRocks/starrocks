@@ -63,7 +63,7 @@ import java.util.Set;
  * This class extends the primary identifier of a Backend with ephemeral state,
  * eg usage information, current administrative state etc.
  */
-public class Backend extends ComputeNode {
+public class DataNode extends ComputeNode {
 
     public enum BackendState {
         using, /* backend belongs to a cluster*/
@@ -71,7 +71,7 @@ public class Backend extends ComputeNode {
         free /* backend is not belong to any clusters */
     }
 
-    private static final Logger LOG = LogManager.getLogger(Backend.class);
+    private static final Logger LOG = LogManager.getLogger(DataNode.class);
 
     // rootPath -> DiskInfo
     private volatile ImmutableMap<String, DiskInfo> disksRef;
@@ -87,12 +87,12 @@ public class Backend extends ComputeNode {
     // additional backendStatus information for BE, display in JSON format
     private final BackendStatus backendStatus = new BackendStatus();
 
-    public Backend() {
+    public DataNode() {
         super();
         this.disksRef = ImmutableMap.of();
     }
 
-    public Backend(long id, String host, int heartbeatPort) {
+    public DataNode(long id, String host, int heartbeatPort) {
         super(id, host, heartbeatPort);
         this.disksRef = ImmutableMap.of();
     }
@@ -298,8 +298,8 @@ public class Backend extends ComputeNode {
         return backendStatus;
     }
 
-    public static Backend read(DataInput in) throws IOException {
-        Backend backend = new Backend();
+    public static DataNode read(DataInput in) throws IOException {
+        DataNode backend = new DataNode();
         backend.readFields(in);
         return backend;
     }
@@ -387,11 +387,11 @@ public class Backend extends ComputeNode {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof Backend)) {
+        if (!(obj instanceof DataNode)) {
             return false;
         }
 
-        Backend backend = (Backend) obj;
+        DataNode backend = (DataNode) obj;
 
         return (getId() == backend.getId()) && (getHost().equals(backend.getHost()))
                 && (getHeartbeatPort() == backend.getHeartbeatPort())

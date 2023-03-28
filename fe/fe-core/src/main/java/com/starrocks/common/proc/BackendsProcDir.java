@@ -48,7 +48,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -112,7 +112,7 @@ public class BackendsProcDir implements ProcDirInterface {
         Stopwatch watch = Stopwatch.createUnstarted();
         List<List<Comparable>> comparableBackendInfos = new LinkedList<>();
         for (long backendId : backendIds) {
-            Backend backend = clusterInfoService.getBackend(backendId);
+            DataNode backend = clusterInfoService.getBackend(backendId);
             if (backend == null) {
                 continue;
             }
@@ -240,7 +240,7 @@ public class BackendsProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid backend id format: " + beIdStr);
         }
 
-        Backend backend = clusterInfoService.getBackend(backendId);
+        DataNode backend = clusterInfoService.getBackend(backendId);
         if (backend == null) {
             throw new AnalysisException("Backend[" + backendId + "] does not exist.");
         }
