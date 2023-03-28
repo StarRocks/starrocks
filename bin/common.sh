@@ -170,3 +170,34 @@ export_cachelib_lib_path() {
     CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib64
 }
+
+build_submodules()
+{
+    local build_type=$1
+    local clean=$2
+    
+    pushd ${STARROCKS_HOME} &>/dev/null
+    git submodule init
+    git submodule update
+
+    # build starcache
+    STARCACHE_HOME=${STARROCKS_HOME}/be/src/submodules/starcache
+    cd ${STARCACHE_HOME}
+    if [ ${clean} -eq 1 ]; then
+        STARCACHE_GCC_HOME=${STARROCKS_GCC_HOME} \
+            STARCACHE_CMAKE_CMD=${CMAKE_CMD} \
+            STARCACHE_THIRDPARTY=${STARROCKS_THIRDPARTY}/installed \
+            STARCACHE_INSTALL_DIR=${STARCACHE_HOME}/installed \
+            BUILD_TYPE=${build_type} ./build-scripts/cmake-build.sh --clean
+    else
+        if test -f "${STARCACHE_HOME}/installed/lib64/libstarcache.a"; then
+            return
+        fi
+        STARCACHE_GCC_HOME=${STARROCKS_GCC_HOME} \
+            STARCACHE_CMAKE_CMD=${CMAKE_CMD} \
+            STARCACHE_THIRDPARTY=${STARROCKS_THIRDPARTY}/installed \
+            STARCACHE_INSTALL_DIR=${STARCACHE_HOME}/installed \
+            BUILD_TYPE=${build_type} ./build-scripts/cmake-build.sh
+    fi
+    popd
+}
