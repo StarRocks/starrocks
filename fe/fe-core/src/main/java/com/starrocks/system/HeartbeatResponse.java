@@ -107,7 +107,7 @@ public class HeartbeatResponse implements Writable {
         if (type == Type.FRONTEND) {
             result = new FrontendHbResponse();
         } else if (type == Type.BACKEND) {
-            result = new BackendHbResponse();
+            result = new DataNodeHbResponse();
         } else if (type == Type.BROKER) {
             result = new BrokerHbResponse();
         } else {
