@@ -43,7 +43,7 @@ public:
 
     Status set_stream(std::shared_ptr<SpillInputStream> stream) {
         std::lock_guard guard(_mutex);
-        _current_stream = std::move(stream);
+        _stream = std::move(stream);
         return Status::OK();
     }
 
@@ -53,7 +53,7 @@ public:
     template <class TaskExecutor, class MemGuard>
     Status trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
 
-    bool has_output_data() { return _current_stream && _current_stream->is_ready(); }
+    bool has_output_data() { return _stream && _stream->is_ready(); }
 
 protected:
     Spiller* _spiller;
@@ -61,7 +61,7 @@ protected:
     std::atomic_uint64_t _finished_restore_tasks{};
 
     std::mutex _mutex;
-    std::shared_ptr<SpillInputStream> _current_stream;
+    std::shared_ptr<SpillInputStream> _stream;
     SerdeContext _spill_read_ctx;
 
     size_t _read_rows{};

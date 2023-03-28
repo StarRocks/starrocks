@@ -151,7 +151,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
 template <class TaskExecutor, class MemGuard>
 StatusOr<ChunkPtr> SpillerReader::restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
     SCOPED_TIMER(_spiller->metrics().restore_timer);
-    ASSIGN_OR_RETURN(auto chunk, _current_stream->get_next(_spill_read_ctx));
+    ASSIGN_OR_RETURN(auto chunk, _stream->get_next(_spill_read_ctx));
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
     _read_rows += chunk->num_rows();
     return chunk;
@@ -159,17 +159,17 @@ StatusOr<ChunkPtr> SpillerReader::restore(RuntimeState* state, TaskExecutor&& ex
 
 template <class TaskExecutor, class MemGuard>
 Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    if (_current_stream == nullptr) {
+    if (_stream == nullptr) {
         return Status::OK();
     }
-    DCHECK(_current_stream->enable_prefetch());
+    DCHECK(_stream->enable_prefetch());
     // if all is well and input stream enable prefetch and not eof
-    if (!_current_stream->eof()) {
+    if (!_stream->eof()) {
         auto restore_task = [this, state, guard]() {
             RETURN_IF(!guard.scoped_begin(), Status::OK());
             _running_restore_tasks++;
             SerdeContext ctx;
-            auto res = _current_stream->prefetch(ctx);
+            auto res = _stream->prefetch(ctx);
 
             if (!res.is_end_of_file() && !res.ok()) {
                 _spiller->update_spilled_task_status(std::move(res));
