@@ -71,9 +71,8 @@ import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
-import com.starrocks.system.DataNode.BackendStatus;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -441,7 +440,7 @@ public class ReportHandler extends Daemon {
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
         DataNode reportBackend = currentSystemInfo.getBackend(backendId);
         if (reportBackend != null) {
-            BackendStatus backendStatus = reportBackend.getBackendStatus();
+            DataNode.BackendStatus backendStatus = reportBackend.getBackendStatus();
             backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(start);
         }
 
