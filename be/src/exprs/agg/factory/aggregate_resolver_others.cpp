@@ -72,7 +72,6 @@ void AggregateFuncResolver::register_others() {
     add_array_mapping<TYPE_DATETIME, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
 
-    // TYPE_BIGINT hack for various arguments
     add_general_mapping_notnull("array_agg", false, AggregateFactory::MakeArrayAggAggregateFunction());
 }
 

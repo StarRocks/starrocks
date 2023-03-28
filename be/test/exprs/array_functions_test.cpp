@@ -5016,7 +5016,7 @@ TEST_F(ArrayFunctionsTest, array_generate_when_overflow) {
 
     _check_array<int8_t>({(int8_t)(9), (int8_t)(97)}, dest_column->get(0).get_array());
     _check_array<int8_t>({(int8_t)(-9), (int8_t)(-97)}, dest_column->get(1).get_array());
-=======
+}
 
 TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     // test only null

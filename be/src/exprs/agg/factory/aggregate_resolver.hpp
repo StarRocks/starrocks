@@ -46,6 +46,13 @@ struct AggregateFuncMapHash {
     }
 };
 
+struct GeneralFuncMapHash {
+    size_t operator()(const GeneralFuncKey& key) const {
+        std::hash<std::string> hasher;
+        return hasher(std::get<0>(key)) ^ std::get<1>(key) ^ std::get<2>(key);
+    }
+};
+
 class AggregateFuncResolver {
     DECLARE_SINGLETON(AggregateFuncResolver);
 
@@ -91,11 +98,11 @@ public:
 
     template <typename SpecificAggFunctionPtr = AggregateFunctionPtr>
     void add_general_mapping_notnull(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
-        _infos_mapping.emplace(std::make_tuple(name, false, false), fun);
-        _infos_mapping.emplace(std::make_tuple(name, false, true), fun);
+        _general_mapping.emplace(std::make_tuple(name, false, false), fun);
+        _general_mapping.emplace(std::make_tuple(name, false, true), fun);
         if (is_window) {
-            _infos_mapping.emplace(std::make_tuple(name, true, false), fun);
-            _infos_mapping.emplace(std::make_tuple(name, true, true), fun);
+            _general_mapping.emplace(std::make_tuple(name, true, false), fun);
+            _general_mapping.emplace(std::make_tuple(name, true, true), fun);
         }
     }
 
@@ -227,7 +234,7 @@ public:
 
 private:
     std::unordered_map<AggregateFuncKey, AggregateFunctionPtr, AggregateFuncMapHash> _infos_mapping;
-    std::unordered_map<GeneralFuncKey, AggregateFunctionPtr> _general_mapping;
+    std::unordered_map<GeneralFuncKey, AggregateFunctionPtr, GeneralFuncMapHash> _general_mapping;
 };
 
 } // namespace starrocks

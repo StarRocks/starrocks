@@ -87,7 +87,7 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        DCHECK(ctx->get_num_args(), this->data(statte).data_columns->size());
+        DCHECK_EQ(ctx->get_num_args(), this->data(state).data_columns->size());
         for (auto i = 0; i < ctx->get_num_args(); ++i) {
             DCHECK(columns[i]->size() > row_num);
             // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
