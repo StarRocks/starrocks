@@ -376,41 +376,44 @@ if (${WITH_BLOCK_CACHE} STREQUAL "ON")
 endif()
 
 if ("${USE_STAROS}" STREQUAL "ON")
-     # starrocks project has its imported libprotobuf.a and libre2.a
-     # add following ALIAS so grpc can find the correct dependent libraries
-     add_library(protobuf::libprotobuf ALIAS protobuf)
-     add_library(re2::re2 ALIAS re2)
+    # explicitly import ZLIB::ZLIB which is required by starlet thirdparty
+    add_library(ZLIB::ZLIB STATIC IMPORTED)
+    set_target_properties(ZLIB::ZLIB PROPERTIES IMPORTED_LOCATION ${LIBZ})
+    # starrocks project has its imported libprotobuf.a and libre2.a
+    # add following ALIAS so grpc can find the correct dependent libraries
+    add_library(protobuf::libprotobuf ALIAS protobuf)
+    add_library(re2::re2 ALIAS re2)
 
-     find_package(gRPC CONFIG REQUIRED)
-     message(STATUS "Using gRPC ${gRPC_VERSION}")
-     get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
-     include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
+    find_package(gRPC CONFIG REQUIRED)
+    message(STATUS "Using gRPC ${gRPC_VERSION}")
+    get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
+    include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 
-     find_package(starlet CONFIG REQUIRED)
-     message(STATUS "Using starlet ${starlet_VERSION}")
-     message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
-     message(STATUS "starlet lib dir: ${STARLET_LIBS}")
-     include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
-     add_library(starlet STATIC IMPORTED)
-     set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
+    find_package(starlet CONFIG REQUIRED)
+    message(STATUS "Using starlet ${starlet_VERSION}")
+    message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
+    message(STATUS "starlet lib dir: ${STARLET_LIBS}")
+    include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
+    add_library(starlet STATIC IMPORTED)
+    set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
 
-     find_package (prometheus-cpp CONFIG REQUIRED)
-     get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
-     message(STATUS "Using prometheus-cpp")
-     message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
-     include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
+    find_package (prometheus-cpp CONFIG REQUIRED)
+    get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
+    message(STATUS "Using prometheus-cpp")
+    message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
+    include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
 
-     add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
-     set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
+    add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
+    set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
 
-     set(STARROCKS_DEPENDENCIES
-        ${STARROCKS_DEPENDENCIES}
-        starlet
-        gRPC::grpc++_reflection
-        gRPC::grpc++
-        starlet_fslib_all
-        prometheus-cpp::core
-        )
+    set(STARROCKS_DEPENDENCIES
+       ${STARROCKS_DEPENDENCIES}
+       starlet
+       gRPC::grpc++_reflection
+       gRPC::grpc++
+       starlet_fslib_all
+       prometheus-cpp::core
+       )
 endif()
 
 # Check if functions are supported in this platform. All flags will generated
