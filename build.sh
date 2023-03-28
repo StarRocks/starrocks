@@ -42,6 +42,7 @@ export STARROCKS_HOME=${ROOT}
 
 . ${STARROCKS_HOME}/env.sh
 
+
 if [[ $OSTYPE == darwin* ]] ; then
     PARALLEL=$(sysctl -n hw.ncpu)
     # We know for sure that build-thirdparty.sh will fail on darwin platform, so just skip the step.
@@ -138,14 +139,14 @@ if [ -e /proc/cpuinfo ] ; then
 fi
 
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-    # force turn off cachelib on arm platform
-    WITH_CACHELIB=OFF
-elif [[ -z ${WITH_CACHELIB} ]]; then
-    WITH_CACHELIB=OFF
+    # force turn off block cache on arm platform
+    WITH_BLOCK_CACHE=OFF
+elif [[ -z ${WITH_BLOCK_CACHE} ]]; then
+    WITH_BLOCK_CACHE=OFF
 fi
 
-if [[ "${WITH_CACHELIB}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
-    echo "WITH_CACHELIB=ON but missing depdency libraries(cachelib)"
+if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
+    echo "WITH_BLOCK_CACHE=ON but missing depdency libraries(cachelib)"
     exit 1
 fi
 
@@ -223,7 +224,7 @@ echo "Get params:
     USE_AVX512          -- $USE_AVX512
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
-    WITH_CACHELIB       -- $WITH_CACHELIB
+    WITH_BLOCK_CACHE    -- $WITH_BLOCK_CACHE
     USE_JEMALLOC        -- $USE_JEMALLOC
 "
 
@@ -278,17 +279,11 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     if [ "${WITH_GCOV}" = "ON" ]; then
         CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}_gcov
     fi
-
     if [ ${CLEAN} -eq 1 ]; then
         rm -rf $CMAKE_BUILD_DIR
         rm -rf ${STARROCKS_HOME}/be/output/
     fi
     mkdir -p ${CMAKE_BUILD_DIR}
-
-    . ${STARROCKS_HOME}/bin/common.sh
-
-    build_submodules ${CMAKE_BUILD_TYPE} ${CLEAN}
-
     cd ${CMAKE_BUILD_DIR}
     if [ "${USE_STAROS}" == "ON"  ]; then
       if [ -z "$STARLET_INSTALL_DIR" ] ; then
@@ -307,8 +302,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                     -DUSE_STAROS=${USE_STAROS} \
                     -DWITH_BENCH=${WITH_BENCH} \
-                    -DWITH_CACHELIB=${WITH_CACHELIB} \
-                    -Dstarcache_DIR=${STARROCKS_HOME}/be/src/submodules/starcache/installed \
+                    -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
                     -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
                     -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
@@ -324,8 +318,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
                     -DWITH_BENCH=${WITH_BENCH} \
-                    -DWITH_CACHELIB=${WITH_CACHELIB} \
-                    -Dstarcache_DIR=${STARROCKS_HOME}/be/src/submodules/starcache/installed \
+                    -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
     fi
     time ${BUILD_SYSTEM} -j${PARALLEL}
@@ -436,7 +429,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
 
-    if [ "${WITH_CACHELIB}" == "ON"  ]; then
+    if [ "${WITH_BLOCK_CACHE}" == "ON"  ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib
         cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
     fi
