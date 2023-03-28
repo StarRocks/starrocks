@@ -15,7 +15,7 @@ import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -69,7 +69,11 @@ public class ShardDeleter extends LeaderDaemon {
             Set<Long> shards = entry.getValue();
 
             // 1. drop tablet
+<<<<<<< HEAD
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+=======
+            DataNode backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackend(backendId);
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
             DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
 

@@ -4,7 +4,14 @@ package com.starrocks.service;
 
 
 import com.starrocks.qe.QueryQueueManager;
+<<<<<<< HEAD
 import com.starrocks.system.Backend;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
@@ -38,12 +45,20 @@ public class FrontendServiceImplTest {
     @Test
     public void testUpdateResourceUsage() throws TException {
         QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
+<<<<<<< HEAD
         Backend backend = new Backend();
         long backendId = 0;
         int numRunningQueries = 1;
         long memLimitBytes = 3;
         long memUsedBytes = 2;
         int cpuUsedPermille = 300;
+=======
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        DataNode backend = new DataNode(0, "127.0.0.1", 80);
+        ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
+
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
         new MockUp<SystemInfoService>() {
             @Mock
             public Backend getBackend(long id) {

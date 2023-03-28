@@ -36,7 +36,7 @@ import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -263,7 +263,7 @@ public class CurrentQueryInfoProvider {
     }
 
     private TNetworkAddress toBrpcHost(TNetworkAddress host) throws AnalysisException {
-        final Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
+        final DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (backend == null) {
             throw new AnalysisException(new StringBuilder("Backend ")

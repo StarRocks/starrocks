@@ -24,7 +24,7 @@ package com.starrocks.task;
 import com.google.common.collect.Lists;
 import com.starrocks.common.ClientPool;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TAgentServiceVersion;
 import com.starrocks.thrift.TAgentTaskRequest;
@@ -156,7 +156,7 @@ public class AgentBatchTask implements Runnable {
             TNetworkAddress address = null;
             boolean ok = false;
             try {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
                 if (backend == null || !backend.isAlive()) {
                     continue;
                 }

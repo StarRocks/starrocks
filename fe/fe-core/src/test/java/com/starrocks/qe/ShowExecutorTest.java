@@ -78,7 +78,14 @@ import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+<<<<<<< HEAD
 import com.starrocks.system.Backend;
+=======
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
@@ -677,7 +684,7 @@ public class ShowExecutorTest {
         StarOSAgent starosAgent = new StarOSAgent();
 
         // mock backends
-        Backend backend = new Backend();
+        DataNode backend = new DataNode();
         new Expectations(clusterInfo) {
             {
                 clusterInfo.getBackend(1L);

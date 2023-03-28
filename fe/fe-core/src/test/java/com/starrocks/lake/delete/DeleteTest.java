@@ -40,7 +40,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -129,7 +129,7 @@ public class DeleteTest {
     }
 
     public void setUpExpectation() {
-        Backend backend = new Backend(backendId, "127.0.0.1", 1234);
+        DataNode backend = new DataNode(backendId, "127.0.0.1", 1234);
 
         new Expectations() {
             {

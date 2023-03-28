@@ -26,6 +26,11 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.system.DataNode;
+import com.starrocks.system.SystemInfoService;
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -79,6 +84,14 @@ public class LocalTabletTest {
         tablet.addReplica(replica1);
         tablet.addReplica(replica2);
         tablet.addReplica(replica3);
+<<<<<<< HEAD
+=======
+
+        infoService = GlobalStateMgr.getCurrentSystemInfo();
+        infoService.addBackend(new DataNode(10001L, "host1", 9050));
+        infoService.addBackend(new DataNode(10002L, "host2", 9050));
+
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
     }
 
     @Test

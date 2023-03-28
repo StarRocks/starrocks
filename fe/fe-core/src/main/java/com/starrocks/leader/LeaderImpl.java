@@ -64,7 +64,7 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
@@ -168,7 +168,7 @@ public class LeaderImpl {
         TBackend tBackend = request.getBackend();
         String host = tBackend.getHost();
         int bePort = tBackend.getBe_port();
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
         if (backend == null) {
             tStatus.setStatus_code(TStatusCode.CANCELLED);
             List<String> errorMsgs = new ArrayList<>();
@@ -1012,7 +1012,7 @@ public class LeaderImpl {
             }
 
             List<TBackendMeta> backends = new ArrayList<>();
-            for (Backend backend : GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackends()) {
+            for (DataNode backend : GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackends()) {
                 TBackendMeta backendMeta = new TBackendMeta();
                 backendMeta.setBackend_id(backend.getId());
                 backendMeta.setHost(backend.getHost());

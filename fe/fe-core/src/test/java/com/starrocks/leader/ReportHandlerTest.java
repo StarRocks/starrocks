@@ -9,7 +9,12 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.system.Backend;
+=======
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TTablet;
@@ -84,12 +89,18 @@ public class ReportHandlerTest {
     @Test
     public void testHandleResourceUsageReport() {
         QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
+<<<<<<< HEAD
         Backend backend = new Backend();
         long backendId = 0;
         int numRunningQueries = 1;
         long memLimitBytes = 3;
         long memUsedBytes = 2;
         int cpuUsedPermille = 300;
+=======
+
+        DataNode backend = new DataNode(0, "127.0.0.1", 80);
+        ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
 
         new MockUp<SystemInfoService>() {
             @Mock
@@ -118,4 +129,76 @@ public class ReportHandlerTest {
         // Don't sync and notify, because this BE doesn't exist.
         ReportHandler.testHandleResourceUsageReport(/* Not Exist */ 1, resourceUsage);
     }
+<<<<<<< HEAD
+=======
+    
+    @Test
+    public void testHandleReport() throws TException {
+        DataNode be = new DataNode(10001, "host1", 8000);
+        ComputeNode cn = new ComputeNode(10002, "host2", 8000);
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public DataNode getBackendWithBePort(String host, int bePort) {
+                if (host.equals(be.getHost()) && bePort == be.getBePort()) {
+                    return be;
+                }
+                return null;
+            }
+
+            @Mock
+            public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
+                if (host.equals(cn.getHost()) && bePort == cn.getBePort()) {
+                    return cn;
+                }
+                return null;
+            }
+        };
+
+
+        ReportHandler handler = new ReportHandler();
+        TResourceUsage resourceUsage = genResourceUsage(1, 2L, 3L, 100);
+
+        {
+
+            TReportRequest req = new TReportRequest();
+            req.setResource_usage(resourceUsage);
+
+            TBackend tcn = new TBackend();
+            tcn.setHost(cn.getHost());
+            tcn.setBe_port(cn.getBePort());
+            req.setBackend(tcn);
+
+            TMasterResult res = handler.handleReport(req);
+            Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
+        }
+
+        {
+
+            TReportRequest req = new TReportRequest();
+            req.setResource_usage(resourceUsage);
+
+            TBackend tbe = new TBackend();
+            tbe.setHost(be.getHost());
+            tbe.setBe_port(be.getBePort());
+            req.setBackend(tbe);
+
+            TMasterResult res = handler.handleReport(req);
+            Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
+        }
+
+        {
+
+            TReportRequest req = new TReportRequest();
+
+            TBackend tcn = new TBackend();
+            tcn.setHost(cn.getHost() + "NotExist");
+            tcn.setBe_port(cn.getBePort());
+            req.setBackend(tcn);
+
+            TMasterResult res = handler.handleReport(req);
+            Assert.assertEquals(TStatusCode.INTERNAL_ERROR, res.getStatus().getStatus_code());
+        }
+    }
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
 }

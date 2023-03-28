@@ -31,7 +31,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+<<<<<<< HEAD
 import com.starrocks.system.Backend;
+=======
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.system.DataNode;
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -46,7 +51,7 @@ public class CreateTableTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        Backend be = UtFrameUtils.addMockBackend(10002);
+        DataNode be = UtFrameUtils.addMockBackend(10002);
         be.setIsDecommissioned(true);
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);

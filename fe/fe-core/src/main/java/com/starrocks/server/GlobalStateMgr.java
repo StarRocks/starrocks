@@ -244,6 +244,10 @@ import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
+<<<<<<< HEAD
+=======
+import com.starrocks.system.DataNode;
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
@@ -479,6 +483,19 @@ public class GlobalStateMgr {
         return nodeMgr.getOrCreateSystemInfo(clusterId);
     }
 
+<<<<<<< HEAD
+=======
+    public TNodesInfo createNodesInfo(Integer clusterId) {
+        TNodesInfo nodesInfo = new TNodesInfo();
+        SystemInfoService systemInfoService = getOrCreateSystemInfo(clusterId);
+        for (Long id : systemInfoService.getBackendIds(false)) {
+            DataNode backend = systemInfoService.getBackend(id);
+            nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+        }
+        return nodesInfo;
+    }
+
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
     public SystemInfoService getClusterInfo() {
         return nodeMgr.getClusterInfo();
     }

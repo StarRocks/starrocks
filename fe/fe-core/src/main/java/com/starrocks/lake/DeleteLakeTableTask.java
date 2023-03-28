@@ -10,7 +10,7 @@ import com.starrocks.proto.DropTableResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -53,7 +53,7 @@ class DeleteLakeTableTask implements Runnable {
         if (beId == null) {
             return;
         }
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
         if (backend == null) {
             return;
         }

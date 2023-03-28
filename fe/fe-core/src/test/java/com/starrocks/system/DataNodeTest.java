@@ -6,11 +6,11 @@ import org.junit.Assert;
 import org.junit.Test;
 
 
-public class BackendTest {
+public class DataNodeTest {
 
     @Test
     public void testSetHeartbeatPort() {
-        Backend be = new Backend();
+        DataNode be = new DataNode();
         be.setHeartbeatPort(1000);
         Assert.assertTrue(be.getHeartbeatPort() == 1000);
     }

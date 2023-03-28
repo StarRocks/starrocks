@@ -57,8 +57,13 @@ import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendStatus;
+=======
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNode;
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -148,6 +153,7 @@ public class ReportHandler extends Daemon {
         TBackend tBackend = request.getBackend();
         String host = tBackend.getHost();
         int bePort = tBackend.getBe_port();
+<<<<<<< HEAD
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
         if (backend == null) {
             tStatus.setStatus_code(TStatusCode.INTERNAL_ERROR);
@@ -155,6 +161,28 @@ public class ReportHandler extends Daemon {
             errorMsgs.add("backend[" + host + ":" + bePort + "] does not exist.");
             tStatus.setError_msgs(errorMsgs);
             return result;
+=======
+        long beId;
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+        if (backend != null) {
+            beId = backend.getId();
+        } else {
+            ComputeNode computeNode = null;
+            // Compute node only reports resource usage.
+            if (request.isSetResource_usage()) {
+                computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort);
+            }
+
+            if (computeNode != null) {
+                beId = computeNode.getId();
+            } else {
+                tStatus.setStatus_code(TStatusCode.INTERNAL_ERROR);
+                List<String> errorMsgs = Lists.newArrayList();
+                errorMsgs.add("backend or compute node [" + host + ":" + bePort + "] does not exist.");
+                tStatus.setError_msgs(errorMsgs);
+                return result;
+            }
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
         }
 
         long beId = backend.getId();
@@ -407,9 +435,9 @@ public class ReportHandler extends Daemon {
         handleSetTabletEnablePersistentIndex(backendId, backendTablets);
 
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
-        Backend reportBackend = currentSystemInfo.getBackend(backendId);
+        DataNode reportBackend = currentSystemInfo.getBackend(backendId);
         if (reportBackend != null) {
-            BackendStatus backendStatus = reportBackend.getBackendStatus();
+            DataNode.BackendStatus backendStatus = reportBackend.getBackendStatus();
             backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(start);
         }
 
@@ -467,7 +495,7 @@ public class ReportHandler extends Daemon {
     private static void diskReport(long backendId, Map<String, TDisk> backendDisks) {
         LOG.debug("begin to handle disk report from backend {}", backendId);
         long start = System.currentTimeMillis();
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
             LOG.warn("backend doesn't exist. id: " + backendId);
             return;
@@ -484,7 +512,7 @@ public class ReportHandler extends Daemon {
     private static void workgroupReport(long backendId, List<TWorkGroup> workGroups) {
         LOG.debug("begin to handle workgroup report from backend{}", backendId);
         long start = System.currentTimeMillis();
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
             LOG.warn("backend does't exist. id: " + backendId);
         }

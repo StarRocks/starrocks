@@ -34,7 +34,12 @@ import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
+<<<<<<< HEAD
 import com.starrocks.system.Backend;
+=======
+import com.starrocks.rpc.PMVMaintenanceTaskRequest;
+import com.starrocks.system.DataNode;
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
@@ -170,7 +175,7 @@ public class PseudoBackend {
     private long currentAvailableCapacityB;
     private long currentTotalCapacityB;
 
-    Backend be;
+    DataNode be;
     HeartBeatClient heatBeatClient;
     BeThriftClient backendClient;
     PseudoPBackendService pBackendService;
@@ -314,7 +319,7 @@ public class PseudoBackend {
         this.frontendService = frontendService;
         this.random = new Random(backendId);
 
-        this.be = new Backend(backendId, host, heartBeatPort);
+        this.be = new DataNode(backendId, host, heartBeatPort);
         this.tBackend = new TBackend(host, beThriftPort, httpPort);
 
         // TODO: maintain disk info with tablet/rowset count

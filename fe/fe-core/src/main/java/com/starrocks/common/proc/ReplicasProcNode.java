@@ -26,7 +26,7 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 
 import java.util.Arrays;
 import java.util.List;
@@ -55,14 +55,14 @@ public class ReplicasProcNode implements ProcNodeInterface {
 
     @Override
     public ProcResult fetchResult() {
-        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, DataNode> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         for (Replica replica : replicas) {
             String metaUrl;
             String compactionUrl;
-            Backend backend = backendMap.get(replica.getBackendId());
+            DataNode backend = backendMap.get(replica.getBackendId());
             if (backend != null) {
                 metaUrl = String.format("http://%s:%d/api/meta/header/%d",
                         backend.getHost(),

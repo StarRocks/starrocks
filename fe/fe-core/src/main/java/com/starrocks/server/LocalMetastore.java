@@ -192,7 +192,7 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -1888,7 +1888,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 for (Map.Entry<Long, Long> mark : firstThree) {
                     sb.append(mark.getValue()); // TabletId
                     sb.append('(');
-                    Backend backend = stateMgr.getClusterInfo().getBackend(mark.getKey());
+                    DataNode backend = stateMgr.getClusterInfo().getBackend(mark.getKey());
                     sb.append(backend != null ? backend.getHost() : "N/A");
                     sb.append(") ");
                 }
@@ -4309,8 +4309,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
-        final List<Backend> defaultClusterBackends = systemInfoService.getBackends();
-        for (Backend backend : defaultClusterBackends) {
+        final List<DataNode> defaultClusterBackends = systemInfoService.getBackends();
+        for (DataNode backend : defaultClusterBackends) {
             backendList.add(backend.getId());
         }
 
@@ -4319,7 +4319,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // make sure one host hold only one backend.
         Set<String> beHost = Sets.newHashSet();
-        for (Backend be : defaultClusterBackends) {
+        for (DataNode be : defaultClusterBackends) {
             if (beHost.contains(be.getHost())) {
                 // we can not handle this situation automatically.
                 LOG.error("found more than one backends in same host: {}", be.getHost());
@@ -4358,12 +4358,12 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
         for (long id : info.getBackendList()) {
-            final Backend backend = stateMgr.getClusterInfo().getBackend(id);
+            final DataNode backend = stateMgr.getClusterInfo().getBackend(id);
             final Cluster cluster = defaultCluster;
             cluster.removeBackend(id);
             backend.setDecommissioned(false);
             backend.clearClusterName();
-            backend.setBackendState(Backend.BackendState.free);
+            backend.setBackendState(DataNode.BackendState.free);
         }
     }
 

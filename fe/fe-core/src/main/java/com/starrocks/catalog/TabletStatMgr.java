@@ -38,7 +38,7 @@ import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -109,10 +109,10 @@ public class TabletStatMgr extends LeaderDaemon {
     }
 
     private void updateLocalTabletStat() {
-        ImmutableMap<Long, Backend> backends = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, DataNode> backends = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         long start = System.currentTimeMillis();
-        for (Backend backend : backends.values()) {
+        for (DataNode backend : backends.values()) {
             BackendService.Client client = null;
             TNetworkAddress address = null;
             boolean ok = false;
@@ -232,7 +232,7 @@ public class TabletStatMgr extends LeaderDaemon {
         long start = System.currentTimeMillis();
         try {
             for (Map.Entry<Long, List<TabletInfo>> entry : beToTabletInfos.entrySet()) {
-                Backend backend = systemInfoService.getBackend(entry.getKey());
+                DataNode backend = systemInfoService.getBackend(entry.getKey());
                 if (backend == null) {
                     continue;
                 }

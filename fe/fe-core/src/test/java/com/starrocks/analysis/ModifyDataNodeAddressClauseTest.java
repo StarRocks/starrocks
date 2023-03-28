@@ -9,7 +9,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 
-public class ModifyBackendAddressClauseTest {
+public class ModifyDataNodeAddressClauseTest {
     
     @Test
     public void testCreateClause() {

@@ -46,7 +46,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
@@ -63,7 +62,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TLakeScanNode;
@@ -320,6 +319,92 @@ public class OlapScanNode extends ScanNode {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // update TScanRangeLocations based on the latest olapTable tablet distributions, 
+    // this function will make sure the version of each TScanRangeLocations doesn't change.
+    public List<TScanRangeLocations> updateScanRangeLocations(List<TScanRangeLocations> locations)
+            throws UserException {
+        if (selectedPartitionIds.size() == 0) {
+            throw new UserException("Scan node's partition is empty");
+        }
+        List<TScanRangeLocations> newLocations = Lists.newArrayList();
+        for (TScanRangeLocations location : locations) {
+            TInternalScanRange internalScanRange = location.scan_range.internal_scan_range;
+            String expectedSchemaHashStr = internalScanRange.getSchema_hash();
+            String expectedVersionStr = internalScanRange.getVersion();
+            long tabletId = internalScanRange.getTablet_id();
+            int expectedSchemaHash = Integer.parseInt(expectedSchemaHashStr);
+            long expectedVersion = Long.parseLong(expectedVersionStr);
+            Long partitionId = internalScanRange.partition_id;
+
+            final Partition partition = olapTable.getPartition(partitionId);
+            final MaterializedIndex selectedTable = partition.getIndex(selectedIndexId);
+            final Tablet selectedTablet = selectedTable.getTablet(tabletId);
+            if (selectedTablet == null) {
+                throw new UserException("Tablet " + tabletId + " doesn't exist in partition " + partitionId);
+            }
+
+            int schemaHash = olapTable.getSchemaHashByIndexId(selectedTable.getId());
+            if (schemaHash != expectedSchemaHash) {
+                throw new UserException("Tablet " + tabletId + " schema hash " + schemaHash +
+                        " has changed, doesn't equal to expected schema hash " + expectedSchemaHash);
+            }
+
+            // random shuffle List && only collect one copy
+            List<Replica> allQueryableReplicas = Lists.newArrayList();
+            List<Replica> localReplicas = Lists.newArrayList();
+            selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                    expectedVersion, -1, schemaHash);
+            if (allQueryableReplicas.isEmpty()) {
+                String replicaInfos = ((LocalTablet) selectedTablet).getReplicaInfos();
+                LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
+                        tabletId, expectedVersion, replicaInfos);
+                throw new UserException(
+                        "Failed to get scan range, no queryable replica found in tablet: " + tabletId + " " +
+                                replicaInfos);
+            }
+
+            TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+            TInternalScanRange internalRange = new TInternalScanRange();
+            internalRange.setDb_name("");
+            internalRange.setSchema_hash(expectedSchemaHashStr);
+            internalRange.setVersion(expectedVersionStr);
+            internalRange.setVersion_hash("0");
+            internalRange.setTablet_id(tabletId);
+            internalRange.setPartition_id(partition.getId());
+
+            List<Replica> replicas = allQueryableReplicas;
+
+            Collections.shuffle(replicas);
+            boolean tabletIsNull = true;
+            for (Replica replica : replicas) {
+                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                if (backend == null) {
+                    LOG.debug("replica {} not exists", replica.getBackendId());
+                    continue;
+                }
+                String ip = backend.getHost();
+                int port = backend.getBePort();
+                TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(ip, port));
+                scanRangeLocation.setBackend_id(replica.getBackendId());
+                scanRangeLocations.addToLocations(scanRangeLocation);
+                internalRange.addToHosts(new TNetworkAddress(ip, port));
+                tabletIsNull = false;
+            }
+            if (tabletIsNull) {
+                throw new UserException(tabletId + "have no alive replicas");
+            }
+            TScanRange scanRange = new TScanRange();
+            scanRange.setInternal_scan_range(internalRange);
+            scanRangeLocations.setScan_range(scanRange);
+
+            newLocations.add(scanRangeLocations);
+        }
+        return newLocations;
+    }
+
+>>>>>>> 52bd9f3d1 ([Refactor]Rename Backend  Class to DataNode (#20438))
     public void addScanRangeLocations(Partition partition,
                                       MaterializedIndex index,
                                       List<Tablet> tablets,
@@ -382,7 +467,7 @@ public class OlapScanNode extends ScanNode {
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
                 if (backend == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;

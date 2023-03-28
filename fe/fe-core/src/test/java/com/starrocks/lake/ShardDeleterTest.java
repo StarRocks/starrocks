@@ -8,7 +8,7 @@ import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import mockit.Expectations;
@@ -41,7 +41,7 @@ public class ShardDeleterTest {
     private LakeService lakeService;
 
     @Mocked
-    private Backend be;
+    private DataNode be;
 
     private Set<Long> ids = new HashSet<>();
 
