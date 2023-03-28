@@ -464,10 +464,6 @@ Status FileReader::_init_group_readers() {
     // 2. collect io ranges of every row group reader.
     // 3. set io ranges to the stream.
     if (config::parquet_coalesce_read_enable && _sb_stream != nullptr) {
-        io::SharedBufferedInputStream::CoalesceOptions options = {
-                .max_dist_size = config::io_coalesce_read_max_distance_size,
-                .max_buffer_size = config::io_coalesce_read_max_buffer_size};
-        _sb_stream->set_coalesce_options(options);
         std::vector<io::SharedBufferedInputStream::IORange> ranges;
         for (auto& r : _row_group_readers) {
             int64_t end_offset = 0;
