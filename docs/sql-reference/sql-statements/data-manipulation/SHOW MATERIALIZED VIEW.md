@@ -33,9 +33,9 @@ Parameters in brackets [] is optional.
 | name                       | The name of the materialized view.                           |
 | refresh_type               | The refresh type of the materialized view, including ROLLUP, MANNUL, ASYNC, and INCREMENTAL. |
 | is_active                  | Whether the materialized view state is active. Valid Value: `true` and `false`. |
-| partition_type             | The partition type of the materialized view.                 |
-| task_id                    | ID of the materialized view execution task.                  |
-| task_name                  | Name of the materialized view execution task.                |
+| partition_type             | The partition type of the materialized view, including HASH_PARTITIONED, BUCKET_SHUFFLE_HASH_PARTITIONED, and UNPARTITIONED.                |
+| task_id                    | ID of the materialized view refresh task.                  |
+| task_name                  | Name of the materialized view refresh task.                |
 | last_refresh_start_time    | The start time of the last refresh of the materialized view. |
 | last_refresh_finished_time | The end time of the last refresh of the materialized view.   |
 | last_refresh_duration      | The time taken by the last refresh. Unit: seconds.           |
