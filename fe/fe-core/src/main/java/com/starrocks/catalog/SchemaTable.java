@@ -634,6 +634,9 @@ public class SchemaTable extends Table {
                                     .column("CREATE_TIME", ScalarType.createType(PrimitiveType.BIGINT))
                                     .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("DATA_DIR", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("SHARD_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("SCHEMA_HASH", ScalarType.createType(PrimitiveType.BIGINT))
                                     .build()))
                     .put("be_metrics", new SchemaTable(
                             SystemId.BE_METRICS_ID,
