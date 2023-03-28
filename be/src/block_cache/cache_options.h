@@ -35,7 +35,6 @@ struct CacheOptions {
     bool checksum;
     size_t max_parcel_memory_mb;
     size_t max_concurrent_inserts;
-    std::string engine;
 };
 
 } // namespace starrocks
