@@ -473,16 +473,31 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     for (size_t i = 0; i < tablet_ids.size(); ++i) {
         _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
     }
-    std::stringstream ss;
-    ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id()) << " open delta writer: ";
-    for (auto& [tablet_id, delta_writer] : _delta_writers) {
-        ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
+    if (_is_replicated_storage) {
+        std::stringstream ss;
+        ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id()) << " open "
+           << _delta_writers.size() << " delta writer: ";
+        for (auto& [tablet_id, delta_writer] : _delta_writers) {
+            ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
+        }
+        ss << " " << failed_tablet_ids.size() << " failed_tablets: ";
+        for (auto& tablet_id : failed_tablet_ids) {
+            ss << tablet_id << ",";
+        }
+        if (_is_incremental_channel) {
+            ss << " on incremental channel";
+        }
+        ss << " _num_remaining_senders: " << _num_remaining_senders;
+        LOG(INFO) << ss.str();
     }
+<<<<<<< HEAD
     ss << " failed_tablets: ";
     for (auto& tablet_id : failed_tablet_ids) {
         ss << tablet_id << ",";
     }
     LOG(INFO) << ss.str();
+=======
+>>>>>>> 0d2ba4f49 ([Refactor] Reduce log when disable replicated storage (#20304))
     return Status::OK();
 }
 
