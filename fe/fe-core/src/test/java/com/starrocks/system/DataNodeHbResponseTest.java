@@ -30,7 +30,8 @@ public class DataNodeHbResponseTest {
         long hbTime = System.currentTimeMillis();
         String version = "version1";
         int cpuCores = 10;
-        BackendHbResponse resp = new BackendHbResponse(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores);
+        DataNodeHbResponse
+                resp = new DataNodeHbResponse(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores);
 
         Assert.assertEquals(beId, resp.getBeId());
         Assert.assertEquals(bePort, resp.getBePort());
@@ -42,7 +43,7 @@ public class DataNodeHbResponseTest {
 
         // json serialize
         String json = GsonUtils.GSON.toJson(resp);
-        BackendHbResponse respJson = GsonUtils.GSON.fromJson(json, BackendHbResponse.class);
+        DataNodeHbResponse respJson = GsonUtils.GSON.fromJson(json, DataNodeHbResponse.class);
         Assert.assertEquals(beId, respJson.getBeId());
         Assert.assertEquals(bePort, respJson.getBePort());
         Assert.assertEquals(httpPort, respJson.getHttpPort());
