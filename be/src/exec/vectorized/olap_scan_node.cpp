@@ -705,6 +705,7 @@ Status OlapScanNode::_capture_tablet_rowsets() {
     return Status::OK();
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/olap_scan_node.cpp
 size_t _estimate_type_bytes(PrimitiveType ptype) {
     switch (ptype) {
     case TYPE_VARCHAR:
@@ -726,6 +727,8 @@ size_t _estimate_type_bytes(PrimitiveType ptype) {
     }
 }
 
+=======
+>>>>>>> 1655d63c8 ([Enhancement] port chunk buffer limit from olap scan node to connector scan node (#20490)):be/src/exec/olap_scan_node.cpp
 void OlapScanNode::_estimate_scan_and_output_row_bytes() {
     const TOlapScanNode& thrift_scan_node = thrift_olap_scan_node();
     const TupleDescriptor* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(thrift_scan_node.tuple_id);
@@ -738,7 +741,7 @@ void OlapScanNode::_estimate_scan_and_output_row_bytes() {
 
     for (const auto& slot : slots) {
         size_t field_bytes = std::max<size_t>(slot->slot_size(), 0);
-        field_bytes += _estimate_type_bytes(slot->type().type);
+        field_bytes += type_estimated_overhead_bytes(slot->type().type);
 
         _estimated_scan_row_bytes += field_bytes;
         if (unused_output_column_set.find(slot->col_name()) == unused_output_column_set.end()) {

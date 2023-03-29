@@ -137,6 +137,15 @@ public:
 
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
+<<<<<<< HEAD
+=======
+    Status init(ObjectPool* pool, RuntimeState* state) override;
+    const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
+
+    // Make cloud native table behavior same as olap table
+    bool always_shared_scan() const override { return false; }
+
+>>>>>>> 1655d63c8 ([Enhancement] port chunk buffer limit from olap scan node to connector scan node (#20490))
 protected:
     vectorized::ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;
@@ -582,6 +591,24 @@ DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_
     return std::make_unique<LakeDataSource>(this, scan_range);
 }
 
+<<<<<<< HEAD
+=======
+Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
+    if (_t_lake_scan_node.__isset.bucket_exprs) {
+        const auto& bucket_exprs = _t_lake_scan_node.bucket_exprs;
+        _partition_exprs.resize(bucket_exprs.size());
+        for (int i = 0; i < bucket_exprs.size(); ++i) {
+            RETURN_IF_ERROR(Expr::create_expr_tree(pool, bucket_exprs[i], &_partition_exprs[i], state));
+        }
+    }
+    return Status::OK();
+}
+
+const TupleDescriptor* LakeDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_t_lake_scan_node.tuple_id);
+}
+
+>>>>>>> 1655d63c8 ([Enhancement] port chunk buffer limit from olap scan node to connector scan node (#20490))
 // ================================
 
 DataSourceProviderPtr LakeConnector::create_data_source_provider(vectorized::ConnectorScanNode* scan_node,

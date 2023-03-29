@@ -87,6 +87,21 @@ public:
     // such as MySQL/JDBC, so `accept_empty_scan_ranges` is false, and most in most cases, these data source(MySQL/JDBC)
     // the method `insert_local_exchange_operator` is true also.
     virtual bool accept_empty_scan_ranges() const { return true; }
+<<<<<<< HEAD
+=======
+
+    virtual bool stream_data_source() const { return false; }
+
+    virtual Status init(ObjectPool* pool, RuntimeState* state) { return Status::OK(); }
+
+    const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
+
+    virtual bool always_shared_scan() const { return true; }
+    virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
+
+protected:
+    std::vector<ExprContext*> _partition_exprs;
+>>>>>>> 1655d63c8 ([Enhancement] port chunk buffer limit from olap scan node to connector scan node (#20490))
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
