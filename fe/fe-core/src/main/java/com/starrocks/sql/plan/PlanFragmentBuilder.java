@@ -1421,7 +1421,8 @@ public class PlanFragmentBuilder {
             }
 
             clearOlapScanNodePartitions(sourceFragment.getPlanRoot());
-
+            sourceFragment.clearDestination();
+            sourceFragment.clearOutputPartition();
             return sourceFragment;
         }
 
