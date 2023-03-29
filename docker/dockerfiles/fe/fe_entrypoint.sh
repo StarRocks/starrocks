@@ -13,7 +13,7 @@ FE_LEADER=
 # probe interval: 2 seconds
 PROBE_INTERVAL=2
 # timeout for probe leader: 120 seconds
-PROBE_LEADER_POD0_TIMEOUT=60 # at most 15 attempts, no less than the times needed for an election
+PROBE_LEADER_POD0_TIMEOUT=30 # at most 15 attempts, no less than the times needed for an election
 PROBE_LEADER_PODX_TIMEOUT=120 # at most 60 attempts
 
 # myself as IP or FQDN
@@ -297,7 +297,11 @@ if [[ "x$svc_name" == "x" ]] ; then
     exit 1
 fi
 
-update_conf_from_configmap
-collect_env_info
-probe_leader $svc_name
-start_fe $svc_name
+if [[ -f "/opt/starrocks/fe/meta/image/ROLE" ]];then
+  $STARROCKS_HOME/bin/start_fe.sh
+else
+  update_conf_from_configmap
+  collect_env_info
+  probe_leader $svc_name
+  start_fe $svc_name
+fi
