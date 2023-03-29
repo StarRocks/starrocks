@@ -355,6 +355,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(this);
 
             auto& chunk_source = _chunk_sources[chunk_source_index];
+            SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
+
             [[maybe_unused]] std::string category;
             category = fmt::sprintf("chunk_source_%d_0x%x", get_plan_node_id(), query_trace_ctx.id);
             QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);

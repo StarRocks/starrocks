@@ -190,6 +190,10 @@ Status ConnectorChunkSource::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+const std::string ConnectorChunkSource::get_custom_coredump_msg() const {
+    return _data_source->get_custom_coredump_msg();
+}
+
 void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
     _closed = true;
