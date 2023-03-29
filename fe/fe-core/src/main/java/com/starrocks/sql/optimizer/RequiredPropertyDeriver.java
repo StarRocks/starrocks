@@ -156,9 +156,15 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     @Override
     public Void visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
+<<<<<<< HEAD
         // If scan tablet sum leas than 1, do one phase local aggregate is enough
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0
                 && context.getRootProperty().isExecuteInOneTablet()
+=======
+        // If scan tablet sum less than 1, do one phase local aggregate is enough
+        int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
+        if (aggStage <= 1 && context.getRootProperty().oneTabletProperty().supportOneTabletOpt
+>>>>>>> 780ec24c9 ([BugFix] clear destination info of child when removing exchange node (#19792))
                 && node.isOnePhaseAgg()) {
             requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
             return null;
