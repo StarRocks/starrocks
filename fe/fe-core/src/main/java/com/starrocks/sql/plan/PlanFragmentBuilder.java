@@ -1137,6 +1137,7 @@ public class PlanFragmentBuilder {
                                     break;
                                 case "JOB_ID":
                                     scanNode.setJobId(constantOperator.getBigint());
+                                    break;
                                 case "TYPE":
                                     scanNode.setType(constantOperator.getVarchar());
                                     break;
