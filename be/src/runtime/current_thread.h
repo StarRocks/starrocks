@@ -367,11 +367,9 @@ private:
         CurrentThread::current().set_fragment_instance_id({});               \
     });
 
-#define SCOPED_SET_CUSTOM_COREDUMP_MSG(custom_coredump_msg)     \
-    CurrentThread::current().set_custom_coredump_msg(custom_coredump_msg);              \
-    auto VARNAME_LINENUM(defer) = DeferOp([] {                               \
-        CurrentThread::current().set_custom_coredump_msg({});                  \
-    });
+#define SCOPED_SET_CUSTOM_COREDUMP_MSG(custom_coredump_msg)                \
+    CurrentThread::current().set_custom_coredump_msg(custom_coredump_msg); \
+    auto VARNAME_LINENUM(defer) = DeferOp([] { CurrentThread::current().set_custom_coredump_msg({}); });
 
 #define TRY_CATCH_ALLOC_SCOPE_START() \
     try {                             \
@@ -394,10 +392,12 @@ private:
         return Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));                                       \
     }
 
-#define TRY_CATCH_BAD_ALLOC(stmt)               \
-    do {                                        \
-        TRY_CATCH_ALLOC_SCOPE_START() { stmt; } \
-        TRY_CATCH_ALLOC_SCOPE_END()             \
+#define TRY_CATCH_BAD_ALLOC(stmt)       \
+    do {                                \
+        TRY_CATCH_ALLOC_SCOPE_START() { \
+            stmt;                       \
+        }                               \
+        TRY_CATCH_ALLOC_SCOPE_END()     \
     } while (0)
 
 #define TRY_CATCH_ALL(result, stmt)                                                      \
