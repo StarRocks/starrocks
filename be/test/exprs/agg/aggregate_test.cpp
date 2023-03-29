@@ -2012,7 +2012,7 @@ TEST_F(AggregateTest, test_array_agg) {
         // test update
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
-        auto agg_state = (ArrayAggAggregateState*)(state->state());
+        auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
         ASSERT_EQ(agg_state->data_columns->size(), 2);
         // data_columns in state are nullable
         ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(),
