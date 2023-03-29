@@ -38,8 +38,8 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.BackendHbResponse;
 import com.starrocks.system.DataNode;
-import com.starrocks.system.DataNodeHbResponse;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import org.junit.Assert;
@@ -245,7 +245,7 @@ public class DataNodeTest {
     @Test
     public void testHeartbeatOk() throws Exception {
         DataNode be = new DataNode();
-        DataNodeHbResponse hbResponse = new DataNodeHbResponse(1, 9060, 8040, 8060, 8090,
+        BackendHbResponse hbResponse = new BackendHbResponse(1, 9060, 8040, 8060, 8090,
                 System.currentTimeMillis(), "1.0", 64);
         boolean isChanged = be.handleHbResponse(hbResponse, false);
         Assert.assertTrue(isChanged);
