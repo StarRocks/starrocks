@@ -112,7 +112,7 @@ private:
     bool _eos = false;
     bool _need_create_tuple_columns = true;
 
-    Buffer<SlotDescriptor*> _col_types;
+    Buffer<SlotDescriptor*> _slots;
     Buffer<TupleId> _output_build_tuple_ids;
     Buffer<TupleId> _output_probe_tuple_ids;
     size_t _probe_column_count = 0;

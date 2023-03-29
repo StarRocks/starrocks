@@ -116,8 +116,8 @@ Status CrossJoinNode::prepare(RuntimeState* state) {
 
     _init_row_desc();
 
-    for (size_t i = _probe_column_count; i < _build_column_count + _probe_column_count; i++) {
-        std::cout << "R: " << i << ":" << _col_types[i]->type().debug_string() << std::endl;
+    for (size_t i = 0; i < _build_column_count + _probe_column_count; i++) {
+        std::cout << "R: " << i << ":" << _slots[i]->type().debug_string() << std::endl;
     }
     return Status::OK();
 }
@@ -161,14 +161,14 @@ Status CrossJoinNode::_get_next_probe_chunk(RuntimeState* state) {
 void CrossJoinNode::_copy_joined_rows_with_index_base_probe(ChunkPtr& chunk, size_t row_count, size_t probe_index,
                                                             size_t build_index) {
     for (size_t i = 0; i < _probe_column_count; i++) {
-        SlotDescriptor* slot = _col_types[i];
+        SlotDescriptor* slot = _slots[i];
         ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
         ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
         _copy_probe_rows_with_index_base_probe(dest_col, src_col, probe_index, row_count);
     }
 
     for (size_t i = 0; i < _build_column_count; i++) {
-        SlotDescriptor* slot = _col_types[i + _probe_column_count];
+        SlotDescriptor* slot = _slots[i + _probe_column_count];
         ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_probe(dest_col, src_col, build_index, row_count);
@@ -203,14 +203,14 @@ void CrossJoinNode::_copy_joined_rows_with_index_base_probe(ChunkPtr& chunk, siz
 void CrossJoinNode::_copy_joined_rows_with_index_base_build(ChunkPtr& chunk, size_t row_count, size_t probe_index,
                                                             size_t build_index) {
     for (size_t i = 0; i < _probe_column_count; i++) {
-        SlotDescriptor* slot = _col_types[i];
+        SlotDescriptor* slot = _slots[i];
         ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
         ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
         _copy_probe_rows_with_index_base_build(dest_col, src_col, probe_index, row_count);
     }
 
     for (size_t i = 0; i < _build_column_count; i++) {
-        SlotDescriptor* slot = _col_types[i + _probe_column_count];
+        SlotDescriptor* slot = _slots[i + _probe_column_count];
         ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_build(dest_col, src_col, build_index, row_count);
@@ -534,7 +534,7 @@ Status CrossJoinNode::close(RuntimeState* state) {
 void CrossJoinNode::_init_row_desc() {
     for (auto& tuple_desc : child(0)->row_desc().tuple_descriptors()) {
         for (auto& slot : tuple_desc->slots()) {
-            _col_types.emplace_back(slot);
+            _slots.emplace_back(slot);
             _probe_column_count++;
         }
         if (_need_create_tuple_columns) {
@@ -545,7 +545,7 @@ void CrossJoinNode::_init_row_desc() {
     }
     for (auto& tuple_desc : child(1)->row_desc().tuple_descriptors()) {
         for (auto& slot : tuple_desc->slots()) {
-            _col_types.emplace_back(slot);
+            _slots.emplace_back(slot);
             _build_column_count++;
         }
         if (_need_create_tuple_columns) {
@@ -616,13 +616,13 @@ void CrossJoinNode::_init_chunk(ChunkPtr* chunk) {
 
     // init columns for the new chunk from _probe_chunk and _build_chunk
     for (size_t i = 0; i < _probe_column_count; ++i) {
-        SlotDescriptor* slot = _col_types[i];
+        SlotDescriptor* slot = _slots[i];
         ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
         auto new_col = ColumnHelper::create_column(slot->type(), src_col->is_nullable());
         new_chunk->append_column(std::move(new_col), slot->id());
     }
     for (size_t i = 0; i < _build_column_count; ++i) {
-        SlotDescriptor* slot = _col_types[_probe_column_count + i];
+        SlotDescriptor* slot = _slots[_probe_column_count + i];
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         ColumnPtr new_col = ColumnHelper::create_column(slot->type(), src_col->is_nullable());
         new_chunk->append_column(std::move(new_col), slot->id());
