@@ -41,11 +41,6 @@ const i32 NUM_NODES_ALL_RACKS = -1
 // constants for TPlanNodeId
 const i32 INVALID_PLAN_NODE_ID = -1
 
-// constants for function version
-enum TFunctionVersion {
-    FUNC_VERSION_UNIX_TIMESTAMP_INT64 = 5
-}
-
 // Constant default partition ID, must be < 0 to avoid collisions
 const i64 DEFAULT_PARTITION_ID = -1;
 
