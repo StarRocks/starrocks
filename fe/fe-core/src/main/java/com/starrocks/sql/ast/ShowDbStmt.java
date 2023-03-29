@@ -86,7 +86,7 @@ public class ShowDbStmt extends ShowStmt {
         aliasMap.put(new SlotRef(null, DB_COL), item.getExpr().clone(null));
         where = where.substitute(aliasMap);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                where, null, null));
+                where, null, null), this.origStmt);
     }
 
     @Override
