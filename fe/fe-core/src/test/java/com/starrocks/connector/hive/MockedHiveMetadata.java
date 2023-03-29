@@ -560,7 +560,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                 ImmutableList.of(PrimitiveType.DATE)));
 
         List<String> partitionNames = Lists.newArrayList();
-        partitionNames.addAll(ImmutableList.of("l_shipdate=1998-01-01", "l_shipdate=1998-01-02", "l_shipdate=1998-01-03",
+        partitionNames.addAll(ImmutableList.of("l_shipdate=" + HiveMetaClient.PARTITION_NULL_VALUE,
+                "l_shipdate=1998-01-01", "l_shipdate=1998-01-02", "l_shipdate=1998-01-03",
                 "l_shipdate=1998-01-04", "l_shipdate=1998-01-05"));
 
         List<String> partitionColumnNames = ImmutableList.of("l_shipdate");

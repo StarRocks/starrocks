@@ -26,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
@@ -1893,7 +1894,7 @@ public class MvRewriteOptimizationTest {
         MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                 getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
         mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
-                ImmutableList.of("l_shipdate=1998-01-01"));
+                ImmutableList.of("l_shipdate=" + HiveMetaClient.PARTITION_NULL_VALUE));
 
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                 "where l_shipdate > '1998-01-04'";
@@ -1908,7 +1909,7 @@ public class MvRewriteOptimizationTest {
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv", "UNION",
-                "PARTITION PREDICATES: (22: l_shipdate < '1998-01-02') OR (22: l_shipdate >= '1998-01-06')");
+                "PARTITION PREDICATES: (22: l_shipdate < '1998-01-01') OR (22: l_shipdate >= '1998-01-06')");
         dropMv("test", "hive_parttbl_mv");
 
         createAndRefreshMv("test", "hive_parttbl_mv_2",
@@ -1933,8 +1934,8 @@ public class MvRewriteOptimizationTest {
                 ImmutableList.of("l_shipdate=1998-01-02"));
         plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_2", "l_orderkey > 100", "lineitem_par",
-                "PARTITION PREDICATES: (23: l_shipdate < '1998-01-01') OR (23: l_shipdate >= '1998-01-02'), " +
-                        "(23: l_shipdate < '1998-01-03') OR (23: l_shipdate >= '1998-01-06')",
+                "PARTITION PREDICATES: 23: l_shipdate >= '1998-01-02', (23: l_shipdate < '1998-01-03') OR " +
+                        "(23: l_shipdate >= '1998-01-06')",
                 "NON-PARTITION PREDICATES: 21: l_orderkey > 100");
 
         dropMv("test", "hive_parttbl_mv_2");
@@ -1955,8 +1956,8 @@ public class MvRewriteOptimizationTest {
                         "where l_shipdate > '1998-01-02';");
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv_3", "partitions=3/5", "lineitem_par",
-                "partitions=2/5");
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_3", "partitions=3/6", "lineitem_par",
+                "partitions=2/6");
         dropMv("test", "hive_parttbl_mv_3");
 
         createAndRefreshMv("test", "hive_parttbl_mv_4",
@@ -1974,7 +1975,7 @@ public class MvRewriteOptimizationTest {
                         "where l_shipdate < '1998-01-02' and l_orderkey = 100;");
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv_4", "partitions=1/5", "lineitem_par",
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_4", "partitions=1/6", "lineitem_par",
                 "NON-PARTITION PREDICATES: ((22: l_shipdate >= '1998-01-02') OR (20: l_orderkey != 100)) OR " +
                         "(22: l_shipdate < '1998-01-01')");
         dropMv("test", "hive_parttbl_mv_4");
