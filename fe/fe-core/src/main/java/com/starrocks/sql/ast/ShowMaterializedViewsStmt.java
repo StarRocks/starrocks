@@ -127,7 +127,11 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
         }
         where = where.substitute(aliasMap);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
+<<<<<<< HEAD
                 where, null, null));
+=======
+                finalWhere, null, null), this.getOrigStmt());
+>>>>>>> af156eee7 (Passthrough originalStmt to avoid npe for show statements (#20414))
     }
 
     @Override

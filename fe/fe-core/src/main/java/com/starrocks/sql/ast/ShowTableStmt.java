@@ -114,7 +114,7 @@ public class ShowTableStmt extends ShowStmt {
                 whereDbEQ,
                 where);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                finalWhere, null, null));
+                finalWhere, null, null), this.origStmt);
     }
 
     @Override
