@@ -67,6 +67,7 @@ struct TNormalHashJoinNode {
 struct TNormalNestLoopJoinNode {
   1: optional PlanNodes.TJoinOp join_op
   2: optional list<binary> join_conjuncts
+  3: optional list<Types.TSlotId> output_columns
 }
 
 

@@ -130,7 +130,7 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         }
 
         if (outputSlots != null) {
-            msg.hash_join_node.setOutput_columns(outputSlots);
+            msg.nestloop_join_node.setOutput_columns(outputSlots);
         }
     }
 
@@ -138,6 +138,7 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalNestLoopJoinNode nlJoinNode = new TNormalNestLoopJoinNode();
         nlJoinNode.setJoin_op(getJoinOp().toThrift());
+        nlJoinNode.setOutput_columns(normalizer.remapIntegerSlotIds(outputSlots));
         nlJoinNode.setJoin_conjuncts(normalizer.normalizeExprs(otherJoinConjuncts));
         planNode.setNestloop_join_node(nlJoinNode);
         planNode.setNode_type(TPlanNodeType.NESTLOOP_JOIN_NODE);

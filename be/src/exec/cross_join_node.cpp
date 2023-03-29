@@ -86,6 +86,13 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
                 _build_runtime_filters.emplace_back(rf_desc);
             }
         }
+        if (tnode.nestloop_join_node.__isset.output_columns) {
+            std::cout << "INDEX SET" << std::endl;
+            size_t i = 0;
+            for (const auto& slot_id : tnode.nestloop_join_node.output_columns) {
+                std::cout << "INDEX: " << i << ":" << slot_id << std::endl;
+            }
+        }
         return Status::OK();
     }
 
@@ -108,6 +115,10 @@ Status CrossJoinNode::prepare(RuntimeState* state) {
     _probe_rows_counter = ADD_COUNTER(runtime_profile(), "ProbeRows", TUnit::UNIT);
 
     _init_row_desc();
+
+    for (size_t i = _probe_column_count; i < _build_column_count + _probe_column_count; i++) {
+        std::cout << "R: " << i << ":" << _col_types[i]->type().debug_string() << std::endl;
+    }
     return Status::OK();
 }
 

@@ -2039,6 +2039,7 @@ public class PlanFragmentBuilder {
                     leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
                     null, node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
 
+            fillOutputSlots(node.getProjection(), joinNode);
             joinNode.setLimit(node.getLimit());
             joinNode.computeStatistics(optExpr.getStatistics());
             joinNode.addConjuncts(conjuncts);
