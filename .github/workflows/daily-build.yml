@@ -1,0 +1,65 @@
+name: TEST Cron
+
+on:
+  schedule:
+    - cron: '* 23 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
+
+jobs:
+  Cron-Build:
+    runs-on: self-hosted
+    name: Cron Build
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    strategy:
+      matrix:
+        branch:
+          - main
+          - clean
+        build_type:
+          - Release
+          - ASAN
+
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: UPDATE ECI & RUN BUILD
+        id: run_build
+        shell: bash
+        timeout-minutes: 90
+        run: |
+          rm -rf ./elastic-service
+          ln -s /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/elastic-daily-build.sh --branch ${{ matrix.branch }} --build ${{ matrix.build_type }}
+
+      - name: build result
+        run: |
+          echo ${{ steps.run_build.outputs.OUTPUT_TAR }}
+
+      - name: clean ECI
+        if: always()
+        run: |
+          echo ${{ steps.run_build.outputs.ECI_ID }}
+          eci rm ${{ steps.run_build.outputs.ECI_ID }}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f ${{ steps.run_build.outputs.RES_FILE }}
+          rm -f ${{ steps.run_build.outputs.RES_LOG }}
