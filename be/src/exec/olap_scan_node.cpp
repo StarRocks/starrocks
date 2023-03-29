@@ -717,27 +717,6 @@ Status OlapScanNode::_capture_tablet_rowsets() {
     return Status::OK();
 }
 
-size_t _estimate_type_bytes(LogicalType ltype) {
-    switch (ltype) {
-    case TYPE_VARCHAR:
-    case TYPE_CHAR:
-    case TYPE_ARRAY:
-        return 128;
-    case TYPE_JSON:
-        // 1KB.
-        return 1024;
-    case TYPE_HLL:
-        // 16KB.
-        return 16 * 1024;
-    case TYPE_OBJECT:
-    case TYPE_PERCENTILE:
-        // 1MB.
-        return 1024 * 1024;
-    default:
-        return 0;
-    }
-}
-
 void OlapScanNode::_estimate_scan_and_output_row_bytes() {
     const TOlapScanNode& thrift_scan_node = thrift_olap_scan_node();
     const TupleDescriptor* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(thrift_scan_node.tuple_id);
@@ -750,7 +729,7 @@ void OlapScanNode::_estimate_scan_and_output_row_bytes() {
 
     for (const auto& slot : slots) {
         size_t field_bytes = std::max<size_t>(slot->slot_size(), 0);
-        field_bytes += _estimate_type_bytes(slot->type().type);
+        field_bytes += type_estimated_overhead_bytes(slot->type().type);
 
         _estimated_scan_row_bytes += field_bytes;
         if (unused_output_column_set.find(slot->col_name()) == unused_output_column_set.end()) {

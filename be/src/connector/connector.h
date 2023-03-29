@@ -117,6 +117,8 @@ public:
 
     const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
 
+    virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
+
 protected:
     std::vector<ExprContext*> _partition_exprs;
 };

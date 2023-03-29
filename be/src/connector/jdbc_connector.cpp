@@ -41,6 +41,10 @@ DataSourcePtr JDBCDataSourceProvider::create_data_source(const TScanRange& scan_
     return std::make_unique<JDBCDataSource>(this, scan_range);
 }
 
+const TupleDescriptor* JDBCDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_jdbc_scan_node.tuple_id);
+}
+
 // ================================
 
 static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, const std::vector<std::string>& columns,
