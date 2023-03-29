@@ -43,6 +43,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.platform.commons.util.Preconditions;
 
 public class ShowTableStmtTest {
 
@@ -81,6 +82,8 @@ public class ShowTableStmtTest {
 
         String sql = "show full tables where table_type !='VIEW'";
         stmt = (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Preconditions.notNull(stmt.toSelectStmt().getOrigStmt(), "stmt's original stmt should not be null");
+
         QueryStatement queryStatement = stmt.toSelectStmt();
         String expect = "SELECT information_schema.tables.TABLE_NAME AS Tables_in_testDb, " +
                 "information_schema.tables.TABLE_TYPE AS Table_type FROM " +
