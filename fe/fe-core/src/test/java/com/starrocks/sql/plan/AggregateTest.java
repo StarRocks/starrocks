@@ -2216,4 +2216,27 @@ public class AggregateTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertNotContains(plan, "multi_distinct_count");
     }
+
+
+    @Test
+    public void testRemoveExchange() throws Exception {
+        int oldValue = connectContext.getSessionVariable().getNewPlannerAggStage();
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "select sum(v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)");
+
+        sql = "select sum(v1 + v2) from t0 group by v3";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 5> : 5: sum\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(4: expr)");
+        connectContext.getSessionVariable().setNewPlanerAggStage(oldValue);
+    }
 }
