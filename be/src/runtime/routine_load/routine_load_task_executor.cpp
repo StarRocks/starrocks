@@ -43,6 +43,7 @@
 #include "runtime/routine_load/kafka_consumer_pipe.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "util/defer_op.h"
+#include "util/stopwatch.hpp"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -115,12 +116,24 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetPro
 
     std::shared_ptr<DataConsumer> consumer;
     RETURN_IF_ERROR(_data_consumer_pool.get_consumer(&ctx, &consumer));
-
+    MonotonicStopWatch watch;
+    watch.start();
     Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->get_partition_offset(
             &partition_ids, beginning_offsets, latest_offsets, timeout_ms);
     if (st.ok()) {
         _data_consumer_pool.return_consumer(consumer);
+    } else {
+        std::string group_id;
+        auto it = ctx.kafka_info->properties.find("group.id");
+        if (it == ctx.kafka_info->properties.end()) {
+            group_id = "unknown";
+        } else {
+            group_id = it->second;
+        }
+        LOG(WARNING) << "group id " << group_id << " get kafka partition offset. used time(ms) "
+                     << watch.elapsed_time() / 1000 / 1000 << ". error: " << st.to_string();
     }
+
     return st;
 }
 
