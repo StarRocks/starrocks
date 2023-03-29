@@ -275,6 +275,7 @@
         + [JSON](/sql-reference/sql-statements/data-types/JSON.md)
         + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
     + [关键字](/sql-reference/sql-statements/keywords.md)
+    + [AUTO_INCREMENT](/sql-reference/auto_increment.md)
   + 函数参考
     + [Java UDF](/sql-reference/sql-functions/JAVA_UDF.md)
     + [窗口函数](/sql-reference/sql-functions/Window_function.md)
