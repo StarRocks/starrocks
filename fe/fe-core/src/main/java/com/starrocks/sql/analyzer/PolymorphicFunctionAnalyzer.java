@@ -303,8 +303,8 @@ public class PolymorphicFunctionAnalyzer {
             typeArray = new ArrayType(commonType);
             typeElement = commonType;
         } else {
-            typeElement = Type.NULL;
-            typeArray = new ArrayType(Type.NULL);
+            typeElement = Type.BOOLEAN;
+            typeArray = new ArrayType(Type.BOOLEAN);
         }
 
         if (retType instanceof AnyArrayType) {
@@ -370,3 +370,4 @@ public class PolymorphicFunctionAnalyzer {
         return null;
     }
 }
+
