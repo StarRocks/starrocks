@@ -57,6 +57,11 @@ public:
             const std::vector<ExprContext*>& ctxs);
 
 private:
+    struct SlotDesc {
+        SlotDescriptor* slot;
+        bool need_output;
+    };
+
     Status _build(RuntimeState* state);
     Status _get_next_probe_chunk(RuntimeState* state);
 
@@ -79,11 +84,6 @@ private:
 
     void _init_row_desc();
     void _init_chunk(ChunkPtr* chunk);
-
-    struct SlotDesc {
-        SlotDescriptor* slot;
-        bool need_output;
-    };
 
     TJoinOp::type _join_op = TJoinOp::type::CROSS_JOIN;
     std::vector<ExprContext*> _join_conjuncts;
