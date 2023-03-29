@@ -1339,7 +1339,6 @@ TEST_F(JsonScannerTest, test_column_2x_than_columns_with_json_root) {
               chunk->debug_row(4));
 }
 
-
 TEST_F(JsonScannerTest, test_null_with_jsonpath) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
