@@ -22,7 +22,6 @@
 #include <string>
 #include <vector>
 
-#include "exprs/function_context.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -45,7 +44,13 @@ public:
 
         /// Only valid if type == TYPE_FIXED_BUFFER || type == TYPE_VARCHAR
         int len = 0;
+
+        // only valid if type is nested type
+        // array's element: children[0].
+        // map's key: children[0]; map's value: children[1].
+        // struct's types: keep order with field_names.
         std::vector<TypeDesc> children;
+        std::vector<std::string> field_names;
     };
 
     enum FunctionStateScope {
@@ -135,6 +140,8 @@ public:
 
     bool is_udf() { return _is_udf; }
     void set_is_udf(bool is_udf) { this->_is_udf = is_udf; }
+
+    ColumnPtr create_column(const TypeDesc& type_desc, bool nullable);
 
     // Create a test FunctionContext object. The caller is responsible for calling delete
     // on it. This context has additional debugging validation enabled.

@@ -329,8 +329,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             }
 
             // hack for accepting various arguments
-            if (fn.name.function_name == "exchange_bytes" || fn.name.function_name == "exchange_speed" ||
-                fn.name.function_name == "array_agg") {
+            if (fn.name.function_name == "exchange_bytes" || fn.name.function_name == "exchange_speed") {
                 arg_type = TypeDescriptor(TYPE_BIGINT);
             }
 

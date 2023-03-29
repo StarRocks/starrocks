@@ -34,10 +34,22 @@ namespace starrocks {
 // 5. is_nullable
 using AggregateFuncKey = std::tuple<std::string, int, int, bool, bool>;
 
+// 1. name
+// 2. is_window_function
+// 3. is_nullable
+using GeneralFuncKey = std::tuple<std::string, bool, bool>;
+
 struct AggregateFuncMapHash {
     size_t operator()(const AggregateFuncKey& key) const {
         std::hash<std::string> hasher;
         return hasher(std::get<0>(key)) ^ std::get<1>(key) ^ std::get<2>(key) ^ std::get<3>(key) ^ std::get<4>(key);
+    }
+};
+
+struct GeneralFuncMapHash {
+    size_t operator()(const GeneralFuncKey& key) const {
+        std::hash<std::string> hasher;
+        return hasher(std::get<0>(key)) ^ std::get<1>(key) ^ std::get<2>(key);
     }
 };
 
@@ -73,6 +85,25 @@ public:
             return nullptr;
         }
         return pair->second.get();
+    }
+
+    const AggregateFunction* get_general_info(const std::string& name, const bool is_window_function,
+                                              const bool is_null) const {
+        auto pair = _general_mapping.find(std::make_tuple(name, is_window_function, is_null));
+        if (pair == _general_mapping.end()) {
+            return nullptr;
+        }
+        return pair->second.get();
+    }
+
+    template <typename SpecificAggFunctionPtr = AggregateFunctionPtr>
+    void add_general_mapping_notnull(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
+        _general_mapping.emplace(std::make_tuple(name, false, false), fun);
+        _general_mapping.emplace(std::make_tuple(name, false, true), fun);
+        if (is_window) {
+            _general_mapping.emplace(std::make_tuple(name, true, false), fun);
+            _general_mapping.emplace(std::make_tuple(name, true, true), fun);
+        }
     }
 
     template <LogicalType ArgType, LogicalType RetType, typename SpecificAggFunctionPtr = AggregateFunctionPtr>
@@ -203,6 +234,7 @@ public:
 
 private:
     std::unordered_map<AggregateFuncKey, AggregateFunctionPtr, AggregateFuncMapHash> _infos_mapping;
+    std::unordered_map<GeneralFuncKey, AggregateFunctionPtr, GeneralFuncMapHash> _general_mapping;
 };
 
 } // namespace starrocks
