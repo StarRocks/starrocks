@@ -148,6 +148,8 @@ Status TableFunctionOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     }
 
     _table_function_state->set_params(table_function_params);
+    _table_function_result.first.clear();
+    _table_function_result.second = nullptr;
     return Status::OK();
 }
 
@@ -181,6 +183,11 @@ Status TableFunctionOperator::reset_state(starrocks::RuntimeState* state, const 
     _next_output_row_offset = 0;
     _next_output_row = 0;
     _is_finished = false;
+    _table_function_result.first.clear();
+    _table_function_result.second = nullptr;
+    if (_table_function_state != nullptr) {
+        _table_function_state->set_params(Columns{});
+    }
     return Status::OK();
 }
 
@@ -196,22 +203,28 @@ void TableFunctionOperator::_copy_result(const std::vector<ColumnPtr>& columns, 
         DCHECK_GE(start, offsets_col->get_data()[_next_output_row_offset]);
         DCHECK_LE(start, end);
         uint32_t copy_rows = std::min(end - start, max_output_size - curr_output_size);
+        VLOG(2) << "_next_output_row=" << _next_output_row << " start=" << start << " end=" << end
+                << " copy_rows=" << copy_rows << " input_size=" << fn_result_cols[0]->size()
+                << " _next_output_row_offset=" << _next_output_row_offset
+                << " _input_index_of_first_result=" << _input_index_of_first_result;
 
-        // Build outer data, repeat multiple times
-        for (size_t i = 0; i < _outer_slots.size(); ++i) {
-            ColumnPtr& input_column_ptr = _input_chunk->get_column_by_slot_id(_outer_slots[i]);
-            Datum value = input_column_ptr->get(_input_index_of_first_result + _next_output_row_offset);
-            if (value.is_null()) {
-                DCHECK(columns[i]->is_nullable());
-                down_cast<NullableColumn*>(columns[i].get())->append_nulls(copy_rows);
-            } else {
-                columns[i]->append_value_multiple_times(&value, copy_rows);
+        if (copy_rows > 0) {
+            // Build outer data, repeat multiple times
+            for (size_t i = 0; i < _outer_slots.size(); ++i) {
+                ColumnPtr& input_column_ptr = _input_chunk->get_column_by_slot_id(_outer_slots[i]);
+                Datum value = input_column_ptr->get(_input_index_of_first_result + _next_output_row_offset);
+                if (value.is_null()) {
+                    DCHECK(columns[i]->is_nullable());
+                    down_cast<NullableColumn*>(columns[i].get())->append_nulls(copy_rows);
+                } else {
+                    columns[i]->append_value_multiple_times(&value, copy_rows);
+                }
             }
-        }
 
-        // Build table function result
-        for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
-            columns[_outer_slots.size() + i]->append(*(fn_result_cols[i]), start, copy_rows);
+            // Build table function result
+            for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
+                columns[_outer_slots.size() + i]->append(*(fn_result_cols[i]), start, copy_rows);
+            }
         }
 
         curr_output_size += copy_rows;
