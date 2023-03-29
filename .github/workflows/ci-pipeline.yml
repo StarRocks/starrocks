@@ -399,7 +399,7 @@ jobs:
           rm -rf .actions
           mkdir -p .actions/nose-report-action
           cd .actions/nose-report-action
-          git clone https://github.com/andyziye/action-junit-report.git .
+          git clone https://github.com/StarRocks/action-junit-report.git .
 
       - name: Run Case
         run: |
