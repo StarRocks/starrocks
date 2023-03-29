@@ -974,7 +974,7 @@ ColumnPtr TimeFunctions::_t_to_unix_from_datetime(FunctionContext* context, cons
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr TimeFunctions::to_unix_from_datetime(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime(FunctionContext* context, const Columns& columns) {
     int func_version = context->state()->func_version();
     if (func_version >= TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64) {
         return _t_to_unix_from_datetime<TYPE_BIGINT>(context, columns);
@@ -1078,7 +1078,7 @@ ColumnPtr TimeFunctions::to_unix_from_datetime_with_format(FunctionContext* cont
     }
 }
 
-ColumnPtr TimeFunctions::to_unix_for_now(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now(FunctionContext* context, const Columns& columns) {
     int func_version = context->state()->func_version();
     DCHECK_EQ(columns.size(), 0);
     int64_t value = context->state()->timestamp_ms() / 1000;
