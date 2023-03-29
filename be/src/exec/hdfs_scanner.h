@@ -26,14 +26,24 @@
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "util/lru_cache.h"
 #include "util/runtime_profile.h"
-
 namespace starrocks::parquet {
 class FileReader;
 }
 namespace starrocks {
 
 class RuntimeFilterProbeCollector;
+
+class FooterCache {
+public:
+    explicit FooterCache(size_t capacity);
+    bool get(const std::string& key, std::string* value);
+    void put(const std::string& key, const std::string& value);
+
+private:
+    ShardedLRUCache _cache;
+};
 
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
@@ -216,6 +226,10 @@ struct HdfsScannerContext {
 
     HdfsScanStats* stats = nullptr;
 
+    std::string file_cache_key;
+
+    Cache* footer_cache;
+
     // set column names from file.
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
@@ -323,6 +337,7 @@ protected:
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
     std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
+    std::string _file_cache_key;
 };
 
 } // namespace starrocks

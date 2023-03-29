@@ -19,7 +19,31 @@
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "util/compression/stream_compression.h"
+#include "util/lru_cache.h"
 namespace starrocks {
+
+FooterCache::FooterCache(size_t capacity): _cache(capacity) {}
+
+bool FooterCache::get(const std::string& key, std::string* value) {
+    CacheKey k(key);
+    Cache::Handle* h = _cache.lookup(k);
+    if (h == nullptr) return false;
+    Slice s = _cache.value_slice(h);
+    value->resize(s.size);
+    memcpy(value->data(), s.data, s.size);
+    _cache.release(h);
+    return true;
+}
+
+    void FooterCache::put(const std::string& key, const std::string& value) {
+        CacheKey k(key);
+        s
+
+    }
+
+
+
+
 
 class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
 public:
@@ -127,6 +151,18 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.iceberg_schema = _scanner_params.iceberg_schema;
     ctx.stats = &_stats;
 
+    // use hash(filename) as cache key.
+    {
+        const std::string& file_name = _scanner_params.path;
+        int64_t file_size = _scanner_params.file_size;
+        std::string& file_cache_key = ctx.file_cache_key;
+        file_cache_key.resize(16);
+        char* data = _file_cache_key.data();
+        uint64_t hash_value = HashUtil::hash64(file_name.data(), file_name.size(), 0);
+        memcpy(data, &hash_value, sizeof(hash_value));
+        memcpy(data + 8, &file_size, sizeof(file_size));
+    }
+
     return Status::OK();
 }
 
@@ -196,6 +232,8 @@ Status HdfsScanner::open_random_access_file() {
     _raw_file->set_size(_scanner_params.file_size);
     int64_t file_size = _scanner_params.file_size;
     const std::string& filename = _raw_file->filename();
+
+    // create input stream.
 
     std::shared_ptr<io::SeekableInputStream> input_stream = _raw_file->stream();
 
