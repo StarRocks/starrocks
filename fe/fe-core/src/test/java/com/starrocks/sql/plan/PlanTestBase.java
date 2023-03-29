@@ -1138,6 +1138,16 @@ public class PlanTestBase {
         }
     }
 
+    public void assertCContains(String text, String... pattern) {
+        try {
+            for (String s : pattern) {
+                Assert.assertTrue(text, text.contains(s));
+            }
+        } catch (Error error) {
+            collector.addError(error);
+        }
+    }
+
     public static void assertNotContains(String text, String pattern) {
         Assert.assertFalse(text, text.contains(pattern));
     }
