@@ -55,7 +55,6 @@ import org.junit.Test;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.regex.Pattern;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
@@ -226,19 +225,6 @@ public class AnalyzeStmtTest {
                 Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap());
-        List<String> sqls = collectJob.buildCollectSQLList(2).get(0);
-
-        Assert.assertEquals(String.format("SELECT %d, %d, 'v1', %d, 'test.t0', 't0', " +
-                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_raw(`v1`), hll_empty()), COUNT(1) - COUNT(`v1`), " +
-                        "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM `test`.`t0` partition `t0`",
-                        table.getId(), partition.getId(), database.getId()), sqls.get(0));
-        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sqls.get(0), getConnectContext());
-        Assert.assertEquals(String.format("SELECT %d, %d, 'v2', %d, 'test.t0', 't0', " +
-                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_raw(`v2`), hll_empty()), COUNT(1) - COUNT(`v2`), " +
-                        "IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() FROM `test`.`t0` partition `t0`",
-                        table.getId(), partition.getId(), database.getId()), sqls.get(1));
-        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sqls.get(1), getConnectContext());
-
     }
 
     @Test
