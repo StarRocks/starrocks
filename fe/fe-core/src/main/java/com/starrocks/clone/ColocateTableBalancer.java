@@ -542,6 +542,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 if (srcBeSeqIndexes.size() > 0) {
                     srcBeId = beId;
                     hasUnavailableBe = true;
+                    LOG.info("break");
                     break;
                 }
             }
@@ -550,6 +551,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 // repair task should take precedence over balance task.
                 // If there are unavailable backends, and we have made relocation decision to drain all tablets from
                 // those backends, we will stop here and won't do any further balance work.
+                LOG.info("break");
                 break;
             }
 
@@ -562,6 +564,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                     (backendWithReplicaNum.size() == 1 && decommissionedBackends.isEmpty())) {
                 // There is not enough replicas for us to do relocation or balance, because in this case we
                 // can not choose a valid backend to migrate replica to, end the outer loop.
+                LOG.info("break");
                 break;
             }
 
@@ -594,6 +597,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 // leftBound == 0 indicates that we don't need to consider the unavailable backends and only do
                 // balance work.
                 if (leftBound == 0 && (srcBeSeqIndexes.size() - lowBackend.getValue()) <= 1) {
+                    LOG.info("break");
                     // balanced
                     break OUT;
                 }
@@ -601,6 +605,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 long destBeId = lowBackend.getKey();
                 Backend destBe = infoService.getBackend(destBeId);
                 if (destBe == null) {
+                    LOG.info("break");
                     LOG.info("backend {} does not exist", destBeId);
                     return false;
                 }
