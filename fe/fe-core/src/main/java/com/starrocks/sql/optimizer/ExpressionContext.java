@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * ExpressionContext to convey context wherever an expression is used in a shallow
@@ -40,6 +41,7 @@ public class ExpressionContext {
     private final List<LogicalProperty> childrenProperty = Lists.newArrayList();
 
     private Statistics statistics;
+    private Map<GroupExpression, Statistics> groupExtraStatistics;
     private final List<Statistics> childrenStatistics = Lists.newArrayList();
 
     public ExpressionContext(OptExpression expression) {
@@ -60,6 +62,7 @@ public class ExpressionContext {
 
         rootProperty = groupExpression.getGroup().getLogicalProperty();
         statistics = groupExpression.getGroup().getStatistics();
+        groupExtraStatistics = groupExpression.getGroup().getGroupExpressionStatistics();
 
         // Add child property and statistics
         for (Group group : groupExpression.getInputs()) {
@@ -115,7 +118,9 @@ public class ExpressionContext {
     }
 
     public Statistics getStatistics() {
-        return statistics;
+        Statistics statisticsForGroupExpression =
+                groupExtraStatistics != null ? groupExtraStatistics.get(groupExpression) : null;
+        return statisticsForGroupExpression != null ? statisticsForGroupExpression : statistics;
     }
 
     public void setStatistics(Statistics statistics) {
