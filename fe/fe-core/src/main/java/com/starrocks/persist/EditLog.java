@@ -679,7 +679,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_BACKEND_TABLETS_INFO: {
-                    BackendTabletsInfo backendTabletsInfo = (BackendTabletsInfo) journal.getData();
+                    DataNodeTabletsInfo backendTabletsInfo = (DataNodeTabletsInfo) journal.getData();
                     GlobalStateMgr.getCurrentState().replayBackendTabletsInfo(backendTabletsInfo);
                     break;
                 }
@@ -1510,7 +1510,7 @@ public class EditLog {
         logEdit(OperationType.OP_SET_FORBIT_GLOBAL_DICT, info);
     }
 
-    public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
+    public void logBackendTabletsInfo(DataNodeTabletsInfo backendTabletsInfo) {
         logEdit(OperationType.OP_BACKEND_TABLETS_INFO, backendTabletsInfo);
     }
 

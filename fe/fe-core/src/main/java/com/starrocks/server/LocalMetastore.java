@@ -119,7 +119,7 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
-import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.DataNodeTabletsInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.DataNodeIdsUpdateInfo;
 import com.starrocks.persist.DatabaseInfo;
@@ -4103,7 +4103,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public void replayBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
+    public void replayBackendTabletsInfo(DataNodeTabletsInfo backendTabletsInfo) {
         List<Pair<Long, Integer>> tabletsWithSchemaHash = backendTabletsInfo.getTabletSchemaHash();
         if (!tabletsWithSchemaHash.isEmpty()) {
             // In previous version, we save replica info in `tabletsWithSchemaHash`,

@@ -73,7 +73,7 @@ import com.starrocks.persist.AlterWhClusterOplog;
 import com.starrocks.persist.AlterWhPropertyOplog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.AutoIncrementInfo;
-import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.DataNodeTabletsInfo;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -542,7 +542,7 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_BACKEND_TABLETS_INFO: {
-                data = BackendTabletsInfo.read(in);
+                data = DataNodeTabletsInfo.read(in);
                 isRead = true;
                 break;
             }
