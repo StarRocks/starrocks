@@ -20,13 +20,13 @@ SHOW CREATE CATALOG <catalog_name>;
 
 ## Return result
 
-```SQL
+```Plain
 +------------+-----------------+
 | Catalog    | Create Catalog  |
 +------------+-----------------+
 ```
 
-| **Parameter**  | **Description**                                        |
+| **Field**  | **Description**                                        |
 | -------------- | ------------------------------------------------------ |
 | Catalog        | The name of the catalog.                               |
 | Create Catalog | The statement that was executed to create the catalog. |
