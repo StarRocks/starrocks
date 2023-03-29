@@ -1748,7 +1748,7 @@ TEST_F(AggregateTest, test_array_agg) {
     local_ctx->set_nulls_first(nulls_first);
     local_ctx->set_runtime_state(runtime_state.get());
 
-    const AggregateFunction* array_agg_func = get_aggregate_function("array_agg", TYPE_BIGINT, TYPE_ARRAY, false);
+    const AggregateFunction* array_agg_func = get_aggregate_function("array_agg2", TYPE_BIGINT, TYPE_ARRAY, false);
     auto state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
 
     // nullable columns input
@@ -1780,7 +1780,7 @@ TEST_F(AggregateTest, test_array_agg) {
         // test update
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
-        auto agg_state = (ArrayAggAggregateState*)(state->state());
+        auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
         ASSERT_EQ(agg_state->data_columns->size(), 2);
         // data_columns in state are nullable
         ASSERT_EQ((*agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
@@ -1847,7 +1847,7 @@ TEST_F(AggregateTest, test_array_agg) {
         // test update
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
-        auto agg_state = (ArrayAggAggregateState*)(state->state());
+        auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
         ASSERT_EQ(agg_state->data_columns->size(), 2);
         // data_columns in state are nullable
         ASSERT_EQ((*agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
@@ -1898,7 +1898,7 @@ TEST_F(AggregateTest, test_array_agg) {
         // test update
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
-        auto agg_state = (ArrayAggAggregateState*)(state->state());
+        auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
         ASSERT_EQ(agg_state->data_columns->size(), 2);
         // data_columns in state are nullable
         ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(),
@@ -1953,7 +1953,7 @@ TEST_F(AggregateTest, test_array_agg) {
         // test update
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
-        auto agg_state = (ArrayAggAggregateState*)(state->state());
+        auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
         ASSERT_EQ(agg_state->data_columns->size(), 2);
         // data_columns in state are nullable
         ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(), "[NULL, NULL]"), 0);
@@ -2012,7 +2012,7 @@ TEST_F(AggregateTest, test_array_agg) {
         // test update
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
-        auto agg_state = (ArrayAggAggregateState*)(state->state());
+        auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
         ASSERT_EQ(agg_state->data_columns->size(), 2);
         // data_columns in state are nullable
         ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(),

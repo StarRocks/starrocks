@@ -27,9 +27,77 @@
 
 namespace starrocks {
 
+template <LogicalType LT>
+struct ArrayAggAggregateState {
+    using ColumnType = RunTimeColumnType<LT>;
+
+    void update(const ColumnType& column, size_t offset, size_t count) { data_column.append(column, offset, count); }
+
+    void append_null() { null_count++; }
+    void append_null(size_t count) { null_count += count; }
+
+    ColumnType data_column; // Aggregated elements for array_agg
+    size_t null_count = 0;
+};
+
+template <LogicalType LT>
+class ArrayAggAggregateFunction
+        : public AggregateFunctionBatchHelper<ArrayAggAggregateState<LT>, ArrayAggAggregateFunction<LT>> {
+public:
+    using InputColumnType = RunTimeColumnType<LT>;
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        const auto& column = down_cast<const InputColumnType&>(*columns[0]);
+        // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
+        this->data(state).update(column, row_num, 1);
+    }
+
+    void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {
+        this->data(state).append_null();
+    }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        // Array element is nullable, so we need to extract the data from nullable column first
+        const auto* input_column = down_cast<const ArrayColumn*>(column);
+        auto offset_size = input_column->get_element_offset_size(row_num);
+        auto& array_element = down_cast<const NullableColumn&>(input_column->elements());
+        auto* element_data_column = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(&array_element));
+        size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
+        DCHECK_LE(element_null_count, offset_size.second);
+
+        this->data(state).update(*element_data_column, offset_size.first, offset_size.second - element_null_count);
+        this->data(state).append_null(element_null_count);
+    }
+
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        auto& state_impl = this->data(state);
+        auto* column = down_cast<ArrayColumn*>(to);
+        column->append_array_element(state_impl.data_column, state_impl.null_count);
+    }
+
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        return serialize_to_column(ctx, state, to);
+    }
+
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
+        auto* column = down_cast<ArrayColumn*>(dst->get());
+        auto& offsets = column->offsets_column()->get_data();
+        auto& elements_column = column->elements_column();
+
+        for (size_t i = 0; i < chunk_size; i++) {
+            elements_column->append_datum(src[0]->get(i));
+            offsets.emplace_back(offsets.back() + 1);
+        }
+    }
+
+    std::string get_name() const override { return "array_agg"; }
+};
+
 // input columns result in intermediate result: struct{array[col0], array[col1], array[col2]... array[coln]}
 // return ordered array[col0']
-struct ArrayAggAggregateState {
+struct ArrayAggAggregateStateV2 {
     void update(FunctionContext* ctx, const Column& column, size_t index, size_t offset, size_t count) {
         (*data_columns)[index]->append(column, offset, count);
     }
@@ -47,7 +115,7 @@ struct ArrayAggAggregateState {
         data_columns->resize(1);
     }
 
-    ~ArrayAggAggregateState() {
+    ~ArrayAggAggregateStateV2() {
         if (data_columns != nullptr) {
             for (auto& col : *data_columns) {
                 col.reset();
@@ -62,12 +130,12 @@ struct ArrayAggAggregateState {
     Columns* data_columns = nullptr;
 };
 
-class ArrayAggAggregateFunction
-        : public AggregateFunctionBatchHelper<ArrayAggAggregateState, ArrayAggAggregateFunction> {
+class ArrayAggAggregateFunctionV2
+        : public AggregateFunctionBatchHelper<ArrayAggAggregateStateV2, ArrayAggAggregateFunctionV2> {
 public:
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
         auto num = ctx->get_num_args();
-        auto* state = new (ptr) ArrayAggAggregateState;
+        auto* state = new (ptr) ArrayAggAggregateStateV2;
         state->data_columns = new Columns;
         for (auto i = 0; i < num; ++i) {
             state->data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
@@ -200,7 +268,8 @@ public:
             }
         }
     }
-    std::string get_name() const override { return "array_agg"; }
+    // V2 support order by
+    std::string get_name() const override { return "array_agg2"; }
 };
 
 } // namespace starrocks

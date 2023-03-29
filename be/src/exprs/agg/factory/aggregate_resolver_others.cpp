@@ -72,7 +72,7 @@ void AggregateFuncResolver::register_others() {
     add_array_mapping<TYPE_DATETIME, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
 
-    add_general_mapping_notnull("array_agg", false, AggregateFactory::MakeArrayAggAggregateFunction());
+    add_general_mapping_notnull("array_agg2", false, AggregateFactory::MakeArrayAggAggregateFunctionV2());
 }
 
 } // namespace starrocks
