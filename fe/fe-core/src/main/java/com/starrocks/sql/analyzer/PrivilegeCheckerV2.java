@@ -509,7 +509,530 @@ public class PrivilegeCheckerV2 {
             if (statement.isView()) {
                 checkViewAction(session, statement.getTbl(), PrivilegeType.ViewAction.DROP);
             } else {
+<<<<<<< HEAD
                 checkTableAction(session, statement.getTbl(), PrivilegeType.TableAction.DROP);
+=======
+                checkTableAction(context, statement.getTbl(), PrivilegeType.DROP);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitRecoverTableStatement(RecoverTableStmt statement, ConnectContext context) {
+            TableName tableName = statement.getTableNameObject();
+            String catalog = tableName.getCatalog();
+            if (catalog == null) {
+                catalog = context.getCurrentCatalog();
+            }
+            checkDbAction(context, catalog, tableName.getDb(), PrivilegeType.CREATE_TABLE);
+            return null;
+        }
+
+        @Override
+        public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext context) {
+            checkTableAction(context,
+                    new TableName(context.getCurrentCatalog(), statement.getDbName(), statement.getTblName()),
+                    PrivilegeType.DELETE);
+            return null;
+        }
+
+        @Override
+        public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getTableName(), PrivilegeType.ALTER);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getTbl(), PrivilegeType.ALTER);
+            return null;
+        }
+
+        @Override
+        public Void visitCancelAlterTableStatement(CancelAlterTableStmt statement, ConnectContext context) {
+            if (statement.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(statement.getDbName());
+                if (db != null) {
+                    try {
+                        db.readLock();
+                        Table table = db.getTable(statement.getTableName());
+                        if (table == null || !table.isMaterializedView()) {
+                            // ignore privilege check for old mv
+                            return null;
+                        }
+                    } finally {
+                        db.readUnlock();
+                    }
+                }
+                if (!PrivilegeActions.checkMaterializedViewAction(context,
+                        statement.getDbName(),
+                        statement.getTableName(),
+                        PrivilegeType.ALTER)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
+                }
+            } else {
+                checkTableAction(context, statement.getDbTableName(), PrivilegeType.ALTER);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDescTableStmt(DescribeStmt statement, ConnectContext context) {
+            checkAnyActionOnTable(context, statement.getDbTableName());
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateTableStatement(ShowCreateTableStmt statement, ConnectContext context) {
+            checkAnyActionOnTable(context, statement.getTbl());
+            return null;
+        }
+
+        @Override
+        public Void visitShowTableStatusStatement(ShowTableStatusStmt statement, ConnectContext context) {
+            // `show table status` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowExecutor#handleShowTableStatus()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitShowIndexStatement(ShowIndexStmt statement, ConnectContext context) {
+            checkAnyActionOnTable(context, statement.getTableName());
+            return null;
+        }
+
+        @Override
+        public Void visitShowColumnStatement(ShowColumnStmt statement, ConnectContext context) {
+            checkAnyActionOnTable(context, statement.getTableName());
+            return null;
+        }
+
+        @Override
+        public Void visitRecoverPartitionStatement(RecoverPartitionStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getDbTblName(), PrivilegeType.INSERT);
+            checkTableAction(context, statement.getDbTblName(), PrivilegeType.ALTER);
+            return null;
+        }
+
+        @Override
+        public Void visitShowPartitionsStatement(ShowPartitionsStmt statement, ConnectContext context) {
+            checkAnyActionOnTable(context, new TableName(statement.getDbName(), statement.getTableName()));
+            return null;
+        }
+
+        @Override
+        public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
+            if (statement.getCreateTableAsSelectStmt() != null) {
+                visitCreateTableAsSelectStatement(statement.getCreateTableAsSelectStmt(), context);
+            } else {
+                visitInsertStatement(statement.getInsertStmt(), context);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowAlterStatement(ShowAlterStmt statement, ConnectContext context) {
+            // `show alter table` only show tables/views/mvs that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowExecutor#handleShowAlter()` for details.
+            return null;
+        }
+
+        // ---------------------------------------- Show Variables Statement ------------------------------
+
+        @Override
+        public Void visitShowVariablesStatement(ShowVariablesStmt statement, ConnectContext context) {
+            // No authorization required
+            return null;
+        }
+
+        // ---------------------------------------- Show tablet Statement ---------------------------------
+
+        @Override
+        public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        // ---------------------------------------- Admin operate Statement --------------------------------
+
+        @Override
+        public Void visitAdminSetConfigStatement(AdminSetConfigStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowConfigStatement(AdminShowConfigStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
+                                                               ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminRepairTableStatement(AdminRepairTableStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitKillStatement(KillStmt statement, ConnectContext context) {
+            // Privilege is checked in execution logic, see `StatementExecutor#handleKill()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitAlterSystemStatement(AlterSystemStmt statement, ConnectContext context) {
+            checkStmtNodePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitCancelAlterSystemStatement(CancelAlterSystemStmt statement, ConnectContext context) {
+            checkStmtNodePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowProcStmt(ShowProcStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowProcesslistStatement(ShowProcesslistStmt statement, ConnectContext context) {
+            // Privilege is checked in execution logic, see `StatementExecutor#handleShowProcesslist()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitSetStatement(SetStmt statement, ConnectContext context) {
+            List<SetListItem> varList = statement.getSetListItems();
+            varList.forEach(setVar -> {
+                if ((setVar instanceof SetPassVar)) {
+                    UserIdentity prepareChangeUser = ((SetPassVar) setVar).getUserIdent();
+                    if (!context.getCurrentUserIdentity().equals(prepareChangeUser)) {
+                        if (prepareChangeUser.equals(UserIdentity.ROOT)) {
+                            throw new SemanticException("Can not set password for root user, except root itself");
+                        }
+
+                        if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                        }
+                    }
+                } else if (setVar instanceof SystemVariable) {
+                    SetType type = ((SystemVariable) setVar).getType();
+                    if (type != null && type.equals(SetType.GLOBAL)) {
+                        checkStmtOperatePrivilege(context);
+                    }
+                }
+            });
+            return null;
+        }
+
+        // ---------------------------------------- restore & backup Statement --------------------------------
+        @Override
+        public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkTableAction(context,
+                    statement.getTblName().getDb(),
+                    statement.getTblName().getTbl(),
+                    PrivilegeType.EXPORT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "EXPORT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCancelExportStatement(CancelExportStmt statement, ConnectContext context) {
+            ExportJob exportJob = null;
+            try {
+                exportJob = GlobalStateMgr.getCurrentState().getExportMgr().getExportJob(statement.getDbName(),
+                        statement.getQueryId());
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
+            }
+            if (null == exportJob) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_EXPORT_JOB_NOT_FOUND,
+                        statement.getQueryId().toString());
+            }
+            if (!PrivilegeActions.checkTableAction(context,
+                    exportJob.getTableName().getDb(),
+                    exportJob.getTableName().getTbl(),
+                    PrivilegeType.EXPORT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "EXPORT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowExportStatement(ShowExportStmt statement, ConnectContext context) {
+            // `show export` only show tables that user has export privilege on, we will check it in
+            // the execution logic, not here, see `ExportMgr#getExportJobInfosByIdOrState()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRepositoryStatement(CreateRepositoryStmt statement, ConnectContext context) {
+            checkSystemRepository(context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropRepositoryStatement(DropRepositoryStmt statement, ConnectContext context) {
+            checkSystemRepository(context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowSnapshotStatement(ShowSnapshotStmt statement, ConnectContext context) {
+            checkSystemRepository(context);
+            return null;
+        }
+
+        @Override
+        public Void visitBackupStatement(BackupStmt statement, ConnectContext context) {
+            checkSystemRepository(context);
+            List<TableRef> tableRefs = statement.getTableRefs();
+            if (tableRefs.size() == 0) {
+                String dBName = statement.getDbName();
+                throw new SemanticException("Database: %s is empty", dBName);
+            }
+            tableRefs.forEach(tableRef -> {
+                TableName tableName = tableRef.getName();
+                checkTableAction(context,
+                        tableName.getDb(),
+                        tableName.getTbl(),
+                        PrivilegeType.EXPORT);
+            });
+            return null;
+        }
+
+        @Override
+        public Void visitShowBackupStatement(ShowBackupStmt statement, ConnectContext context) {
+            // Step 1 check system.Repository
+            checkSystemRepository(context);
+            // Step 2 check table.export
+            // `show backup` only show tables that user has export privilege on, we will check it in
+            // the execution logic, not here, see `ShowExecutor#handleShowBackup()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitCancelBackupStatement(CancelBackupStmt statement, ConnectContext context) {
+            checkSystemRepository(context);
+            AbstractJob job = null;
+            try {
+                job = GlobalStateMgr.getCurrentState().getBackupHandler().getAbstractJobByDbName(statement.getDbName());
+            } catch (DdlException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
+            }
+            if (null == job) {
+                return null;
+            }
+            if (job instanceof BackupJob) {
+                BackupJob backupJob = (BackupJob) job;
+                List<TableRef> tableRefs = backupJob.getTableRef();
+                tableRefs.forEach(tableRef -> {
+                    TableName tableName = tableRef.getName();
+                    checkTableAction(context,
+                            tableName.getDb(),
+                            tableName.getTbl(),
+                            PrivilegeType.EXPORT);
+                });
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitRestoreStatement(RestoreStmt statement, ConnectContext context) {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            // check repository on system
+            checkSystemRepository(context);
+
+            List<TableRef> tableRefs = statement.getTableRefs();
+            // check create_database on current catalog if we're going to restore the whole database
+            if (tableRefs == null || tableRefs.isEmpty()) {
+                checkCatalogAction(context, context.getCurrentCatalog(), PrivilegeType.CREATE_DATABASE);
+            } else {
+                // going to restore some tables in database or some partitions in table
+                Database db = globalStateMgr.getDb(statement.getDbName());
+                if (db != null) {
+                    try {
+                        db.readLock();
+                        // check create_table on specified database
+                        checkDbAction(context, context.getCurrentCatalog(), db.getFullName(),
+                                PrivilegeType.CREATE_TABLE);
+                        // check insert on specified table
+                        for (TableRef tableRef : tableRefs) {
+                            Table table = db.getTable(tableRef.getName().getTbl());
+                            if (table != null) {
+                                checkTableAction(context,
+                                        statement.getDbName(),
+                                        tableRef.getName().getTbl(),
+                                        PrivilegeType.INSERT);
+                            }
+                        }
+                    } finally {
+                        db.readUnlock();
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        @Override
+        public Void visitShowRestoreStatement(ShowRestoreStmt statement, ConnectContext context) {
+            checkSystemRepository(context);
+            return null;
+        }
+
+        // ---------------------------------------- Materialized View stmt --------------------------------
+        @Override
+        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
+                                                         ConnectContext context) {
+            if (!PrivilegeActions.checkDbAction(context, statement.getTableName().getDb(),
+                    PrivilegeType.CREATE_MATERIALIZED_VIEW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "CREATE MATERIALIZED VIEW");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkMaterializedViewAction(context,
+                    statement.getMvName().getDb(),
+                    statement.getMvName().getTbl(),
+                    PrivilegeType.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "ALTER MATERIALIZED VIEW");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
+                                                          ConnectContext context) {
+            if (!PrivilegeActions.checkMaterializedViewAction(context,
+                    statement.getMvName().getDb(),
+                    statement.getMvName().getTbl(),
+                    PrivilegeType.REFRESH)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "REFRESH MATERIALIZED VIEW");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt statement,
+                                                                ConnectContext context) {
+            if (!PrivilegeActions.checkMaterializedViewAction(context,
+                    statement.getMvName().getDb(),
+                    statement.getMvName().getTbl(),
+                    PrivilegeType.REFRESH)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "REFRESH MATERIALIZED VIEW");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext context) {
+            // `show Materialized Views` show tables user (has select privilege & show mv user has any privilege),
+            // we will check it in the execution logic, not here,
+            // see `ShowExecutor#handleShowMaterializedView()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
+            // To keep compatibility with old mv, drop mv will be checked in execution logic, and only new mv is checked
+            return null;
+        }
+
+        // ------------------------------------------- UDF Statement ----------------------------------------------------
+
+        @Override
+        public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
+            FunctionName name = statement.getFunctionName();
+            if (name.isGlobalFunction()) {
+                if (!PrivilegeActions.checkSystemAction(
+                        context, PrivilegeType.CREATE_GLOBAL_FUNCTION)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                            "CREATE GLOBAL FUNCTION");
+                }
+            } else {
+                if (!PrivilegeActions.checkDbAction(context, name.getDb(), PrivilegeType.CREATE_FUNCTION)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE FUNCTION");
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowFunctionsStatement(ShowFunctionsStmt statement, ConnectContext context) {
+            // Privilege check is handled in `ShowExecutor#handleShowFunctions()`
+            return null;
+        }
+
+        @Override
+        public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
+            FunctionName functionName = statement.getFunctionName();
+            // global function.
+            if (functionName.isGlobalFunction()) {
+                FunctionSearchDesc functionSearchDesc = statement.getFunctionSearchDesc();
+                Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(functionSearchDesc);
+                if (function != null && !PrivilegeActions.checkGlobalFunctionAction(context, function, PrivilegeType.DROP)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                            "DROP GLOBAL FUNCTION");
+                }
+                return null;
+            }
+
+            // db function.
+            Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
+            if (db != null) {
+                try {
+                    db.readLock();
+                    Function function = db.getFunction(statement.getFunctionSearchDesc());
+                    if (null != function && !PrivilegeActions.checkFunctionAction(context, db, function, PrivilegeType.DROP)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                                "DROP FUNCTION");
+                    }
+                } finally {
+                    db.readUnlock();
+                }
+>>>>>>> 53b793751 ([Feature] support submit task as insert statement (#20610))
             }
             return null;
         }
