@@ -302,6 +302,31 @@ WITH LABEL insert_load_wikipedia_ow_3
 SELECT event_time, channel FROM source_wiki_edit;
 ```
 
+## Asynchronous INSERT
+
+Using insert-select statement to load the data may be a long-running task, which takes the risk of session-interrupt and query timeout when running in foreground. So it's necessary to make it asynchronous.
+
+In StarRocks you could use the `SUBMIT TASK` feature to do this:
+
+```sql
+-- Append to existing data
+SUBMIT TASK AS INSERT INTO tbl1 SELECT * FROM tbl2;
+
+-- Overwrite existing data
+SUBMIT TASK AS INSERT OVERWRITE tbl1 SELECT * FROM tbl2;
+
+-- Enlarge the query timeout for task
+SUBMIT /*+set_var(query_timeout=100000)*/ TASK AS
+    INSERT OVERWRITE tmp SELECT * FROM lineorder;
+
+-- Specify the name of name 
+SUBMIT TASK taskname AS INSERT INTO tbl1 SELECT * FROM tbl2;
+
+-- Inspect the task status
+SELECT * FROM information_schema.task_runs WHERE task_name = 'xxx';
+```
+
+
 ## Check the INSERT transaction status
 
 ### Check via the result
