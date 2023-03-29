@@ -1239,7 +1239,8 @@ public class PlanFragmentBuilder {
             fragments.remove(fragments.size() - 1);
 
             clearOlapScanNodePartitions(sourceFragment.getPlanRoot());
-
+            sourceFragment.clearDestination();
+            sourceFragment.clearOutputPartition();
             return sourceFragment;
         }
 
