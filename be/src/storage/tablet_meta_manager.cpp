@@ -1035,6 +1035,35 @@ Status TabletMetaManager::get_del_vector_by_rowset(
     return Status::OK();
 }
 
+Status TabletMetaManager::del_vector_iterate(KVStore* meta, TTabletId tablet_id, uint32_t lower, uint32_t upper,
+                                             const std::function<bool(uint32_t, int64_t, std::string_view)>& func) {
+    std::string lower_key = encode_del_vector_key(tablet_id, lower, INT64_MAX);
+    std::string upper_key = encode_del_vector_key(tablet_id, upper, 0);
+
+    Status st;
+    st = meta->iterate_range(
+            META_COLUMN_FAMILY_INDEX, lower_key, upper_key, [&](std::string_view key, std::string_view value) -> bool {
+                TTabletId dummy;
+                uint32_t segment_id;
+                int64_t version;
+                DelVectorPtr del_vec;
+                decode_del_vector_key(key, &dummy, &segment_id, &version);
+                DCHECK_EQ(tablet_id, dummy);
+                if (!func(segment_id, version, value)) {
+                    std::string msg = strings::Substitute("fail to get delvecs. tablet:$0 rowset:$1", tablet_id, lower);
+                    LOG(WARNING) << msg;
+                    st = Status::InternalError(msg);
+                    return false;
+                }
+                return true;
+            });
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id << " rowset=" << lower;
+        return st;
+    }
+    return Status::OK();
+}
+
 using DeleteVectorList = TabletMetaManager::DeleteVectorList;
 StatusOr<DeleteVectorList> TabletMetaManager::list_del_vector(KVStore* meta, TTabletId tablet_id, int64_t max_version) {
     DeleteVectorList ret;
