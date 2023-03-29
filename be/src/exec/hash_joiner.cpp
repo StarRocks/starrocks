@@ -318,6 +318,8 @@ void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
     hash_table.set_probe_profile(probe_metrics().search_ht_timer, probe_metrics().output_probe_column_timer,
                                  probe_metrics().output_tuple_column_timer);
 
+    // _hash_table_build_rows is root truth, it used to by _short_circuit_break().
+    _hash_table_build_rows = src_join_builder->_hash_table_build_rows;
     _probe_column_count = src_join_builder->_probe_column_count;
     _build_column_count = src_join_builder->_build_column_count;
 
