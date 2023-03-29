@@ -192,6 +192,13 @@ public class SparkEtlJobHandler {
         }
 
         if (fromSparkState(state) == TEtlState.CANCELLED) {
+            if (state == State.KILLED) {
+                try {
+                    killYarnApplication(handle, loadJobId, resource);
+                } catch (UserException e) {
+                    LOG.warn(errMsg, e);
+                }
+            }
             throw new LoadException(
                     errMsg + "spark app state: " + state.toString() + ", loadJobId:" + loadJobId + ", logPath:" +
                             logPath);
@@ -330,6 +337,36 @@ public class SparkEtlJobHandler {
             }
         }
     }
+
+    public void killYarnApplication(SparkLoadAppHandle handle, long loadJobId, SparkResource resource)
+            throws UserException {
+        if (resource.isYarnMaster()) {
+            if (Strings.isNullOrEmpty(handle.getAppId())) {
+                LOG.warn("yarn application kill failed, app id is empty");
+                return;
+            }
+            // prepare yarn config
+            String configDir = resource.prepareYarnConfig();
+            // yarn client path
+            String yarnClient = resource.getYarnClientPath();
+            // command: yarn --config configDir application -kill appId
+            String yarnKillCmd = String.format(YARN_KILL_CMD, yarnClient, configDir, handle.getAppId());
+            LOG.info(yarnKillCmd);
+            String[] envp = {"LC_ALL=" + Config.locale, "JAVA_HOME=" + System.getProperty("java.home")};
+            CommandResult result = Util.executeCommand(yarnKillCmd, envp, EXEC_CMD_TIMEOUT_MS);
+            LOG.info("yarn application -kill {}, output: {}", handle.getAppId(), result.getStdout());
+            if (result.getReturnCode() != 0) {
+                String stderr = result.getStderr();
+                LOG.warn("yarn application kill failed. app id: {}, load job id: {}, msg: {}", handle.getAppId(), loadJobId,
+                        stderr);
+            }
+        } else {
+            if (handle != null) {
+                handle.stop();
+            }
+        }
+    }
+
 
     public Map<String, Long> getEtlFilePaths(String outputPath, BrokerDesc brokerDesc) throws Exception {
         Map<String, Long> filePathToSize = Maps.newHashMap();
