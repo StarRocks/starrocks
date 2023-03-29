@@ -285,6 +285,25 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
             return expr;
         }
 
+        private ColumnRefOperator createColumnRefForAggArgument(ScalarOperator arg) {
+            ColumnRefOperator newColumnRef;
+            if (arg.isColumnRef()) {
+                // if arg is a ColumnRef, we needn't create a new one, just make sure it appears in project node
+                newColumnRef = (ColumnRefOperator) arg;
+                if (!oldPreAggProjections.containsKey(arg)) {
+                    newPreAggProjections.put((ColumnRefOperator) arg, arg);
+                }
+            } else if (commonArguments.containsKey(arg)) {
+                // if arg has been created by the previous rewriting, we don't need to create a new one.
+                newColumnRef = commonArguments.get(arg);
+            } else {
+                newColumnRef = columnRefFactory.create(arg, arg.getType(), arg.isNullable());
+                newPreAggProjections.put(newColumnRef, arg);
+                commonArguments.put(arg, newColumnRef);
+            }
+            return newColumnRef;
+        }
+
         private ScalarOperator createNewAggFunction(ScalarOperator arg0, ScalarOperator arg1, Type returnType) {
             if (arg0.isConstant()) {
                 // generate count() * arg0
@@ -296,23 +315,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                 // if arg1 is nullable, we use count(arg1), otherwise use count()
                 List<ScalarOperator> countArguments = Lists.newArrayList();
                 if (arg1.isNullable()) {
-                    ColumnRefOperator newColumnRef;
-
-                    if (arg1.isColumnRef()) {
-                        newColumnRef = (ColumnRefOperator) arg1;
-                        if (!oldPreAggProjections.containsKey(arg1)) {
-                            newPreAggProjections.put((ColumnRefOperator) arg1, arg1);
-                        }
-                    } else if (commonArguments.containsKey(arg1)) {
-                        // if arg1 has been created by the previous rewriting,
-                        // we don't need to create a new ColumnRef
-                        newColumnRef = commonArguments.get(arg1);
-                    } else {
-                        newColumnRef = columnRefFactory.create(arg1, arg1.getType(), arg1.isNullable());
-                        newPreAggProjections.put(newColumnRef, arg1);
-                        commonArguments.put(arg1, newColumnRef);
-                    }
-                    countArguments.add(newColumnRef);
+                    countArguments.add(createColumnRefForAggArgument(arg1));
                 }
                 CallOperator newAggFunction = new CallOperator(FunctionSet.COUNT,
                         Type.BIGINT, countArguments, countFunction);
@@ -371,26 +374,9 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
             } else {
                 // generate sum(arg0)
 
-                ColumnRefOperator newColumnRef;
-
-                if (arg0.isColumnRef()) {
-                    // if arg0 is a ColumnRef, we don't need to create a new ColumnRef,
-                    // just make sure it occurs in newPreAggProjections
-                    newColumnRef = (ColumnRefOperator) arg0;
-                    if (!oldPreAggProjections.containsKey(arg0)) {
-                        newPreAggProjections.put((ColumnRefOperator) arg0, arg0);
-                    }
-                } else if (commonArguments.containsKey(arg0)) {
-                    // if arg0 has been created by the previous rewriting,
-                    // we don't need to create a new ColumnRef
-                    newColumnRef = commonArguments.get(arg0);
-                } else {
-                    newColumnRef = columnRefFactory.create(arg0, arg0.getType(), arg0.isNullable());
-                    newPreAggProjections.put(newColumnRef, arg0);
-                    commonArguments.put(arg0, newColumnRef);
-                }
-
+                ColumnRefOperator newColumnRef = createColumnRefForAggArgument(arg0);
                 Type sumFunctionType = returnType;
+
                 if (returnType.isDecimalV3()) {
                     // for decimal type, we should keep the result's scale same as the input's scale
                     int argScale = ((ScalarType) arg0.getType()).getScalarScale();
