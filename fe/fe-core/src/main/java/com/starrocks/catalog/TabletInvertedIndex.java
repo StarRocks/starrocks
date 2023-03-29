@@ -40,7 +40,6 @@ import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
@@ -89,7 +88,8 @@ public class TabletInvertedIndex {
     // replica id -> tablet id
     private Map<Long, Long> replicaToTabletMap = Maps.newHashMap();
 
-    private Set<Long> forceDeleteTablets = Sets.newHashSet();
+    // tablet id -> backend set
+    private Map<Long, Set<Long>> forceDeleteTablets = Maps.newHashMap();
 
     // tablet id -> (backend id -> replica)
     private Table<Long, Long, Replica> replicaMetaTable = HashBasedTable.create();
@@ -432,20 +432,45 @@ public class TabletInvertedIndex {
     }
 
     @VisibleForTesting
-    public Set<Long> getForceDeleteTablets() {
-        return forceDeleteTablets;
+    public Map<Long, Set<Long>> getForceDeleteTablets() {
+        readLock();
+        try {
+            return forceDeleteTablets;
+        } finally {
+            readUnlock();
+        }
     }
 
-    public boolean tabletForceDelete(long tabletId) {
-        return forceDeleteTablets.contains(tabletId);
+    public boolean tabletForceDelete(long tabletId, long backendId) {
+        readLock();
+        try {
+            if (forceDeleteTablets.containsKey(tabletId)) {
+                return forceDeleteTablets.get(tabletId).contains(backendId);
+            }
+            return false;
+        } finally {
+            readUnlock();
+        }
     }
 
-    public void markTabletForceDelete(long tabletId) {
-        forceDeleteTablets.add(tabletId);
+    public void markTabletForceDelete(long tabletId, Set<Long> backendIds) {
+        writeLock();
+        forceDeleteTablets.put(tabletId, backendIds);
+        writeUnlock();
     }
     
-    public void eraseTabletForceDelete(long tabletId) {
-        forceDeleteTablets.remove(tabletId);
+    public void eraseTabletForceDelete(long tabletId, long backendId) {
+        writeLock();
+        try {
+            if (forceDeleteTablets.containsKey(tabletId)) {
+                forceDeleteTablets.get(tabletId).remove(backendId);
+                if (forceDeleteTablets.get(tabletId).size() == 0) {
+                    forceDeleteTablets.remove(tabletId);
+                }
+            }
+        } finally {
+            writeUnlock();
+        }
     }
 
     public void deleteTablet(long tabletId) {
