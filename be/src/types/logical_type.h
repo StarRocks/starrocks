@@ -228,6 +228,27 @@ constexpr bool is_scalar_logical_type(LogicalType ltype) {
     }
 }
 
+constexpr size_t type_estimated_overhead_bytes(LogicalType ltype) {
+    switch (ltype) {
+    case TYPE_VARCHAR:
+    case TYPE_CHAR:
+    case TYPE_ARRAY:
+        return 128;
+    case TYPE_JSON:
+        // 1KB.
+        return 1024;
+    case TYPE_HLL:
+        // 16KB.
+        return 16 * 1024;
+    case TYPE_OBJECT:
+    case TYPE_PERCENTILE:
+        // 1MB.
+        return 1024 * 1024;
+    default:
+        return 0;
+    }
+}
+
 VALUE_GUARD(LogicalType, BigIntLTGuard, lt_is_bigint, TYPE_BIGINT)
 VALUE_GUARD(LogicalType, BooleanLTGuard, lt_is_boolean, TYPE_BOOLEAN)
 VALUE_GUARD(LogicalType, LargeIntLTGuard, lt_is_largeint, TYPE_LARGEINT)
