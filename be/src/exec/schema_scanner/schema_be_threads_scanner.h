@@ -14,27 +14,37 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
+#include <cstdint>
+
+#include "exec/schema_scanner.h"
+#include "gen_cpp/FrontendService_types.h"
 
 namespace starrocks {
 
-struct DirSpace {
-    std::string path;
-    size_t size;
+struct BeThreadInfo {
+    std::string group;
+    std::string name;
+    int64_t pthread_id{0};
+    int64_t tid{0};
+    bool idle{false};
+    int64_t finished_tasks{0};
 };
 
-struct CacheOptions {
-    // basic
-    size_t mem_space_size;
-    std::vector<DirSpace> disk_spaces;
-    std::string meta_path;
+class SchemaBeThreadsScanner : public SchemaScanner {
+public:
+    SchemaBeThreadsScanner();
+    ~SchemaBeThreadsScanner() override;
 
-    // advanced
-    size_t block_size;
-    bool checksum;
-    size_t max_parcel_memory_mb;
-    size_t max_concurrent_inserts;
+    Status start(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
+
+private:
+    Status fill_chunk(ChunkPtr* chunk);
+
+    int64_t _be_id{0};
+    std::vector<BeThreadInfo> _infos;
+    size_t _cur_idx{0};
+    static SchemaScanner::ColumnDesc _s_columns[];
 };
 
 } // namespace starrocks

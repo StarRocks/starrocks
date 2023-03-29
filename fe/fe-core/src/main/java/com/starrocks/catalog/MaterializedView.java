@@ -893,6 +893,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return false;
     }
 
+    private boolean supportPartialPartitionQueryRewriteForExternalTable(Table table) {
+        return table.isHiveTable();
+    }
+
     public Set<String> getPartitionNamesToRefreshForMv() {
         PartitionInfo partitionInfo = getPartitionInfo();
 
@@ -906,8 +910,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 // because we do not know that any changes in external table.
                 if (!table.isNativeTable()) {
                     if (forceExternalTableQueryRewrite) {
-                        // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
-                        continue;
+                        if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
+                            // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
+                            continue;
+                        }
                     } else {
                         return getPartitionNames();
                     }
@@ -947,7 +953,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             if (!table.isNativeTable()) {
                 if (forceExternalTableQueryRewrite) {
                     // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
-                    continue;
+                    if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
+                        return Sets.newHashSet();
+                    }
                 } else {
                     return getPartitionNames();
                 }

@@ -93,19 +93,28 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         return Lists.partition(totalQuerySQL, parallelism);
     }
 
-    private String buildCollectFullStatisticSQL(Database database, Table table, Partition partition, String columnNames) {
+    private String getDataSize(Column column) {
+        if (column.getPrimitiveType().isCharFamily()) {
+            return "IFNULL(SUM(CHAR_LENGTH(" + StatisticUtils.quoting(column.getName()) + ")), 0)";
+        }
+        long typeSize = column.getType().getTypeSize();
+        return "COUNT(1) * " + typeSize;
+    }
+
+    private String buildCollectFullStatisticSQL(Database database, Table table, Partition partition,
+                                                String columnName) {
         StringBuilder builder = new StringBuilder();
         VelocityContext context = new VelocityContext();
-        Column column = table.getColumn(columnNames);
+        Column column = table.getColumn(columnName);
 
         context.put("dbId", database.getId());
         context.put("tableId", table.getId());
         context.put("partitionId", partition.getId());
-        context.put("columnName", columnNames);
+        context.put("columnName", columnName);
         context.put("dbName", database.getOriginName());
         context.put("tableName", table.getName());
         context.put("partitionName", partition.getName());
-        context.put("dataSize", getDataSize(column, false));
+        context.put("dataSize", getDataSize(column));
 
         if (!column.getType().canStatistic()) {
             context.put("countDistinctFunction", "hll_empty()");
@@ -113,10 +122,10 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("maxFunction", "''");
             context.put("minFunction", "''");
         } else {
-            context.put("countDistinctFunction", "IFNULL(hll_raw(`" + columnNames + "`), hll_empty())");
-            context.put("countNullFunction", "COUNT(1) - COUNT(`" + columnNames + "`)");
-            context.put("maxFunction", "IFNULL(MAX(`" + columnNames + "`), '')");
-            context.put("minFunction", "IFNULL(MIN(`" + columnNames + "`), '')");
+            context.put("countDistinctFunction", "IFNULL(hll_raw(`" + columnName + "`), hll_empty())");
+            context.put("countNullFunction", "COUNT(1) - COUNT(`" + columnName + "`)");
+            context.put("maxFunction", getMinMaxFunction(column, StatisticUtils.quoting(columnName), true));
+            context.put("minFunction", getMinMaxFunction(column, StatisticUtils.quoting(columnName), false));
         }
 
         builder.append(build(context, COLLECT_FULL_STATISTIC_TEMPLATE));
