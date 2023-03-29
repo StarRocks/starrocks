@@ -221,7 +221,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                 break;
             }
             case BACKEND: {
-                DataNodeHbResponse hbResponse = (DataNodeHbResponse) response;
+                BackendHbResponse hbResponse = (BackendHbResponse) response;
                 ComputeNode computeNode = nodeMgr.getBackend(hbResponse.getBeId());
                 if (computeNode == null) {
                     computeNode = nodeMgr.getComputeNode(hbResponse.getBeId());
@@ -319,7 +319,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                     }
 
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
-                    DataNodeHbResponse backendHbResponse = new DataNodeHbResponse(
+                    BackendHbResponse backendHbResponse = new BackendHbResponse(
                             computeNodeId, bePort, httpPort, brpcPort, starletPort,
                             System.currentTimeMillis(), version, cpuCores);
                     if (tBackendInfo.isSetReboot_time()) {
@@ -327,14 +327,14 @@ public class HeartbeatMgr extends LeaderDaemon {
                     }
                     return backendHbResponse;
                 } else {
-                    return new DataNodeHbResponse(computeNodeId,
+                    return new BackendHbResponse(computeNodeId,
                             result.getStatus().getError_msgs().isEmpty() ? "Unknown error"
                                     : result.getStatus().getError_msgs().get(0));
                 }
             } catch (Exception e) {
                 LOG.warn("backend heartbeat got exception, addr: {}:{}",
                         computeNode.getHost(), computeNode.getHeartbeatPort(), e);
-                return new DataNodeHbResponse(computeNodeId,
+                return new BackendHbResponse(computeNodeId,
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             } finally {
                 if (ok) {
