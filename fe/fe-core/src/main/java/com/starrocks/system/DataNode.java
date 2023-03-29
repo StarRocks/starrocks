@@ -65,7 +65,7 @@ import java.util.Set;
  */
 public class DataNode extends ComputeNode {
 
-    public enum BackendState {
+    public enum DataNodeState {
         using, /* backend belongs to a cluster*/
         offline,
         free /* backend is not belong to any clusters */
@@ -368,7 +368,7 @@ public class DataNode extends ComputeNode {
             setBackendState(in.readInt());
             setDecommissionType(in.readInt());
         } else {
-            setBackendState(BackendState.using.ordinal());
+            setBackendState(DataNodeState.using.ordinal());
             setDecommissionType(DecommissionType.SystemDecommission.ordinal());
         }
 
