@@ -1106,7 +1106,7 @@ public class CreateTableTest {
     @Test
     public void testCreateTableInSystemDb() {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Can't create table 'goods' (errno: access denied)",
+                "Can't create table 'goods' (errno: create denied)",
                 () -> createTable(
                         "CREATE TABLE information_schema.goods(\n" +
                                 "    item_id1          INT,\n" +
