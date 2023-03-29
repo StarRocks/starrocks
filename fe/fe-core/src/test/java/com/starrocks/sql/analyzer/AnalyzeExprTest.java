@@ -240,6 +240,9 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_agg(a order by b) from (select null as a, null as b " +
                 "union all select v1 as a, v3 as b from t0)A;");
         analyzeSuccess("select array_agg(v1 order by v1),array_sortby(array_agg(v1),array_agg(v2)) from t0;");
+        analyzeSuccess("select array_agg(tj) from tall");
+        analyzeSuccess("select array_agg(tj order by ta) from tall group by tc");
+
 
         analyzeFail("select array_agg(null order by);");
         analyzeFail("select array_agg(null,'a');");
