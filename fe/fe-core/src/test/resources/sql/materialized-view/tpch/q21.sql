@@ -41,9 +41,16 @@ order by
 [result]
 TOP-N (order by [[71: count DESC NULLS LAST, 2: s_name ASC NULLS FIRST]])
     TOP-N (order by [[71: count DESC NULLS LAST, 2: s_name ASC NULLS FIRST]])
+<<<<<<< HEAD
         AGGREGATE ([GLOBAL] aggregate [{395: count=sum(395: count)}] group by [[134: s_name]] having [null]
             EXCHANGE SHUFFLE[134]
                 AGGREGATE ([LOCAL] aggregate [{395: count=sum(137: cnt_star)}] group by [[134: s_name]] having [null]
                     SCAN (mv[query21_mv] columns[134: s_name, 135: o_orderstatus, 136: n_name, 137: cnt_star] predicate[135: o_orderstatus = F AND 136: n_name = CANADA])
+=======
+        AGGREGATE ([GLOBAL] aggregate [{189: count=sum(189: count)}] group by [[157: s_name]] having [null]
+            EXCHANGE SHUFFLE[157]
+                AGGREGATE ([LOCAL] aggregate [{189: count=sum(160: cnt_star)}] group by [[157: s_name]] having [null]
+                    SCAN (mv[query21_mv] columns[157: s_name, 158: o_orderstatus, 159: n_name, 160: cnt_star] predicate[158: o_orderstatus = F AND 159: n_name = CANADA])
+>>>>>>> dd76ccdda ([Enhancement] Enhance mv rewrite when mv/query have multi same tables (#20263))
 [end]
 

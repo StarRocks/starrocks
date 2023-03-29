@@ -21,11 +21,20 @@ group by
 order by
     revenue desc ;
 [result]
+<<<<<<< HEAD
 TOP-N (order by [[: sum DESC NULLS LAST]])
     TOP-N (order by [[: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{: sum=sum(: sum)}] group by [[: n_name]] having [null]
             EXCHANGE SHUFFLE[]
                 AGGREGATE ([LOCAL] aggregate [{: sum=sum(: expr)}] group by [[: n_name]] having [null]
                     SCAN (mv[lineitem_mv] columns[: c_nationkey, : s_nationkey, : l_saleprice, : n_name] predicate[: s_nationkey = : c_nationkey])
+=======
+TOP-N (order by [[49: sum DESC NULLS LAST]])
+    TOP-N (order by [[49: sum DESC NULLS LAST]])
+        AGGREGATE ([GLOBAL] aggregate [{49: sum=sum(49: sum)}] group by [[42: n_name]] having [null]
+            EXCHANGE SHUFFLE[42]
+                AGGREGATE ([LOCAL] aggregate [{49: sum=sum(48: expr)}] group by [[42: n_name]] having [null]
+                    SCAN (mv[lineitem_mv] columns[103: c_nationkey, 129: s_nationkey, 131: l_saleprice, 137: n_name2] predicate[129: s_nationkey = 103: c_nationkey])
+>>>>>>> dd76ccdda ([Enhancement] Enhance mv rewrite when mv/query have multi same tables (#20263))
 [end]
 

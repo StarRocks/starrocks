@@ -55,6 +55,7 @@ TOP-N (order by [[29: substring ASC NULLS FIRST]])
                             SCAN (table[orders] columns[21: o_custkey] predicate[null])
 [end]
 
+<<<<<<< HEAD
 [sql]
 select
     cntrycode,
@@ -95,3 +96,5 @@ order by
     cntrycode ;
 [end]
 
+=======
+>>>>>>> dd76ccdda ([Enhancement] Enhance mv rewrite when mv/query have multi same tables (#20263))

@@ -21,6 +21,10 @@ select
           and n1.n_regionkey = r_regionkey
           and s_nationkey = n2.n_nationkey
 [result]
+<<<<<<< HEAD
 SCAN (mv[lineitem_mv] columns[115: l_saleprice, 118: o_orderyear, 119: n_name1, 120: n_regionkey1, 122: n_regionkey2] predicate[120: n_regionkey1 = 122: n_regionkey2])
+=======
+SCAN (mv[lineitem_mv] columns[144: l_saleprice, 147: o_orderyear, 148: n_name1] predicate[null])
+>>>>>>> dd76ccdda ([Enhancement] Enhance mv rewrite when mv/query have multi same tables (#20263))
 [end]
 
