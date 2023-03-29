@@ -593,7 +593,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS: {
-                    final BackendIdsUpdateInfo info = (BackendIdsUpdateInfo) journal.getData();
+                    final DataNodeIdsUpdateInfo info = (DataNodeIdsUpdateInfo) journal.getData();
                     globalStateMgr.replayUpdateClusterAndBackends(info);
                     break;
                 }
@@ -1433,7 +1433,7 @@ public class EditLog {
         logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
     }
 
-    public void logUpdateClusterAndBackendState(BackendIdsUpdateInfo info) {
+    public void logUpdateClusterAndBackendState(DataNodeIdsUpdateInfo info) {
         logEdit(OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS, info);
     }
 

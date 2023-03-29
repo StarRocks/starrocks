@@ -119,7 +119,7 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
-import com.starrocks.persist.BackendIdsUpdateInfo;
+import com.starrocks.persist.DataNodeIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.DatabaseInfo;
@@ -3838,7 +3838,7 @@ public class LocalMetastore implements ConnectorMetadata {
         return checksum;
     }
 
-    public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
+    public void replayUpdateClusterAndBackends(DataNodeIdsUpdateInfo info) {
         for (long id : info.getBackendList()) {
             final DataNode backend = stateMgr.getClusterInfo().getBackend(id);
             final Cluster cluster = defaultCluster;

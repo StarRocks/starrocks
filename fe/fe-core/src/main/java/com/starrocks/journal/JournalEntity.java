@@ -73,7 +73,7 @@ import com.starrocks.persist.AlterWhClusterOplog;
 import com.starrocks.persist.AlterWhPropertyOplog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.AutoIncrementInfo;
-import com.starrocks.persist.BackendIdsUpdateInfo;
+import com.starrocks.persist.DataNodeIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
@@ -483,8 +483,8 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS: {
-                data = new BackendIdsUpdateInfo();
-                ((BackendIdsUpdateInfo) data).readFields(in);
+                data = new DataNodeIdsUpdateInfo();
+                ((DataNodeIdsUpdateInfo) data).readFields(in);
                 isRead = true;
                 break;
             }
