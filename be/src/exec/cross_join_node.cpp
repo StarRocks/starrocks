@@ -537,7 +537,11 @@ Status CrossJoinNode::close(RuntimeState* state) {
 void CrossJoinNode::_init_row_desc() {
     for (auto& tuple_desc : child(0)->row_desc().tuple_descriptors()) {
         for (auto& slot : tuple_desc->slots()) {
-            _slots.emplace_back(SlotDesc{slot, true});
+            if (!_output_slots.empty() && _output_slots.find(slot->id()) == _output_slots.end()) {
+                _slots.emplace_back(SlotDesc{slot, false});
+            } else {
+                _slots.emplace_back(SlotDesc{slot, true});
+            }
             _probe_column_count++;
         }
         if (_need_create_tuple_columns) {
@@ -548,7 +552,11 @@ void CrossJoinNode::_init_row_desc() {
     }
     for (auto& tuple_desc : child(1)->row_desc().tuple_descriptors()) {
         for (auto& slot : tuple_desc->slots()) {
-            _slots.emplace_back(SlotDesc{slot, true});
+            if (!_output_slots.empty() && _output_slots.find(slot->id()) == _output_slots.end()) {
+                _slots.emplace_back(SlotDesc{slot, false});
+            } else {
+                _slots.emplace_back(SlotDesc{slot, true});
+            }
             _build_column_count++;
         }
         if (_need_create_tuple_columns) {
