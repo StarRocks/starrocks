@@ -748,7 +748,6 @@ TEST_F(BinlogManagerTest, test_wait_reader) {
     auto st_5 = binlog_manager->find_binlog_file(file_info_5->rowsets.front().version,
                                                  file_info_5->rowsets.front().start_seq_id);
     ASSERT_OK(st_5.status());
-    BinlogFileReadHolderPtr read_holder_5 = st_5.value();
     auto& param_9 = params[9];
     binlog_manager->check_expire_and_capacity(param_9.binlog_ttl_second, param_9.binlog_ttl_second,
                                               param_9.binlog_max_size);
@@ -763,7 +762,7 @@ TEST_F(BinlogManagerTest, test_wait_reader) {
     verify_wait_reader_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 5, 14);
     ASSERT_EQ(5, binlog_manager->unused_binlog_file_ids().get_size());
 
-    read_holder_5->release();
+    st_5.value().reset();
     auto& param_last = params.back();
     binlog_manager->check_expire_and_capacity(param_last.binlog_ttl_second, param_last.binlog_ttl_second,
                                               param_last.binlog_max_size);

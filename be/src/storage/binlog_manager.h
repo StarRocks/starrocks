@@ -124,30 +124,22 @@ private:
     int64_t _end_seq_id;
 };
 
-// Hold a reference to the binlog file for read. Call release() explicitly to
-// dereference the binlog file, or it will be called atomically in destructor
+// Hold a reference to the binlog file for read. The reference will be released
+// automatically in the destructor
 class BinlogFileReadHolder {
 public:
     BinlogFileReadHolder(std::shared_ptr<std::atomic<int64_t>> _reader_count, BinlogFileMetaPBPtr file_meta)
-            : _reader_count(_reader_count), _file_meta(file_meta), _released(false) {
+            : _reader_count(_reader_count), _file_meta(file_meta) {
         _reader_count->fetch_add(1);
     }
 
-    ~BinlogFileReadHolder() { release(); }
+    ~BinlogFileReadHolder() { _reader_count->fetch_sub(1); }
 
     BinlogFileMetaPBPtr& file_meta() { return _file_meta; }
-
-    void release() {
-        bool expect = false;
-        if (_released.compare_exchange_strong(expect, true)) {
-            _reader_count->fetch_sub(1);
-        }
-    }
 
 private:
     std::shared_ptr<std::atomic<int64_t>> _reader_count;
     BinlogFileMetaPBPtr _file_meta;
-    std::atomic<bool> _released;
 };
 
 using BinlogFileReadHolderPtr = std::shared_ptr<BinlogFileReadHolder>;

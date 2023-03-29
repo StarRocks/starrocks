@@ -240,8 +240,10 @@ void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t bi
         }
 
         for (int64_t rowset_id : meta->rowsets()) {
-            int32_t count = --_alive_rowset_count_map[rowset_id];
-            if (count == 0) {
+            auto rit = _alive_rowset_count_map.find(rowset_id);
+            DCHECK(rit != _alive_rowset_count_map.end());
+            rit->second--;
+            if (rit->second == 0) {
                 _alive_rowset_count_map.erase(rowset_id);
                 _total_alive_rowset_data_size -= _rowset_fetcher->get_rowset(rowset_id)->data_disk_size();
             }
