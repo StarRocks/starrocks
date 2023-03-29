@@ -245,7 +245,7 @@ public class BackendsProcDir implements ProcDirInterface {
             throw new AnalysisException("Backend[" + backendId + "] does not exist.");
         }
 
-        return new BackendProcNode(backend);
+        return new DataNodeProcNode(backend);
     }
 
 }
