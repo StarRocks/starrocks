@@ -86,11 +86,8 @@ public class BinaryPredicateStatisticCalculator {
             if (constant.isPresent()) {
                 Optional<Double> c = StatisticUtils.convertStatisticsToDouble(
                         constant.get().getType(), constant.get().toString());
-                if (c.isPresent()) {
-                    predicateRange = new StatisticRangeValues(c.get(), c.get(), 1);
-                } else {
-                    predicateRange = new StatisticRangeValues(NEGATIVE_INFINITY, POSITIVE_INFINITY, 1);
-                }
+                predicateRange = c.map(aDouble -> new StatisticRangeValues(aDouble, aDouble, 1))
+                        .orElseGet(() -> new StatisticRangeValues(NEGATIVE_INFINITY, POSITIVE_INFINITY, 1));
             } else {
                 predicateRange = new StatisticRangeValues(NEGATIVE_INFINITY, POSITIVE_INFINITY, 1);
             }
