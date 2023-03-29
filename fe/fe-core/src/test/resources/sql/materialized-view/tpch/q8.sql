@@ -42,6 +42,6 @@ TOP-N (order by [[61: year ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{65: sum=sum(65: sum), 64: sum=sum(64: sum)}] group by [[61: year]] having [null]
             EXCHANGE SHUFFLE[61]
                 AGGREGATE ([LOCAL] aggregate [{65: sum=sum(62: expr), 64: sum=sum(63: case)}] group by [[61: year]] having [null]
-                    SCAN (mv[lineitem_mv] columns[135: o_orderdate, 144: p_type, 148: l_saleprice, 151: o_orderyear, 152: n_name1, 153: n_regionkey1, 155: n_regionkey2, 156: r_name1] predicate[153: n_regionkey1 = 155: n_regionkey2 AND 156: r_name1 = MIDDLE EAST AND 144: p_type = ECONOMY ANODIZED STEEL AND 135: o_orderdate <= 1996-12-31 AND 135: o_orderdate >= 1995-01-01 AND 135: o_orderdate < 1997-01-01])
+                    SCAN (mv[lineitem_mv] columns[135: o_orderdate, 144: p_type, 148: l_saleprice, 151: o_orderyear, 152: n_name1, 157: r_name2] predicate[135: o_orderdate <= 1996-12-31 AND 144: p_type = ECONOMY ANODIZED STEEL AND 157: r_name2 = MIDDLE EAST AND 135: o_orderdate >= 1995-01-01 AND 135: o_orderdate < 1997-01-01])
 [end]
 

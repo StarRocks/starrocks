@@ -19,7 +19,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -40,6 +39,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv1.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv2.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv3.sql");
+       connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
     }
 
     @Test
@@ -98,7 +98,6 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     }
 
     // TODO(lishuming): predicates may be out of order when in parallel.
-    @Ignore
     @Test
     public void testQuery8() {
         runFileUnitTest("materialized-view/tpch/q8");

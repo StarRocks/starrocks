@@ -26,6 +26,6 @@ TOP-N (order by [[49: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{49: sum=sum(49: sum)}] group by [[42: n_name]] having [null]
             EXCHANGE SHUFFLE[42]
                 AGGREGATE ([LOCAL] aggregate [{49: sum=sum(48: expr)}] group by [[42: n_name]] having [null]
-                    SCAN (mv[lineitem_mv] columns[103: c_nationkey, 129: s_nationkey, 131: l_saleprice, 135: n_name1] predicate[129: s_nationkey = 103: c_nationkey])
+                    SCAN (mv[lineitem_mv] columns[103: c_nationkey, 129: s_nationkey, 131: l_saleprice, 137: n_name2] predicate[129: s_nationkey = 103: c_nationkey])
 [end]
 
