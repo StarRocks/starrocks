@@ -392,7 +392,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Here: count_distinct_column_buckets means the num_buckets and enable_distinct_column_bucketization is switch to
     // control on/off of this bucketization optimization.
     public static final String DISTINCT_COLUMN_BUCKETS = "count_distinct_column_buckets";
+
     public static final String ENABLE_DISTINCT_COLUMN_BUCKETIZATION = "enable_distinct_column_bucketization";
+
+    // Force bucketization optimization ratter than using skew hint
+    public static final String FORCE_DISTINCT_COLUMN_BUCKETIZATION = "force_distinct_column_bucketization";
+
     public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
 
     public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
@@ -999,6 +1004,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_DISTINCT_COLUMN_BUCKETIZATION)
     private boolean enableDistinctColumnBucketization = false;
 
+    @VariableMgr.VarAttr(name = FORCE_DISTINCT_COLUMN_BUCKETIZATION)
+    private boolean forceDistinctColumnBucketization = false;
+
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorScanRangeShuffle = false;
 
@@ -1043,6 +1051,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableDistinctColumnBucketization() {
         return enableDistinctColumnBucketization;
+    }
+
+    public void setForceDistinctColumnBucketization(boolean flag) {
+        forceDistinctColumnBucketization = flag;
+    }
+
+    public boolean isForceDistinctColumnBucketization() {
+        return forceDistinctColumnBucketization;
     }
 
     public boolean getEnablePopulateBlockCache() {

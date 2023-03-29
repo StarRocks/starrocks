@@ -82,7 +82,7 @@ public class SplitAggregateRule extends TransformationRule {
             return false;
         }
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
-        if (agg.checkGroupByCountDistinctWithSkewHint()) {
+        if (agg.checkGroupByCountDistinctWithSkewHint(context.getSessionVariable())) {
             return false;
         }
         // Only apply this rule if the aggregate type is global and not split

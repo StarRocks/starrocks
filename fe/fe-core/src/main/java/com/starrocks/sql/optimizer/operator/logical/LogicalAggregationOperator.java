@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -157,13 +158,14 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return false;
     }
 
-    public boolean hasSkew() {
+    public boolean hasSkew(SessionVariable sessionVariable) {
         return this.getAggregations().values().stream().anyMatch(call ->
-                call.isDistinct() && call.getFnName().equals(FunctionSet.COUNT) && call.getHints().contains("skew"));
+                call.isDistinct() && call.getFnName().equals(FunctionSet.COUNT) &&
+                        (sessionVariable.isForceDistinctColumnBucketization() || call.getHints().contains("skew")));
     }
 
-    public boolean checkGroupByCountDistinctWithSkewHint() {
-        return checkGroupByCountDistinct() && hasSkew();
+    public boolean checkGroupByCountDistinctWithSkewHint(SessionVariable sessionVariable) {
+        return checkGroupByCountDistinct() && hasSkew(sessionVariable);
     }
 
     @Override

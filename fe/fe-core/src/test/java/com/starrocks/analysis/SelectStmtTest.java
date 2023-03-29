@@ -42,7 +42,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -50,11 +52,13 @@ import org.junit.rules.ExpectedException;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class SelectStmtTest {
     private static StarRocksAssert starRocksAssert;
+    private static ConnectContext connectContext;
 
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
@@ -62,8 +66,26 @@ public class SelectStmtTest {
     @BeforeClass
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        String createTblStmtStr = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        String createTblStmtStr = "create table db1.tbl1 (\n"
+                + "    k1 varchar(32),\n"
+                + "    k2 varchar(32),\n"
+                + "    k3 varchar(32),\n"
+                + "    k4 int,\n"
+                + "    k5 varchar(32),\n"
+                + "    k6 varchar(32)\n"
+                + ") AGGREGATE KEY(k1, k2, k3, k4, k5, k6) \n"
+                + "distributed by hash(k1) buckets 3 \n"
+                + "properties('replication_num' = '1');\n";
+
+        String createTblStmtStr2 = "create table db1.tbl2 (\n"
+                + "    v1 varchar(32),\n"
+                + "    v2 varchar(32),\n"
+                + "    v3 int,\n"
+                + "    v4 int\n"
+                + ") DUPLICATE KEY(v1, v2, v3, v4) \n"
+                + "distributed by hash(v1) buckets 3 \n"
+                + "properties('replication_num' = '1');";
+
         String createBaseAllStmtStr = "create table db1.baseall(k1 int) distributed by hash(k1) "
                 + "buckets 3 properties('replication_num' = '1');";
         String createPratitionTableStr = "CREATE TABLE db1.partition_table (\n" +
@@ -81,11 +103,20 @@ public class SelectStmtTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
 
-        starRocksAssert = new StarRocksAssert();
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr)
+                .withTable(createTblStmtStr2)
                 .withTable(createBaseAllStmtStr)
                 .withTable(createPratitionTableStr);
+
+    }
+
+    @Before
+    public void init() {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(TimeUnit.MINUTES.toMillis(20L));
     }
 
     @Test
@@ -201,7 +232,7 @@ public class SelectStmtTest {
                 "select * from db1.tbl1 where not(k1 <=> 'abc-def')",
         };
         Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*");
-        for (String q: queryList) {
+        for (String q : queryList) {
             String s = starRocksAssert.query(q).explainQuery();
             Assert.assertTrue(re.matcher(s).find());
         }
@@ -215,7 +246,7 @@ public class SelectStmtTest {
                 "select not(k1 <=> 'abc-def') from db1.tbl1",
         };
         Pattern re = Pattern.compile("NOT.*<=>.*");
-        for (String q: queryList) {
+        for (String q : queryList) {
             String s = starRocksAssert.query(q).explainQuery();
             Assert.assertTrue(re.matcher(s).find());
         }
@@ -279,9 +310,9 @@ public class SelectStmtTest {
                 "select cast(k1 as int), count(distinct [skew] cast(k2 as int)) from db1.tbl1 group by cast(k1 as int)";
         String s = starRocksAssert.query(sql).explainQuery();
         Assert.assertTrue(s, s.contains("  3:Project\n" +
-                "  |  <slot 5> : 5: cast\n" +
-                "  |  <slot 6> : 6: cast\n" +
-                "  |  <slot 8> : CAST(murmur_hash3_32(CAST(6: cast AS VARCHAR)) % 512 AS SMALLINT)"));
+                "  |  <slot 7> : 7: cast\n" +
+                "  |  <slot 8> : 8: cast\n" +
+                "  |  <slot 10> : CAST(murmur_hash3_32(CAST(8: cast AS VARCHAR)) % 512 AS SMALLINT)"));
         FeConstants.runningUnitTest = false;
     }
 
@@ -293,9 +324,9 @@ public class SelectStmtTest {
         String s = starRocksAssert.query(sql).explainQuery();
         Assert.assertTrue(s, s.contains("  3:Project\n" +
                 "  |  <slot 3> : 3: k3\n" +
-                "  |  <slot 5> : 5: cast\n" +
-                "  |  <slot 6> : 6: cast\n" +
-                "  |  <slot 8> : CAST(murmur_hash3_32(CAST(6: cast AS VARCHAR)) % 512 AS SMALLINT)"));
+                "  |  <slot 7> : 7: cast\n" +
+                "  |  <slot 8> : 8: cast\n" +
+                "  |  <slot 10> : CAST(murmur_hash3_32(CAST(8: cast AS VARCHAR)) % 512 AS SMALLINT)"));
         FeConstants.runningUnitTest = false;
     }
 
@@ -306,10 +337,10 @@ public class SelectStmtTest {
                 "select k1, k3, count(distinct [skew] k2), count(distinct k4) from db1.tbl1 group by k1, k3";
         String s = starRocksAssert.query(sql).explainQuery();
         Assert.assertTrue(s, s.contains("  4:Project\n" +
-                "  |  <slot 7> : 7: k1\n" +
-                "  |  <slot 8> : 8: k2\n" +
-                "  |  <slot 9> : 9: k3\n" +
-                "  |  <slot 13> : CAST(murmur_hash3_32(8: k2) % 512 AS SMALLINT)"));
+                "  |  <slot 9> : 9: k1\n" +
+                "  |  <slot 10> : 10: k2\n" +
+                "  |  <slot 11> : 11: k3\n" +
+                "  |  <slot 15> : CAST(murmur_hash3_32(10: k2) % 512 AS SMALLINT)"));
         FeConstants.runningUnitTest = false;
     }
 
@@ -325,6 +356,102 @@ public class SelectStmtTest {
     }
 
     @Test
+    public void testGroupByCountDistinctWithSkewHintExtTestCase01() throws Exception {
+        FeConstants.runningUnitTest = true;
+
+        String sql = "SELECT\n"
+                + "  SUM(tbl1.k5) / COUNT(DISTINCT [skew] tbl1.k3),\n"
+                + "  SUM(tbl1.k6),\n"
+                + "  COUNT(DISTINCT [skew] tbl1.k2),\n"
+                + "  tbl1.k1 AS k1,\n"
+                + "  tbl2.v1 AS v1\n"
+                + "FROM db1.tbl1 as tbl1 \n"
+                + "LEFT JOIN db1.tbl2 as tbl2 ON tbl1.k4 = tbl2.v4\n"
+                + "GROUP BY\n"
+                + "  tbl1.k1,\n"
+                + "  tbl2.v1\n"
+                + "LIMIT 100";
+        String explain = starRocksAssert.query(sql).explainQuery();
+
+        Assert.assertTrue(explain, explain.contains("  9:Project\n" +
+                "  |  <slot 16> : 16: k1\n" +
+                "  |  <slot 17> : 17: k3\n" +
+                "  |  <slot 18> : 18: v1\n" +
+                "  |  <slot 26> : CAST(murmur_hash3_32(17: k3) % 512 AS SMALLINT)"));
+
+        Assert.assertTrue(explain, explain.contains("  18:Project\n" +
+                "  |  <slot 19> : 19: k1\n" +
+                "  |  <slot 20> : 20: k2\n" +
+                "  |  <slot 21> : 21: v1\n" +
+                "  |  <slot 27> : CAST(murmur_hash3_32(20: k2) % 512 AS SMALLINT)"));
+
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testGroupByCountDistinctWithSkewHintExtTestCase02() throws Exception {
+        FeConstants.runningUnitTest = true;
+        connectContext.getSessionVariable().setForceDistinctColumnBucketization(true);
+
+        String sql = "SELECT\n"
+                + "  SUM(tbl1.k5) / COUNT(DISTINCT tbl1.k3),\n"
+                + "  SUM(tbl1.k6),\n"
+                + "  COUNT(DISTINCT tbl1.k2),\n"
+                + "  tbl1.k1 AS k1,\n"
+                + "  tbl2.v1 AS v1\n"
+                + "FROM db1.tbl1 as tbl1 \n"
+                + "LEFT JOIN db1.tbl2 as tbl2 ON tbl1.k4 = tbl2.v4\n"
+                + "GROUP BY\n"
+                + "  tbl1.k1,\n"
+                + "  tbl2.v1\n"
+                + "LIMIT 100";
+        String explain = starRocksAssert.query(sql).explainQuery();
+
+        Assert.assertTrue(explain, explain.contains("  9:Project\n" +
+                "  |  <slot 16> : 16: k1\n" +
+                "  |  <slot 17> : 17: k3\n" +
+                "  |  <slot 18> : 18: v1\n" +
+                "  |  <slot 26> : CAST(murmur_hash3_32(17: k3) % 512 AS SMALLINT)"));
+
+        Assert.assertTrue(explain, explain.contains("  18:Project\n" +
+                "  |  <slot 19> : 19: k1\n" +
+                "  |  <slot 20> : 20: k2\n" +
+                "  |  <slot 21> : 21: v1\n" +
+                "  |  <slot 27> : CAST(murmur_hash3_32(20: k2) % 512 AS SMALLINT)"));
+
+        connectContext.getSessionVariable().setForceDistinctColumnBucketization(false);
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testGroupByCountDistinctWithSkewHintExtTestCase03() throws Exception {
+        FeConstants.runningUnitTest = true;
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+
+        String sql = "SELECT \n"
+                + "    COUNT(DISTINCT [skew] tbl1.k2),"
+                + "    SUM( cast(tbl1.k3 as int) ) / COUNT(DISTINCT [skew] tbl1.k2),\n"
+                + "    tbl1.k1 AS k1,\n"
+                + "    tbl2.v1 AS v1\n"
+                + "FROM db1.tbl1 as tbl1 \n"
+                + "LEFT JOIN db1.tbl2 as tbl2 ON tbl1.k4 = tbl2.v4\n"
+                + "GROUP BY\n"
+                + "  tbl1.k1,\n"
+                + "  tbl2.v1\n"
+                + "LIMIT 100";
+        String explain = starRocksAssert.query(sql).explainQuery();
+
+        Assert.assertTrue(explain, explain.contains("  7:AGGREGATE (update finalize)\n"
+                + "  |  output: multi_distinct_count(2: k2), sum(11: cast)\n"
+                + "  |  group by: 1: k1, 7: v1\n"
+                + "  |  limit: 100"));
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        FeConstants.runningUnitTest = false;
+    }
+
+
+    @Test
     public void testScalarCorrelatedSubquery() {
         try {
             String sql = "select *, (select [a.k1,a.k2] from db1.tbl1 a where a.k4 = b.k1) as r from db1.baseall b;";
@@ -338,7 +465,7 @@ public class SelectStmtTest {
         try {
             String sql = "select *, (select a.k1 from db1.tbl1 a where a.k4 = b.k1) as r from db1.baseall b;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-            Assert.assertTrue(plan, plan.contains("assert_true[((7: countRows IS NULL) OR (7: countRows <= 1)"));
+            Assert.assertTrue(plan, plan.contains("assert_true[((9: countRows IS NULL) OR (9: countRows <= 1)"));
         } catch (Exception e) {
             Assert.fail("Should not throw an exception");
         }
