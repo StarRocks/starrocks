@@ -5,15 +5,11 @@
 be/build_
 thirdparty/installed
 thirdparty/src
-
 **/target
 **/log
-
 **/.github
 **/.idea
-
 **/*.o
-
 **/output
 # negate the output as it might be used for packing container from locally build artifact
 !output
@@ -21,7 +17,4 @@ output/fe/meta
 output/fe/log
 output/be/storage
 output/be/log
-
-
-
-
+.git/
