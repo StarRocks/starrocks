@@ -393,6 +393,14 @@ jobs:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
 
+      - name: Prepare Tools
+        run: |
+          cd ${{ github.workspace }}
+          rm -rf .actions
+          mkdir -p .actions/nose-report-action
+          cd .actions/nose-report-action
+          git clone https://github.com/StarRocks/action-junit-report.git .
+
       - name: Run Case
         run: |
           set -x
@@ -411,7 +419,7 @@ jobs:
           ./bin/run-admit.sh
 
       - name: Publish Test Results
-        uses: mikepenz/action-junit-report@v3
+        uses: ./.actions/nose-report-action
         if: success() || failure()
         with:
           check_name: 'Admit Test Results'
