@@ -299,11 +299,10 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
         long value = unixTime.getBigint();
         if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
-            throw new AnalysisException(
-                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
+            throw new AnalysisException("unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
-                LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(unixTime.getInt()), TimeUtils.getTimeZone().toZoneId()));
         return ConstantOperator.createVarchar(dl.toString());
     }
 
@@ -312,8 +311,7 @@ public class ScalarOperatorFunctions {
             throws AnalysisException {
         long value = unixTime.getBigint();
         if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
-            throw new AnalysisException(
-                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
+            throw new AnalysisException("unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
                 LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
@@ -739,8 +737,7 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "bitShiftRightLogical", argTypes = {LARGEINT, BIGINT}, returnType = LARGEINT)
     public static ConstantOperator bitShiftRightLogicalLargeInt(ConstantOperator first, ConstantOperator second) {
-        return ConstantOperator.createLargeInt(
-                bitShiftRightLogicalForInt128(first.getLargeInt(), (int) second.getBigint()));
+        return ConstantOperator.createLargeInt(bitShiftRightLogicalForInt128(first.getLargeInt(), (int) second.getBigint()));
     }
 
     @ConstantFunction(name = "concat", argTypes = {VARCHAR}, returnType = VARCHAR)
@@ -790,8 +787,7 @@ public class ScalarOperatorFunctions {
 
     private static final int CONSTANT_128 = 128;
     private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
-    private static final BigInteger[] INT_128_MASK1_ARR1 = new BigInteger[CONSTANT_128];
-
+    private static final BigInteger []INT_128_MASK1_ARR1 = new BigInteger[CONSTANT_128];
     static {
         for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
             INT_128_MASK1_ARR1[shiftBy] = INT_128_OPENER.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
