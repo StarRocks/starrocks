@@ -26,7 +26,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.DataNodeCoreStat;
 import com.starrocks.thrift.TWorkGroupType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
@@ -140,7 +140,7 @@ public class ResourceGroupAnalyzer {
             String value = e.getValue();
             if (key.equalsIgnoreCase(ResourceGroup.CPU_CORE_LIMIT)) {
                 int cpuCoreLimit = Integer.parseInt(value);
-                int avgCoreNum = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+                int avgCoreNum = DataNodeCoreStat.getAvgNumOfHardwareCoresOfBe();
                 if (cpuCoreLimit <= 0 || cpuCoreLimit > avgCoreNum) {
                     throw new SemanticException(String.format("cpu_core_limit should range from 1 to %d", avgCoreNum));
                 }
