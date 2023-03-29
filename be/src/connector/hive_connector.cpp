@@ -42,6 +42,10 @@ DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_
     return std::make_unique<HiveDataSource>(this, scan_range);
 }
 
+const TupleDescriptor* HiveDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_hdfs_scan_node.tuple_id);
+}
+
 // ================================
 
 HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range)
