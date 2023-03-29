@@ -136,10 +136,10 @@ public class DataNodesProcDirTest {
 
     @Test(expected = AnalysisException.class)
     public void testLookupNormal() throws AnalysisException {
-        BackendsProcDir dir;
+        DataNodesProcDir dir;
         ProcNodeInterface node;
 
-        dir = new BackendsProcDir(systemInfoService);
+        dir = new DataNodesProcDir(systemInfoService);
         try {
             node = dir.lookup("1000");
             Assert.assertNotNull(node);
@@ -149,7 +149,7 @@ public class DataNodesProcDirTest {
             Assert.fail();
         }
 
-        dir = new BackendsProcDir(systemInfoService);
+        dir = new DataNodesProcDir(systemInfoService);
         try {
             node = dir.lookup("1001");
             Assert.assertNotNull(node);
@@ -158,17 +158,17 @@ public class DataNodesProcDirTest {
             Assert.fail();
         }
 
-        dir = new BackendsProcDir(systemInfoService);
+        dir = new DataNodesProcDir(systemInfoService);
         node = dir.lookup("1002");
         Assert.fail();
     }
 
     @Test
     public void testLookupInvalid() {
-        BackendsProcDir dir;
+        DataNodesProcDir dir;
         ProcNodeInterface node;
 
-        dir = new BackendsProcDir(systemInfoService);
+        dir = new DataNodesProcDir(systemInfoService);
         try {
             node = dir.lookup(null);
         } catch (AnalysisException e) {
@@ -184,10 +184,10 @@ public class DataNodesProcDirTest {
 
     @Test
     public void testFetchResultNormal() throws AnalysisException {
-        BackendsProcDir dir;
+        DataNodesProcDir dir;
         ProcResult result;
 
-        dir = new BackendsProcDir(systemInfoService);
+        dir = new DataNodesProcDir(systemInfoService);
         result = dir.fetchResult();
         Assert.assertNotNull(result);
         Assert.assertTrue(result instanceof BaseProcResult);
@@ -195,6 +195,6 @@ public class DataNodesProcDirTest {
 
     @Test    
     public void testIPTitle() {
-        Assert.assertTrue(BackendsProcDir.TITLE_NAMES.get(1).equals("IP"));
+        Assert.assertTrue(DataNodesProcDir.TITLE_NAMES.get(1).equals("IP"));
     }
 }
