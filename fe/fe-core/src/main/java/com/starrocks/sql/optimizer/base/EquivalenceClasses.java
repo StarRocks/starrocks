@@ -19,12 +19,11 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class EquivalenceClasses {
+public class EquivalenceClasses implements Cloneable {
     private final Map<ColumnRefOperator, Set<ColumnRefOperator>> columnToEquivalenceClass;
 
     private List<Set<ColumnRefOperator>> cacheColumnToEquivalenceClass;
@@ -33,9 +32,15 @@ public class EquivalenceClasses {
         columnToEquivalenceClass = Maps.newHashMap();
     }
 
-    public EquivalenceClasses(EquivalenceClasses other) {
-        columnToEquivalenceClass = Maps.newHashMap();
-        columnToEquivalenceClass.putAll(other.columnToEquivalenceClass);
+    @Override
+    public EquivalenceClasses clone() {
+        final EquivalenceClasses ec = new EquivalenceClasses();
+        for (Map.Entry<ColumnRefOperator, Set<ColumnRefOperator>> entry :
+                this.columnToEquivalenceClass.entrySet()) {
+            ec.columnToEquivalenceClass.put(entry.getKey(), Sets.newLinkedHashSet(entry.getValue()));
+        }
+        ec.cacheColumnToEquivalenceClass = null;
+        return ec;
     }
 
     public void addEquivalence(ColumnRefOperator left, ColumnRefOperator right) {
@@ -85,7 +90,7 @@ public class EquivalenceClasses {
             cacheColumnToEquivalenceClass = Lists.newArrayList();
             Set<ColumnRefOperator> visited = Sets.newHashSet();
             for (Set<ColumnRefOperator> columnRefOperators : columnToEquivalenceClass.values()) {
-                if (Collections.disjoint(visited, columnRefOperators)) {
+                if (!visited.containsAll(columnRefOperators)) {
                     visited.addAll(columnRefOperators);
                     cacheColumnToEquivalenceClass.add(columnRefOperators);
                 }
