@@ -213,10 +213,10 @@ void CrossJoinNode::_copy_joined_rows_with_index_base_build(ChunkPtr& chunk, siz
     }
 
     for (size_t i = 0; i < _build_column_count; i++) {
-        SlotDescriptor* slot = _slots[i + _probe_column_count].slot;
-        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
-        ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
-        _copy_build_rows_with_index_base_build(dest_col, src_col, build_index, row_count);
+        const SlotDesc& slot = _slots[i + _probe_column_count];
+        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot.slot->id());
+        ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot.slot->id());
+        _copy_build_rows_with_index_base_build(slot, dest_col, src_col, build_index, row_count);
     }
 
     for (int tuple_id : _output_probe_tuple_ids) {
