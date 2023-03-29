@@ -42,6 +42,19 @@ public class JournalWriter {
     // batch size in bytes
     private long uncommittedEstimatedBytes;
 
+<<<<<<< HEAD
+=======
+    /**
+     * If this flag is set true, we will roll journal,
+     * i.e. create a new database in BDB immediately after
+     * current journal batch has been written.
+     */
+    private boolean forceRollJournal;
+
+    /** Last timestamp in millisecond to log the commit triggered by delay. */
+    private long lastLogTimeForDelayTriggeredCommit = -1;
+
+>>>>>>> 7ed4ae624 ([BugFix] Fix incorrect time unit for JournalTask#betterCommitBeforeTime (#20372))
     public JournalWriter(Journal journal, BlockingQueue<JournalTask> journalQueue) {
         this.journal = journal;
         this.journalQueue = journalQueue;
@@ -158,11 +171,16 @@ public class JournalWriter {
 
     private boolean shouldCommitNow() {
         // 1. check if is an emergency journal
-        if (currentJournal.getBetterCommitBeforeTime() > 0) {
-            long delayMillis = (System.nanoTime() - currentJournal.getBetterCommitBeforeTime()) / 1000000;
-            if (delayMillis >= 0) {
-                LOG.warn("journal expect commit before {} is delayed {} mills, will commit now",
-                        currentJournal.getBetterCommitBeforeTime(), delayMillis);
+        if (currentJournal.getBetterCommitBeforeTimeInNano() > 0) {
+            long delayNanos = System.nanoTime() - currentJournal.getBetterCommitBeforeTimeInNano();
+            if (delayNanos >= 0) {
+                long logTime = System.currentTimeMillis();
+                // avoid logging too many messages if triggered frequently
+                if (lastLogTimeForDelayTriggeredCommit + 500 < logTime) {
+                    lastLogTimeForDelayTriggeredCommit = logTime;
+                    LOG.warn("journal expect commit before {} is delayed {} nanos, will commit now",
+                            currentJournal.getBetterCommitBeforeTimeInNano(), delayNanos);
+                }
                 return true;
             }
         }
