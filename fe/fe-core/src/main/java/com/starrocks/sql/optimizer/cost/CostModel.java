@@ -129,7 +129,6 @@ public class CostModel {
         public CostEstimate visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
-
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
 

@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 import static java.lang.Double.NaN;
 
@@ -93,6 +94,25 @@ public class Statistics {
             usedColumns.union(entry.getKey().getUsedColumns());
         }
         return usedColumns;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        Statistics that = (Statistics) o;
+        return Double.compare(that.outputRowCount, outputRowCount) == 0
+                && tableRowCountMayInaccurate == that.tableRowCountMayInaccurate
+                && Objects.equals(columnStatistics.keySet(), that.columnStatistics.keySet());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(outputRowCount, columnStatistics.keySet(), tableRowCountMayInaccurate);
     }
 
     public static Builder buildFrom(Statistics other) {
