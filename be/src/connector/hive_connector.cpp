@@ -425,9 +425,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     FSOptions fsOptions =
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
-    // Use to print file path in be.out when coredump
-    tls_thread_status.set_scan_file_path(native_file_path);
-
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
 
     COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
@@ -521,6 +518,11 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     ChunkHelper::reorder_chunk(*_tuple_desc, chunk->get());
 
     return Status::OK();
+}
+
+const std::string HiveDataSource::get_custom_coredump_msg() const {
+    const std::string path = !_scan_range.relative_path.empty() ? _scan_range.relative_path : _scan_range.full_path;
+    return strings::Substitute("Hive file path: $0, partition id: $1, length: $2, offset: $3", path, _scan_range.partition_id, _scan_range.length, _scan_range.offset);
 }
 
 int64_t HiveDataSource::raw_rows_read() const {

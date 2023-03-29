@@ -85,7 +85,7 @@ static void dump_trace_info() {
         // dump query_id and fragment id
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
-        const std::string scan_file_path = CurrentThread::current().get_scan_file_path();
+        const std::string custom_coredump_msg = CurrentThread::current().get_custom_coredump_msg();
         const uint32_t MAX_BUFFER_SIZE = 512;
         char buffer[MAX_BUFFER_SIZE] = {};
 
@@ -101,9 +101,9 @@ static void dump_trace_info() {
         res = sprintf(buffer + res, "\n") + res;
 
         // print for lake filename
-        if (!scan_file_path.empty()) {
-            // Avoid buffer overflow, because url's length in not fixed
-            res = snprintf(buffer + res, MAX_BUFFER_SIZE - res, "Scan file path: %s\n", scan_file_path.c_str()) + res;
+        if (!custom_coredump_msg.empty()) {
+            // Avoid buffer overflow, because custom coredump msg's length in not fixed
+            res = snprintf(buffer + res, MAX_BUFFER_SIZE - res, "%s\n", custom_coredump_msg.c_str()) + res;
         }
 
         wt = write(STDERR_FILENO, buffer, res);

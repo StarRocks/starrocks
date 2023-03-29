@@ -157,9 +157,9 @@ public:
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
 
-    void set_scan_file_path(const std::string scan_file_path) { _scan_file_path = scan_file_path; }
+    void set_custom_coredump_msg(const std::string custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
 
-    std::string get_scan_file_path() const { return _scan_file_path; }
+    const std::string get_custom_coredump_msg() const { return _custom_coredump_msg; }
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
@@ -261,7 +261,7 @@ private:
     // Store in TLS for diagnose coredump easier
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
-    std::string _scan_file_path{};
+    std::string _custom_coredump_msg{};
     int32_t _driver_id = 0;
     bool _is_catched = false;
     bool _check = true;
@@ -365,6 +365,12 @@ private:
         CurrentThread::current().set_pipeline_driver_id(0);                  \
         CurrentThread::current().set_query_id({});                           \
         CurrentThread::current().set_fragment_instance_id({});               \
+    });
+
+#define SCOPED_SET_CUSTOM_COREDUMP_MSG(custom_coredump_msg)     \
+    CurrentThread::current().set_custom_coredump_msg(custom_coredump_msg);              \
+    auto VARNAME_LINENUM(defer) = DeferOp([] {                               \
+        CurrentThread::current().set_custom_coredump_msg({});                  \
     });
 
 #define TRY_CATCH_ALLOC_SCOPE_START() \
