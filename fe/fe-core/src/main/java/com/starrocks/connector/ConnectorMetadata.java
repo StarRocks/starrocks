@@ -200,14 +200,16 @@ public interface ConnectorMetadata {
             throws DdlException, MetaNotFoundException, AnalysisException {
     }
 
-    default void refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
-                                         int priority, boolean mergeRedundant, boolean isManual)
+    default String refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
+                                           int priority, boolean mergeRedundant, boolean isManual)
             throws DdlException, MetaNotFoundException {
+        return null;
     }
 
-    default void refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
-                                         int priority)
+    default String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
+                                           int priority)
             throws DdlException, MetaNotFoundException {
+        return null;
     }
 
     default void cancelRefreshMaterializedView(String dbName, String mvName)
