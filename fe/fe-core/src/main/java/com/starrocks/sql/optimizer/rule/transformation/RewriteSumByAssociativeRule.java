@@ -296,7 +296,23 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                 // if arg1 is nullable, we use count(arg1), otherwise use count()
                 List<ScalarOperator> countArguments = Lists.newArrayList();
                 if (arg1.isNullable()) {
-                    countArguments.add(arg1);
+                    ColumnRefOperator newColumnRef;
+
+                    if (arg1.isColumnRef()) {
+                        newColumnRef = (ColumnRefOperator) arg1;
+                        if (!oldPreAggProjections.containsKey(arg1)) {
+                            newPreAggProjections.put((ColumnRefOperator) arg1, arg1);
+                        }
+                    } else if (commonArguments.containsKey(arg1)) {
+                        // if arg1 has been created by the previous rewriting,
+                        // we don't need to create a new ColumnRef
+                        newColumnRef = commonArguments.get(arg1);
+                    } else {
+                        newColumnRef = columnRefFactory.create(arg1, arg1.getType(), arg1.isNullable());
+                        newPreAggProjections.put(newColumnRef, arg1);
+                        commonArguments.put(arg1, newColumnRef);
+                    }
+                    countArguments.add(newColumnRef);
                 }
                 CallOperator newAggFunction = new CallOperator(FunctionSet.COUNT,
                         Type.BIGINT, countArguments, countFunction);

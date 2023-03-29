@@ -1911,8 +1911,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  23 <-> [36: sum, BIGINT, true] + [37: count, BIGINT, true] * 1\n" +
                 "  |  24 <-> [38: sum, DECIMAL128(38,2), true] + cast([39: count, BIGINT, true] as DECIMAL128(18,0)) * 1");
         // if a column can cast to target type safely, we can remove the implicit cast directly.
-        // in this case, t1b is SMALLINT,and need to be cast to BIGINT implicitly before calculate sum,
-        // after we rewrite sum(add(cast t1b as bigint), 1),
+        // in this case, t1b is SMALLINT,and need to be cast to INT implicitly before calculate sum,
+        // after we rewrite sum(add(cast t1b as int), 1),
         // there must be no project node between aggregate node and olap scan node
         sql = "select sum(t1b+1) from test_all_type";
         plan = getFragmentPlan(sql);
@@ -1925,17 +1925,36 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:OlapScanNode");
         // apply this rule more than once
-        // 1. sum(add(add(cast t1b as bigint, 1), 1)) => sum(add(cast t1b as bigint, 1)) + count(add(cast t1b as bigint, 1) * 1
-        // 2. sum(add(cast t1b as bigint,1)) => sum(t1b) + count(t1b) * 1
-        // so the final result is sum(t1b) + count(t1b) * 1 + count(add(cast t1b as bigint. 1)) * 1
+        // 1. sum(add(add(cast t1b as int, 1), 1)) => sum(add(cast t1b as int, 1)) + count(add(cast t1b as int, 1) * 1
+        // 2. sum(add(cast t1b as int,1)) => sum(t1b) + count(t1b) * 1
+        // so the final result is sum(t1b) + count(t1b) * 1 + count(add(cast t1b as int. 1)) * 1
         sql = "select sum(t1b+1+1) from test_all_type";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:Project\n" +
+        assertContains(plan, "  3:Project\n" +
                 "  |  <slot 12> : 16: sum + 17: count * 1 + 15: count * 1\n" +
                 "  |  \n" +
-                "  1:AGGREGATE (update finalize)\n" +
+                "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(2: t1b), count(CAST(2: t1b AS INT) + 1), sum(2: t1b)\n" +
                 "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        // should make sure the argument of count appears in project node
+        sql = "select sum(id_decimal + 1 + 2) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 12> : 14: sum + CAST(15: count AS DECIMAL128(18,0)) * 2\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(13: cast), count(13: cast)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 13> : " +
+                "CAST(CAST(CAST(10: id_decimal AS DECIMAL64(12,2)) AS DECIMAL64(15,2)) + 1 AS DECIMAL64(13,2))\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
         // 1.2 not null
