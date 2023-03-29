@@ -60,6 +60,7 @@ import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -222,6 +223,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
         TabletScheduler tabletScheduler = globalStateMgr.getTabletScheduler();
         TabletSchedulerStat stat = tabletScheduler.getStat();
         Map<GroupId, Long> group2InScheduleTabletNum = tabletScheduler.getTabletsNumInScheduleForEachCG();
+        Set<GroupId> toIgnoreGroupIds = new HashSet<>();
         for (GroupId groupId : groupIds) {
             Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
             if (db == null) {
@@ -233,6 +235,10 @@ public class ColocateTableBalancer extends LeaderDaemon {
             }
             List<List<Long>> backendsPerBucketSeq = colocateIndex.getBackendsPerBucketSeq(groupId);
             if (backendsPerBucketSeq.isEmpty()) {
+                continue;
+            }
+
+            if (toIgnoreGroupIds.contains(groupId)) {
                 continue;
             }
 
@@ -257,16 +263,25 @@ public class ColocateTableBalancer extends LeaderDaemon {
             List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
             if (relocateAndBalance(groupId, unavailableBeIdsInGroup, availableBeIds, colocateIndex, infoService,
                     statistic, balancedBackendsPerBucketSeq)) {
-                group2ColocateRelocationInfo.put(groupId,
-                        new ColocateRelocationInfo(!unavailableBeIdsInGroup.isEmpty(),
-                                colocateIndex.getBackendsPerBucketSeq(groupId), Maps.newHashMap()));
-                colocateIndex.addBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
-                ColocatePersistInfo info =
-                        ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
-                globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info);
-                LOG.info("balance colocate group {}. now backends per bucket sequence is: {}, " +
-                                "bucket sequence before balance: {}", groupId, balancedBackendsPerBucketSeq,
-                        group2ColocateRelocationInfo.get(groupId).getLastBackendsPerBucketSeq());
+                List<GroupId> colocateWithGroupsInOtherDb =
+                        colocateIndex.getColocateWithGroupsInOtherDb(groupId, db.getId());
+                // For groups which have the same GroupId.grpId with current group, the bucket seq should be the same,
+                // so here we will update the bucket seq for them directly and ignore the following traverse.
+                toIgnoreGroupIds.addAll(colocateWithGroupsInOtherDb);
+                // Add myself into the list so that we can persist the bucket seq info with other groups altogether.
+                colocateWithGroupsInOtherDb.add(groupId);
+                for (GroupId gid : colocateWithGroupsInOtherDb) {
+                    group2ColocateRelocationInfo.put(gid,
+                            new ColocateRelocationInfo(!unavailableBeIdsInGroup.isEmpty(),
+                                    colocateIndex.getBackendsPerBucketSeq(gid), Maps.newHashMap()));
+                    colocateIndex.addBackendsPerBucketSeq(gid, balancedBackendsPerBucketSeq);
+                    ColocatePersistInfo info =
+                            ColocatePersistInfo.createForBackendsPerBucketSeq(gid, balancedBackendsPerBucketSeq);
+                    globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info);
+                    LOG.info("balance colocate group {}. now backends per bucket sequence is: {}, " +
+                                    "bucket sequence before balance: {}", gid, balancedBackendsPerBucketSeq,
+                            group2ColocateRelocationInfo.get(gid).getLastBackendsPerBucketSeq());
+                }
             } else {
                 // clean historical relocation info if nothing changed after trying to do `relocateAndBalance()`
                 group2ColocateRelocationInfo.remove(groupId);
