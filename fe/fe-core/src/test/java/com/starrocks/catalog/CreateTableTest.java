@@ -1102,4 +1102,18 @@ public class CreateTableTest {
                                 ");"
                 ));
     }
+
+    @Test
+    public void testCreateTableInSystemDb() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Can't create table 'goods' (errno: create denied)",
+                () -> createTable(
+                        "CREATE TABLE information_schema.goods(\n" +
+                                "    item_id1          INT,\n" +
+                                "    item_name         STRING,\n" +
+                                "    price             FLOAT\n" +
+                                ") DISTRIBUTED BY HASH(item_id1)\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");"
+                ));
+    }
 }
