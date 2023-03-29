@@ -262,6 +262,8 @@ public:
 
     bool contains_version(Version version) const { return rowset_meta()->version().contains(version); }
 
+    DeletePredicatePB* mutable_delete_predicate() { return _rowset_meta->mutable_delete_predicate(); }
+
     static bool comparator(const RowsetSharedPtr& left, const RowsetSharedPtr& right) {
         return left->end_version() < right->end_version();
     }
