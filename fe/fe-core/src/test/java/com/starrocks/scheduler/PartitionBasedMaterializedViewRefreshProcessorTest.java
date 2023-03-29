@@ -481,7 +481,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         taskRun.executeTaskRun();
 
         Collection<Partition> partitions = materializedView.getPartitions();
-        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(6, partitions.size());
         Assert.assertEquals(1, materializedView.getPartition("p19980101").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p19980102").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p19980103").getVisibleVersion());
@@ -504,7 +504,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
 
-        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(6, partitions.size());
         Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p19980102").getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p19980103").getVisibleVersion());
@@ -620,7 +620,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=5/5");
+        assertPlanContains(execPlan, "partitions=6/6");
 
         MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                 getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
@@ -630,11 +630,10 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
-        System.out.println(execPlan.getExplainString(TExplainLevel.NORMAL));
 
-        assertPlanContains(execPlan, "partitions=1/6");
+        assertPlanContains(execPlan, "partitions=1/7");
         Collection<Partition> partitions = materializedView.getPartitions();
-        Assert.assertEquals(6, partitions.size());
+        Assert.assertEquals(7, partitions.size());
 
         mockedHiveMetadata.dropPartition("partitioned_db", "lineitem_par", "l_shipdate=1998-01-06");
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
@@ -713,7 +712,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=5/5");
+        assertPlanContains(execPlan, "partitions=6/6");
 
         MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                 getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
@@ -726,7 +725,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         execPlan = mvContext.getExecPlan();
 
         assertPlanContains(execPlan, "l_shipdate >= '1998-01-04', 16: l_shipdate < '1998-01-05'",
-                "partitions=1/5");
+                "partitions=1/6");
 
         mockedHiveMetadata.updateTable("tpch", "orders");
 
@@ -734,7 +733,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=5/5", "partitions=1/1");
+        assertPlanContains(execPlan, "partitions=6/6", "partitions=1/1");
     }
 
     public void testAutoPartitionRefreshWithUnPartitionedHiveTable() throws Exception {
@@ -803,7 +802,9 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=5/5");
+        System.out.println(execPlan.getExplainString(TExplainLevel.NORMAL));
+        assertPlanContains(execPlan, "partitions=6/6", "PARTITION PREDICATES: (16: l_shipdate < '1998-01-06') " +
+                "OR (16: l_shipdate IS NULL)");
 
         MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                 getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
@@ -815,10 +816,10 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "PARTITION PREDICATES: 16: l_shipdate >= '1998-01-02', 16: l_shipdate < '1998-01-04'",
-                "partitions=2/5");
+                "partitions=2/6");
 
         Collection<Partition> partitions = materializedView.getPartitions();
-        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(6, partitions.size());
         Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
         Assert.assertEquals(3, materializedView.getPartition("p19980102").getVisibleVersion());
         Assert.assertEquals(3, materializedView.getPartition("p19980103").getVisibleVersion());
@@ -850,7 +851,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=5/5");
+        assertPlanContains(execPlan, "partitions=6/6");
 
         MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                 getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
@@ -861,7 +862,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=5/5");
+        assertPlanContains(execPlan, "partitions=6/6");
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(1, partitions.size());
@@ -894,7 +895,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=5/5");
+        assertPlanContains(execPlan, "partitions=6/6");
 
         MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                 getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
@@ -906,10 +907,10 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "PARTITION PREDICATES: 16: l_shipdate >= '1998-01-02', 16: l_shipdate < '1998-01-04'",
-                "partitions=2/5");
+                "partitions=2/6");
 
         Collection<Partition> partitions = materializedView.getPartitions();
-        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(6, partitions.size());
         Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
         Assert.assertEquals(3, materializedView.getPartition("p19980102").getVisibleVersion());
         Assert.assertEquals(3, materializedView.getPartition("p19980103").getVisibleVersion());
@@ -943,7 +944,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=5/5");
+        assertPlanContains(execPlan, "partitions=6/6");
 
         MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                 getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
@@ -955,10 +956,10 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "PARTITION PREDICATES: 16: l_shipdate >= '1998-01-02', 16: l_shipdate < '1998-01-04'",
-                "partitions=2/5");
+                "partitions=2/6");
 
         Collection<Partition> partitions = materializedView.getPartitions();
-        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(6, partitions.size());
         Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
         Assert.assertEquals(3, materializedView.getPartition("p19980102").getVisibleVersion());
         Assert.assertEquals(3, materializedView.getPartition("p19980103").getVisibleVersion());
@@ -1044,7 +1045,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         taskRun.executeTaskRun();
         Collection<Partition> partitions = materializedView.getPartitions();
 
-        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(6, partitions.size());
         Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p19980102").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p19980103").getVisibleVersion());
@@ -1058,7 +1059,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         Assert.assertTrue(plan.contains("PARTITION PREDICATES: 16: l_shipdate >= '1998-01-01', " +
                 "16: l_shipdate < '1998-01-03'"));
-        Assert.assertTrue(plan.contains("partitions=2/5"));
+        Assert.assertTrue(plan.contains("partitions=2/6"));
     }
 
     @Test
