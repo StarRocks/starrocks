@@ -42,6 +42,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/index_page.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/rowset/parsed_page.h"
@@ -112,10 +113,15 @@ class IndexedColumnReader {
 
 public:
     // Does *NOT* take the ownership of |fs|.
-    IndexedColumnReader(FileSystem* fs, std::string file_name, IndexedColumnMetaPB meta)
-            : _fs(fs), _file_name(std::move(file_name)), _meta(std::move(meta)){};
+    IndexedColumnReader(const IndexReadOptions& opts, IndexedColumnMetaPB meta)
+            : _fs(opts.fs),
+              _file_name(opts.file_name),
+              _meta(std::move(meta)),
+              _use_page_cache(opts.use_page_cache),
+              _kept_in_memory(opts.kept_in_memory),
+              _skip_fill_local_cache(opts.skip_fill_local_cache) {}
 
-    Status load(bool use_page_cache, bool kept_in_memory);
+    Status load();
 
     Status new_iterator(std::unique_ptr<IndexedColumnIterator>* iter);
 
@@ -131,9 +137,6 @@ public:
         return size;
     }
 
-    bool use_page_cache() const { return _use_page_cache; }
-    bool kept_in_memory() const { return _kept_in_memory; }
-
 private:
     Status load_index_page(RandomAccessFile* read_file, const PagePointerPB& pp, PageHandle* handle,
                            IndexPageReader* reader);
@@ -148,6 +151,8 @@ private:
 
     bool _use_page_cache = true;
     bool _kept_in_memory = false;
+    bool _skip_fill_local_cache = false;
+
     int64_t _num_values = 0;
     // whether this column contains any index page.
     // could be false when the column contains only one data page.

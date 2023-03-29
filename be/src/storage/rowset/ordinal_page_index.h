@@ -43,6 +43,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/index_page.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/page_pointer.h"
 #include "util/coding.h"
 #include "util/once.h"
@@ -87,8 +88,7 @@ public:
     //
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
-    StatusOr<bool> load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
-                        bool use_page_cache, bool kept_in_memory);
+    StatusOr<bool> load(const IndexReadOptions& opts, const OrdinalIndexPB& meta, ordinal_t num_values);
 
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     OrdinalPageIndexIterator seek_at_or_before(ordinal_t ordinal);
@@ -123,8 +123,7 @@ private:
         return sizeof(OrdinalIndexReader) + _ordinals.size() * sizeof(ordinal_t) + _pages.size() * sizeof(PagePointer);
     }
 
-    Status _do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
-                    bool use_page_cache, bool kept_in_memory);
+    Status _do_load(const IndexReadOptions& opts, const OrdinalIndexPB& meta, ordinal_t num_values);
 
     OnceFlag _load_once;
     // valid after load

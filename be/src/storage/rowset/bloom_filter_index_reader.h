@@ -66,8 +66,7 @@ public:
     //
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
-    StatusOr<bool> load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                        bool use_page_cache, bool kept_in_memory);
+    StatusOr<bool> load(const IndexReadOptions& opts, const BloomFilterIndexPB& meta);
 
     // create a new column iterator.
     // REQUIRES: the index data has been successfully `load()`ed into memory.
@@ -78,8 +77,7 @@ public:
     bool loaded() const { return invoked(_load_once); }
 
 private:
-    Status _do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta, bool use_page_cache,
-                    bool kept_in_memory);
+    Status _do_load(const IndexReadOptions& opts, const BloomFilterIndexPB& meta);
 
     void _reset();
 
