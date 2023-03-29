@@ -42,7 +42,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -76,10 +76,10 @@ public class BackendAction extends WebBaseAction {
     }
 
     private void appendKnownBackendsInfo(StringBuilder buffer) {
-        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, DataNode> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         List<List<Comparable>> backendInfos = new ArrayList<List<Comparable>>();
-        for (Backend backend : backendMap.values()) {
+        for (DataNode backend : backendMap.values()) {
             List<Comparable> backendInfo = new ArrayList<Comparable>();
             InetAddress address = null;
             try {

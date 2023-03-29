@@ -21,7 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -34,7 +34,7 @@ public class BinlogManagerTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        Backend be = UtFrameUtils.addMockBackend(10002);
+        DataNode be = UtFrameUtils.addMockBackend(10002);
         be.setIsDecommissioned(true);
         Config.enable_strict_storage_medium_check = true;
         // create connect context

@@ -27,7 +27,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
@@ -149,7 +149,7 @@ public class TabletSchedulerTest {
         Map<String, TDisk> backendDisks1 = new HashMap<>();
         backendDisks1.put("/path11", td11);
         backendDisks1.put("/path12", td12);
-        Backend be1 = new Backend(1, "192.168.0.1", 9030);
+        DataNode be1 = new DataNode(1, "192.168.0.1", 9030);
         be1.setIsAlive(new AtomicBoolean(true));
         be1.updateDisks(backendDisks1);
         systemInfoService.addBackend(be1);
@@ -161,7 +161,7 @@ public class TabletSchedulerTest {
         Map<String, TDisk> backendDisks2 = new HashMap<>();
         backendDisks2.put("/path21", td21);
         backendDisks2.put("/path22", td22);
-        Backend be2 = new Backend(2, "192.168.0.2", 9030);
+        DataNode be2 = new DataNode(2, "192.168.0.2", 9030);
         be2.updateDisks(backendDisks2);
         be2.setIsAlive(new AtomicBoolean(true));
         systemInfoService.addBackend(be2);

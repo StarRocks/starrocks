@@ -415,6 +415,7 @@ jobs:
         if: success() || failure()
         with:
           check_name: 'Admit Test Results'
+          fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'StarRocksTest/result/*.xml'
