@@ -19,7 +19,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -40,6 +39,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv1.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv2.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv3.sql");
+       connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
     }
 
 
@@ -100,7 +100,12 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     public void testQuery7_1() {
         runFileUnitTest("materialized-view/tpch/q7-1");
     }
+<<<<<<< HEAD
     
+=======
+
+    // TODO(lishuming): predicates may be out of order when in parallel.
+>>>>>>> dd76ccdda ([Enhancement] Enhance mv rewrite when mv/query have multi same tables (#20263))
     @Test
     @Ignore
     public void testQuery8() {
