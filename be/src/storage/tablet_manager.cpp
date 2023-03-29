@@ -108,8 +108,8 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
             return Status::InternalError(fmt::format("tablet already exists, tablet_id: {}", old_tablet->tablet_id()));
         }
         old_tablet->obtain_header_rdlock();
-        auto old_rowset = old_tablet->rowset_with_max_version();
-        auto new_rowset = new_tablet->rowset_with_max_version();
+        auto old_rowset = old_tablet->rowset_with_max_version_unlocked();
+        auto new_rowset = new_tablet->rowset_with_max_version_unlocked();
         auto old_time = (old_rowset == nullptr) ? -1 : old_rowset->creation_time();
         auto new_time = (new_rowset == nullptr) ? -1 : new_rowset->creation_time();
         auto old_version = (old_rowset == nullptr) ? -1 : old_rowset->end_version();
@@ -127,7 +127,7 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
         }
     }
     if (update_meta) {
-        new_tablet->save_meta();
+        new_tablet->save_meta_unlocked();
     }
     return Status::OK();
 }
@@ -599,9 +599,9 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
             {
                 std::shared_lock rdlock(tablet_ptr->get_header_lock());
                 if (compaction_type == CompactionType::BASE_COMPACTION) {
-                    table_score = tablet_ptr->calc_base_compaction_score();
+                    table_score = tablet_ptr->calc_base_compaction_score_unlocked();
                 } else if (compaction_type == CompactionType::CUMULATIVE_COMPACTION) {
-                    table_score = tablet_ptr->calc_cumulative_compaction_score();
+                    table_score = tablet_ptr->calc_cumulative_compaction_score_unlocked();
                 }
             }
             if (table_score > highest_score) {
@@ -729,7 +729,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     }
     // NOTE: We do not check tablet's initial version here, because if BE restarts when
     // one tablet is doing schema-change, we may meet empty tablet.
-    if (tablet->max_version().first == -1 && tablet->tablet_state() == TABLET_RUNNING) {
+    if (tablet->max_version_unlocked().first == -1 && tablet->tablet_state() == TABLET_RUNNING) {
         LOG(WARNING) << "Fail to load tablet. it is in running state but without delta. "
                      << "tablet=" << tablet->full_name() << " path=" << data_dir->path();
         // tablet state is invalid, drop tablet
@@ -1302,7 +1302,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
             // See comments above
             std::unique_lock l(dropped_tablet->get_header_lock());
             dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
-            dropped_tablet->save_meta();
+            dropped_tablet->save_meta_unlocked();
         }
 
         std::unique_lock l(_shutdown_tablets_lock);

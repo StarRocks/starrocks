@@ -188,14 +188,14 @@ Status DataDir::get_shard(uint64_t* shard) {
     return Status::OK();
 }
 
-void DataDir::register_tablet(Tablet* tablet) {
+void DataDir::register_tablet(BaseTablet* tablet) {
     TabletInfo tablet_info(tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid());
 
     std::lock_guard<std::mutex> l(_mutex);
     _tablet_set.emplace(tablet_info);
 }
 
-void DataDir::deregister_tablet(Tablet* tablet) {
+void DataDir::deregister_tablet(BaseTablet* tablet) {
     TabletInfo tablet_info(tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid());
 
     std::lock_guard<std::mutex> l(_mutex);

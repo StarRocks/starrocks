@@ -523,7 +523,7 @@ public:
     }
 
     static StatusOr<TabletSharedPtr> clone_a_new_replica(const TabletSharedPtr& source_tablet, int64_t new_tablet_id) {
-        auto clone_version = source_tablet->max_version().second;
+        auto clone_version = source_tablet->max_version_unlocked().second;
         auto snapshot_dir = SnapshotManager::instance()->snapshot_full(source_tablet, clone_version, 3600);
         CHECK(snapshot_dir.ok()) << snapshot_dir.status();
 
@@ -940,7 +940,7 @@ static ssize_t read_tablet_and_compare_nullable_sort_key(const TabletSharedPtr& 
 void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     // write
     const int N = 8000;
     std::vector<int64_t> keys;
@@ -999,7 +999,7 @@ TEST_F(TabletUpdatesTest, writeread_with_sort_key) {
 
 void TabletUpdatesTest::test_writeread_with_delete(bool enable_persistent_index) {
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     // write
     const int N = 8000;
     std::vector<int64_t> keys;
@@ -1114,7 +1114,7 @@ TEST_F(TabletUpdatesTest, writeread_with_overlapping_deletes_only_batches) {
 
 void TabletUpdatesTest::test_noncontinous_commit(bool enable_persistent_index) {
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     const int N = 100;
     std::vector<int64_t> keys;
     for (int i = 0; i < N; i++) {
@@ -1143,7 +1143,7 @@ TEST_F(TabletUpdatesTest, noncontinous_commit_with_persistent_index) {
 
 void TabletUpdatesTest::test_noncontinous_meta_save_load(bool enable_persistent_index) {
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     const int N = 100;
     std::vector<int64_t> keys;
     for (int i = 0; i < N; i++) {
@@ -1159,7 +1159,7 @@ void TabletUpdatesTest::test_noncontinous_meta_save_load(bool enable_persistent_
     ASSERT_EQ(2, _tablet->updates()->max_version());
 
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    _tablet->save_meta();
+    _tablet->save_meta_unlocked();
 
     auto tablet1 = load_same_tablet_from_store(_tablet);
 
@@ -1177,7 +1177,7 @@ TEST_F(TabletUpdatesTest, noncontinous_meta_save_load_with_persistent_index) {
 
 void TabletUpdatesTest::test_save_meta(bool enable_persistent_index) {
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     // Prepare records for test.
     const int N = 10;
@@ -1197,7 +1197,7 @@ void TabletUpdatesTest::test_save_meta(bool enable_persistent_index) {
     ASSERT_EQ(N, read_tablet(_tablet, 16));
     ASSERT_EQ(N, read_tablet(_tablet, 2));
 
-    _tablet->save_meta();
+    _tablet->save_meta_unlocked();
 
     auto tablet1 = load_same_tablet_from_store(_tablet);
     ASSERT_EQ(31, tablet1->updates()->version_history_count());
@@ -1289,7 +1289,7 @@ TEST_F(TabletUpdatesTest, load_from_pb_with_persistent_index) {
 
 void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_index) {
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     // Prepare records for test.
     const int N = 100;
@@ -1358,7 +1358,7 @@ TEST_F(TabletUpdatesTest, remove_expired_versions_with_persistent_index) {
 void TabletUpdatesTest::test_apply(bool enable_persistent_index, bool has_merge_condition = false) {
     const int N = 10;
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     ASSERT_EQ(1, _tablet->updates()->version_history_count());
 
     std::vector<int64_t> keys(N);
@@ -1387,7 +1387,7 @@ void TabletUpdatesTest::test_apply(bool enable_persistent_index, bool has_merge_
     auto tablet1 = load_same_tablet_from_store(_tablet);
     // `enable_persistent_index` is not persistent in this case
     // so we reset the `enable_persistent_index` after load
-    tablet1->set_enable_persistent_index(enable_persistent_index);
+    tablet1->set_enable_persistent_index_unlocked(enable_persistent_index);
     EXPECT_EQ(max_version, tablet1->updates()->max_version());
     EXPECT_EQ(max_version, tablet1->updates()->version_history_count());
     for (int i = 2; i <= max_version; i++) {
@@ -1414,7 +1414,7 @@ void TabletUpdatesTest::test_concurrent_write_read_and_gc(bool enable_persistent
     std::atomic<bool> stopped{false};
     std::atomic<int64_t> version{1};
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     auto wait_start = [&]() {
         while (!started) {
@@ -1490,7 +1490,7 @@ TEST_F(TabletUpdatesTest, concurrent_write_read_and_gc_with_persistent_index) {
 void TabletUpdatesTest::test_compaction_score_not_enough(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     std::vector<int64_t> keys;
     for (int i = 0; i < 100; i++) {
         keys.push_back(i);
@@ -1516,7 +1516,7 @@ TEST_F(TabletUpdatesTest, compaction_score_not_enough_with_persistent_index) {
 void TabletUpdatesTest::test_compaction_score_enough_duplicate(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     std::vector<int64_t> keys;
     for (int i = 0; i < 100; i++) {
         keys.push_back(i);
@@ -1546,7 +1546,7 @@ TEST_F(TabletUpdatesTest, compaction_score_enough_duplicate_with_persistent_inde
 void TabletUpdatesTest::test_compaction_score_enough_normal(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     std::vector<int64_t> keys;
     for (int i = 0; i < 100; i++) {
         keys.push_back(i);
@@ -1577,7 +1577,7 @@ void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index)
     int N = 100;
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     std::vector<int64_t> keys;
     for (int i = 0; i < N; i++) {
         keys.push_back(i);
@@ -1765,7 +1765,7 @@ void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
     int N = 100;
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     std::vector<int64_t> keys;
     for (int i = 0; i < N; i++) {
         keys.push_back(i);
@@ -1840,7 +1840,7 @@ void TabletUpdatesTest::test_compaction_with_empty_rowset(bool enable_persistent
     int N = 10000;
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand(), multi_column_pk);
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     std::vector<int64_t> keys2;
     for (int i = 0; i < N; i++) {
         keys2.push_back(i * 3);
@@ -1894,8 +1894,8 @@ void TabletUpdatesTest::test_link_from(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
     _tablet2 = create_tablet2(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
-    _tablet2->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
+    _tablet2->set_enable_persistent_index_unlocked(enable_persistent_index);
     std::vector<int64_t> keys;
     int N = 100;
     for (int i = 0; i < N; i++) {
@@ -1925,7 +1925,7 @@ TEST_F(TabletUpdatesTest, link_from_with_persistent_index) {
 void TabletUpdatesTest::test_convert_from(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     const auto& tablet_to_schema_change = create_tablet_to_schema_change(rand(), rand());
     std::vector<int64_t> keys;
     int N = 100;
@@ -1954,7 +1954,7 @@ void TabletUpdatesTest::test_convert_from(bool enable_persistent_index) {
 void TabletUpdatesTest::test_convert_from_with_pending(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     const auto& tablet_to_schema_change = create_tablet_to_schema_change(rand(), rand());
     int N = 100;
     std::vector<int64_t> keys2;   // [0, 100)
@@ -2010,7 +2010,7 @@ TEST_F(TabletUpdatesTest, convert_from_with_pending_and_persistent_index) {
 void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    _tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     const auto& tablet_with_sort_key1 = create_tablet_with_sort_key(rand(), rand(), {1});
     std::vector<int64_t> keys;
     int N = 100;
@@ -2066,8 +2066,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental(bool enable_persistent_in
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
-    tablet0->set_enable_persistent_index(enable_persistent_index);
-    tablet1->set_enable_persistent_index(enable_persistent_index);
+    tablet0->set_enable_persistent_index_unlocked(enable_persistent_index);
+    tablet1->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -2140,8 +2140,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental_ignore_already_committed_
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
-    tablet0->set_enable_persistent_index(enable_persistent_index);
-    tablet1->set_enable_persistent_index(enable_persistent_index);
+    tablet0->set_enable_persistent_index_unlocked(enable_persistent_index);
+    tablet1->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -2214,8 +2214,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental_mismatched_tablet_id(bool
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
-    tablet0->set_enable_persistent_index(enable_persistent_index);
-    tablet1->set_enable_persistent_index(enable_persistent_index);
+    tablet0->set_enable_persistent_index_unlocked(enable_persistent_index);
+    tablet1->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -2275,8 +2275,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental_data_file_not_exist(bool 
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
-    tablet0->set_enable_persistent_index(enable_persistent_index);
-    tablet1->set_enable_persistent_index(enable_persistent_index);
+    tablet0->set_enable_persistent_index_unlocked(enable_persistent_index);
+    tablet1->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -2338,8 +2338,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental_incorrect_version(bool en
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
-    tablet0->set_enable_persistent_index(enable_persistent_index);
-    tablet1->set_enable_persistent_index(enable_persistent_index);
+    tablet0->set_enable_persistent_index_unlocked(enable_persistent_index);
+    tablet1->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -2513,8 +2513,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_old(b
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
-    tablet0->set_enable_persistent_index(enable_persistent_index);
-    tablet1->set_enable_persistent_index(enable_persistent_index);
+    tablet0->set_enable_persistent_index_unlocked(enable_persistent_index);
+    tablet1->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -2576,8 +2576,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
-    tablet0->set_enable_persistent_index(enable_persistent_index);
-    tablet1->set_enable_persistent_index(enable_persistent_index);
+    tablet0->set_enable_persistent_index_unlocked(enable_persistent_index);
+    tablet1->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -2699,8 +2699,8 @@ void TabletUpdatesTest::test_load_snapshot_full(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
-    tablet0->set_enable_persistent_index(enable_persistent_index);
-    tablet1->set_enable_persistent_index(enable_persistent_index);
+    tablet0->set_enable_persistent_index_unlocked(enable_persistent_index);
+    tablet1->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -2746,8 +2746,8 @@ void TabletUpdatesTest::test_load_snapshot_full_file_not_exist(bool enable_persi
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
-    tablet0->set_enable_persistent_index(enable_persistent_index);
-    tablet1->set_enable_persistent_index(enable_persistent_index);
+    tablet0->set_enable_persistent_index_unlocked(enable_persistent_index);
+    tablet1->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -2816,8 +2816,8 @@ void TabletUpdatesTest::test_load_snapshot_full_mismatched_tablet_id(bool enable
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
-    tablet0->set_enable_persistent_index(enable_persistent_index);
-    tablet1->set_enable_persistent_index(enable_persistent_index);
+    tablet0->set_enable_persistent_index_unlocked(enable_persistent_index);
+    tablet1->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -2878,8 +2878,8 @@ void TabletUpdatesTest::test_issue_4193(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
-    tablet0->set_enable_persistent_index(enable_persistent_index);
-    tablet1->set_enable_persistent_index(enable_persistent_index);
+    tablet0->set_enable_persistent_index_unlocked(enable_persistent_index);
+    tablet1->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -2929,8 +2929,8 @@ void TabletUpdatesTest::test_issue_4181(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
-    tablet0->set_enable_persistent_index(enable_persistent_index);
-    tablet1->set_enable_persistent_index(enable_persistent_index);
+    tablet0->set_enable_persistent_index_unlocked(enable_persistent_index);
+    tablet1->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -2981,7 +2981,7 @@ TEST_F(TabletUpdatesTest, test_issue_4181_with_persistent_index) {
 void TabletUpdatesTest::test_snapshot_with_empty_rowset(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
-    tablet0->set_enable_persistent_index(enable_persistent_index);
+    tablet0->set_enable_persistent_index_unlocked(enable_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -3045,7 +3045,7 @@ void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
         (void)tablet_mgr->drop_tablet(tablet->tablet_id());
         (void)fs::remove_all(tablet->schema_hash_path());
     });
-    tablet->set_enable_persistent_index(enable_persistent_index);
+    tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     const int N = 8000;
     std::vector<int64_t> keys;
     for (int i = 0; i < N; i++) {
@@ -3206,8 +3206,8 @@ void TabletUpdatesTest::test_load_snapshot_primary(int64_t max_version, const st
                                                    bool enable_persistent_index) {
     auto src_tablet = create_tablet(rand(), rand());
     auto dest_tablet = create_tablet(rand(), rand());
-    src_tablet->set_enable_persistent_index(enable_persistent_index);
-    dest_tablet->set_enable_persistent_index(enable_persistent_index);
+    src_tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
+    dest_tablet->set_enable_persistent_index_unlocked(enable_persistent_index);
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(src_tablet->tablet_id());

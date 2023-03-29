@@ -119,7 +119,7 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
         // get all versions to be migrate
         {
             std::shared_lock header_rdlock(tablet->get_header_lock());
-            RowsetSharedPtr max_version = tablet->rowset_with_max_version();
+            RowsetSharedPtr max_version = tablet->rowset_with_max_version_unlocked();
             if (max_version == nullptr) {
                 LOG(WARNING) << "Not found version in tablet. tablet: " << tablet->tablet_id();
                 return Status::NotFound(fmt::format("Not found version in tablet. tablet: {}", tablet->tablet_id()));
@@ -237,7 +237,7 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
         {
             // check version
             std::shared_lock header_rdlock(tablet->get_header_lock());
-            RowsetSharedPtr max_version = tablet->rowset_with_max_version();
+            RowsetSharedPtr max_version = tablet->rowset_with_max_version_unlocked();
             if (max_version == nullptr) {
                 LOG(WARNING) << "Not found version in tablet. tablet: " << tablet->tablet_id();
                 need_remove_new_path = true;

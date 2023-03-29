@@ -1764,7 +1764,7 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
     if (num_version_removed > 0) {
         {
             std::unique_lock wrlock(_tablet.get_header_lock());
-            _tablet.save_meta();
+            _tablet.save_meta_unlocked();
         }
         auto tablet_id = _tablet.tablet_id();
         // Remove useless delete vectors.

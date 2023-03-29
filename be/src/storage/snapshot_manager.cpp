@@ -100,7 +100,7 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
 
     StatusOr<std::string> res;
     std::shared_lock rdlock(tablet->get_header_lock());
-    int64_t cur_tablet_version = tablet->max_version().second;
+    int64_t cur_tablet_version = tablet->max_version_unlocked().second;
     rdlock.unlock();
     if (request.__isset.missing_version) {
         LOG(INFO) << "make incremental snapshot tablet:" << request.tablet_id << " cur_version:" << cur_tablet_version
@@ -410,7 +410,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     // 1. Check whether the snapshot version exist.
     std::shared_lock rdlock(tablet->get_header_lock());
     if (snapshot_version == 0) {
-        snapshot_version = tablet->max_version().second;
+        snapshot_version = tablet->max_version_unlocked().second;
     }
     RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, snapshot_version), &snapshot_rowsets));
     tablet->generate_tablet_meta_copy_unlocked(snapshot_tablet_meta);
@@ -550,7 +550,7 @@ StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& t
 Status SnapshotManager::make_snapshot_on_tablet_meta(const TabletSharedPtr& tablet) {
     std::vector<RowsetSharedPtr> snapshot_rowsets;
     std::shared_lock rdlock(tablet->get_header_lock());
-    int64_t snapshot_version = tablet->max_version().second;
+    int64_t snapshot_version = tablet->max_version_unlocked().second;
     RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, snapshot_version), &snapshot_rowsets));
     rdlock.unlock();
     std::vector<RowsetMetaSharedPtr> snapshot_rowset_metas;

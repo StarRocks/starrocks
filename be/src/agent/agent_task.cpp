@@ -672,11 +672,11 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
         std::unique_lock wrlock(tablet->get_header_lock());
         // update tablet meta
         if (!tablet_meta_info.__isset.meta_type) {
-            tablet->set_partition_id(tablet_meta_info.partition_id);
+            tablet->set_partition_id_unlocked(tablet_meta_info.partition_id);
         } else {
             switch (tablet_meta_info.meta_type) {
             case TTabletMetaType::PARTITIONID:
-                tablet->set_partition_id(tablet_meta_info.partition_id);
+                tablet->set_partition_id_unlocked(tablet_meta_info.partition_id);
                 break;
             case TTabletMetaType::INMEMORY:
                 // This property is no longer supported.
@@ -696,12 +696,12 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                     }
                 }
 
-                tablet->set_binlog_config(tablet_meta_info.binlog_config);
+                tablet->set_binlog_config_unlocked(tablet_meta_info.binlog_config);
                 break;
             case TTabletMetaType::ENABLE_PERSISTENT_INDEX:
                 LOG(INFO) << "update tablet:" << tablet->tablet_id()
                           << " enable_persistent_index:" << tablet_meta_info.enable_persistent_index;
-                tablet->set_enable_persistent_index(tablet_meta_info.enable_persistent_index);
+                tablet->set_enable_persistent_index_unlocked(tablet_meta_info.enable_persistent_index);
                 // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
                 // because the primary index is available in cache
                 // But it will be remove from index cache after apply is finished
@@ -710,7 +710,7 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 break;
             }
         }
-        tablet->save_meta();
+        tablet->save_meta_unlocked();
     }
 
     LOG(INFO) << "finish update tablet meta task. signature:" << agent_task_req->signature;

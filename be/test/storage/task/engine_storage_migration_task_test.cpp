@@ -307,7 +307,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
         // success because the related transaction is GCed
         ASSERT_TRUE(st.ok());
     }
-    Version max_version = tablet->max_version();
+    Version max_version = tablet->max_version_unlocked();
     ASSERT_EQ(3, max_version.first);
 }
 

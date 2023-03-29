@@ -36,6 +36,7 @@
 
 #include <memory>
 
+#include "storage/data_dir.h"
 #include "storage/olap_define.h"
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"
@@ -80,6 +81,12 @@ public:
     TabletState tablet_state() const { return _state; }
     Status set_tablet_state(TabletState state);
 
+    // meta lock
+    void obtain_header_rdlock() { _meta_lock.lock_shared(); }
+    void obtain_header_wrlock() { _meta_lock.lock(); }
+    void release_header_lock() { _meta_lock.unlock(); }
+    std::shared_mutex& get_header_lock() { return _meta_lock; }
+
     // Property encapsulated in TabletMeta
     const TabletMetaSharedPtr tablet_meta();
 
@@ -101,6 +108,33 @@ public:
     // properties encapsulated in TabletSchema
     const TabletSchema& tablet_schema() const;
 
+    bool is_used();
+
+    void register_tablet_into_dir();
+    void deregister_tablet_from_dir();
+
+    // propreties encapsulated in TabletSchema
+    KeysType keys_type() const;
+    size_t num_columns() const;
+    size_t num_key_columns() const;
+    size_t num_rows_per_row_block() const;
+    size_t next_unique_id() const;
+    size_t field_index(const string& field_name) const;
+
+    const DelPredicateArray& delete_predicates() const;
+
+    bool get_enable_persistent_index();
+
+    void set_enable_persistent_index_unlocked(bool enable_persistent_index);
+
+    void set_binlog_config_unlocked(TBinlogConfig binlog_config);
+
+    Status set_partition_id_unlocked(int64_t partition_id);
+
+    // should save tablet meta to remote meta store
+    // if it's a primary replica
+    void save_meta_unlocked();
+
 protected:
     virtual void on_shutdown() {}
 
@@ -108,6 +142,7 @@ protected:
 
     TabletState _state;
     TabletMetaSharedPtr _tablet_meta;
+    mutable std::shared_mutex _meta_lock;
 
     DataDir* _data_dir;
     std::string _tablet_path; // TODO: remove this variable for less memory occupation
@@ -126,18 +161,22 @@ inline const std::string& BaseTablet::schema_hash_path() const {
 }
 
 inline const TabletMetaSharedPtr BaseTablet::tablet_meta() {
+    std::shared_lock rdlock(_meta_lock);
     return _tablet_meta;
 }
 
 inline TabletUid BaseTablet::tablet_uid() const {
+    std::shared_lock rdlock(_meta_lock);
     return _tablet_meta->tablet_uid();
 }
 
 inline int64_t BaseTablet::belonged_table_id() const {
+    std::shared_lock rdlock(_meta_lock);
     return _tablet_meta->table_id();
 }
 
 inline const std::string BaseTablet::full_name() const {
+    std::shared_lock rdlock(_meta_lock);
     std::stringstream ss;
     ss << _tablet_meta->tablet_id() << "." << _tablet_meta->schema_hash() << "."
        << _tablet_meta->tablet_uid().to_string();
@@ -145,26 +184,32 @@ inline const std::string BaseTablet::full_name() const {
 }
 
 inline int64_t BaseTablet::partition_id() const {
+    std::shared_lock rdlock(_meta_lock);
     return _tablet_meta->partition_id();
 }
 
 inline int64_t BaseTablet::tablet_id() const {
+    std::shared_lock rdlock(_meta_lock);
     return _tablet_meta->tablet_id();
 }
 
 inline int32_t BaseTablet::schema_hash() const {
+    std::shared_lock rdlock(_meta_lock);
     return _tablet_meta->schema_hash();
 }
 
 inline int16_t BaseTablet::shard_id() {
+    std::shared_lock rdlock(_meta_lock);
     return _tablet_meta->shard_id();
 }
 
 inline const int64_t BaseTablet::creation_time() const {
+    std::shared_lock rdlock(_meta_lock);
     return _tablet_meta->creation_time();
 }
 
 inline void BaseTablet::set_creation_time(int64_t creation_time) {
+    std::shared_lock rdlock(_meta_lock);
     _tablet_meta->set_creation_time(creation_time);
 }
 
@@ -173,7 +218,79 @@ inline bool BaseTablet::equal(int64_t id, int32_t hash) {
 }
 
 inline const TabletSchema& BaseTablet::tablet_schema() const {
+    std::shared_lock rdlock(_meta_lock);
     return _tablet_meta->tablet_schema();
+}
+
+inline bool BaseTablet::is_used() {
+    return _data_dir->is_used();
+}
+
+inline void BaseTablet::register_tablet_into_dir() {
+    _data_dir->register_tablet(this);
+}
+
+inline void BaseTablet::deregister_tablet_from_dir() {
+    _data_dir->deregister_tablet(this);
+}
+
+inline KeysType BaseTablet::keys_type() const {
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->tablet_schema().keys_type();
+}
+
+inline size_t BaseTablet::num_columns() const {
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->tablet_schema().num_columns();
+}
+
+inline size_t BaseTablet::num_key_columns() const {
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->tablet_schema().num_key_columns();
+}
+
+inline size_t BaseTablet::num_rows_per_row_block() const {
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->tablet_schema().num_rows_per_row_block();
+}
+
+inline size_t BaseTablet::next_unique_id() const {
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->tablet_schema().next_column_unique_id();
+}
+
+inline size_t BaseTablet::field_index(const string& field_name) const {
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->tablet_schema().field_index(field_name);
+}
+
+inline const DelPredicateArray& BaseTablet::delete_predicates() const {
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->delete_predicates();
+}
+
+inline bool BaseTablet::get_enable_persistent_index() {
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->get_enable_persistent_index();
+}
+
+inline void BaseTablet::set_enable_persistent_index_unlocked(bool enable_persistent_index) {
+    return _tablet_meta->set_enable_persistent_index(enable_persistent_index);
+}
+
+inline void BaseTablet::set_binlog_config_unlocked(TBinlogConfig binlog_config) {
+    _tablet_meta->set_binlog_config(binlog_config);
+}
+
+inline Status BaseTablet::set_partition_id_unlocked(int64_t partition_id) {
+    return _tablet_meta->set_partition_id(partition_id);
+}
+
+// should save tablet meta to remote meta store
+// if it's a primary replica
+inline void BaseTablet::save_meta_unlocked() {
+    auto st = _tablet_meta->save_meta(_data_dir);
+    CHECK(st.ok()) << "fail to save tablet_meta: " << st;
 }
 
 } /* namespace starrocks */

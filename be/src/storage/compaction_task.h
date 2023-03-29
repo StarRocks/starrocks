@@ -247,8 +247,8 @@ protected:
                 input_stream_info << ".." << (*_input_rowsets.rbegin())->version();
             }
             std::vector<RowsetSharedPtr> to_replace;
-            _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
-            _tablet->save_meta();
+            _tablet->modify_rowsets_unlocked({_output_rowset}, _input_rowsets, &to_replace);
+            _tablet->save_meta_unlocked();
             Rowset::close_rowsets(_input_rowsets);
             for (auto& rs : to_replace) {
                 StorageEngine::instance()->add_unused_rowset(rs);

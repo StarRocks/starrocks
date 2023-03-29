@@ -247,7 +247,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
         // success because the related transaction is GCed
         ASSERT_TRUE(st.ok());
     }
-    Version max_version = tablet->max_version();
+    Version max_version = tablet->max_version_unlocked();
     ASSERT_EQ(3, max_version.first);
 
     // tablet already publish finish, get txn finished tablets
@@ -346,7 +346,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version2) {
         ASSERT_EQ(1, affected_dirs.size());
     }
     auto tablet = tablet_manager->get_tablet(12345);
-    Version max_version = tablet->max_version();
+    Version max_version = tablet->max_version_unlocked();
     ASSERT_EQ(3, max_version.first);
     {
         std::unordered_set<DataDir*> affected_dirs;
