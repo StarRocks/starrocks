@@ -120,8 +120,8 @@ import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.system.BackendHbResponse;
 import com.starrocks.system.BrokerHbResponse;
-import com.starrocks.system.DataNodeHbResponse;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.system.HeartbeatResponse;
 
@@ -213,7 +213,7 @@ public class GsonUtils {
     private static final RuntimeTypeAdapterFactory<HeartbeatResponse> HEARTBEAT_RESPONSE_ADAPTER_FACTOR =
             RuntimeTypeAdapterFactory
                     .of(HeartbeatResponse.class, "clazz")
-                    .registerSubtype(DataNodeHbResponse.class, DataNodeHbResponse.class.getSimpleName())
+                    .registerSubtype(BackendHbResponse.class, BackendHbResponse.class.getSimpleName())
                     .registerSubtype(FrontendHbResponse.class, FrontendHbResponse.class.getSimpleName())
                     .registerSubtype(BrokerHbResponse.class, BrokerHbResponse.class.getSimpleName());
 

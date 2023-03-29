@@ -435,7 +435,7 @@ public class ComputeNode implements IComputable, Writable {
      * handle Compute node's heartbeat response.
      * return true if any port changed, or alive state is changed.
      */
-    public boolean handleHbResponse(DataNodeHbResponse hbResponse, boolean isReplay) {
+    public boolean handleHbResponse(BackendHbResponse hbResponse, boolean isReplay) {
         boolean becomeDead = false;
         boolean isChanged = false;
         if (hbResponse.getStatus() == HeartbeatResponse.HbStatus.OK) {
