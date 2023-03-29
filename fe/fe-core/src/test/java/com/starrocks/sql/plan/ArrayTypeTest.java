@@ -627,4 +627,12 @@ public class ArrayTypeTest extends PlanTestBase {
                 "[8: d_5, ARRAY<DECIMAL64(16,3)>, true]); " +
                 "args: INVALID_TYPE,INVALID_TYPE; result: ARRAY<DECIMAL128(26,2)>;");
     }
+
+    @Test
+    public void testArrayAgg() throws Exception {
+        String sql = "select  array_agg(i_1) from adec;";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "aggregate: array_agg[([2: i_1, ARRAY<INT>, false]); " +
+                "args: INVALID_TYPE; result: ARRAY<ARRAY<INT>>;");
+    }
 }

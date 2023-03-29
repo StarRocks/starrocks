@@ -728,6 +728,8 @@ vectorized_functions = [
     [150100, 'array_distinct', 'ARRAY_DATETIME',    ['ARRAY_DATETIME'],    'ArrayFunctions::array_distinct<TYPE_DATETIME>'],
     [150101, 'array_distinct', 'ARRAY_DATE',        ['ARRAY_DATE'],        'ArrayFunctions::array_distinct<TYPE_DATE>'],
 
+    [150107, 'array_distinct', 'ANY_ARRAY',        ['ANY_ARRAY'],        'ArrayFunctions::array_distinct_any_type'],
+
     [150110, 'array_sort', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::array_sort<TYPE_BOOLEAN>'],
     [150111, 'array_sort', 'ARRAY_TINYINT',   ['ARRAY_TINYINT'],   'ArrayFunctions::array_sort<TYPE_TINYINT>'],
     [150112, 'array_sort', 'ARRAY_SMALLINT',  ['ARRAY_SMALLINT'],  'ArrayFunctions::array_sort<TYPE_SMALLINT>'],
@@ -761,6 +763,8 @@ vectorized_functions = [
     [150140, 'reverse', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_reverse<TYPE_DATETIME>'],
     [150141, 'reverse', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_reverse<TYPE_DATE>'],
     [150142, 'reverse', 'ARRAY_JSON',      ['ARRAY_JSON'],      'ArrayFunctions::array_reverse<TYPE_JSON>'],
+
+    [150146, 'reverse', 'ANY_ARRAY',      ['ANY_ARRAY'],      'ArrayFunctions::array_reverse_any_types'],
 
     [150150, 'array_join', 'VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'],   'ArrayFunctions::array_join'],
     [150151, 'array_join', 'VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],   'ArrayFunctions::array_join'],
@@ -834,6 +838,8 @@ vectorized_functions = [
     [150220, 'arrays_overlap', 'BOOLEAN', ['ARRAY_DECIMALV2', 'ARRAY_DECIMALV2'],    'ArrayFunctions::array_overlap<TYPE_DECIMALV2>'],
     [150221, 'arrays_overlap', 'BOOLEAN',   ['ARRAY_VARCHAR', 'ARRAY_VARCHAR'],      'ArrayFunctions::array_overlap<TYPE_VARCHAR>'],
 
+    [150226, 'arrays_overlap', 'BOOLEAN',   ['ANY_ARRAY', 'ANY_ARRAY'],      'ArrayFunctions::array_contains_any'],
+
     [150230, 'array_intersect', 'ARRAY_DATE',       ['ARRAY_DATE', "..."],        'ArrayFunctions::array_intersect<TYPE_DATE>'],
     [150231, 'array_intersect', 'ARRAY_DATETIME',   ['ARRAY_DATETIME', "..."],    'ArrayFunctions::array_intersect<TYPE_DATETIME>'],
     [150232, 'array_intersect', 'ARRAY_BOOLEAN',    ['ARRAY_BOOLEAN', "..."],     'ArrayFunctions::array_intersect<TYPE_BOOLEAN>'],
@@ -849,6 +855,8 @@ vectorized_functions = [
     [150239, 'array_intersect', 'ARRAY_DOUBLE',     ['ARRAY_DOUBLE', "..."],      'ArrayFunctions::array_intersect<TYPE_DOUBLE>'],
     [150240, 'array_intersect', 'ARRAY_DECIMALV2',  ['ARRAY_DECIMALV2', "..."],   'ArrayFunctions::array_intersect<TYPE_DECIMALV2>'],
     [150241, 'array_intersect', 'ARRAY_VARCHAR',    ['ARRAY_VARCHAR', "..."],     'ArrayFunctions::array_intersect<TYPE_VARCHAR>'],
+
+    [150246, 'array_intersect', 'ANY_ARRAY',    ['ANY_ARRAY', "..."],     'ArrayFunctions::array_intersect_any_type'],
 
 
     # @Deprecated: these will be deleted in the future version, keep these just for compatible

@@ -106,6 +106,11 @@ public:
     DEFINE_VECTORIZED_FN(array_contains_all);
     DEFINE_VECTORIZED_FN(array_map);
     DEFINE_VECTORIZED_FN(array_filter);
+
+    // array function for nested type(Array/Map/Struct)
+    DEFINE_VECTORIZED_FN(array_distinct_any_type);
+    DEFINE_VECTORIZED_FN(array_reverse_any_types);
+    DEFINE_VECTORIZED_FN(array_intersect_any_type);
 };
 
 } // namespace starrocks

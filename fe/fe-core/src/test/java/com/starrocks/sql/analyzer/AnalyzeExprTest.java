@@ -290,7 +290,6 @@ public class AnalyzeExprTest {
         analyzeFail("select array_agg(null order by);");
         analyzeFail("select array_agg(null,'a');");
         analyzeFail("select array_agg(1,1);");
-        analyzeFail("select array_agg([1,1]);");
         analyzeFail("select array_agg(1 order by 1 nulls first desc)");
     }
 }
