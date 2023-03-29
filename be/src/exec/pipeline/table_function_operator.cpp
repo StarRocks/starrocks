@@ -183,7 +183,7 @@ Status TableFunctionOperator::reset_state(starrocks::RuntimeState* state, const 
 }
 
 void TableFunctionOperator::_copy_result(const std::vector<ColumnPtr>& columns, uint32_t max_output_size) {
-    DCHECK_LE(_next_output_row, _table_function_result.first.size());
+    DCHECK_LE(_next_output_row, _table_function_result.first[0]->size());
     DCHECK_LT(_next_output_row_offset, _table_function_result.second->size());
     uint32_t curr_output_size = columns[0]->size();
     const auto& fn_result_cols = _table_function_result.first;
