@@ -89,12 +89,15 @@ private:
     Status _init(const ParquetBuilderOptions& options, const std::vector<std::string>& file_column_names);
     void _init_properties(const ParquetBuilderOptions& options);
     Status _init_schema(const std::vector<std::string>& file_column_names);
+    parquet::schema::NodePtr _init_schema_node(const std::string& name, const TypeDescriptor& type_desc, ::parquet::Repetition::type rep_type);
     void _generate_rg_writer();
     void _flush_row_group();
     size_t _get_rg_written_bytes();
     void _check_size();
-    void _write_varchar_chunk_column(size_t num_rows, size_t col_idx, const Column* data_column,
-                                     std::vector<int16_t>& def_level);
+    void _write_varchar_chunk_column(size_t num_rows, const Column* data_column,
+                                     std::vector<int16_t>& def_level) ;
+    void _add_chunk_column(const TypeDescriptor& type_desc, const ColumnPtr col, std::vector<int16_t>& def_level,
+                           std::vector<int16_t>& rep_level, int16_t max_rep_level,  std::vector<bool>& is_null, std::map<int, int>& mapping);
 
     std::unique_ptr<WritableFile> _writable_file;
     std::shared_ptr<ParquetOutputStream> _output_stream;
@@ -103,6 +106,7 @@ private:
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::unique_ptr<::parquet::ParquetFileWriter> _file_writer;
     ::parquet::RowGroupWriter* _rg_writer = nullptr;
+    int _col_idx{0};
     std::vector<int64_t> _buffered_values_estimate;
     const int64_t _row_group_max_size;
     bool _closed = false;
