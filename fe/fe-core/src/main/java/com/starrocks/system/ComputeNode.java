@@ -76,7 +76,7 @@ public class ComputeNode implements IComputable, Writable {
     // to index the state in some cluster
     @SerializedName("backendState")
     private volatile int backendState;
-    // private BackendState backendState;
+    // private DataNodeState backendState;
 
     @SerializedName("heartbeatErrMsg")
     private String heartbeatErrMsg = "";
@@ -113,7 +113,7 @@ public class ComputeNode implements IComputable, Writable {
         this.beRpcPort = 0;
 
         this.ownerClusterName = "";
-        this.backendState = DataNode.BackendState.free.ordinal();
+        this.backendState = DataNode.DataNodeState.free.ordinal();
 
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
     }
@@ -133,7 +133,7 @@ public class ComputeNode implements IComputable, Writable {
         this.isDecommissioned = new AtomicBoolean(false);
 
         this.ownerClusterName = "";
-        this.backendState = DataNode.BackendState.free.ordinal();
+        this.backendState = DataNode.DataNodeState.free.ordinal();
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
     }
 
@@ -235,7 +235,7 @@ public class ComputeNode implements IComputable, Writable {
         this.host = host;
     }
 
-    public void setBackendState(DataNode.BackendState state) {
+    public void setBackendState(DataNode.DataNodeState state) {
         this.backendState = state.ordinal();
     }
 
@@ -377,14 +377,14 @@ public class ComputeNode implements IComputable, Writable {
         ownerClusterName = "";
     }
 
-    public DataNode.BackendState getBackendState() {
+    public DataNode.DataNodeState getBackendState() {
         switch (backendState) {
             case 0:
-                return DataNode.BackendState.using;
+                return DataNode.DataNodeState.using;
             case 1:
-                return DataNode.BackendState.offline;
+                return DataNode.DataNodeState.offline;
             default:
-                return DataNode.BackendState.free;
+                return DataNode.DataNodeState.free;
         }
     }
 
