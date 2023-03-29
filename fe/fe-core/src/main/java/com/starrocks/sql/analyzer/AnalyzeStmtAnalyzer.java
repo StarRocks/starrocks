@@ -40,6 +40,7 @@ public class AnalyzeStmtAnalyzer {
 
     private static final List<String> VALID_PROPERTIES = Lists.newArrayList(
             StatsConstants.STATISTIC_AUTO_COLLECT_RATIO,
+            StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL,
             StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
             StatsConstants.STATISTIC_EXCLUDE_PATTERN,
 
