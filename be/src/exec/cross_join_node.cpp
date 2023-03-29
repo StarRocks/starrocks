@@ -325,14 +325,14 @@ void CrossJoinNode::_copy_build_rows_with_index_base_build(const SlotDesc& slot,
             _buf_selective.assign(row_count, 0);
             dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, row_count);
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, slot.need_output);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, false);
         }
     } else {
         if (src_col->is_constant()) {
             // current can't reach here
             dest_col->append_nulls(row_count);
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, slot.need_output);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, false);
         }
     }
 }
