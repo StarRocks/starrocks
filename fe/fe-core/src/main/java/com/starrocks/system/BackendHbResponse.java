@@ -44,7 +44,7 @@ import java.io.IOException;
 /**
  * Backend heartbeat response contains Backend's be port, http port and brpc port
  */
-public class DataNodeHbResponse extends HeartbeatResponse implements Writable {
+public class BackendHbResponse extends HeartbeatResponse implements Writable {
 
     @SerializedName(value = "beId")
     private long beId;
@@ -64,12 +64,12 @@ public class DataNodeHbResponse extends HeartbeatResponse implements Writable {
     @SerializedName(value = "rebootTime")
     private long rebootTime = -1L;   
 
-    public DataNodeHbResponse() {
+    public BackendHbResponse() {
         super(HeartbeatResponse.Type.BACKEND);
     }
 
-    public DataNodeHbResponse(long beId, int bePort, int httpPort, int brpcPort,
-                              int starletPort, long hbTime, String version, int cpuCores) {
+    public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort,
+                             int starletPort, long hbTime, String version, int cpuCores) {
         super(HeartbeatResponse.Type.BACKEND);
         this.beId = beId;
         this.status = HbStatus.OK;
@@ -82,7 +82,7 @@ public class DataNodeHbResponse extends HeartbeatResponse implements Writable {
         this.cpuCores = cpuCores;
     }
 
-    public DataNodeHbResponse(long beId, String errMsg) {
+    public BackendHbResponse(long beId, String errMsg) {
         super(HeartbeatResponse.Type.BACKEND);
         this.status = HbStatus.BAD;
         this.beId = beId;
@@ -125,8 +125,8 @@ public class DataNodeHbResponse extends HeartbeatResponse implements Writable {
         return cpuCores;
     }
 
-    public static DataNodeHbResponse read(DataInput in) throws IOException {
-        DataNodeHbResponse result = new DataNodeHbResponse();
+    public static BackendHbResponse read(DataInput in) throws IOException {
+        BackendHbResponse result = new BackendHbResponse();
         result.readFields(in);
         return result;
     }
