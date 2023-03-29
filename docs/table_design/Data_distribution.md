@@ -168,31 +168,41 @@ If you intend to set the number of buckets, StarRocks 2.4 and later versions sup
 
 ### Create partitions
 
-You can partition a table in threes ways by using `PARTITION BY RANGE` clause:
+Since version 3.0, StarRocks supports [automatic partitioning](./automatic_partitioning.md) during data loading. You no longer need to create a large number of partitions in advance. This on-demand partition creation method can help you reduce the cost of operations and maintenance.
 
-- Partition a table with the LESS THAN clause. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
+If you do need to create partitions in advance, you can use other partition creation methods, such as enabling dynamic partitioning, manually creating partitions and creating partitions in a batch.
 
-  ```SQL
-  PARTITION BY RANGE (k1, k2, ...)
-  (
-      PARTITION partition_name1 VALUES LESS THAN ("value1", "value2", ...),
-      PARTITION partition_name2 VALUES LESS THAN ("value1", "value2", ...),
-      PARTITION partition_name3 VALUES LESS THAN (MAXVALUE)
-  )
-  ```
+- Dynamic partitioning
 
-- Partition a table by specifying values of a fixed range. For more information, see CREATE TABLE.
+StarRocks supports [dynamic partitioning](./dynamic_partitioning.md), which can automatically manage the time to life (TTL) of partitions, such as partitioning new input data in tables and deleting expired partitions. This feature significantly reduces maintenance costs.
 
-  ```SQL
-  PARTITION BY RANGE (k1, k2, k3, ...)
-  (
-      PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)],
-      PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, )],
-      "k3-upper1-2", ...
-  )
-  ```
+- manually create partitions
 
-- Partition a table by specifying START, END, and EVERY. You can create multiple partitions at a time by using this method. For more information, see CREATE TABLE.
+  - Partition a table with the LESS THAN clause. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
+
+    ```SQL
+    PARTITION BY RANGE (k1, k2, ...)
+    (
+        PARTITION partition_name1 VALUES LESS THAN ("value1", "value2", ...),
+        PARTITION partition_name2 VALUES LESS THAN ("value1", "value2", ...),
+        PARTITION partition_name3 VALUES LESS THAN (MAXVALUE)
+    )
+    ```
+
+  - Partition a table by specifying values of a fixed range. For more information, see CREATE TABLE.
+
+    ```SQL
+    PARTITION BY RANGE (k1, k2, k3, ...)
+    (
+        PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)],
+        PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, )],
+        "k3-upper1-2", ...
+    )
+    ```
+
+- create partitions in a batch
+
+Partition a table by specifying START, END, and EVERY. You can create multiple partitions at a time by using this method. For more information, see CREATE TABLE.
 
   ```SQL
   PARTITION BY RANGE (k1, k2, ...) 
