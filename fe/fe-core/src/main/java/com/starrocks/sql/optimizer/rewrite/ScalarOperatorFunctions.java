@@ -322,11 +322,10 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
         long value = unixTime.getBigint();
         if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
-            throw new AnalysisException(
-                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
+            throw new AnalysisException("unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
-                LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(unixTime.getInt()), TimeUtils.getTimeZone().toZoneId()));
         return ConstantOperator.createVarchar(dl.toString());
     }
 
@@ -335,8 +334,7 @@ public class ScalarOperatorFunctions {
             throws AnalysisException {
         long value = unixTime.getBigint();
         if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
-            throw new AnalysisException(
-                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
+            throw new AnalysisException("unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
                 LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
