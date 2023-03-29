@@ -47,7 +47,7 @@ const std::unordered_map<orc::TypeKind, LogicalType> g_orc_starrocks_logical_typ
         {orc::DATE, starrocks::TYPE_DATE},
         {orc::TIMESTAMP, starrocks::TYPE_DATETIME},
         {orc::STRING, starrocks::TYPE_VARCHAR},
-        {orc::BINARY, starrocks::TYPE_VARCHAR},
+        {orc::BINARY, starrocks::TYPE_VARBINARY},
         {orc::CHAR, starrocks::TYPE_CHAR},
         {orc::VARCHAR, starrocks::TYPE_VARCHAR},
         {orc::TIMESTAMP_INSTANT, starrocks::TYPE_DATETIME},
@@ -556,7 +556,7 @@ static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size
     auto* values = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(col);
 
     values->get_offset().reserve(col_start + size);
-    values->get_bytes().reserve(len);
+    values->get_bytes().reserve(values->get_bytes().size() + len);
 
     auto& vb = values->get_bytes();
     auto& vo = values->get_offset();
@@ -619,7 +619,7 @@ static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr&
     auto* nulls = c->null_column()->get_data().data();
     auto* values = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c->data_column());
 
-    values->get_offset().reserve(values->get_offset().size() + size);
+    values->get_offset().reserve(col_start + size);
     values->get_bytes().reserve(values->get_bytes().size() + len);
 
     auto& vb = values->get_bytes();
@@ -696,6 +696,75 @@ static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr&
                     nulls[i] = 1;
                 }
             }
+        }
+    }
+
+    c->update_has_null();
+}
+
+static void fill_varbinary_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                  const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    auto* data = down_cast<orc::StringVectorBatch*>(cvb);
+
+    size_t len = 0;
+    for (size_t i = 0; i < size; ++i) {
+        len += data->length[from + i];
+    }
+
+    int col_start = col->size();
+    auto* values = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(col);
+
+    values->get_offset().reserve(col_start + size);
+    values->get_bytes().reserve(values->get_bytes().size() + len);
+
+    auto& vb = values->get_bytes();
+    auto& vo = values->get_offset();
+    int pos = from;
+
+    for (int i = col_start; i < col_start + size; ++i, ++pos) {
+        vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+        vo.emplace_back(vb.size());
+    }
+}
+
+static void fill_varbinary_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                            const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    auto* data = down_cast<orc::StringVectorBatch*>(cvb);
+
+    size_t len = 0;
+    for (size_t i = 0; i < size; ++i) {
+        len += data->length[from + i];
+    }
+
+    int col_start = col->size();
+
+    auto* c = ColumnHelper::as_raw_column<NullableColumn>(col);
+
+    c->null_column()->resize(col->size() + size);
+    auto* nulls = c->null_column()->get_data().data();
+    auto* values = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(c->data_column());
+
+    values->get_offset().reserve(col_start + size);
+    values->get_bytes().reserve(values->get_bytes().size() + len);
+
+    auto& vb = values->get_bytes();
+    auto& vo = values->get_offset();
+
+    int pos = from;
+    if (cvb->hasNulls) {
+        for (int i = col_start; i < col_start + size; ++i, ++pos) {
+            nulls[i] = !cvb->notNull[pos];
+            if (cvb->notNull[pos]) {
+                vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+                vo.emplace_back(vb.size());
+            } else {
+                vo.emplace_back(vb.size());
+            }
+        }
+    } else {
+        for (int i = col_start; i < col_start + size; ++i, ++pos) {
+            vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+            vo.emplace_back(vb.size());
         }
     }
 
@@ -1014,6 +1083,7 @@ FunctionsMap::FunctionsMap() : _funcs(), _nullable_funcs() {
     _funcs[TYPE_DECIMAL128] = &fill_decimal128_column;
     _funcs[TYPE_CHAR] = &fill_string_column;
     _funcs[TYPE_VARCHAR] = &fill_string_column;
+    _funcs[TYPE_VARBINARY] = &fill_varbinary_column;
     _funcs[TYPE_DATE] = &fill_date_column;
     _funcs[TYPE_DATETIME] = &fill_timestamp_column;
     _funcs[TYPE_ARRAY] = &fill_array_column;
@@ -1035,6 +1105,7 @@ FunctionsMap::FunctionsMap() : _funcs(), _nullable_funcs() {
     _nullable_funcs[TYPE_DECIMAL128] = &fill_decimal128_column_with_null;
     _nullable_funcs[TYPE_CHAR] = &fill_string_column_with_null;
     _nullable_funcs[TYPE_VARCHAR] = &fill_string_column_with_null;
+    _nullable_funcs[TYPE_VARBINARY] = &fill_varbinary_column_with_null;
     _nullable_funcs[TYPE_DATE] = &fill_date_column_with_null;
     _nullable_funcs[TYPE_DATETIME] = &fill_timestamp_column_with_null;
     _nullable_funcs[TYPE_ARRAY] = &fill_array_column_with_null;

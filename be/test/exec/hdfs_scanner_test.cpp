@@ -1014,7 +1014,7 @@ TEST_F(HdfsScannerTest, TestZeroSizeStream) {
                              {"col_date", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE)},
                              {"col_timestamp", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
                              {"col_string", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                             {"col_binary", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                             {"col_binary", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARBINARY)},
                              {""}};
 
     const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_zero_size_stream.orc";
