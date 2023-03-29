@@ -1338,7 +1338,11 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
-            visitCreateTableAsSelectStatement(statement.getCreateTableAsSelectStmt(), context);
+            if (statement.getCreateTableAsSelectStmt() != null) {
+                visitCreateTableAsSelectStatement(statement.getCreateTableAsSelectStmt(), context);
+            } else {
+                visitInsertStatement(statement.getInsertStmt(), context);
+            }
             return null;
         }
 

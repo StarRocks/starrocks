@@ -1284,6 +1284,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
             }
         }
+<<<<<<< HEAD
         CreateTableAsSelectStmt createTableAsSelectStmt =
                 (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
         int startIndex = context.createTableAsSelectStatement().start.getStartIndex();
@@ -1296,8 +1297,42 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (qualifiedName.getParts().size() == 2) {
             return new SubmitTaskStmt(qualifiedName.getParts().get(0),
                     qualifiedName.getParts().get(1), properties, startIndex, createTableAsSelectStmt);
+=======
+        CreateTableAsSelectStmt createTableAsSelectStmt = null;
+        InsertStmt insertStmt = null;
+        if (context.createTableAsSelectStatement() != null) {
+            createTableAsSelectStmt = (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
+        } else if (context.insertStatement() != null) {
+            insertStmt = (InsertStmt) visit(context.insertStatement());
+        }
+
+        int startIndex = 0;
+        if (createTableAsSelectStmt != null) {
+            startIndex = context.createTableAsSelectStatement().start.getStartIndex();
+        } else {
+            startIndex = context.insertStatement().start.getStartIndex();
+        }
+
+        NodePosition pos = createPos(context);
+        String dbName;
+        String taskName;
+        if (qualifiedName == null) {
+            dbName = null;
+            taskName = null;
+        } else if (qualifiedName.getParts().size() == 1) {
+            dbName = null;
+            taskName = qualifiedName.getParts().get(0);
+        } else if (qualifiedName.getParts().size() == 2) {
+            dbName = qualifiedName.getParts().get(0);
+            taskName = qualifiedName.getParts().get(1);
+>>>>>>> 53b793751 ([Feature] support submit task as insert statement (#20610))
         } else {
             throw new ParsingException("error task name ");
+        }
+        if (createTableAsSelectStmt != null) {
+            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, createTableAsSelectStmt, pos);
+        } else {
+            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, insertStmt, pos);
         }
     }
 
