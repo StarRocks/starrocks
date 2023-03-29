@@ -28,15 +28,16 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exec/pipeline/query_context.h"
 #include "exec/sort_exec_exprs.h"
+#include "exec/spill/input_stream.h"
 #include "exec/spill/mem_table.h"
+#include "exec/spill/options.h"
+#include "exec/spill/spiller.hpp"
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
 
-namespace starrocks {
-namespace spill {
+namespace starrocks::spill {
 SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
     spill_timer = ADD_TIMER(profile, "SpillTime");
     spill_rows = ADD_COUNTER(profile, "SpilledRows", TUnit::UNIT);
@@ -44,94 +45,69 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
     write_io_timer = ADD_TIMER(profile, "SpillWriteIOTimer");
     restore_rows = ADD_COUNTER(profile, "SpillRestoreRows", TUnit::UNIT);
     restore_timer = ADD_TIMER(profile, "SpillRestoreTimer");
+    shuffle_timer = ADD_TIMER(profile, "SpillShuffleTimer");
+    split_partition_timer = ADD_TIMER(profile, "SplitPartitionTimer");
 }
 
 Status Spiller::prepare(RuntimeState* state) {
-    // prepare
-    for (size_t i = 0; i < _opts.mem_table_pool_size; ++i) {
-        if (_opts.is_unordered) {
-            _mem_table_pool.push(
-                    std::make_unique<UnorderedMemTable>(state, _opts.spill_file_size, state->instance_mem_tracker()));
-        } else {
-            _mem_table_pool.push(std::make_unique<OrderedMemTable>(&_opts.sort_exprs->lhs_ordering_expr_ctxs(),
-                                                                   _opts.sort_desc, state, _opts.spill_file_size,
-                                                                   state->instance_mem_tracker()));
-        }
+    _chunk_builder.chunk_schema() = std::make_shared<SpilledChunkBuildSchema>();
+
+    ASSIGN_OR_RETURN(_serde, Serde::create_serde(_chunk_builder, _opts.compress_type));
+
+    if (_opts.init_partition_nums > 0) {
+        _writer = std::make_unique<PartitionedSpillerWriter>(this, state);
+    } else {
+        _writer = std::make_unique<RawSpillerWriter>(this, state);
     }
 
-    ASSIGN_OR_RETURN(_serde, spill::create_serde(&_opts));
-    _block_group = std::make_shared<spill::BlockGroup>(_serde);
-#ifndef BE_TEST
-    _block_manager = state->query_ctx()->spill_manager()->block_manager();
-#endif
+    RETURN_IF_ERROR(_writer->prepare(state));
+
+    _reader = std::make_unique<SpillerReader>(this);
+
+    if (!_opts.is_unordered) {
+        DCHECK(_opts.init_partition_nums == -1);
+    }
+
+    _block_group = std::make_shared<spill::BlockGroup>();
+    _block_manager = _opts.block_manager;
 
     return Status::OK();
 }
 
-Status Spiller::_open(RuntimeState* state) {
+Status Spiller::set_partition(const std::vector<const SpillPartitionInfo*>& parititons) {
+    DCHECK_GT(_opts.init_partition_nums, 0);
+    RETURN_IF_ERROR(down_cast<PartitionedSpillerWriter*>(_writer.get())->reset_partition(parititons));
     return Status::OK();
 }
 
-Status Spiller::_run_flush_task(RuntimeState* state, const MemTablePtr& mem_table) {
-    if (state->is_cancelled()) {
-        return Status::OK();
-    }
-    spill::AcquireBlockOptions opts;
-    opts.query_id = state->query_id();
-    opts.plan_node_id = _opts.plan_node_id;
-    opts.name = _opts.name;
-    ASSIGN_OR_RETURN(auto block, _block_manager->acquire_block(opts));
-
-    {
-        SCOPED_TIMER(_metrics.write_io_timer);
-        // @TODO reuse context
-        SerdeContext ctx;
-        size_t num_rows_flushed = 0;
-        RETURN_IF_ERROR(mem_table->flush([&](const auto& chunk) {
-            num_rows_flushed += chunk->num_rows();
-            RETURN_IF_ERROR(_serde->serialize(ctx, chunk, block));
-            return Status::OK();
-        }));
-    }
-    RETURN_IF_ERROR(block->flush());
-    _block_manager->release_block(block);
-
-    std::lock_guard<std::mutex> l(_mutex);
-    _block_group->append(block);
-
-    return Status::OK();
-}
-
-void Spiller::_update_spilled_task_status(Status&& st) {
+void Spiller::update_spilled_task_status(Status&& st) {
     std::lock_guard guard(_mutex);
     if (_spilled_task_status.ok() && !st.ok()) {
         _spilled_task_status = std::move(st);
     }
 }
 
-Status Spiller::_acquire_input_stream(RuntimeState* state) {
-    std::lock_guard l(_mutex);
-    if (_input_stream != nullptr) {
-        return Status::OK();
+std::vector<std::shared_ptr<SpillerReader> > Spiller::get_partition_spill_readers(
+        const std::vector<const SpillPartitionInfo*>& partitions) {
+    std::vector<std::shared_ptr<SpillerReader> > res;
+
+    for (auto partition : partitions) {
+        res.emplace_back(std::make_unique<SpillerReader>(this));
+        std::shared_ptr<SpillInputStream> stream;
+        // TODO check return status
+        CHECK(_writer->acquire_stream(partition, &stream).ok());
+        res.back()->set_stream(std::move(stream));
     }
-    if (_opts.is_unordered) {
-        ASSIGN_OR_RETURN(_input_stream, _block_group->as_unordered_stream());
-    } else {
-        ASSIGN_OR_RETURN(_input_stream, _block_group->as_ordered_stream(state, _opts.sort_exprs, _opts.sort_desc));
-    }
-    return Status::OK();
+
+    return res;
 }
 
-Status Spiller::_decrease_running_flush_tasks() {
-    if (_running_flush_tasks.fetch_sub(1) == 1) {
-        if (_flush_all_callback) {
-            RETURN_IF_ERROR(_flush_all_callback());
-            if (_inner_flush_all_callback) {
-                RETURN_IF_ERROR(_inner_flush_all_callback());
-            }
-        }
-    }
+Status Spiller::_acquire_input_stream(RuntimeState* state) {
+    std::shared_ptr<SpillInputStream> input_stream;
+
+    RETURN_IF_ERROR(_writer->acquire_stream(&input_stream));
+    RETURN_IF_ERROR(_reader->set_stream(std::move(input_stream)));
+
     return Status::OK();
 }
-} // namespace spill
-} // namespace starrocks
+} // namespace starrocks::spill

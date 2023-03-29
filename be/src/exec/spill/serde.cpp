@@ -14,7 +14,9 @@
 
 #include "exec/spill/serde.h"
 
+#include "exec/spill/options.h"
 #include "exec/spill/spiller.h"
+#include "gen_cpp/types.pb.h"
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
@@ -114,10 +116,9 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, const Blo
     return chunk;
 }
 
-StatusOr<SerdePtr> create_serde(SpilledOptions* options) {
-    auto compress_type = options->compress_type;
+StatusOr<SerdePtr> Serde::create_serde(const ChunkBuilder& chunk_builder, const CompressionTypePB& compress_type) {
     const BlockCompressionCodec* codec = nullptr;
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &codec));
-    return std::make_shared<ColumnarSerde>(options->chunk_builder, codec);
+    return std::make_shared<ColumnarSerde>(chunk_builder, codec);
 }
 } // namespace starrocks::spill

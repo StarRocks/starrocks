@@ -127,9 +127,7 @@ Status SpillablePartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->spill_file_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
-    _spill_options->chunk_builder = [&]() {
-        return ChunkHelper::new_chunk(*_materialized_tuple_desc, _state->chunk_size());
-    };
+    _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "local-sort-spill";
     _spill_options->plan_node_id = _plan_node_id;
 

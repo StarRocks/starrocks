@@ -27,9 +27,9 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks {
-namespace spill {
+namespace starrocks::spill {
 using FlushCallBack = std::function<Status(const ChunkPtr&)>;
+class SpillInputStream;
 
 //  This component is the intermediate buffer for our spill data, which may be ordered or unordered,
 // depending on the requirements of the upper layer
@@ -43,17 +43,23 @@ using FlushCallBack = std::function<Status(const ChunkPtr&)>;
 // mem_table->done();
 // mem_table->flush();
 
-class SpilledMemTable {
+class SpillableMemTable {
 public:
-    SpilledMemTable(RuntimeState* state, size_t max_buffer_size, MemTracker* parent)
+    SpillableMemTable(RuntimeState* state, size_t max_buffer_size, MemTracker* parent)
             : _runtime_state(state), _max_buffer_size(max_buffer_size) {
-        _tracker = std::make_unique<MemTracker>(-1, "spill-mem-table");
+        _tracker = std::make_unique<MemTracker>(-1, "spill-mem-table", parent);
     }
-    virtual ~SpilledMemTable() = default;
-
-    bool is_full() { return _tracker->consumption() >= _max_buffer_size; };
+    virtual ~SpillableMemTable() {
+        if (auto parent = _tracker->parent()) {
+            parent->release(_tracker->consumption());
+        }
+    }
+    bool is_full() const { return _tracker->consumption() >= _max_buffer_size; };
+    virtual bool is_empty() = 0;
+    size_t mem_usage() { return _tracker->consumption(); }
     // append data to mem table
     virtual Status append(ChunkPtr chunk) = 0;
+    virtual Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
     // all of data has been added
     // done will be called in pipeline executor threads
     virtual Status done() = 0;
@@ -61,36 +67,46 @@ public:
     // flush will be called in IO threads
     virtual Status flush(FlushCallBack callback) = 0;
 
+    virtual StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) {
+        return Status::NotSupported("unsupport to call as_input_stream");
+    }
+
 protected:
     RuntimeState* _runtime_state;
     const size_t _max_buffer_size;
     std::unique_ptr<MemTracker> _tracker;
 };
 
-using MemTablePtr = std::shared_ptr<SpilledMemTable>;
+using MemTablePtr = std::shared_ptr<SpillableMemTable>;
 
-class UnorderedMemTable final : public SpilledMemTable {
+class UnorderedMemTable final : public SpillableMemTable {
 public:
     template <class... Args>
-    UnorderedMemTable(Args&&... args) : SpilledMemTable(std::forward<Args>(args)...) {}
+    UnorderedMemTable(Args&&... args) : SpillableMemTable(std::forward<Args>(args)...) {}
     ~UnorderedMemTable() override = default;
 
+    bool is_empty() override;
     Status append(ChunkPtr chunk) override;
+    Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
     Status done() override { return Status::OK(); };
     Status flush(FlushCallBack callback) override;
+
+    StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) override;
 
 private:
     std::vector<ChunkPtr> _chunks;
 };
 
-class OrderedMemTable final : public SpilledMemTable {
+class OrderedMemTable final : public SpillableMemTable {
 public:
     template <class... Args>
     OrderedMemTable(const std::vector<ExprContext*>* sort_exprs, const SortDescs* sort_desc, Args&&... args)
-            : SpilledMemTable(std::forward<Args>(args)...), _sort_exprs(sort_exprs), _sort_desc(*sort_desc) {}
+            : SpillableMemTable(std::forward<Args>(args)...), _sort_exprs(sort_exprs), _sort_desc(*sort_desc) {}
     ~OrderedMemTable() override = default;
 
+    bool is_empty() override;
     Status append(ChunkPtr chunk) override;
+    Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
     Status done() override;
     Status flush(FlushCallBack callback) override;
 
@@ -103,6 +119,4 @@ private:
     ChunkPtr _chunk;
     ChunkSharedSlice _chunk_slice;
 };
-} // namespace spill
-
-} // namespace starrocks
+} // namespace starrocks::spill
