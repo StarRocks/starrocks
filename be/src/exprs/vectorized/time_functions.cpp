@@ -6,9 +6,14 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+<<<<<<< HEAD:be/src/exprs/vectorized/time_functions.cpp
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
+=======
+#include "exprs/binary_function.h"
+#include "exprs/unary_function.h"
 #include "gen_cpp/InternalService_constants.h"
+>>>>>>> 78fa0816c ([Enhancement] unixtime related functions support int64 (#20119)):be/src/exprs/time_functions.cpp
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
@@ -1029,7 +1034,8 @@ ColumnPtr TimeFunctions::to_unix_from_date(FunctionContext* context, const Colum
 }
 
 template <PrimitiveType TIMESTAMP_TYPE>
-ColumnPtr TimeFunctions::_t_to_unix_from_datetime_with_format(FunctionContext* context, const Columns& columns) {
+ColumnPtr TimeFunctions::_t_to_unix_from_datetime_with_format(FunctionContext* context,
+                                                                        const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
@@ -1255,7 +1261,7 @@ ColumnPtr TimeFunctions::_t_from_unix_with_format_general(FunctionContext* conte
 
 template <Primitive TIMESTAMP_TYPE>
 ColumnPtr TimeFunctions::_t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
-                                                        const Columns& columns) {
+                                                                  const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
