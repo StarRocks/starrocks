@@ -24,6 +24,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -733,6 +734,13 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         if (outputPartitionSlot != null) {
             List<Expr> partitionPredicates =
                     MvUtils.convertRange(outputPartitionSlot, sourceTablePartitionRange);
+            // range contains the min value could be null value
+            Optional<Range<PartitionKey>> nullRange = sourceTablePartitionRange.stream().
+                    filter(range -> range.lowerEndpoint().isMinValue()).findAny();
+            if (nullRange.isPresent()) {
+                Expr isNullPredicate = new IsNullPredicate(outputPartitionSlot, false);
+                partitionPredicates.add(isNullPredicate);
+            }
             tableRelation.setPartitionPredicate(Expr.compoundOr(partitionPredicates));
         }
     }
