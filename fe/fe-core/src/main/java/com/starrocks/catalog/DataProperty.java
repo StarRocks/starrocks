@@ -80,13 +80,14 @@ public class DataProperty implements Writable {
         }
 
         Preconditions.checkState(mediumSet.size() <= 2, "current medium set: " + mediumSet);
-        TStorageMedium m = TStorageMedium.SSD;
-        // If the storage paths reported by all the backends all have storage medium type HDD,
-        // we infer that user wants to create a table or partition with storage_medium=HDD when not explicitly
-        // specify the storage_medium property, otherwise it's SSD
-        if (mediumSet.size() == 0 ||
-                (mediumSet.size() == 1 && mediumSet.iterator().next() == TStorageMedium.HDD)) {
-            m = TStorageMedium.HDD;
+        TStorageMedium m = TStorageMedium.HDD;
+        // When storage_medium property is not explicitly specified on creating table, we infer the storage medium type
+        // based on the types of storage paths reported by backends. Here is the rules(this is only for 2.12+ and 2.3.11+),
+        //   1. If the storage paths reported by all the backends all have storage medium type SSD,
+        //      we infer that user wants to create a table or partition with storage_medium=SSD.
+        //   2. In other cases, it's HDD type.
+        if (mediumSet.size() == 1 && mediumSet.iterator().next() == TStorageMedium.SSD) {
+            m = TStorageMedium.SSD;
         }
 
         return new DataProperty(m);

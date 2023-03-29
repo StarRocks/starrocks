@@ -36,7 +36,7 @@ import org.junit.Test;
 
 import java.util.List;
 
-public class StorageMediumInfoTest {
+public class StorageMediumInferTest {
     private static ConnectContext connectContext;
     private static Backend be1;
     private static Backend be2;
@@ -106,7 +106,7 @@ public class StorageMediumInfoTest {
         DataProperty dataProperty3 =
                 globalStateMgr.getDataPropertyIncludeRecycleBin(tbl3.getPartitionInfo(),
                         partitionList3.get(0).getId());
-        Assert.assertEquals(TStorageMedium.SSD, dataProperty3.getStorageMedium());
+        Assert.assertEquals(TStorageMedium.HDD, dataProperty3.getStorageMedium());
     }
 
     @Test
