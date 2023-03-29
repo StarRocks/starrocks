@@ -503,12 +503,20 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         dest.addChild(this);
     }
 
+    public void clearDestination() {
+        this.destNode = null;
+    }
+
     public DataPartition getDataPartition() {
         return dataPartition;
     }
 
     public void setOutputPartition(DataPartition outputPartition) {
         this.outputPartition = outputPartition;
+    }
+
+    public void clearOutputPartition() {
+        this.outputPartition = DataPartition.UNPARTITIONED;
     }
 
     public PlanNode getPlanRoot() {
