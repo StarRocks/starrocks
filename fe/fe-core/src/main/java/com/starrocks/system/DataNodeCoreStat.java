@@ -20,7 +20,7 @@ import com.google.common.collect.ImmutableMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class BackendCoreStat {
+public class DataNodeCoreStat {
     private static int DEFAULT_CORES_OF_BE = 1;
 
     private static ConcurrentHashMap<Long, Integer> numOfHardwareCoresPerBe = new ConcurrentHashMap<>();
@@ -83,7 +83,7 @@ public class BackendCoreStat {
     }
 
     public static int getDefaultDOP() {
-        int avgNumOfCores = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+        int avgNumOfCores = DataNodeCoreStat.getAvgNumOfHardwareCoresOfBe();
         return Math.max(1, avgNumOfCores / 2);
     }
 
@@ -92,7 +92,7 @@ public class BackendCoreStat {
         // so we can't let query engine use up resources
         // At the same time, the improvement of performance and concurrency is not linear
         // but the memory usage increases linearly, so we control the slope of concurrent growth
-        int avgCoreNum = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+        int avgCoreNum = DataNodeCoreStat.getAvgNumOfHardwareCoresOfBe();
         if (avgCoreNum <= 24) {
             return Math.max(1, avgCoreNum / 3);
         } else {

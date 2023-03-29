@@ -487,7 +487,7 @@ public class ComputeNode implements IComputable, Writable {
             if (this.cpuCores != hbResponse.getCpuCores()) {
                 isChanged = true;
                 this.cpuCores = hbResponse.getCpuCores();
-                BackendCoreStat.setNumOfHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
+                DataNodeCoreStat.setNumOfHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
             }
 
             heartbeatErrMsg = "";
