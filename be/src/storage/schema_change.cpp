@@ -810,6 +810,11 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             break;
         }
         LOG(INFO) << "new rowset has " << (*new_rowset)->num_segments() << " segments";
+        if (sc_params.rowsets_to_change[i]->rowset_meta()->has_delete_predicate()) {
+            (*new_rowset)
+                    ->mutable_delete_predicate()
+                    ->CopyFrom(sc_params.rowsets_to_change[i]->rowset_meta()->delete_predicate());
+        }
         status = sc_params.new_tablet->add_rowset(*new_rowset, false);
         if (status.is_already_exist()) {
             LOG(WARNING) << "version already exist, version revert occurred. "
