@@ -619,16 +619,28 @@ private:
 
     static std::string convert_format(const Slice& format);
 
+<<<<<<< HEAD:be/src/exprs/vectorized/time_functions.h
+    static ColumnPtr from_unix_with_format_general(FunctionContext* context,
+                                                   const starrocks::vectorized::Columns& columns);
+    static ColumnPtr from_unix_with_format_const(std::string& format_content, FunctionContext* context,
+                                                 const starrocks::vectorized::Columns& columns);
+=======
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format_general);
 
-    template <PrimitiveType TIMESTAMP_TYPE>
-    static ColumnPtr _t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
+    template <LogicalType TIMESTAMP_TYPE>
+    static StatusOr<ColumnPtr> _t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
                                                               const starrocks::Columns& columns);
+>>>>>>> 78fa0816c ([Enhancement] unixtime related functions support int64 (#20119)):be/src/exprs/time_functions.h
 
     static ColumnPtr convert_tz_general(FunctionContext* context, const Columns& columns);
 
-    static ColumnPtr convert_tz_const(FunctionContext* context, const Columns& columns,
+<<<<<<< HEAD:be/src/exprs/vectorized/time_functions.h
+    static ColumnPtr convert_tz_const(FunctionContext* context, const Columns& columns, const cctz::time_zone& from,
+                                      const cctz::time_zone& to);
+=======
+    static StatusOr<ColumnPtr> convert_tz_const(FunctionContext* context, const Columns& columns,
                                                 const cctz::time_zone& from, const cctz::time_zone& to);
+>>>>>>> 78fa0816c ([Enhancement] unixtime related functions support int64 (#20119)):be/src/exprs/time_functions.h
 
 public:
     static TimestampValue start_of_time_slice;
