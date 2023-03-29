@@ -36,7 +36,6 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -46,7 +45,6 @@ import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.util.Strings;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -461,7 +459,6 @@ public class FunctionSet {
                     .addAll(Type.FLOAT_TYPES)
                     .build();
 
-
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
      * need to check whether the expression tree can use vectorized function from bottom to
@@ -706,7 +703,7 @@ public class FunctionSet {
 
     private void addBuiltInFunction(Function fn) {
         Preconditions.checkArgument(!fn.getReturnType().isPseudoType() || fn.isPolymorphic(), fn.toString());
-        if (getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
+        if (!fn.isPolymorphic() && getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
             return;
         }
         fn.setIsNullable(!alwaysReturnNonNullableFunctions.contains(fn.functionName()));

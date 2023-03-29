@@ -92,6 +92,20 @@ public class CreateTableTest {
 
         ExceptionChecker.expectThrowsNoException(
                 () -> createTable(
+                        "CREATE TABLE test.case_insensitive (\n" +
+                                "    A1 TINYINT,\n" +
+                                "    A2 DATE\n" +
+                                ") ENGINE=OLAP\n" +
+                                "DUPLICATE KEY(A1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "PARTITION BY RANGE (a2) (\n" +
+                                "START (\"2021-01-01\") END (\"2022-01-01\") EVERY (INTERVAL 1 year)\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(A1) BUCKETS 20\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");"));
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable(
                         "create table test.lp_tbl0\n" + "(k1 bigint, k2 varchar(16) not null)\n" + "duplicate key(k1)\n"
                                 + "partition by list(k2)\n" + "(partition p1 values in (\"shanghai\",\"beijing\"))\n"
                                 + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
@@ -1100,6 +1114,20 @@ public class CreateTableTest {
                                 "PROPERTIES (\n" +
                                 "\"storage_volume\" = \"local\"\n" +
                                 ");"
+                ));
+    }
+
+    @Test
+    public void testCreateTableInSystemDb() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Can't create table 'goods' (errno: create denied)",
+                () -> createTable(
+                        "CREATE TABLE information_schema.goods(\n" +
+                                "    item_id1          INT,\n" +
+                                "    item_name         STRING,\n" +
+                                "    price             FLOAT\n" +
+                                ") DISTRIBUTED BY HASH(item_id1)\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");"
                 ));
     }
 }

@@ -45,16 +45,15 @@ public:
             input_columns.push_back(json_column);
         }
         TableFunctionState* func_state;
-        bool eos;
 
         // execute
         ASSERT_OK(func->init({}, &func_state));
         func_state->set_params(input_columns);
         ASSERT_OK(func->open(rt_state, func_state));
-        auto [result_columns, offset_column] = func->process(func_state, &eos);
+        auto [result_columns, offset_column] = func->process(func_state);
 
         // check
-        ASSERT_TRUE(eos);
+        ASSERT_EQ(func_state->input_rows(), func_state->processed_rows());
         ASSERT_EQ(2, result_columns.size());
         ASSERT_EQ(expected.size(), result_columns[0]->size());
         auto result_key = ColumnHelper::cast_to<TYPE_VARCHAR>(result_columns[0]);

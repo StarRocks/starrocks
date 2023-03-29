@@ -56,6 +56,11 @@ protected:
         StoragePageCache::create_global_cache(_mem_tracker.get(), 1000000000);
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
+
+        _opts.fs = _fs.get();
+        _opts.use_page_cache = true;
+        _opts.kept_in_memory = false;
+        _opts.skip_fill_local_cache = false;
     }
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
@@ -92,10 +97,10 @@ protected:
     void get_bloom_filter_reader_iter(const std::string& file_name, const ColumnIndexMetaPB& meta,
                                       std::unique_ptr<RandomAccessFile>* rfile, BloomFilterIndexReader** reader,
                                       std::unique_ptr<BloomFilterIndexIterator>* iter) {
-        std::string fname = kTestDir + "/" + file_name;
+        _opts.file_name = kTestDir + "/" + file_name;
 
         *reader = new BloomFilterIndexReader();
-        ASSIGN_OR_ABORT(auto r, (*reader)->load(_fs.get(), fname, meta.bloom_filter_index(), true, false));
+        ASSIGN_OR_ABORT(auto r, (*reader)->load(_opts, meta.bloom_filter_index()));
         ASSERT_TRUE(r);
         ASSERT_OK((*reader)->new_iterator(iter));
     }
@@ -160,6 +165,7 @@ protected:
 
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
+    IndexReadOptions _opts;
 };
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_int) {

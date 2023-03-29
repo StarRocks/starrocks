@@ -98,7 +98,13 @@ public class DecimalV3FunctionAnalyzer {
         }
 
         if (FunctionSet.ARRAY_INTERSECT.equalsIgnoreCase(fnName) || FunctionSet.ARRAY_CONCAT.equalsIgnoreCase(fnName)) {
-            Type[] childTypes = Arrays.stream(argTypes).map(a -> ((ArrayType) a).getItemType()).toArray(Type[]::new);
+            Type[] childTypes = Arrays.stream(argTypes).map(a -> {
+                if (a.isArrayType()) {
+                    return ((ArrayType) a).getItemType();
+                } else {
+                    return a;
+                }
+            }).toArray(Type[]::new);
             Preconditions.checkState(Arrays.stream(childTypes).anyMatch(Type::isDecimalV3));
             Type commonType = new ArrayType(Type.getCommonType(childTypes, 0, childTypes.length));
             return Arrays.stream(argTypes).map(t -> commonType).toArray(Type[]::new);
@@ -106,7 +112,13 @@ public class DecimalV3FunctionAnalyzer {
 
         if (FunctionSet.ARRAYS_OVERLAP.equalsIgnoreCase(fnName)) {
             Preconditions.checkState(argTypes.length == 2);
-            Type[] childTypes = Arrays.stream(argTypes).map(a -> ((ArrayType) a).getItemType()).toArray(Type[]::new);
+            Type[] childTypes = Arrays.stream(argTypes).map(a -> {
+                if (a.isArrayType()) {
+                    return ((ArrayType) a).getItemType();
+                } else {
+                    return a;
+                }
+            }).toArray(Type[]::new);
             ArrayType commonType = new ArrayType(Type.getAssignmentCompatibleType(childTypes[0], childTypes[1], false));
             return new Type[] {commonType, commonType};
         }
