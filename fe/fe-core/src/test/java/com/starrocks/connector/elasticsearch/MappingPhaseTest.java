@@ -38,6 +38,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
 import mockit.Injectable;
 import org.junit.Before;
@@ -92,7 +93,7 @@ public class MappingPhaseTest extends EsTestCase {
         EsTable table = fakeEsTable("fake", "test", "not_exists", columns);
         SearchContext searchContext = new SearchContext(table);
         // type not exists
-        ExceptionChecker.expectThrows(StarRocksESException.class,
+        ExceptionChecker.expectThrows(StarRocksConnectorException.class,
                 () -> mappingPhase.resolveFields(searchContext, loadJsonFromFile("data/es/test_index_mapping.json")));
     }
 

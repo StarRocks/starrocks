@@ -37,6 +37,7 @@ package com.starrocks.connector.elasticsearch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
@@ -74,7 +75,7 @@ public class EsShardPartitions {
      * @return shardRoutings is used for searching
      */
     public static EsShardPartitions findShardPartitions(String indexName, String searchShards)
-            throws StarRocksESException {
+            throws StarRocksConnectorException {
 
         EsShardPartitions partitions = new EsShardPartitions(indexName);
         JSONObject jsonObject = new JSONObject(searchShards);
@@ -98,7 +99,7 @@ public class EsShardPartitions {
                                         jsonObject.getJSONObject("nodes")));
                     } catch (Exception e) {
                         LOG.error("fetch index [{}] shard partitions failure", indexName, e);
-                        throw new StarRocksESException(
+                        throw new StarRocksConnectorException(
                                 "fetch [" + indexName + "] shard partitions failure [" + e.getMessage() + "]");
                     }
                 }

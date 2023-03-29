@@ -36,6 +36,7 @@ package com.starrocks.connector.elasticsearch;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import lombok.Data;
 import okhttp3.Credentials;
 import okhttp3.OkHttpClient;
@@ -123,7 +124,7 @@ public class EsRestClient {
         currentNode = nodes[currentNodeIndex];
     }
 
-    public Map<String, EsNodeInfo> getHttpNodes() throws StarRocksESException {
+    public Map<String, EsNodeInfo> getHttpNodes() throws StarRocksConnectorException {
         Map<String, Map<String, Object>> nodesData = get("_nodes/http", "nodes");
         if (nodesData == null) {
             return Collections.emptyMap();
@@ -144,10 +145,10 @@ public class EsRestClient {
      * @return
      * @throws Exception
      */
-    public EsMajorVersion version() throws StarRocksESException {
+    public EsMajorVersion version() throws StarRocksConnectorException {
         Map<String, Object> result = get("/", null);
         if (result == null) {
-            throw new StarRocksESException("Unable to retrieve ES main cluster info.");
+            throw new StarRocksConnectorException("Unable to retrieve ES main cluster info.");
         }
         Map<String, String> versionBody = (Map<String, String>) result.get("version");
         return EsMajorVersion.parse(versionBody.get("number"));
@@ -160,11 +161,11 @@ public class EsRestClient {
      * @return
      * @throws Exception
      */
-    public String getMapping(String indexName) throws StarRocksESException {
+    public String getMapping(String indexName) throws StarRocksConnectorException {
         String path = indexName + "/_mapping";
         String indexMapping = execute(path);
         if (indexMapping == null) {
-            throw new StarRocksESException("index[" + indexName + "] not found");
+            throw new StarRocksConnectorException("index[" + indexName + "] not found");
         }
         return indexMapping;
     }
@@ -174,13 +175,13 @@ public class EsRestClient {
      *
      * @param indexName
      * @return
-     * @throws StarRocksESException
+     * @throws StarRocksConnectorException
      */
-    public EsShardPartitions searchShards(String indexName) throws StarRocksESException {
+    public EsShardPartitions searchShards(String indexName) throws StarRocksConnectorException {
         String path = indexName + "/_search_shards";
         String searchShards = execute(path);
         if (searchShards == null) {
-            throw new StarRocksESException("request index [" + indexName + "] search_shards failure");
+            throw new StarRocksConnectorException("request index [" + indexName + "] search_shards failure");
         }
         return EsShardPartitions.findShardPartitions(indexName, searchShards);
     }
@@ -191,9 +192,9 @@ public class EsRestClient {
      * @param path the path must not leading with '/'
      * @return response
      */
-    private String execute(String path) throws StarRocksESException {
+    private String execute(String path) throws StarRocksConnectorException {
         int retrySize = nodes.length;
-        StarRocksESException scratchExceptionForThrow = null;
+        StarRocksConnectorException scratchExceptionForThrow = null;
         OkHttpClient client;
         if (sslEnabled) {
             client = getOrCreateSSLClient();
@@ -225,7 +226,7 @@ public class EsRestClient {
                 }
             } catch (IOException e) {
                 LOG.warn("request node [{}] [{}] failures {}, try next nodes", currentNode, path, e);
-                scratchExceptionForThrow = new StarRocksESException(e.getMessage());
+                scratchExceptionForThrow = new StarRocksConnectorException(e.getMessage());
             } finally {
                 if (response != null) {
                     response.close();
@@ -240,7 +241,7 @@ public class EsRestClient {
         return null;
     }
 
-    public <T> T get(String q, String key) throws StarRocksESException {
+    public <T> T get(String q, String key) throws StarRocksConnectorException {
         return parseContent(execute(q), key);
     }
 
@@ -252,7 +253,7 @@ public class EsRestClient {
             map = mapper.readValue(jsonParser, Map.class);
         } catch (IOException ex) {
             LOG.error("parse es response failure: [{}]", response);
-            throw new StarRocksESException(ex.getMessage());
+            throw new StarRocksConnectorException(ex.getMessage());
         }
         return (T) (key != null ? map.get(key) : map);
     }
@@ -293,7 +294,7 @@ public class EsRestClient {
             sc.init(null, new TrustManager[] {new TrustAllCerts()}, new SecureRandom());
             ssfFactory = sc.getSocketFactory();
         } catch (Exception e) {
-            throw new StarRocksESException("Errors happens when create ssl socket");
+            throw new StarRocksConnectorException("Errors happens when create ssl socket");
         }
         return ssfFactory;
     }
@@ -331,7 +332,7 @@ public class EsRestClient {
     private Set<String> getIndices() {
         String response = execute("_cat/indices?h=index&format=json&s=index:asc");
         if (Objects.isNull(response)) {
-            throw new StarRocksESException("es indexes are null, maybe this is error");
+            throw new StarRocksConnectorException("es indexes are null, maybe this is error");
         }
 
         EsIndex[] esIndices = getFromJSONArray(response, EsIndex[].class);

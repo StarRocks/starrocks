@@ -34,6 +34,7 @@
 
 package com.starrocks.connector.elasticsearch;
 
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.thrift.TNetworkAddress;
 
 import java.util.List;
@@ -55,7 +56,7 @@ public class EsNodeInfo {
     private boolean hasThrift;
     private TNetworkAddress thriftAddress;
 
-    public EsNodeInfo(String id, Map<String, Object> map) throws StarRocksESException {
+    public EsNodeInfo(String id, Map<String, Object> map) throws StarRocksConnectorException {
         this.id = id;
         EsMajorVersion version = EsMajorVersion.parse((String) map.get("version"));
         this.name = (String) map.get("name");

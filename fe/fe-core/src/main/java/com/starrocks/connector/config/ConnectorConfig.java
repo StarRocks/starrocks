@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.config;
 
 import com.starrocks.common.AnalysisException;
@@ -51,7 +50,7 @@ public abstract class ConnectorConfig {
                     // extract real value from properties
                     if (Integer.class.equals(field.getType()) || int.class.equals(field.getType())) {
                         field.setInt(this, Integer.parseInt(trimValue));
-                     }  else if (Long.class.equals(field.getType())) {
+                    } else if (Long.class.equals(field.getType())) {
                         field.setLong(this, Long.parseLong(trimValue));
                     } else if (String.class.equals(field.getType())) {
                         field.set(this, trimValue);

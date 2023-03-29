@@ -43,6 +43,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -71,7 +72,7 @@ public class EsTablePartitions {
     }
 
     public static EsTablePartitions fromShardPartitions(EsTable esTable, EsShardPartitions shardPartitions)
-            throws StarRocksESException, DdlException {
+            throws StarRocksConnectorException, DdlException {
         EsTablePartitions esTablePartitions = new EsTablePartitions();
         RangePartitionInfo partitionInfo = null;
         if (esTable.getPartitionInfo() != null) {
@@ -97,7 +98,7 @@ public class EsTablePartitions {
                 LOG.debug("begin to parse es table [{}] state from search shards, "
                         + "with no partition info", esTable.getName());
             } else {
-                throw new StarRocksESException("es table only support range partition, "
+                throw new StarRocksConnectorException("es table only support range partition, "
                         + "but current partition type is "
                         + esTable.getPartitionInfo().getType());
             }

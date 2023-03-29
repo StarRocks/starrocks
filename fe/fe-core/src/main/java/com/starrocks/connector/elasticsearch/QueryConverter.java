@@ -31,6 +31,7 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprOpcode;
 
@@ -89,7 +90,7 @@ public class QueryConverter extends AstVisitor<QueryBuilders.QueryBuilder, Void>
                 if (left != null && right != null) {
                     return QueryBuilders.boolQuery().must(left).must(right);
                 }
-                throw new StarRocksESException("process compound and failure ");
+                throw new StarRocksConnectorException("process compound and failure ");
             }
             case OR: {
                 QueryBuilders.QueryBuilder left = node.getChild(0).accept(this, context);
@@ -97,17 +98,17 @@ public class QueryConverter extends AstVisitor<QueryBuilders.QueryBuilder, Void>
                 if (left != null && right != null) {
                     return QueryBuilders.boolQuery().should(left).should(right);
                 }
-                throw new StarRocksESException("process compound or failure ");
+                throw new StarRocksConnectorException("process compound or failure ");
             }
             case NOT: {
                 QueryBuilders.QueryBuilder child = node.getChild(0).accept(this, context);
                 if (child != null) {
                     return QueryBuilders.boolQuery().mustNot(child);
                 }
-                throw new StarRocksESException("process compound not failure ");
+                throw new StarRocksConnectorException("process compound not failure ");
             }
             default:
-                throw new StarRocksESException("currently only support compound and/or/not");
+                throw new StarRocksConnectorException("currently only support compound and/or/not");
         }
     }
 
@@ -138,7 +139,7 @@ public class QueryConverter extends AstVisitor<QueryBuilders.QueryBuilder, Void>
             case LT:
                 return QueryBuilders.rangeQuery(column).lt(value);
             default:
-                throw new StarRocksESException("can not support " + opCode + " in BinaryPredicate");
+                throw new StarRocksConnectorException("can not support " + opCode + " in BinaryPredicate");
         }
     }
 
@@ -193,17 +194,17 @@ public class QueryConverter extends AstVisitor<QueryBuilders.QueryBuilder, Void>
             String stringValue = ((StringLiteral) node.getChild(1)).getStringValue();
             return new QueryBuilders.RawQueryBuilder(stringValue);
         } else {
-            throw new StarRocksESException("can not support function { " + node.getFnName() + " }");
+            throw new StarRocksConnectorException("can not support function { " + node.getFnName() + " }");
         }
     }
 
     private static String getColumnName(Expr expr) {
         if (expr == null) {
-            throw new StarRocksESException("internal exception: expr is null");
+            throw new StarRocksConnectorException("internal exception: expr is null");
         }
         String columnName = new QueryConverter.ExtractColumnName().visit(expr, null);
         if (columnName == null || columnName.isEmpty()) {
-            throw new StarRocksESException("column's name must be not null or empty");
+            throw new StarRocksConnectorException("column's name must be not null or empty");
         }
         return columnName;
     }
@@ -222,7 +223,7 @@ public class QueryConverter extends AstVisitor<QueryBuilders.QueryBuilder, Void>
 
     private static Object valueFor(Expr expr) {
         if (!expr.isLiteral()) {
-            throw new StarRocksESException("can not get literal value from " + expr);
+            throw new StarRocksConnectorException("can not get literal value from " + expr);
         }
         if (expr instanceof BoolLiteral) {
             return ((BoolLiteral) expr).getValue();

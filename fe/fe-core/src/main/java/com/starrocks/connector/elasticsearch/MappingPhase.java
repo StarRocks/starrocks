@@ -36,6 +36,7 @@ package com.starrocks.connector.elasticsearch;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.commons.lang3.StringUtils;
 import org.json.JSONObject;
 
@@ -57,7 +58,7 @@ public class MappingPhase implements SearchPhase {
     }
 
     @Override
-    public void execute(SearchContext context) throws StarRocksESException {
+    public void execute(SearchContext context) throws StarRocksConnectorException {
         jsonMapping = client.getMapping(context.sourceIndex());
     }
 
@@ -74,7 +75,7 @@ public class MappingPhase implements SearchPhase {
      * @return fetchFieldsContext and docValueFieldsContext
      * @throws Exception
      */
-    public void resolveFields(SearchContext searchContext, String indexMapping) throws StarRocksESException {
+    public void resolveFields(SearchContext searchContext, String indexMapping) throws StarRocksConnectorException {
         JSONObject jsonObject = new JSONObject(indexMapping);
         // the indexName use alias takes the first mapping
         Iterator<String> keys = jsonObject.keys();
@@ -97,7 +98,7 @@ public class MappingPhase implements SearchPhase {
             properties = rootSchema.optJSONObject("properties");
         }
         if (properties == null) {
-            throw new StarRocksESException("index[" + searchContext.sourceIndex() + "] type[" + searchContext.type() +
+            throw new StarRocksConnectorException("index[" + searchContext.sourceIndex() + "] type[" + searchContext.type() +
                     "] mapping not found for the ES Cluster");
         }
         for (Column col : searchContext.columns()) {

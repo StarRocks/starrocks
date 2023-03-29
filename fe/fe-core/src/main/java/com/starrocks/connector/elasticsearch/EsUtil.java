@@ -176,20 +176,22 @@ public class EsUtil {
     }
 
     /**
-     *{
-     * 	"media_account": {
-     * 		"mappings": {
-     * 			"properties": {
-     * 				"@timestamp": {
-     * 					"type": "date"
-     *                                },
-     * 				"access_token": {
-     * 					"type": "keyword"
-     *                },
-     * 				"access_token_expires": {
-     * 					"type": "long"
-     *                }* 			}
-     *        }* 	}
+     * {
+     * "media_account": {
+     * "mappings": {
+     * "properties": {
+     * "@timestamp": {
+     * "type": "date"
+     * },
+     * "access_token": {
+     * "type": "keyword"
+     * },
+     * "access_token_expires": {
+     * "type": "long"
+     * }
+     * }
+     * }
+     * }
      * }
      *
      * @param index

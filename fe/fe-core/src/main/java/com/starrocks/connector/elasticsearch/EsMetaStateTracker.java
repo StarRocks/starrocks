@@ -18,6 +18,7 @@
 package com.starrocks.connector.elasticsearch;
 
 import com.starrocks.catalog.EsTable;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -47,7 +48,7 @@ public class EsMetaStateTracker {
         return searchContext;
     }
 
-    public void run() throws StarRocksESException {
+    public void run() throws StarRocksConnectorException {
         for (SearchPhase searchPhase : builtinSearchPhase) {
             searchPhase.preProcess(searchContext);
             searchPhase.execute(searchContext);

@@ -31,8 +31,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.IdGenerator;
-import com.starrocks.connector.elasticsearch.QueryConverter;
-import com.starrocks.connector.elasticsearch.StarRocksESException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -92,7 +91,7 @@ public class QueryConverterTest {
         illegalParams.add(serviceSlotRef);
         illegalParams.add(illegalValueLiteral);
         FunctionCallExpr illegalESQueryExpr = new FunctionCallExpr("esquery", illegalParams);
-        ExceptionChecker.expectThrows(StarRocksESException.class, () -> queryConverter.convert(illegalESQueryExpr));
+        ExceptionChecker.expectThrows(StarRocksConnectorException.class, () -> queryConverter.convert(illegalESQueryExpr));
     }
 
     @Test

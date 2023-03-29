@@ -19,6 +19,7 @@ import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.config.ConnectorConfig;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,7 +45,7 @@ public class ElasticsearchConnector
         if (metadata == null) {
             try {
                 metadata = new ElasticsearchMetadata(esRestClient, catalogName, esConfig.getProperties());
-            } catch (StarRocksESException e) {
+            } catch (StarRocksConnectorException e) {
                 LOG.error("Failed to create elasticsearch metadata on [catalog : {}]", catalogName, e);
                 throw e;
             }

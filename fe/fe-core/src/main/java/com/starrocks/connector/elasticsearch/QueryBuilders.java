@@ -24,6 +24,7 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starrocks.common.io.FastByteArrayOutputStream;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -52,13 +53,13 @@ public final class QueryBuilders {
         public abstract void toJson(JsonGenerator out) throws IOException;
 
         @Override
-        public String toString() throws StarRocksESException {
+        public String toString() throws StarRocksConnectorException {
             FastByteArrayOutputStream out = new FastByteArrayOutputStream(256);
             JsonFactory factory = new JsonFactory();
             try (JsonGenerator jsonGenerator = factory.createGenerator(out, JsonEncoding.UTF8)) {
                 toJson(jsonGenerator);
             } catch (IOException e) {
-                throw new StarRocksESException(e.getMessage());
+                throw new StarRocksConnectorException(e.getMessage());
             }
             return out.toString();
         }
@@ -485,10 +486,10 @@ public final class QueryBuilders {
             try {
                 map = MAPPER.readValue(value, HashMap.class);
             } catch (JsonProcessingException e) {
-                throw new StarRocksESException(e.getMessage());
+                throw new StarRocksConnectorException(e.getMessage());
             }
             if (map == null || map.size() != 1) {
-                throw new StarRocksESException("raw query dsl in `esquery` must have one (only one) root json element");
+                throw new StarRocksConnectorException("raw query dsl in `esquery` must have one (only one) root json element");
             }
 
         }

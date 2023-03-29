@@ -15,16 +15,23 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableSet;
+import com.starrocks.connector.config.ConnectorConfig;
+import com.starrocks.connector.elasticsearch.ElasticsearchConnector;
+import com.starrocks.connector.elasticsearch.EsConfig;
+import com.starrocks.connector.hive.HiveConnector;
+import com.starrocks.connector.hudi.HudiConnector;
+import com.starrocks.connector.iceberg.IcebergConnector;
+import com.starrocks.connector.jdbc.JDBCConnector;
 
 import java.util.Set;
 
 public enum ConnectorType {
 
-    ELASTICSEARCH("es"),
-    HIVE("hive"),
-    ICEBERG("iceberg"),
-    JDBC("jdbc"),
-    HUDI("hudi");
+    ELASTICSEARCH("es", ElasticsearchConnector.class, EsConfig.class),
+    HIVE("hive", HiveConnector.class, null),
+    ICEBERG("iceberg", IcebergConnector.class, null),
+    JDBC("jdbc", JDBCConnector.class, null),
+    HUDI("hudi", HudiConnector.class, null);
 
     public static Set<String> SUPPORT_TYPE_SET = ImmutableSet.of(
             ELASTICSEARCH.getName(),
@@ -34,14 +41,26 @@ public enum ConnectorType {
             HUDI.getName()
     );
 
-    ConnectorType(String name) {
+    ConnectorType(String name, Class connectorClass, Class configClass) {
         this.name = name;
+        this.connectorClass = connectorClass;
+        this.configClass = configClass;
     }
 
     private String name;
+    private Class<Connector> connectorClass;
+    private Class<ConnectorConfig> configClass;
 
     public String getName() {
         return name;
+    }
+
+    public Class getConnectorClass() {
+        return connectorClass;
+    }
+
+    public Class<ConnectorConfig> getConfigClass() {
+        return configClass;
     }
 
     public static boolean isSupport(String name) {

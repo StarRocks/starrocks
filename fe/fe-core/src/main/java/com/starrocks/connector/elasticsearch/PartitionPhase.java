@@ -18,6 +18,7 @@
 package com.starrocks.connector.elasticsearch;
 
 import com.starrocks.catalog.EsTable;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -36,7 +37,7 @@ public class PartitionPhase implements SearchPhase {
     }
 
     @Override
-    public void execute(SearchContext context) throws StarRocksESException {
+    public void execute(SearchContext context) throws StarRocksConnectorException {
         shardPartitions = client.searchShards(context.sourceIndex());
         nodesInfo = client.getHttpNodes();
         if (!context.wanOnly()) {
@@ -51,7 +52,7 @@ public class PartitionPhase implements SearchPhase {
     }
 
     @Override
-    public void postProcess(SearchContext context) throws StarRocksESException {
+    public void postProcess(SearchContext context) throws StarRocksConnectorException {
         context.partitions(shardPartitions);
         if (EsTable.TRANSPORT_HTTP.equals(context.esTable().getTransport())) {
             context.partitions().addHttpAddress(nodesInfo);

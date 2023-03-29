@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.AbstractTableFactory;
 import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -102,7 +103,7 @@ public class ElasticsearchMetadata
             return esTable;
         } catch (Exception e) {
             LOG.error("transform to EsTable Error", e);
-            throw new StarRocksESException("transform to EsTable Error");
+            throw new StarRocksConnectorException("transform to EsTable Error");
         }
     }
 

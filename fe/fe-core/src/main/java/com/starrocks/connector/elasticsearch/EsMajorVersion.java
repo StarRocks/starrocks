@@ -34,6 +34,8 @@
 
 package com.starrocks.connector.elasticsearch;
 
+import com.starrocks.connector.exception.StarRocksConnectorException;
+
 /**
  * Elasticsearch major version information, useful to check client's query compatibility with the Rest API.
  * <p>
@@ -82,7 +84,7 @@ public class EsMajorVersion {
         return version.major >= major;
     }
 
-    public static EsMajorVersion parse(String version) throws StarRocksESException {
+    public static EsMajorVersion parse(String version) throws StarRocksConnectorException {
         if (version.startsWith("0.")) {
             return new EsMajorVersion((byte) 0, version);
         }
@@ -105,7 +107,7 @@ public class EsMajorVersion {
         if (version.startsWith("8.")) {
             return new EsMajorVersion((byte) 8, version);
         }
-        throw new StarRocksESException("Unsupported/Unknown ES Cluster version [" + version + "]." +
+        throw new StarRocksConnectorException("Unsupported/Unknown ES Cluster version [" + version + "]." +
                 "Highest supported version is [" + LATEST.version + "].");
     }
 

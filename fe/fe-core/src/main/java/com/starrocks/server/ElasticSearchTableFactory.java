@@ -63,8 +63,7 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
         }
 
         long tableId = GlobalStateMgr.getCurrentState().getNextId();
-        EsTable esTable = new EsTable(tableId, tableName, baseSchema, stmt.getProperties(), partitionInfo,
-                database.getCatalogName());
+        EsTable esTable = new EsTable(tableId, tableName, baseSchema, stmt.getProperties(), partitionInfo);
         esTable.setComment(stmt.getComment());
         return esTable;
     }

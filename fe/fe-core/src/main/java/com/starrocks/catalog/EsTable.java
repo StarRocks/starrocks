@@ -135,8 +135,8 @@ public class EsTable extends Table {
         super(TableType.ELASTICSEARCH);
     }
 
-    public EsTable(long id, String name, List<Column> schema,
-                   Map<String, String> properties, PartitionInfo partitionInfo) throws DdlException {
+    public EsTable(long id, String name, List<Column> schema, Map<String, String> properties,
+                   PartitionInfo partitionInfo) throws DdlException {
         super(id, name, TableType.ELASTICSEARCH, schema);
         this.partitionInfo = partitionInfo;
         validate(properties);
