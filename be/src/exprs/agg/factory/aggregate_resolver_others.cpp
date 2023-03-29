@@ -57,9 +57,13 @@ void AggregateFuncResolver::register_others() {
     add_array_mapping<TYPE_DATETIME, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
 
+<<<<<<< HEAD
     // TYPE_BIGINT hack for various arguments
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_ARRAY>("array_agg2", false,
                                                            AggregateFactory::MakeArrayAggAggregateFunctionV2());
+=======
+    add_general_mapping_notnull("array_agg2", false, AggregateFactory::MakeArrayAggAggregateFunctionV2());
+>>>>>>> 1730fcf75 ([BugFix] array_agg supports upgrade to 3.0 (#20597))
 }
 
 } // namespace starrocks

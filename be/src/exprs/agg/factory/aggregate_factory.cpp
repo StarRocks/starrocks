@@ -122,6 +122,17 @@ static const AggregateFunction* get_function(const std::string& name, LogicalTyp
     if (func_version > 5) {
         if (name == "array_agg") {
             func_name = "array_agg2";
+<<<<<<< HEAD
+=======
+        }
+    }
+
+    if (binary_type == TFunctionBinaryType::BUILTIN) {
+        auto func = AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type,
+                                                                          is_window_function, is_null);
+        if (func != nullptr) {
+            return func;
+>>>>>>> 1730fcf75 ([BugFix] array_agg supports upgrade to 3.0 (#20597))
         }
     }
 
