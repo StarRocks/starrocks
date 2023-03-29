@@ -29,7 +29,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 public class PipelineParallelismTest extends PlanTestBase {
-    private MockUp<DataNodeCoreStat> mockedDataNodeCoreStat = null;
+    private MockUp<DataNodeCoreStat> mockedBackendCoreStat = null;
     private final int parallelExecInstanceNum = 16;
     private final int numHardwareCores = 8;
     private int prevParallelExecInstanceNum = 0;
@@ -38,7 +38,7 @@ public class PipelineParallelismTest extends PlanTestBase {
 
     @Before
     public void setUp() {
-        mockedDataNodeCoreStat = new MockUp<DataNodeCoreStat>() {
+        mockedBackendCoreStat = new MockUp<DataNodeCoreStat>() {
             @Mock
             public int getAvgNumOfHardwareCoresOfBe() {
                 return numHardwareCores;
@@ -57,7 +57,7 @@ public class PipelineParallelismTest extends PlanTestBase {
 
     @After
     public void tearDown() {
-        mockedDataNodeCoreStat = null;
+        mockedBackendCoreStat = null;
 
         connectContext.getSessionVariable().setParallelExecInstanceNum(prevParallelExecInstanceNum);
         connectContext.getSessionVariable().setEnablePipelineEngine(prevEnablePipelineEngine);
