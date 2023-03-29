@@ -87,9 +87,14 @@ TEST_F(OrdinalPageIndexTest, normal) {
         LOG(INFO) << "index page size=" << index_meta.ordinal_index().root_page().root_page().size();
     }
 
+    IndexReadOptions opts;
+    opts.fs = _fs.get();
+    opts.file_name = filename;
+    opts.use_page_cache = true;
+    opts.kept_in_memory = false;
+    opts.skip_fill_local_cache = false;
     OrdinalIndexReader index;
-    ASSIGN_OR_ABORT(auto r,
-                    index.load(_fs.get(), filename, index_meta.ordinal_index(), 16 * 1024 * 4096 + 1, true, false));
+    ASSIGN_OR_ABORT(auto r, index.load(opts, index_meta.ordinal_index(), 16 * 1024 * 4096 + 1));
     ASSERT_TRUE(r);
     ASSERT_EQ(16 * 1024, index.num_data_pages());
     ASSERT_EQ(1, index.get_first_ordinal(0));
@@ -143,8 +148,14 @@ TEST_F(OrdinalPageIndexTest, one_data_page) {
         ASSERT_EQ(data_page_pointer, root_page_pointer);
     }
 
+    IndexReadOptions opts;
+    opts.fs = _fs.get();
+    opts.file_name = "";
+    opts.use_page_cache = true;
+    opts.kept_in_memory = false;
+    opts.skip_fill_local_cache = false;
     OrdinalIndexReader index;
-    ASSIGN_OR_ABORT(auto r, index.load(_fs.get(), "", index_meta.ordinal_index(), num_values, true, false));
+    ASSIGN_OR_ABORT(auto r, index.load(opts, index_meta.ordinal_index(), num_values));
     ASSERT_TRUE(r);
     ASSERT_EQ(1, index.num_data_pages());
     ASSERT_EQ(0, index.get_first_ordinal(0));
