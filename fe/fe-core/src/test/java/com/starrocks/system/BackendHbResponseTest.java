@@ -19,7 +19,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class DataNodeHbResponseTest {
+public class BackendHbResponseTest {
     @Test
     public void testSerializeHbResponse() {
         int beId = 1;
@@ -30,7 +30,8 @@ public class DataNodeHbResponseTest {
         long hbTime = System.currentTimeMillis();
         String version = "version1";
         int cpuCores = 10;
-        BackendHbResponse resp = new BackendHbResponse(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores);
+        BackendHbResponse
+                resp = new BackendHbResponse(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores);
 
         Assert.assertEquals(beId, resp.getBeId());
         Assert.assertEquals(bePort, resp.getBePort());

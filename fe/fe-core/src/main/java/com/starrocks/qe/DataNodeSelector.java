@@ -16,7 +16,7 @@ package com.starrocks.qe;
 
 import java.util.Map;
 
-public interface BackendSelector {
+public interface DataNodeSelector {
     void computeScanRangeAssignment() throws Exception;
 
     static <K, V> V findOrInsert(Map<K, V> m, final K key, final V defaultVal) {

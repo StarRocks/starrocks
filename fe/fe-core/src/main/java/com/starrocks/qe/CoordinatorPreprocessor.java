@@ -1030,14 +1030,14 @@ public class CoordinatorPreprocessor {
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
             if (scanNode instanceof SchemaScanNode) {
-                BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
+                DataNodeSelector selector = new NormalDataNodeSelector(scanNode, locations, assignment);
                 selector.computeScanRangeAssignment();
             } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                     scanNode instanceof FileTableScanNode) {
 
-                HDFSBackendSelector selector =
-                        new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
+                HDFSDataNodeSelector selector =
+                        new HDFSDataNodeSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),
                                 hasComputeNode,
                                 sv.getForceScheduleLocal(),
@@ -1049,14 +1049,14 @@ public class CoordinatorPreprocessor {
                         isBucketShuffleJoin(scanNode.getFragmentId().asInt(), scanNode.getFragment().getPlanRoot());
                 boolean hasReplicated = isReplicatedFragment(scanNode.getFragment().getPlanRoot());
                 if (assignment.size() > 0 && hasReplicated && scanNode.canDoReplicatedJoin()) {
-                    BackendSelector selector = new ReplicatedBackendSelector(scanNode, locations, assignment);
+                    DataNodeSelector selector = new ReplicatedDataNodeSelector(scanNode, locations, assignment);
                     selector.computeScanRangeAssignment();
                     replicateScanIds.add(scanNode.getId().asInt());
                 } else if (hasColocate || hasBucket) {
-                    BackendSelector selector = new ColocatedBackendSelector((OlapScanNode) scanNode, assignment);
+                    DataNodeSelector selector = new ColocatedDataNodeSelector((OlapScanNode) scanNode, assignment);
                     selector.computeScanRangeAssignment();
                 } else {
-                    BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
+                    DataNodeSelector selector = new NormalDataNodeSelector(scanNode, locations, assignment);
                     selector.computeScanRangeAssignment();
                 }
             }
@@ -1824,13 +1824,13 @@ public class CoordinatorPreprocessor {
         }
     }
 
-    private class NormalBackendSelector implements BackendSelector {
+    private class NormalDataNodeSelector implements DataNodeSelector {
         private final ScanNode scanNode;
         private final List<TScanRangeLocations> locations;
         private final FragmentScanRangeAssignment assignment;
 
-        public NormalBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                                     FragmentScanRangeAssignment assignment) {
+        public NormalDataNodeSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
+                                      FragmentScanRangeAssignment assignment) {
             this.scanNode = scanNode;
             this.locations = locations;
             this.assignment = assignment;
@@ -1844,7 +1844,7 @@ public class CoordinatorPreprocessor {
                 Long minAssignedBytes = Long.MAX_VALUE;
                 TScanRangeLocation minLocation = null;
                 for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
-                    Long assignedBytes = BackendSelector.findOrInsert(assignedBytesPerHost, location.server, 0L);
+                    Long assignedBytes = DataNodeSelector.findOrInsert(assignedBytesPerHost, location.server, 0L);
                     if (assignedBytes < minAssignedBytes) {
                         minAssignedBytes = assignedBytes;
                         minLocation = location;
@@ -1865,9 +1865,9 @@ public class CoordinatorPreprocessor {
                 }
                 recordUsedBackend(execHostPort, backendIdRef.getRef());
 
-                Map<Integer, List<TScanRangeParams>> scanRanges = BackendSelector.findOrInsert(
+                Map<Integer, List<TScanRangeParams>> scanRanges = DataNodeSelector.findOrInsert(
                         assignment, execHostPort, new HashMap<>());
-                List<TScanRangeParams> scanRangeParamsList = BackendSelector.findOrInsert(
+                List<TScanRangeParams> scanRangeParamsList = DataNodeSelector.findOrInsert(
                         scanRanges, scanNode.getId().asInt(), new ArrayList<>());
                 // add scan range
                 TScanRangeParams scanRangeParams = new TScanRangeParams();
@@ -1877,13 +1877,13 @@ public class CoordinatorPreprocessor {
         }
     }
 
-    private class ReplicatedBackendSelector implements BackendSelector {
+    private class ReplicatedDataNodeSelector implements DataNodeSelector {
         private final ScanNode scanNode;
         private final List<TScanRangeLocations> locations;
         private final FragmentScanRangeAssignment assignment;
 
-        public ReplicatedBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                                         FragmentScanRangeAssignment assignment) {
+        public ReplicatedDataNodeSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
+                                          FragmentScanRangeAssignment assignment) {
             this.scanNode = scanNode;
             this.locations = locations;
             this.assignment = assignment;
@@ -1894,7 +1894,7 @@ public class CoordinatorPreprocessor {
             for (TScanRangeLocations scanRangeLocations : locations) {
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> kv : assignment.entrySet()) {
                     Map<Integer, List<TScanRangeParams>> scanRanges = kv.getValue();
-                    List<TScanRangeParams> scanRangeParamsList = BackendSelector.findOrInsert(
+                    List<TScanRangeParams> scanRangeParamsList = DataNodeSelector.findOrInsert(
                             scanRanges, scanNode.getId().asInt(), new ArrayList<>());
                     // add scan range
                     TScanRangeParams scanRangeParams = new TScanRangeParams();
@@ -1915,7 +1915,7 @@ public class CoordinatorPreprocessor {
             if (bucketSeqToScanRange != null && !bucketSeqToScanRange.isEmpty()) {
                 for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> entry : bucketSeqToScanRange.entrySet()) {
                     for (TScanRangeLocations scanRangeLocations : locations) {
-                        List<TScanRangeParams> scanRangeParamsList = BackendSelector.findOrInsert(
+                        List<TScanRangeParams> scanRangeParamsList = DataNodeSelector.findOrInsert(
                                 entry.getValue(), scanNode.getId().asInt(), new ArrayList<>());
                         // add scan range
                         TScanRangeParams scanRangeParams = new TScanRangeParams();
@@ -1927,11 +1927,11 @@ public class CoordinatorPreprocessor {
         }
     }
 
-    private class ColocatedBackendSelector implements BackendSelector {
+    private class ColocatedDataNodeSelector implements DataNodeSelector {
         private final OlapScanNode scanNode;
         private final FragmentScanRangeAssignment assignment;
 
-        public ColocatedBackendSelector(OlapScanNode scanNode, FragmentScanRangeAssignment assignment) {
+        public ColocatedDataNodeSelector(OlapScanNode scanNode, FragmentScanRangeAssignment assignment) {
             this.scanNode = scanNode;
             this.assignment = assignment;
         }

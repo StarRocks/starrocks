@@ -43,7 +43,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
-public class BackendTabletsInfo implements Writable {
+public class DataNodeTabletsInfo implements Writable {
 
     private long backendId;
     // tablet id , schema hash
@@ -55,11 +55,11 @@ public class BackendTabletsInfo implements Writable {
 
     private List<ReplicaPersistInfo> replicaPersistInfos = Lists.newArrayList();
 
-    private BackendTabletsInfo() {
+    private DataNodeTabletsInfo() {
 
     }
 
-    public BackendTabletsInfo(long backendId) {
+    public DataNodeTabletsInfo(long backendId) {
         this.backendId = backendId;
     }
 
@@ -91,8 +91,8 @@ public class BackendTabletsInfo implements Writable {
         return tabletSchemaHash.isEmpty() && replicaPersistInfos.isEmpty();
     }
 
-    public static BackendTabletsInfo read(DataInput in) throws IOException {
-        BackendTabletsInfo backendTabletsInfo = new BackendTabletsInfo();
+    public static DataNodeTabletsInfo read(DataInput in) throws IOException {
+        DataNodeTabletsInfo backendTabletsInfo = new DataNodeTabletsInfo();
         backendTabletsInfo.readFields(in);
         return backendTabletsInfo;
     }
