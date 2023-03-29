@@ -43,4 +43,4 @@ COPY --from=artifacts /release/be_artifacts/ $STARROCKS_ROOT/
 COPY docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
 
 # Create directory for BE storage, create cn symbolic link to be
-RUN mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
+RUN touch /.dockerenv && mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn

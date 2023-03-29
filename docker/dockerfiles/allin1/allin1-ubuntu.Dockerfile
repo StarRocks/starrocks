@@ -50,6 +50,6 @@ COPY --chmod=755 docker/dockerfiles/allin1/*.sh $DEPLOYDIR
 COPY docker/dockerfiles/allin1/*.conf $DEPLOYDIR
 RUN cat be.conf >> $DEPLOYDIR/starrocks/be/conf/be.conf && \
     cat fe.conf >> $DEPLOYDIR/starrocks/fe/conf/fe.conf && \
-    mkdir -p $DEPLOYDIR/starrocks/fe/meta && mkdir -p $DEPLOYDIR/starrocks/be/storage
+    mkdir -p $DEPLOYDIR/starrocks/fe/meta && mkdir -p $DEPLOYDIR/starrocks/be/storage && touch /.dockerenv
 
-CMD $DEPLOYDIR/start_fe_be.sh
+CMD ./start_fe_be.sh
