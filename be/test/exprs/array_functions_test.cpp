@@ -5063,7 +5063,6 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     }
 }
 
-
 TEST_F(ArrayFunctionsTest, array_intersect_any_type_int) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
@@ -5083,7 +5082,8 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_int) {
     src_column3->append_datum(DatumArray{(int32_t)(4), (int32_t)(1)});
     src_column3->append_datum(DatumArray{(int32_t)(100)});
 
-    auto dest_column = ArrayFunctions::array_intersect_any_type(nullptr, {src_column, src_column2, src_column3}).value();
+    auto dest_column =
+            ArrayFunctions::array_intersect_any_type(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
     _check_array<int32_t>({(int32_t)(5)}, dest_column->get(0).get_array());
@@ -5111,7 +5111,8 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_int_with_not_null) {
     src_column3->append_datum(DatumArray{(int32_t)(4), (int32_t)(1)});
     src_column3->append_datum(DatumArray{(int32_t)(4), Datum(), (int32_t)(2), (int32_t)(22), (int32_t)(1)});
 
-    auto dest_column = ArrayFunctions::array_intersect_any_type(nullptr, {src_column, src_column2, src_column3}).value();
+    auto dest_column =
+            ArrayFunctions::array_intersect_any_type(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
     _check_array<int32_t>({(int32_t)(5)}, dest_column->get(0).get_array());
@@ -5163,7 +5164,8 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_varchar) {
     src_column3->append_datum(DatumArray{Slice("4"), Slice("1")});
     src_column3->append_datum(DatumArray{Slice("100")});
 
-    auto dest_column = ArrayFunctions::array_intersect_any_type(nullptr, {src_column, src_column2, src_column3}).value();
+    auto dest_column =
+            ArrayFunctions::array_intersect_any_type(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
     _check_array<Slice>({Slice("5")}, dest_column->get(0).get_array());
@@ -5224,7 +5226,6 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_varchar_with_not_null) {
         ASSERT_EQ(null_values, 1);
     }
 }
-
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_int) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
