@@ -128,6 +128,10 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
             msg.nestloop_join_node.setBuild_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters));
         }
+
+        if (outputSlots != null) {
+            msg.hash_join_node.setOutput_columns(outputSlots);
+        }
     }
 
     @Override

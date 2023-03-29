@@ -2180,18 +2180,7 @@ public class PlanFragmentBuilder {
             }
 
             //Build outputColumns
-            if (node.getProjection() != null) {
-                ColumnRefSet outputColumns = new ColumnRefSet();
-                for (ScalarOperator s : node.getProjection().getColumnRefMap().values()) {
-                    outputColumns.union(s.getUsedColumns());
-                }
-                for (ScalarOperator s : node.getProjection().getCommonSubOperatorMap().values()) {
-                    outputColumns.union(s.getUsedColumns());
-                }
-
-                outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
-                joinNode.setOutputSlots(outputColumns.getStream().collect(Collectors.toList()));
-            }
+            fillOutputSlots(node.getProjection(), joinNode);
 
             joinNode.setDistributionMode(distributionMode);
             joinNode.getConjuncts().addAll(conjuncts);
@@ -2780,18 +2769,7 @@ public class PlanFragmentBuilder {
                             node.getJoinType(), eqJoinConjuncts, otherJoinConjuncts);
 
             // 4. Build outputColumns
-            if (node.getProjection() != null) {
-                ColumnRefSet outputColumns = new ColumnRefSet();
-                for (ScalarOperator s : node.getProjection().getColumnRefMap().values()) {
-                    outputColumns.union(s.getUsedColumns());
-                }
-                for (ScalarOperator s : node.getProjection().getCommonSubOperatorMap().values()) {
-                    outputColumns.union(s.getUsedColumns());
-                }
-
-                outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
-                joinNode.setOutputSlots(outputColumns.getStream().collect(Collectors.toList()));
-            }
+            fillOutputSlots(node.getProjection(), joinNode);
 
             joinNode.setDistributionMode(distributionMode);
             joinNode.getConjuncts().addAll(conjuncts);
@@ -3005,5 +2983,19 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+        private void fillOutputSlots(Projection projection, JoinNode joinNode) {
+            if (projection != null) {
+                ColumnRefSet outputColumns = new ColumnRefSet();
+                for (ScalarOperator s : projection.getColumnRefMap().values()) {
+                    outputColumns.union(s.getUsedColumns());
+                }
+                for (ScalarOperator s : projection.getCommonSubOperatorMap().values()) {
+                    outputColumns.union(s.getUsedColumns());
+                }
+
+                outputColumns.except(new ArrayList<>(projection.getCommonSubOperatorMap().keySet()));
+                joinNode.setOutputSlots(outputColumns.getStream().collect(Collectors.toList()));
+            }
+        }
     }
 }
