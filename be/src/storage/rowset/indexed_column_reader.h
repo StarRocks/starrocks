@@ -114,7 +114,12 @@ class IndexedColumnReader {
 public:
     // Does *NOT* take the ownership of |fs|.
     IndexedColumnReader(const IndexReadOptions& opts, IndexedColumnMetaPB meta)
-            : _opts(opts), _fs(opts.fs), _file_name(opts.file_name), _meta(std::move(meta)){};
+            : _fs(opts.fs),
+              _file_name(opts.file_name),
+              _meta(std::move(meta)),
+              _use_page_cache(opts.use_page_cache),
+              _kept_in_memory(opts.kept_in_memory),
+              _skip_fill_local_cache(opts.skip_fill_local_cache) {}
 
     Status load();
 
@@ -140,11 +145,13 @@ private:
     Status read_page(RandomAccessFile* read_file, const PagePointer& pp, PageHandle* handle, Slice* body,
                      PageFooterPB* footer) const;
 
-    const IndexReadOptions& _opts;
-
     FileSystem* _fs;
     std::string _file_name;
     IndexedColumnMetaPB _meta;
+
+    bool _use_page_cache = true;
+    bool _kept_in_memory = false;
+    bool _skip_fill_local_cache = false;
 
     int64_t _num_values = 0;
     // whether this column contains any index page.
