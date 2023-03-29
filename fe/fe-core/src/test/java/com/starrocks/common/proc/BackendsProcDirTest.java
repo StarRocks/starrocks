@@ -143,7 +143,7 @@ public class BackendsProcDirTest {
         try {
             node = dir.lookup("1000");
             Assert.assertNotNull(node);
-            Assert.assertTrue(node instanceof BackendProcNode);
+            Assert.assertTrue(node instanceof DataNodeProcNode);
         } catch (AnalysisException e) {
             e.printStackTrace();
             Assert.fail();
@@ -153,7 +153,7 @@ public class BackendsProcDirTest {
         try {
             node = dir.lookup("1001");
             Assert.assertNotNull(node);
-            Assert.assertTrue(node instanceof BackendProcNode);
+            Assert.assertTrue(node instanceof DataNodeProcNode);
         } catch (AnalysisException e) {
             Assert.fail();
         }
