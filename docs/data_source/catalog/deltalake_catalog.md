@@ -327,6 +327,30 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   );
   ```
 
+### View Delta Lake catalogs
+
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+
+```SQL
+SHOW CATALOGS;
+```
+
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation information of an external catalog. The following example queries the creation information of a Delta Lake catalog named `deltalake_catalog_glue`:
+
+```SQL
+SHOW CREATE CATALOG deltalake_catalog_glue;
+```
+
+### Drop a Delta Lake catalog
+
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop a Delta Lake catalog.
+
+The following example drops a Delta Lake catalog named `deltalake_catalog_glue`:
+
+```SQL
+DROP Catalog deltalake_catalog_glue;
+```
+
 ## View the schema of a Delta Lake table
 
 You can use one of the following syntaxes to view the schema of a Delta Lake table:

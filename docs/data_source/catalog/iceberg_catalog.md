@@ -344,6 +344,30 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   );
   ```
 
+### View Iceberg catalogs
+
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+
+```SQL
+SHOW CATALOGS;
+```
+
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation information of an external catalog. The following example queries the creation information of an Iceberg catalog named `iceberg_catalog_glue`:
+
+```SQL
+SHOW CREATE CATALOG iceberg_catalog_glue;
+```
+
+### Drop an Iceberg catalog
+
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop an Iceberg catalog.
+
+The following example drops an Iceberg catalog named `iceberg_catalog_glue`:
+
+```SQL
+DROP Catalog iceberg_catalog_glue;
+```
+
 ## View the schema of an Iceberg table
 
 You can use one of the following syntaxes to view the schema of an Iceberg table:
