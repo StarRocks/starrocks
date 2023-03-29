@@ -104,7 +104,7 @@ public:
                     count = max_chunk_size - res->size();
                 }
 
-                bool overflow;
+                bool overflow = false;
                 auto old_size = res->size();
                 resize_column_uninitialized(res.get(), old_size + count);
                 auto* data = res->get_data().data();
