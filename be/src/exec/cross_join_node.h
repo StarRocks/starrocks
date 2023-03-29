@@ -77,8 +77,8 @@ private:
     void _copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
                                                 size_t copy_number);
 
-    void _copy_build_rows_with_index_base_build(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
-                                                size_t row_count);
+    void _copy_build_rows_with_index_base_build(const SlotDesc& slot, ColumnPtr& dest_col, ColumnPtr& src_col,
+                                                size_t start_row, size_t row_count);
     void _copy_build_rows_with_index_base_probe(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
                                                 size_t row_count);
 
