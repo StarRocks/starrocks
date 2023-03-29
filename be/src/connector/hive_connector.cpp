@@ -523,6 +523,12 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     return Status::OK();
 }
 
+const std::string HiveDataSource::get_custom_coredump_msg() const {
+    const std::string path = !_scan_range.relative_path.empty() ? _scan_range.relative_path : _scan_range.full_path;
+    return strings::Substitute("Hive file path: $0, partition id: $1, length: $2, offset: $3", path,
+                               _scan_range.partition_id, _scan_range.length, _scan_range.offset);
+}
+
 int64_t HiveDataSource::raw_rows_read() const {
     if (_scanner == nullptr) return 0;
     return _scanner->raw_rows_read();

@@ -146,6 +146,10 @@ Status FileDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     return Status::OK();
 }
 
+const std::string FileDataSource::get_custom_coredump_msg() const {
+    return strings::Substitute("Load file path: $0", _scan_range.ranges[0].path);
+}
+
 int64_t FileDataSource::raw_rows_read() const {
     return _counter.filtered_rows_read + _counter.num_rows_filtered;
 }

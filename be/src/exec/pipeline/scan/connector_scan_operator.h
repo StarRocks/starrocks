@@ -88,6 +88,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
+    const std::string get_custom_coredump_msg() const override;
 
 protected:
     virtual bool _reach_eof() { return _limit != -1 && _rows_read >= _limit; }

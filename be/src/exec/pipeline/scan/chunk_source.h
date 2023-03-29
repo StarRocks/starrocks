@@ -66,6 +66,10 @@ public:
     void pin_chunk_token(ChunkBufferTokenPtr chunk_token);
     void unpin_chunk_token();
 
+    // Used to print custom error msg in be.out when coredmp
+    // Don't do heavey work, it calls frequently
+    virtual const std::string get_custom_coredump_msg() const { return ""; }
+
 protected:
     // MUST be implemented by different ChunkSource
     virtual Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) = 0;

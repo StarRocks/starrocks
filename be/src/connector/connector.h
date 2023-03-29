@@ -62,6 +62,8 @@ public:
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     Status parse_runtime_filters(RuntimeState* state);
     void update_has_any_predicate();
+    // Called frequently, don't do heavy work
+    virtual const std::string get_custom_coredump_msg() const { return ""; }
 
 protected:
     int64_t _read_limit = -1; // no limit
