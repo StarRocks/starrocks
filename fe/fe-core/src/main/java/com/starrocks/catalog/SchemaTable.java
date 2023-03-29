@@ -529,6 +529,19 @@ public class SchemaTable extends Table {
                                     .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("VALUE", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .build()))
+                    .put("be_threads", new SchemaTable(
+                            SystemId.BE_THREADS_ID,
+                            "be_threads",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("GROUP", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PTHREAD_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("IDLE", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("FINISHED_TASKS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .build()))
                     .build();
 
     public static class Builder {
