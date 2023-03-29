@@ -29,6 +29,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.platform.commons.util.Preconditions;
 
 public class ShowMaterializedViewTest {
     private ConnectContext ctx;
@@ -74,8 +75,15 @@ public class ShowMaterializedViewTest {
         Assert.assertEquals("text", stmt.getMetaData().getColumn(3).getName());
         Assert.assertEquals("rows", stmt.getMetaData().getColumn(4).getName());
 
+<<<<<<< HEAD
         stmt = (ShowMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
                 "SHOW MATERIALIZED VIEW FROM abc where name = 'mv1';", ctx);
+=======
+        stmt = (ShowMaterializedViewsStmt) UtFrameUtils.parseStmtWithNewParser(
+                "SHOW MATERIALIZED VIEWS FROM abc where name = 'mv1';", ctx);
+        Preconditions.notNull(stmt.toSelectStmt().getOrigStmt(), "stmt's original stmt should not be null");
+
+>>>>>>> af156eee7 (Passthrough originalStmt to avoid npe for show statements (#20414))
         Assert.assertEquals("abc", stmt.getDb());
         Assert.assertEquals(
                 "SELECT information_schema.materialized_views.MATERIALIZED_VIEW_ID AS id, " +
