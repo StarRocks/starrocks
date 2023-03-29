@@ -432,7 +432,40 @@ FROM KAFKA
 );
 ```
 
-### Load  JSON-formatted data 
+#### Setting skip_header, trim_space, enclose, and escape
+
+Suppose you want to load CSV-formatted data from a Kafka topic named `test_csv`. Every message in the dataset includes six columns: order ID, payment date, customer name, nationality, gender, and price.
+
+```Plaintext
+ "2020050802" , "2020-05-08" , "Johann Georg Faust" , "Deutschland" , "male" , "895"
+ "2020050802" , "2020-05-08" , "Julien Sorel" , "France" , "male" , "893"
+ "2020050803" , "2020-05-08" , "Dorian Grey\,Lord Henry" , "UK" , "male" , "1262"
+ "2020050901" , "2020-05-09" , "Anna Karenina" , "Russia" , "female" , "175"
+ "2020051001" , "2020-05-10" , "Tess Durbeyfield" , "US" , "female" , "986"
+ "2020051101" , "2020-05-11" , "Edogawa Conan" , "japan" , "male" , "8924"
+```
+
+If you want to load all data from the Kafka topic `test_csv` into `example_tbl1`, with the intention of removing the spaces preceding and following column separators and setting `enclose` to `"` and `escape` to `\`, run the following command:
+
+```SQL
+CREATE ROUTINE LOAD example_db.example_tbl1_test_csv ON example_tbl1
+COLUMNS TERMINATED BY ",",
+COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
+PROPERTIES
+(
+    "trim_space"="true",
+    "enclose"="\"",
+    "escape"="\\",
+)
+FROM KAFKA
+(
+    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_topic"="test_csv",
+    "property.kafka_default_offsets"="OFFSET_BEGINNING"
+);
+```
+
+### Load  JSON-formatted data
 
 #### StarRocks table column names consistent with JSON key names
 
