@@ -318,6 +318,30 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   );
   ```
 
+### 查看 Hudi Catalog
+
+您可以通过 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+
+```SQL
+SHOW CATALOGS;
+```
+
+您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) 查询某个 External Catalog 的创建信息。例如，通过如下命令查询 Hudi Catalog `hudi_catalog_glue` 的创建信息：
+
+```SQL
+SHOW CREATE CATALOG hudi_catalog_glue;
+```
+
+### 删除 Hudi Catalog
+
+您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) 删除一个 Hudi Catalog。
+
+例如，通过如下命令删除 Hudi Catalog `hudi_catalog_glue`：
+
+```SQL
+DROP Catalog hudi_catalog_glue;
+```
+
 ## 查看 Hudi 表结构
 
 您可以通过如下方法查看 Hudi 表的表结构：
