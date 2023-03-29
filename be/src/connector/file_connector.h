@@ -57,6 +57,7 @@ public:
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
+    const std::string get_custom_coredump_msg() const override;
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;

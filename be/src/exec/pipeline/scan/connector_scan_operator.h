@@ -106,6 +106,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
+    const std::string get_custom_coredump_msg() const override;
 
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;

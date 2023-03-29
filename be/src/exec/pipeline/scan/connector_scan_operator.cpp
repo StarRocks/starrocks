@@ -480,6 +480,10 @@ ConnectorScanOperatorIOTasksMemLimiter* ConnectorChunkSource::_get_io_tasks_mem_
     return f->_io_tasks_mem_limiter;
 }
 
+const std::string ConnectorChunkSource::get_custom_coredump_msg() const {
+    return _data_source->get_custom_coredump_msg();
+}
+
 void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
 

@@ -64,6 +64,8 @@ public:
     void set_runtime_filters(const RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     Status parse_runtime_filters(RuntimeState* state);
+    // Called frequently, don't do heavy work
+    virtual const std::string get_custom_coredump_msg() const { return ""; }
 
 protected:
     int64_t _read_limit = -1; // no limit
