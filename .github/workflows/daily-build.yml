@@ -1,8 +1,8 @@
-name: TEST Cron
+name: DAILY BUILD
 
 on:
   schedule:
-    - cron: '* 23 * * 1-5'
+    - cron: '00 15 * * 1-5'
   workflow_dispatch:
 
 permissions:
@@ -29,7 +29,8 @@ jobs:
       matrix:
         branch:
           - main
-          - clean
+          - branch-3.0
+          - branch-2.5
         build_type:
           - Release
           - ASAN
