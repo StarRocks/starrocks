@@ -327,6 +327,30 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
   );
   ```
 
+### View Hudi catalogs
+
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+
+```SQL
+SHOW CATALOGS;
+```
+
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation information of an external catalog. The following example queries the creation information of a Hudi catalog named `hudi_catalog_glue`:
+
+```SQL
+SHOW CREATE CATALOG hudi_catalog_glue;
+```
+
+### Drop a Hudi catalog
+
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop a Hudi catalog.
+
+The following example drops a Hudi catalog named `hudi_catalog_glue`:
+
+```SQL
+DROP Catalog hudi_catalog_glue;
+```
+
 ## View the schema of a Hudi table
 
 You can use one of the following syntaxes to view the schema of a Hudi table:
