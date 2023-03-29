@@ -67,30 +67,57 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 }
 
 Status FileReader::_parse_footer() {
-    std::vector<char> footer_buffer;
-    ASSIGN_OR_RETURN(uint32_t footer_read_size, _get_footer_read_size());
-    footer_buffer.resize(footer_read_size);
+    std::string footer_buffer;
+    uint8_t* footer_buf = nullptr;
+    uint64_t to_read = 0;
+    uint32_t footer_size = 0;
 
-    {
-        SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
-        RETURN_IF_ERROR(_file->read_at_fully(_file_size - footer_read_size, footer_buffer.data(), footer_read_size));
-        _scanner_ctx->stats->request_bytes_read += footer_read_size;
-        _scanner_ctx->stats->request_bytes_read_uncompressed += footer_read_size;
-    }
-
-    ASSIGN_OR_RETURN(uint32_t metadata_length, _parse_metadata_length(footer_buffer));
-
-    if (footer_read_size < (metadata_length + PARQUET_FOOTER_SIZE)) {
-        // footer_buffer's size is not enough to read the whole metadata, we need to re-read for larger size
-        size_t re_read_size = metadata_length + PARQUET_FOOTER_SIZE;
-        footer_buffer.resize(re_read_size);
+    bool in_cache = _scanner_ctx->footer_cache->get(_scanner_ctx->file_cache_key, &footer_buffer);
+    if (!in_cache) {
+        ASSIGN_OR_RETURN(auto footer_reader_size, _get_footer_read_size);
+        to_read = std::min(_file_size, footer_reader_size);
+        footer_buffer.resize(to_read);
+        footer_buf = (uint8_t*)footer_buffer.data();
         {
             SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
-            RETURN_IF_ERROR(_file->read_at_fully(_file_size - re_read_size, footer_buffer.data(), re_read_size));
-            _scanner_ctx->stats->request_bytes_read += re_read_size;
-            _scanner_ctx->stats->request_bytes_read_uncompressed += re_read_size;
+            RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buffer.data(), to_read));
         }
+        // check magic
+        RETURN_IF_ERROR(_check_magic(footer_buf + to_read - 4));
+        // deserialize footer
+        footer_size = decode_fixed32_le(footer_buf + to_read - 8);
+
+        // if local buf is not large enough, we have to allocate on heap and re-read.
+        // 4 bytes magic number, 4 bytes for footer_size, so total size is footer_size + 8.
+        if ((footer_size + 8) > to_read) {
+            // VLOG_FILE << "parquet file has large footer. name = " << _file->filename() << ", footer_size = " << footer_size;
+            to_read = footer_size + 8;
+            if (_file_size < to_read) {
+                return Status::Corruption(
+                        strings::Substitute("Invalid parquet file: name=$0, file_size=$1, footer_size=$2",
+                                            _file->filename(), _file_size, to_read));
+            }
+            footer_buffer.resize(to_read);
+            footer_buf = (uint8_t*)footer_buffer.data();
+            {
+                SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
+                RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buf, to_read));
+            }
+        } else {
+            int64_t extra = to_read - footer_size - 8;
+            memmove(footer_buf, footer_buf + extra, footer_size + 8);
+            footer_buffer.resize(footer_size + 8);
+        }
+        _scanner_ctx->footer_cache->put(_scanner_ctx->file_cache_key, footer_buffer);
+    } else {
+        footer_buf = (uint8_t*)footer_buffer.data();
+        to_read = footer_buffer.size();
+        RETURN_IF_ERROR(_check_magic(footer_buf + to_read - 4));
+        footer_size = decode_fixed32_le(footer_buf + to_read - 8);
     }
+
+    _scanner_ctx->stats->request_bytes_read += footer_size + 8;
+    _scanner_ctx->stats->request_bytes_read_uncompressed += footer_size + 8;
 
     tparquet::FileMetaData t_metadata;
     // deserialize footer

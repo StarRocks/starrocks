@@ -22,7 +22,7 @@
 #include "util/lru_cache.h"
 namespace starrocks {
 
-FooterCache::FooterCache(size_t capacity): _cache(capacity) {}
+FooterCache::FooterCache(size_t capacity) : _cache(capacity) {}
 
 bool FooterCache::get(const std::string& key, std::string* value) {
     CacheKey k(key);
@@ -35,15 +35,19 @@ bool FooterCache::get(const std::string& key, std::string* value) {
     return true;
 }
 
-    void FooterCache::put(const std::string& key, const std::string& value) {
-        CacheKey k(key);
-        s
+static void cache_deleter(const CacheKey& key, void* value) {
+    free(value);
+}
+void FooterCache::put(const std::string& key, const std::string& value) {
+    CacheKey k(key);
+    size_t size = value.size();
+    char* buf = (char*)malloc(size);
+    memcpy(buf, value.data(), size);
+    _cache.insert(k, buf, size, cache_deleter, CachePriority::NORMAL);
+    return;
+}
 
-    }
-
-
-
-
+static FooterCache global_footer_cache(128 * 1024 * 1024);
 
 class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
 public:
@@ -157,11 +161,12 @@ Status HdfsScanner::_build_scanner_context() {
         int64_t file_size = _scanner_params.file_size;
         std::string& file_cache_key = ctx.file_cache_key;
         file_cache_key.resize(16);
-        char* data = _file_cache_key.data();
+        char* data = file_cache_key.data();
         uint64_t hash_value = HashUtil::hash64(file_name.data(), file_name.size(), 0);
         memcpy(data, &hash_value, sizeof(hash_value));
         memcpy(data + 8, &file_size, sizeof(file_size));
     }
+    ctx.footer_cache = &global_footer_cache;
 
     return Status::OK();
 }

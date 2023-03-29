@@ -228,7 +228,7 @@ struct HdfsScannerContext {
 
     std::string file_cache_key;
 
-    Cache* footer_cache;
+    FooterCache* footer_cache;
 
     // set column names from file.
     // and to update not_existed slots and conjuncts.
@@ -337,7 +337,6 @@ protected:
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
     std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
-    std::string _file_cache_key;
 };
 
 } // namespace starrocks
