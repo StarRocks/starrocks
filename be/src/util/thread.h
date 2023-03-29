@@ -47,6 +47,8 @@
 
 namespace starrocks {
 
+class BeThreadInfo;
+
 class Thread : public RefCountedThreadSafe<Thread> {
 public:
     enum CreateFlags { NO_FLAGS = 0, NO_STACK_WATCHDOG = 1 };
@@ -119,6 +121,11 @@ public:
     const std::string& category() const;
     std::string to_string() const;
 
+    bool idle() const { return _idle; }
+    void set_idle(bool idle) { _idle = idle; }
+    int64_t finished_tasks() const { return _finished_tasks; }
+    void inc_finished_tasks() { _finished_tasks++; }
+
     // The current thread of execution, or NULL if the current thread isn't a starrocks::Thread.
     // This call is signal-safe.
     static Thread* current_thread();
@@ -152,6 +159,8 @@ public:
     // name's size should be less than 16, otherwise it will be truncated
     static void set_thread_name(pthread_t t, const std::string& name);
     static void set_thread_name(std::thread& t, std::string name);
+
+    static void get_thread_infos(std::vector<BeThreadInfo>& infos);
 
 private:
     friend class ThreadJoiner;
@@ -193,6 +202,9 @@ private:
     CountDownLatch _done;
 
     bool _joinable{false};
+
+    bool _idle{true};
+    std::atomic<int64_t> _finished_tasks{0};
 
     // Thread local pointer to the current thread of execution. Will be NULL if the current
     // thread is not a Thread.
