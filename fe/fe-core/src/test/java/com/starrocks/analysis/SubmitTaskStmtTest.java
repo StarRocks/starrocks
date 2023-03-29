@@ -109,4 +109,13 @@ public class SubmitTaskStmtTest {
         ShowResultSet showResult = DDLStmtExecutor.execute(statement, ctx);
         Assert.assertNotNull(showResult);
     }
+
+    @Test
+    public void testSubmitInsert() throws Exception {
+        String sql1 = "submit task task1 as insert into test.tbl1 select * from test.tbl1";
+        UtFrameUtils.parseStmtWithNewParser(sql1, starRocksAssert.getCtx());
+
+        String sql2 = "submit task task1 as insert overwrite test.tbl1 select * from test.tbl1";
+        UtFrameUtils.parseStmtWithNewParser(sql2, starRocksAssert.getCtx());
+    }
 }
