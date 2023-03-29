@@ -124,8 +124,8 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
         } else if (_table_function_state->processed_rows() < _input_chunk->num_rows()) {
             RETURN_IF_ERROR(_process_table_function());
         } else {
-            CHECK(!has_output());
-            CHECK(need_input());
+            DCHECK(!has_output());
+            DCHECK(need_input());
             break;
         }
     }
@@ -214,6 +214,7 @@ void TableFunctionOperator::_copy_result(const std::vector<ColumnPtr>& columns, 
 
         curr_output_size += copy_rows;
         _next_output_row += copy_rows;
+        DCHECK_LE(start + copy_rows, end);
         if (start + copy_rows == end) {
             _next_output_row_offset++;
         }
