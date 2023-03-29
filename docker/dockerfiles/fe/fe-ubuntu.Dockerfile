@@ -42,4 +42,4 @@ COPY --from=artifacts /release/fe_artifacts/ $STARROCKS_ROOT/
 COPY docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
 
 # Create directory for FE metadata
-RUN mkdir -p /opt/starrocks/fe/meta
+RUN touch /.dockerenv && mkdir -p /opt/starrocks/fe/meta
