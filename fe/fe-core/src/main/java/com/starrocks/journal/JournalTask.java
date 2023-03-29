@@ -33,15 +33,15 @@ public class JournalTask implements Future<Boolean> {
     // JournalWriter will call notify() after log is committed.
     protected CountDownLatch latch;
     // JournalWrite will commit immediately if received a log with betterCommitBeforeTime > now
-    protected long betterCommitBeforeTime;
+    protected long betterCommitBeforeTimeInNano;
 
     public JournalTask(DataOutputBuffer buffer, long maxWaitIntervalMs) {
         this.buffer = buffer;
         this.latch = new CountDownLatch(1);
         if (maxWaitIntervalMs > 0) {
-            this.betterCommitBeforeTime = System.currentTimeMillis() + maxWaitIntervalMs;
+            this.betterCommitBeforeTimeInNano = System.nanoTime() + maxWaitIntervalMs * 1000000;
         } else {
-            this.betterCommitBeforeTime = -1;
+            this.betterCommitBeforeTimeInNano = -1;
         }
     }
 
@@ -55,8 +55,8 @@ public class JournalTask implements Future<Boolean> {
         latch.countDown();
     }
 
-    public long getBetterCommitBeforeTime() {
-        return betterCommitBeforeTime;
+    public long getBetterCommitBeforeTimeInNano() {
+        return betterCommitBeforeTimeInNano;
     }
 
     public long estimatedSizeByte() {
