@@ -24,7 +24,6 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
@@ -81,18 +80,14 @@ public class DataProperty implements Writable {
         }
 
         Preconditions.checkState(mediumSet.size() <= 2, "current medium set: " + mediumSet);
-        TStorageMedium m = TStorageMedium.SSD;
+        TStorageMedium m = TStorageMedium.HDD;
         // When storage_medium property is not explicitly specified on creating table, we infer the storage medium type
-        // based on the types of storage paths reported by backends. Here is the rules,
-        //   1. If the storage paths reported by all the backends all have storage medium type HDD,
-        //      we infer that user wants to create a table or partition with storage_medium=HDD.
-        //   2. If the reported storage paths have both SSD type and HDD type, and storage cool down feature is
-        //      not used, we also infer with HDD type.
-        //   3. In other cases, it's SSD type.
-        if (mediumSet.size() == 0 ||
-                (mediumSet.size() == 1 && mediumSet.iterator().next() == TStorageMedium.HDD) ||
-                (mediumSet.size() == 2 && Config.tablet_sched_storage_cooldown_second < 0)) {
-            m = TStorageMedium.HDD;
+        // based on the types of storage paths reported by backends. Here is the rules(this is only for 2.12+ and 2.3.11+),
+        //   1. If the storage paths reported by all the backends all have storage medium type SSD,
+        //      we infer that user wants to create a table or partition with storage_medium=SSD.
+        //   2. In other cases, it's HDD type.
+        if (mediumSet.size() == 1 && mediumSet.iterator().next() == TStorageMedium.SSD) {
+            m = TStorageMedium.SSD;
         }
 
         return new DataProperty(m);
