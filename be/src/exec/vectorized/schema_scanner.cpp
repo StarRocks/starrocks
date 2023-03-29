@@ -6,6 +6,7 @@
 #include "exec/vectorized/schema_scanner/schema_be_configs_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_be_metrics_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_be_tablets_scanner.h"
+#include "exec/vectorized/schema_scanner/schema_be_threads_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_be_txns_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_charsets_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_collations_scanner.h"
@@ -113,6 +114,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaBeTxnsScanner>();
     case TSchemaTableType::SCH_BE_CONFIGS:
         return std::make_unique<SchemaBeConfigsScanner>();
+    case TSchemaTableType::SCH_BE_THREADS:
+        return std::make_unique<SchemaBeThreadsScanner>();
     case TSchemaTableType::SCH_FE_TABLET_SCHEDULES:
         return std::make_unique<SchemaFeTabletSchedulesScanner>();
     default:
