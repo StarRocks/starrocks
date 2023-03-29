@@ -30,39 +30,39 @@ public class DataNodeTest {
 
     @Test
     public void cpuCoreUpdate() {
-        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 8);
-        Assert.assertEquals(8, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
-        Assert.assertEquals(4, BackendCoreStat.getDefaultDOP());
+        DataNodeCoreStat.setNumOfHardwareCoresOfBe(1, 8);
+        Assert.assertEquals(8, DataNodeCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(4, DataNodeCoreStat.getDefaultDOP());
 
-        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 16);
-        Assert.assertEquals(16, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
-        Assert.assertEquals(8, BackendCoreStat.getDefaultDOP());
+        DataNodeCoreStat.setNumOfHardwareCoresOfBe(1, 16);
+        Assert.assertEquals(16, DataNodeCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(8, DataNodeCoreStat.getDefaultDOP());
     }
 
     @Test
     public void defaultSinkDopTest() {
-        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 8);
-        Assert.assertEquals(8, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
-        Assert.assertEquals(2, BackendCoreStat.getSinkDefaultDOP());
+        DataNodeCoreStat.setNumOfHardwareCoresOfBe(1, 8);
+        Assert.assertEquals(8, DataNodeCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(2, DataNodeCoreStat.getSinkDefaultDOP());
 
-        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 16);
-        Assert.assertEquals(16, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
-        Assert.assertEquals(5, BackendCoreStat.getSinkDefaultDOP());
+        DataNodeCoreStat.setNumOfHardwareCoresOfBe(1, 16);
+        Assert.assertEquals(16, DataNodeCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(5, DataNodeCoreStat.getSinkDefaultDOP());
 
-        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 24);
-        Assert.assertEquals(24, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
-        Assert.assertEquals(8, BackendCoreStat.getSinkDefaultDOP());
+        DataNodeCoreStat.setNumOfHardwareCoresOfBe(1, 24);
+        Assert.assertEquals(24, DataNodeCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(8, DataNodeCoreStat.getSinkDefaultDOP());
 
-        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
-        Assert.assertEquals(32, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
-        Assert.assertEquals(8, BackendCoreStat.getSinkDefaultDOP());
+        DataNodeCoreStat.setNumOfHardwareCoresOfBe(1, 32);
+        Assert.assertEquals(32, DataNodeCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(8, DataNodeCoreStat.getSinkDefaultDOP());
 
-        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 48);
-        Assert.assertEquals(48, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
-        Assert.assertEquals(12, BackendCoreStat.getSinkDefaultDOP());
+        DataNodeCoreStat.setNumOfHardwareCoresOfBe(1, 48);
+        Assert.assertEquals(48, DataNodeCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(12, DataNodeCoreStat.getSinkDefaultDOP());
 
-        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 64);
-        Assert.assertEquals(64, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
-        Assert.assertEquals(16, BackendCoreStat.getSinkDefaultDOP());
+        DataNodeCoreStat.setNumOfHardwareCoresOfBe(1, 64);
+        Assert.assertEquals(64, DataNodeCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(16, DataNodeCoreStat.getSinkDefaultDOP());
     }
 }

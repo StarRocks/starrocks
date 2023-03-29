@@ -23,8 +23,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.DataNodeCoreStat;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -118,7 +118,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
             computeNodeInfo.add(computeNode.getHeartbeatErrMsg());
             computeNodeInfo.add(computeNode.getVersion());
 
-            computeNodeInfo.add(BackendCoreStat.getCoresOfBe(computeNodeId));
+            computeNodeInfo.add(DataNodeCoreStat.getCoresOfBe(computeNodeId));
 
             computeNodeInfo.add(computeNode.getNumRunningQueries());
             double memUsedPct = computeNode.getMemUsedPct();
