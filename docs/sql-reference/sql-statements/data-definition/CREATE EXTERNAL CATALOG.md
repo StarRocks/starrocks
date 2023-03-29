@@ -22,7 +22,7 @@ PROPERTIES ("key"="value", ...)
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
 | catalog_name  | Yes          | The name of the external catalog. The naming conventions are as follows:<ul><li>The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.</li><li>The name cannot exceed 64 characters in length.</li></ul> |
-| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see Hive catalog, Iceberg catalog and Hudi catalog. |
+| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../../../data_source/catalog/hudi_catalog.md). |
 
 ## Examples
 

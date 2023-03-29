@@ -85,7 +85,7 @@ public abstract class StatisticsCollectJob {
 
     public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         int count = 0;
-        int maxRetryTimes = 10;
+        int maxRetryTimes = 5;
         do {
             LOG.debug("statistics collect sql : " + sql);
             StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
@@ -99,7 +99,7 @@ public abstract class StatisticsCollectJob {
                 LOG.warn("Statistics collect fail | Error Message [" + context.getState().getErrorMessage() + "] | " +
                         "SQL [" + sql + "]");
                 if (StringUtils.contains(context.getState().getErrorMessage(), "Too many versions")) {
-                    Thread.sleep(60000);
+                    Thread.sleep(Config.statistic_collect_too_many_version_sleep);
                     count++;
                 } else {
                     throw new DdlException(context.getState().getErrorMessage());
@@ -112,33 +112,15 @@ public abstract class StatisticsCollectJob {
         throw new DdlException(context.getState().getErrorMessage());
     }
 
-    protected String getDataSize(Column column, boolean isSample) {
-        if (column.getPrimitiveType().isCharFamily() || column.getPrimitiveType().isJsonType()) {
-            if (isSample) {
-                return "IFNULL(SUM(CHAR_LENGTH(`" + column.getName() + "`) * t1.count), 0)";
-            }
-            return "IFNULL(SUM(CHAR_LENGTH(`" + column.getName() + "`)), 0)";
-        }
-
-        long typeSize = column.getType().getTypeSize();
-
-        if (isSample && column.getType().canStatistic()) {
-            return "IFNULL(SUM(t1.count), 0) * " + typeSize;
-        }
-        return "COUNT(1) * " + typeSize;
-    }
-
-    protected int splitColumns(long rowCount) {
-        long splitSize;
-        if (rowCount == 0) {
-            splitSize = columns.size();
+    protected String getMinMaxFunction(Column column, String name, boolean isMax) {
+        String fn = isMax ? "MAX" : "MIN";
+        if (column.getPrimitiveType().isCharFamily()) {
+            fn = fn + "(LEFT(" + name + ", 200))";
         } else {
-            splitSize = Config.statistic_collect_max_row_count_per_query / rowCount + 1;
-            if (splitSize > columns.size()) {
-                splitSize = columns.size();
-            }
+            fn = fn + "(" + name + ")";
         }
-        return (int) splitSize;
+        fn = "IFNULL(" + fn + ", '')";
+        return fn;
     }
 
     protected String build(VelocityContext context, String template) {
