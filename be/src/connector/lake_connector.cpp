@@ -171,6 +171,7 @@ public:
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
     Status init(ObjectPool* pool, RuntimeState* state) override;
+    const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
     // Make cloud native table behavior same as olap table
     bool always_shared_scan() const override { return false; }
@@ -682,6 +683,10 @@ Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
         }
     }
     return Status::OK();
+}
+
+const TupleDescriptor* LakeDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_t_lake_scan_node.tuple_id);
 }
 
 // ================================
