@@ -24,8 +24,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/Types_types.h"
 
-namespace starrocks {
-namespace spill {
+namespace starrocks::spill {
 class QuerySpillManager {
 public:
     QuerySpillManager(const TUniqueId& uid) : _uid(uid) { _block_manager = std::make_unique<LogBlockManager>(uid); }
@@ -39,5 +38,4 @@ private:
     std::atomic_size_t _spilled_bytes;
     std::unique_ptr<BlockManager> _block_manager;
 };
-} // namespace spill
-} // namespace starrocks
+} // namespace starrocks::spill

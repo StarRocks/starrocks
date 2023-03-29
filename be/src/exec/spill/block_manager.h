@@ -37,6 +37,11 @@ public:
     virtual Status read_fully(void* data, int64_t count) = 0;
 
     virtual std::string debug_string() = 0;
+
+    size_t size() const { return _size; }
+
+protected:
+    size_t _size{};
 };
 
 using BlockPtr = std::shared_ptr<Block>;
