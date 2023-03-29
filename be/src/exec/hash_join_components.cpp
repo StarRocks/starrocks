@@ -48,7 +48,7 @@ StatusOr<ChunkPtr> HashJoinProber::probe_remain(RuntimeState* state, JoinHashTab
 }
 
 void HashJoinProber::reset() {
-    _probe_chunk->reset();
+    _probe_chunk.reset();
     _current_probe_has_remain = false;
 }
 
