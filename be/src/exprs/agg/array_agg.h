@@ -31,23 +31,9 @@ namespace starrocks {
 // return ordered array[col0']
 struct ArrayAggAggregateState {
     void update(FunctionContext* ctx, const Column& column, size_t index, size_t offset, size_t count) {
-        if (UNLIKELY(index >= data_columns->size())) {
-            if (ctx != nullptr) {
-                auto s = fmt::format("index {} is larger than column size {}.", index, data_columns->size());
-                ctx->set_error(s.c_str(), false);
-            }
-            return;
-        }
         (*data_columns)[index]->append(column, offset, count);
     }
     void update_nulls(FunctionContext* ctx, size_t index, size_t count) {
-        if (UNLIKELY(index >= data_columns->size())) {
-            if (ctx != nullptr) {
-                auto s = fmt::format("index {} is larger than column size {}.", index, data_columns->size());
-                ctx->set_error(s.c_str(), false);
-            }
-            return;
-        }
         DCHECK((*data_columns)[index]->is_nullable());
         (*data_columns)[index]->append_nulls(count);
     }
@@ -84,17 +70,7 @@ public:
         auto* state = new (ptr) ArrayAggAggregateState;
         state->data_columns = new Columns;
         for (auto i = 0; i < num; ++i) {
-            auto arg_type = ctx->get_arg_type(i);
-            // TODO: support nested type
-            if (arg_type->type == LogicalType::TYPE_STRUCT || arg_type->type == LogicalType::TYPE_ARRAY ||
-                arg_type->type == LogicalType::TYPE_MAP) {
-                ctx->set_error("array_agg can't support nested type.", false);
-                return;
-            }
-            state->data_columns->emplace_back(
-                    ColumnHelper::create_column(TypeDescriptor::from_logical_type(arg_type->type, arg_type->len,
-                                                                                  arg_type->precision, arg_type->scale),
-                                                true));
+            state->data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
         }
         DCHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
         DCHECK(state->data_columns->size() == ctx->get_is_asc_order().size() + 1);
@@ -111,6 +87,7 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
+        DCHECK_EQ(ctx->get_num_args(), this->data(state).data_columns->size());
         for (auto i = 0; i < ctx->get_num_args(); ++i) {
             DCHECK(columns[i]->size() > row_num);
             // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck

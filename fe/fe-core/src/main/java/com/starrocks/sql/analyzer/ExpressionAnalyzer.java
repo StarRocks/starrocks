@@ -902,7 +902,7 @@ public class ExpressionAnalyzer {
             String fnName = node.getFnName().getFunction();
 
             // throw exception direct
-            checkFunction(fnName, node);
+            checkFunction(fnName, node, argumentTypes);
 
             if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 // Compatible with the logic of the original search function "count distinct"
@@ -925,23 +925,19 @@ public class ExpressionAnalyzer {
                         nullsFirst.add(elem.getNullsFirstParam());
                     }
                 }
+                Type[] argsTypes = new Type[argumentTypes.length];
                 for (int i = 0; i < argumentTypes.length; ++i) {
-                    // TODO: support nested type
-                    if (argumentTypes[i].isComplexType()) {
-                        throw new SemanticException("array_agg can't support inputs of nested types, " +
-                                "but " + i + "-th input is " + argumentTypes[i].toSql());
-                    }
-                    argumentTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
+                    argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
                 }
-                fn.setArgsType(argumentTypes); // as accepting various types
-                ArrayList<Type> structTypes = new ArrayList<>(argumentTypes.length);
-                for (Type t : argumentTypes) {
+                fn.setArgsType(argsTypes); // as accepting various types
+                ArrayList<Type> structTypes = new ArrayList<>(argsTypes.length);
+                for (Type t : argsTypes) {
                     structTypes.add(new ArrayType(t));
                 }
                 ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
                 ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
                 ((AggregateFunction) fn).setNullsFirst(nullsFirst);
-                fn.setRetType(new ArrayType(argumentTypes[0])); // return null if scalar agg with empty input
+                fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
             } else if (FunctionSet.PERCENTILE_DISC.equals(fnName)) {
                 argumentTypes[1] = Type.DOUBLE;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
@@ -1028,7 +1024,7 @@ public class ExpressionAnalyzer {
             return null;
         }
 
-        private void checkFunction(String fnName, FunctionCallExpr node) {
+        private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
             switch (fnName) {
                 case FunctionSet.TIME_SLICE:
                 case FunctionSet.DATE_SLICE:
@@ -1112,6 +1108,16 @@ public class ExpressionAnalyzer {
                                 node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
                     }
                     break;
+                case FunctionSet.ARRAY_AGG: {
+                    for (int i = 1; i < argumentTypes.length; ++i) {
+                        if (argumentTypes[i].isComplexType()) {
+                            throw new SemanticException("array_agg can't support order by nested types, " +
+                                    "but " + i + "-th input is " + argumentTypes[i].toSql());
+                        }
+                    }
+                    break;
+                }
+
             }
         }
 
@@ -1182,7 +1188,8 @@ public class ExpressionAnalyzer {
                 }
             }
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
-            return Expr.getBuiltinFunction(FunctionSet.ARRAY_GENERATE, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
+            return Expr.getBuiltinFunction(FunctionSet.ARRAY_GENERATE, argumentTypes,
+                    Function.CompareMode.IS_SUPERTYPE_OF);
         }
 
         @Override
@@ -1421,3 +1428,4 @@ public class ExpressionAnalyzer {
     }
 
 }
+
