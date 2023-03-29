@@ -69,7 +69,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
      * The number of rows is accumulated in turn until the maximum number of rows is accumulated.
      * Use UNION ALL connection between multiple tasks and collect them in one query
      */
-    public List<List<String>> buildCollectSQLList(int parallelism) {
+    protected List<List<String>> buildCollectSQLList(int parallelism) {
         List<String> totalQuerySQL = new ArrayList<>();
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
