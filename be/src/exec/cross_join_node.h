@@ -80,6 +80,11 @@ private:
     void _init_row_desc();
     void _init_chunk(ChunkPtr* chunk);
 
+    struct SlotDesc {
+        SlotDescriptor* slot;
+        bool need_output;
+    };
+
     TJoinOp::type _join_op = TJoinOp::type::CROSS_JOIN;
     std::vector<ExprContext*> _join_conjuncts;
     std::string _sql_join_conjuncts;
@@ -112,7 +117,9 @@ private:
     bool _eos = false;
     bool _need_create_tuple_columns = true;
 
-    Buffer<SlotDescriptor*> _slots;
+    // empty means output all columns
+    std::set<SlotId> _output_slots;
+    Buffer<SlotDesc> _slots;
     Buffer<TupleId> _output_build_tuple_ids;
     Buffer<TupleId> _output_probe_tuple_ids;
     size_t _probe_column_count = 0;
