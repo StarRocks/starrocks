@@ -599,7 +599,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
             List<String> columnList = checkAndExtractPartitionCol(functionCallExpr, columnDefs);
-            checkGranularity(functionCallExpr, currentGranularity);
+            checkAutoPartitionTableLimit(functionCallExpr, currentGranularity);
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
             return new ExpressionPartitionDesc(rangePartitionDesc, functionCallExpr);
         }
@@ -623,7 +623,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return partitionDesc;
     }
 
-    private void checkGranularity(FunctionCallExpr functionCallExpr, String prePartitionGranularity) {
+    private void checkAutoPartitionTableLimit(FunctionCallExpr functionCallExpr, String prePartitionGranularity) {
         if (prePartitionGranularity == null) {
             return;
         }
@@ -636,12 +636,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         "batch creation in advance should be consistent");
             }
         } else if (FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName)) {
-            Expr expr = functionCallExpr.getParams().exprs().get(2);
-            String functionGranularity = ((StringLiteral) expr).getStringValue();
-            if (!prePartitionGranularity.equalsIgnoreCase(functionGranularity)) {
-                throw new ParsingException("The partition granularity of automatic partition table " +
-                        "batch creation in advance should be consistent");
-            }
+            throw new ParsingException("time_slice does not support pre-created partitions");
+
         }
     }
 
@@ -4998,9 +4994,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             functionName = FunctionSet.MIN;
         } else if (context.aggregationFunction().MAX() != null) {
             functionName = FunctionSet.MAX;
+        } else if (context.aggregationFunction().ARRAY_AGG() != null) {
+            functionName = FunctionSet.ARRAY_AGG;
         } else {
             throw new StarRocksPlannerException("Aggregate functions are not being parsed correctly",
                     ErrorType.INTERNAL_ERROR);
+        }
+
+        List<OrderByElement> orderByElements = new ArrayList<>();
+        if (context.aggregationFunction().ORDER() != null) {
+            orderByElements = visit(context.aggregationFunction().sortItem(), OrderByElement.class);
         }
 
         List<String> hints = Lists.newArrayList();
@@ -5012,7 +5015,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 context.aggregationFunction().ASTERISK_SYMBOL() == null ?
                         new FunctionParams(context.aggregationFunction().DISTINCT() != null,
-                                visit(context.aggregationFunction().expression(), Expr.class)) :
+                                visit(context.aggregationFunction().expression(), Expr.class), orderByElements) :
                         FunctionParams.createStarParam());
 
         functionCallExpr.setHints(hints);

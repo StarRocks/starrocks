@@ -33,6 +33,7 @@ import java.util.Map;
 public class PartitionDesc implements ParseNode {
 
     protected PartitionType type;
+    protected boolean isSystem = false;
 
     public PartitionType getType() {
         return type;
@@ -88,5 +89,13 @@ public class PartitionDesc implements ParseNode {
 
     public StorageCacheInfo getStorageCacheInfo() throws NotImplementedException {
         throw new NotImplementedException();
+    }
+
+    public boolean isSystem() {
+        return isSystem;
+    }
+
+    public void setSystem(boolean system) {
+        isSystem = system;
     }
 }
