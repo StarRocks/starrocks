@@ -3862,7 +3862,7 @@ public class LocalMetastore implements ConnectorMetadata {
             cluster.removeBackend(id);
             backend.setDecommissioned(false);
             backend.clearClusterName();
-            backend.setBackendState(DataNode.BackendState.free);
+            backend.setBackendState(DataNode.DataNodeState.free);
         }
     }
 
