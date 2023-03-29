@@ -1635,7 +1635,7 @@ public class CreateMaterializedViewTest {
             mv.setActive(false);
             List<Column> mvColumns = mv.getFullSchema();
 
-            Assert.assertEquals("EXPR$0", mvColumns.get(0).getName());
+            Assert.assertEquals("date_trunc('month', tbl1.k1)", mvColumns.get(0).getName());
             Assert.assertEquals("k1", mvColumns.get(1).getName());
             Assert.assertEquals("k2", mvColumns.get(2).getName());
 
@@ -1666,13 +1666,10 @@ public class CreateMaterializedViewTest {
             mv.setActive(false);
             List<Column> mvColumns = mv.getFullSchema();
 
-            Assert.assertEquals("EXPR$0", mvColumns.get(0).getName());
+            Assert.assertEquals("date_trunc('month', tbl1.k1)", mvColumns.get(0).getName());
             Assert.assertEquals("k1", mvColumns.get(1).getName());
             Assert.assertEquals("k2", mvColumns.get(2).getName());
 
-        } catch (Exception e) {
-            Assert.fail("Materialized view query statement select item " +
-                    "date_trunc('month', `tbl1`.`k1`) should be supported");
         } finally {
             dropMv("testAsSelectItemAlias2");
         }
@@ -2602,8 +2599,8 @@ public class CreateMaterializedViewTest {
     public void testExprAlias() throws Exception {
         testMVColumnAlias("c_1_9 + 1");
         testMVColumnAlias("char_length(c_1_9)");
-        testMVColumnAlias("char_length(c_1_9) + 1");
-        testMVColumnAlias("char_length(c_1_9) + '$'");
+        testMVColumnAlias("(char_length(c_1_9)) + 1");
+        testMVColumnAlias("(char_length(c_1_9)) + '$'");
         testMVColumnAlias("c_1_9 + c_1_10");
     }
 }

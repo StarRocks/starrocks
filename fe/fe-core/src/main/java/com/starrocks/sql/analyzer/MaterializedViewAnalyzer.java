@@ -68,8 +68,6 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.SelectList;
-import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
@@ -96,10 +94,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
@@ -195,13 +193,11 @@ public class MaterializedViewAnalyzer {
             }
 
             // derive alias
-            final HashSet<String> aliases = Sets.newHashSet();
-            for (SelectRelation selectRelation : selectRelations) {
-                deriveSelectAlias(selectRelation.getSelectList(), aliases);
-            }
-
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
+
+            List<String> columnNames = selectRelations.get(0).getRelationFields().getAllFields()
+                    .stream().map(Field::getName).collect(Collectors.toList());
 
             // for select star, use `analyze` to deduce its child's output and validate select list then.
             for (SelectRelation selectRelation : selectRelations) {
@@ -256,7 +252,7 @@ public class MaterializedViewAnalyzer {
             // get outputExpressions and convert it to columns which in selectRelation
             // set the columns into createMaterializedViewStatement
             // record the relationship between columns and outputExpressions for next check
-            genColumnAndSetIntoStmt(statement, selectRelations.get(0), columnExprMap);
+            genColumnAndSetIntoStmt(statement, selectRelations.get(0), columnNames, columnExprMap);
             // some check if partition exp exists
             if (statement.getPartitionExpDesc() != null) {
                 // check partition expression all in column list and
@@ -274,21 +270,7 @@ public class MaterializedViewAnalyzer {
             return null;
         }
 
-        private void deriveSelectAlias(SelectList selectList, HashSet<String> aliases) {
-            for (SelectListItem selectListItem : selectList.getItems()) {
-                if (!(selectListItem.getExpr() instanceof SlotRef) && selectListItem.getAlias() == null) {
-                    String alias = selectListItem.getExpr().toSql();
-                    selectListItem.setAlias(alias);
-                    aliases.add(alias);
-                }
-            }
-        }
-
         private void validateSelectItem(SelectRelation selectRelation) {
-            for (SelectListItem selectListItem : selectRelation.getSelectList().getItems()) {
-                Preconditions.checkState((selectListItem.getExpr() instanceof SlotRef)
-                        || selectListItem.getAlias() != null);
-            }
             for (Expr expr : selectRelation.getOutputExpression()) {
                 checkNondeterministicFunction(expr);
             }
@@ -358,13 +340,12 @@ public class MaterializedViewAnalyzer {
         }
 
         private void genColumnAndSetIntoStmt(CreateMaterializedViewStatement statement, QueryRelation queryRelation,
-                                             Map<Column, Expr> columnExprMap) {
+                                             List<String> columnNames, Map<Column, Expr> columnExprMap) {
             List<Column> mvColumns = Lists.newArrayList();
-            List<String> columnOutputNames = queryRelation.getColumnOutputNames();
             List<Expr> outputExpression = queryRelation.getOutputExpression();
             for (int i = 0; i < outputExpression.size(); ++i) {
                 Type type = AnalyzerUtils.transformTypeForMv(outputExpression.get(i).getType());
-                Column column = new Column(columnOutputNames.get(i), type,
+                Column column = new Column(columnNames.get(i), type,
                         outputExpression.get(i).isNullable());
                 // set default aggregate type, look comments in class Column
                 column.setAggregationType(AggregateType.NONE, false);
