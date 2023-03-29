@@ -67,7 +67,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.DataNodeTabletsInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
@@ -806,7 +806,7 @@ public class ReportHandler extends Daemon {
                                         LOG.warn("tablet {} has only one replica {} on backend {}"
                                                         + " and it is lost, set it as bad",
                                                 tabletId, replica.getId(), backendId);
-                                        BackendTabletsInfo tabletsInfo = new BackendTabletsInfo(backendId);
+                                        DataNodeTabletsInfo tabletsInfo = new DataNodeTabletsInfo(backendId);
                                         tabletsInfo.setBad(true);
                                         ReplicaPersistInfo replicaPersistInfo = ReplicaPersistInfo.createForReport(
                                                 dbId, tableId, partitionId, indexId, tabletId, backendId,
@@ -1042,7 +1042,7 @@ public class ReportHandler extends Daemon {
                 tabletRecoveryMap.size(), backendId);
 
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        BackendTabletsInfo backendTabletsInfo = new BackendTabletsInfo(backendId);
+        DataNodeTabletsInfo backendTabletsInfo = new DataNodeTabletsInfo(backendId);
         backendTabletsInfo.setBad(true);
         for (Long dbId : tabletRecoveryMap.keySet()) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);

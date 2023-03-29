@@ -18,7 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.proc.BackendsProcDir;
+import com.starrocks.common.proc.DataNodesProcDir;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -34,7 +34,7 @@ public class ShowBackendsStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : BackendsProcDir.TITLE_NAMES) {
+        for (String title : DataNodesProcDir.TITLE_NAMES) {
             builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
         }
         return builder.build();

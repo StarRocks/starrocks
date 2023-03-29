@@ -66,8 +66,8 @@ import java.util.Set;
  * assign scan ranges to local backend if there has one.
  */
 
-public class HDFSBackendSelector implements BackendSelector {
-    public static final Logger LOG = LogManager.getLogger(HDFSBackendSelector.class);
+public class HDFSDataNodeSelector implements DataNodeSelector {
+    public static final Logger LOG = LogManager.getLogger(HDFSDataNodeSelector.class);
     // be -> assigned scans
     Map<ComputeNode, Long> assignedScansPerComputeNode = Maps.newHashMap();
     // be host -> bes
@@ -137,10 +137,10 @@ public class HDFSBackendSelector implements BackendSelector {
 
     private HdfsScanRangeHasher hdfsScanRangeHasher;
 
-    public HDFSBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                               FragmentScanRangeAssignment assignment, Map<TNetworkAddress, Long> addressToBackendId,
-                               Set<Long> usedBackendIDs, ImmutableCollection<ComputeNode> computeNodes,
-                               boolean chooseComputeNode, boolean forceScheduleLocal, boolean shuffleScanRange) {
+    public HDFSDataNodeSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
+                                FragmentScanRangeAssignment assignment, Map<TNetworkAddress, Long> addressToBackendId,
+                                Set<Long> usedBackendIDs, ImmutableCollection<ComputeNode> computeNodes,
+                                boolean chooseComputeNode, boolean forceScheduleLocal, boolean shuffleScanRange) {
         this.scanNode = scanNode;
         this.locations = locations;
         this.assignment = assignment;
@@ -295,9 +295,9 @@ public class HDFSBackendSelector implements BackendSelector {
 
         // add in assignment
         Map<Integer, List<TScanRangeParams>> scanRanges =
-                BackendSelector.findOrInsert(assignment, address, new HashMap<>());
+                DataNodeSelector.findOrInsert(assignment, address, new HashMap<>());
         List<TScanRangeParams> scanRangeParamsList =
-                BackendSelector.findOrInsert(scanRanges, scanNode.getId().asInt(), new ArrayList<TScanRangeParams>());
+                DataNodeSelector.findOrInsert(scanRanges, scanNode.getId().asInt(), new ArrayList<TScanRangeParams>());
         // add scan range params
         TScanRangeParams scanRangeParams = new TScanRangeParams();
         scanRangeParams.scan_range = scanRangeLocations.scan_range;
