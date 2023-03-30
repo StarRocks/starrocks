@@ -44,6 +44,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 INTO TABLE <table_name>
 [PARTITION (<partition_name>[, <partition_name> ...])]
 [FORMAT AS "CSV | Parquet | ORC"]
+[(fomat_type_options)]
 [COLUMNS TERMINATED BY "<column_separator>"]
 [ROWS TERMINATED BY "<row_separator>"]
 [(column_list)]
@@ -96,6 +97,27 @@ INTO TABLE <table_name>
 - `FORMAT AS`
 
   用于指定源数据文件的格式。取值包括 `CSV`、`Parquet` 和 `ORC`。如果不指定该参数，则默认通过 `file_path` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
+
+- `format_type_options`
+
+  `FORMAT AS` 设置为 `CSV` 时用于指定 CSV 格式选项。语法如下：
+
+  ```JSON
+  (
+      key = value
+      key = value
+      ...
+  )
+  ```
+  
+  选项说明见下表。
+  
+  | **参数**    | **说明**                                                     |
+  | ----------- | ------------------------------------------------------------ |
+  | skip_header | 用于指定跳过 CSV 文件最开头的几行数据。取值类型：INTEGER。默认值：`0`。<br>在某些 CSV 文件里，最开头的几行数据会用来定义列名、列类型等元数据信息。通过设置该参数，可以使 StarRocks 在导入数据时忽略 CSV 文件的前面几行。例如，如果设置该参数为 `1`，则 StarRocks 会在导入数据时忽略 CSV 文件的第一行。<br>这里的行所使用的分隔符须与您在导入命令或语句中所设定的行分隔符一致，例如在 Stream Load 中通过 `row_delimiter` 参数来设定行分隔符。 |
+  | trim_space  | 用于指定是否去除 CSV 文件中列分隔符前后的空格。取值类型：BOOLEAN。默认值：`false`。<br>有些数据库在导出数据为 CSV 文件时，会在列分隔符的前后添加一些空格。根据位置的不同，这些空格可以称为“前导空格”或者“尾随空格”。通过设置该参数，可以使 StarRocks 在导入数据时删除这些不必要的空格。<br>需要注意的是，StarRocks 不会去除被 `enclose` 指定字符括起来的字段内的空格（包括字段的前导空格和尾随空格）。例如，列分隔符是竖线 (\|)，`enclose` 指定的字符是双引号 (`"`)：<br>`\|"Love StarRocks"\| \|" Love StarRocks "\| \| "Love StarRocks" \|`<br>如果设置 `trim_space` 为 `true`，则 StarRocks 处理后的结果数据如下：<br>`\|"Love StarRocks"\| \|" Love StarRocks "\| \|"Love StarRocks"\|` |
+  | enclose     | 根据 [RFC4180](https://www.rfc-editor.org/rfc/rfc4180)，用于指定把 CSV 文件中的字段括起来的字符。取值类型：单字节字符。默认值：`NONE`。最常用 `enclose` 字符为单引号 (`'`) 或双引号 (`"`)。<br>被 `enclose` 指定字符括起来的字段内的所有特殊字符（包括行分隔符、列分隔符等）均看做是普通符号。比 RFC4180 标准更进一步的是，StarRocks 提供的 `enclose` 属性支持设置任意单个字节的字符。<br>如果一个字段内包含了 `enclose` 指定字符，则可以使用同样的字符对 `enclose` 指定字符进行转义。例如，在设置了`enclose` 为双引号 (`"`) 时，字段值 `a "quoted" c` 在 CSV 文件中应该写作 `"a ""quoted"" c"`。 |
+  | escape      | 指定用于转义的字符。用来转义各种特殊字符，比如行分隔符、列分隔符、转义符、`enclose` 指定字符等，使 StarRocks 把这些特殊字符当做普通字符而解析成字段值的一部分。取值类型：单字节字符。默认值：`NONE`。最常用的 `escape` 字符为斜杠 (`\`)，在 SQL 语句中应该写作双斜杠 (`\\`)。<br>**说明**<br>`escape` 指定字符同时作用于 `enclose` 指定字符的内部和外部。<br>以下为两个示例：<ul><li>当设置 `enclose` 为双引号 (`"`) 、`escape` 为斜杠 (`\`) 时，StarRocks 会把 `"say \"Hello world\""` 解析成一个字段值 `say "Hello world"`。</li><li>假设列分隔符为逗号 (`,`) ，当设置 `escape` 为斜杠 (`\`) ，StarRocks 会把 `a, b\, c` 解析成 `a` 和 `b, c` 两个字段值。</li></ul> |
 
 - `COLUMNS TERMINATED BY`
 
@@ -744,6 +766,40 @@ WITH BROKER
 ```
 
 上述示例中，因为直接提取后的分区字段 `data_time` 是包含 `%3A` 的字符串（如 `2020-02-17 00%3A00%3A00`），因此需要再通过 `str_to_date` 函数把字符串转换为 DATETIME 类型的数据以后才能落入 `table8` 中的 `data_time` 列。
+
+#### 设置 `format_type_options`
+
+StarRocks 数据库 `test_db` 里的表 `table13` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example13.csv` 也包含三列，按顺序依次对应 `table13` 中 `col2`、`col1`、`col3`。
+
+如果要把 `example13.csv` 中所有的数据都导入到 `table13` 中，并且希望跳过 `example13.csv` 中最开头的两行数据、去除列分隔符前后的空格、 指定 `enclose` 字符为斜杠 (`\`)、并且指定 `escape` 字符为斜杠 (`\`)，可以执行如下语句：
+
+```SQL
+LOAD LABEL test_db.label13
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/*/example13.csv")
+    INTO TABLE table13
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "CSV"
+    (
+        skip_header = 2
+        trim_space = TRUE
+        enclose = "\""
+        escape = "\\"
+    )
+    (col2, col1, col3)
+)
+WITH BROKER
+(
+    "username" = "hdfs_username",
+    "password" = "hdfs_password"
+)
+PROPERTIES
+(
+    "timeout" = "3600"
+);
+```
 
 ### 导入 Parquet 格式的数据
 

@@ -88,6 +88,10 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | ---------------- | ------------ | ------------------------------------------------------------ |
 | column_separator | 否           | 用于指定源数据文件中的列分隔符。如果不指定该参数，则默认为 `\t`，即 Tab。必须确保这里指定的列分隔符与源数据文件中的列分隔符一致。<br>**说明**<br>StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (\|)。 |
 | row_delimiter    | 否           | 用于指定源数据文件中的行分隔符。如果不指定该参数，则默认为 `\n`。 |
+| skip_header      | 否           | 用于指定跳过 CSV 文件最开头的几行数据。取值类型：INTEGER。默认值：`0`。<br>在某些 CSV 文件里，最开头的几行数据会用来定义列名、列类型等元数据信息。通过设置该参数，可以使 StarRocks 在导入数据时忽略 CSV 文件的前面几行。例如，如果设置该参数为 `1`，则 StarRocks 会在导入数据时忽略 CSV 文件的第一行。<br>这里的行所使用的分隔符须与您在导入命令或语句中所设定的行分隔符一致，例如在 Stream Load 中通过 `row_delimiter` 参数来设定行分隔符。 |
+| trim_space       | 否           | 用于指定是否去除 CSV 文件中列分隔符前后的空格。取值类型：BOOLEAN。默认值：`false`。<br>有些数据库在导出数据为 CSV 文件时，会在列分隔符的前后添加一些空格。根据位置的不同，这些空格可以称为“前导空格”或者“尾随空格”。通过设置该参数，可以使 StarRocks 在导入数据时删除这些不必要的空格。<br>需要注意的是，StarRocks 不会去除被 `enclose` 指定字符括起来的字段内的空格（包括字段的前导空格和尾随空格）。例如，列分隔符是竖线 (\|)，`enclose` 指定的字符是双引号 (`"`)：<br>`\|"Love StarRocks"\| \|" Love StarRocks "\| \| "Love StarRocks" \|`<br>如果设置 `trim_space` 为 `true`，则 StarRocks 处理后的结果数据如下：<br>`\|"Love StarRocks"\| \|" Love StarRocks "\| \|"Love StarRocks"\|` |
+| enclose          | 否           | 根据 [RFC4180](https://www.rfc-editor.org/rfc/rfc4180)，用于指定把 CSV 文件中的字段括起来的字符。取值类型：单字节字符。默认值：`NONE`。最常用 `enclose` 字符为单引号 (`'`) 或双引号 (`"`)。<br>被 `enclose` 指定字符括起来的字段内的所有特殊字符（包括行分隔符、列分隔符等）均看做是普通符号。比 RFC4180 标准更进一步的是，StarRocks 提供的 `enclose` 属性支持设置任意单个字节的字符。<br>如果一个字段内包含了 `enclose` 指定字符，则可以使用同样的字符对 `enclose` 指定字符进行转义。例如，在设置了`enclose` 为双引号 (`"`) 时，字段值 `a "quoted" c` 在 CSV 文件中应该写作 `"a ""quoted"" c"`。 |
+| escape           | 否           | 指定用于转义的字符。用来转义各种特殊字符，比如行分隔符、列分隔符、转义符、`enclose` 指定字符等，使 StarRocks 把这些特殊字符当做普通字符而解析成字段值的一部分。取值类型：单字节字符。默认值：`NONE`。最常用的 `escape` 字符为斜杠 (`\`)，在 SQL 语句中应该写作双斜杠 (`\\`)。<br>**说明**<br>`escape` 指定字符同时作用于 `enclose` 指定字符的内部和外部。<br>以下为两个示例：<ul><li>当设置 `enclose` 为双引号 (`"`) 、`escape` 为斜杠 (`\`) 时，StarRocks 会把 `"say \"Hello world\""` 解析成一个字段值 `say "Hello world"`。</li><li>假设列分隔符为逗号 (`,`) ，当设置 `escape` 为斜杠 (`\`) ，StarRocks 会把 `a, b\, c` 解析成 `a` 和 `b, c` 两个字段值。</li></ul> |
 
 > 说明
 >
@@ -387,6 +391,23 @@ curl --location-trusted -u root: \
 > - 使用 `bitmap_empty` 函数给导入的数据行在 `table8` 中的第二列补充默认值。
 
 有关 `to_bitmap` 函数和 `bitmap_empty` 函数的用法，请参见 [to_bitmap](../../sql-functions/bitmap-functions/to_bitmap.md) 和 [bitmap_empty](../../sql-functions/bitmap-functions/bitmap_empty.md)。
+
+#### 设置 `skip_header`、`trim_space`、`enclose` 和 `escape`
+
+StarRocks 数据库 `test_db` 里的表 `table9` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example9.csv` 也包含三列，按顺序依次对应 `table9` 中 `col2`、`col1`、`col3`。
+
+如果要把 `example9.csv` 中所有的数据都导入到 `table9` 中，并且希望跳过 `example9.csv` 中最开头的五行数据、去除列分隔符前后的空格、 指定 `enclose` 字符为斜杠 (`\`)、并且指定 `escape` 字符为斜杠 (`\`)，可以执行如下语句：
+
+```Bash
+curl --location-trusted -u root: -H "label:3875" \
+    -H "trim_space: true" -H "skip_header: 5" \
+    -H "column_separator:," -H "enclose:\"" -H "escape:\\" \
+    -H "columns: col2, col1, col3" \
+    -T example9.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/tbl9/_stream_load
+```
 
 ### **导入 JSON 格式的数据**
 
