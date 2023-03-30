@@ -266,6 +266,7 @@ bool CompactionManager::pick_candidate(CompactionCandidate* candidate) {
         if (_check_precondition(*iter)) {
             *candidate = *iter;
             _compaction_candidates.erase(iter);
+            _last_score = candidate->score;
             return true;
         }
         iter++;
@@ -343,8 +344,10 @@ bool CompactionManager::register_task(CompactionTask* compaction_task) {
     }
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
         _data_dir_to_cumulative_task_num_map[data_dir]++;
+        _cumulative_compaction_concurrency++;
     } else {
         _data_dir_to_base_task_num_map[data_dir]++;
+        _base_compaction_concurrency++;
     }
     return true;
 }
@@ -360,8 +363,10 @@ void CompactionManager::unregister_task(CompactionTask* compaction_task) {
         DataDir* data_dir = tablet->data_dir();
         if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
             _data_dir_to_cumulative_task_num_map[data_dir]--;
+            _cumulative_compaction_concurrency--;
         } else {
             _data_dir_to_base_task_num_map[data_dir]--;
+            _base_compaction_concurrency--;
         }
     }
 }
@@ -371,6 +376,8 @@ void CompactionManager::clear_tasks() {
     _running_tasks.clear();
     _data_dir_to_cumulative_task_num_map.clear();
     _data_dir_to_base_task_num_map.clear();
+    _base_compaction_concurrency = 0;
+    _cumulative_compaction_concurrency = 0;
 }
 
 Status CompactionManager::update_max_threads(int max_threads) {
@@ -379,6 +386,30 @@ Status CompactionManager::update_max_threads(int max_threads) {
     } else {
         return Status::InternalError("Thread pool not exist");
     }
+}
+
+double CompactionManager::max_score() {
+    std::lock_guard lg(_candidates_mutex);
+    if (_compaction_candidates.empty()) {
+        return 0;
+    }
+
+    return _compaction_candidates.begin()->score;
+}
+
+double CompactionManager::last_score() {
+    std::lock_guard lg(_candidates_mutex);
+    return _last_score;
+}
+
+int64_t CompactionManager::base_compaction_concurrency() {
+    std::lock_guard lg(_tasks_mutex);
+    return _base_compaction_concurrency;
+}
+
+int64_t CompactionManager::cumulative_compaction_concurrency() {
+    std::lock_guard lg(_tasks_mutex);
+    return _cumulative_compaction_concurrency;
 }
 
 } // namespace starrocks
