@@ -84,7 +84,7 @@ public:
             const std::vector<TScanRangeParams>& scan_ranges,
             const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
             int pipeline_dop, bool enable_tablet_internal_parallel,
-            TTabletInternalParallelMode::type tablet_internal_parallel_mode);
+            TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan);
     virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
@@ -117,11 +117,14 @@ public:
     const std::string& name() const { return _name; }
 
     virtual int io_tasks_per_scan_operator() const { return _io_tasks_per_scan_operator; }
-    virtual bool always_shared_scan() const { return config::scan_node_always_shared_scan; }
 
     // TODO: support more share_scan strategy
     void enable_shared_scan(bool enable);
     bool is_shared_scan_enabled() const;
+    // If session variable enable_shared_scan is true,
+    // whether support disable shared scan adaptively according to the plan.
+    // Support in olap table and cloud native table currently.
+    virtual bool allow_adaptive_disable_shared_scan() const { return false; }
 
 protected:
     RuntimeProfile::Counter* _bytes_read_counter = nullptr; // # bytes read from the scanner

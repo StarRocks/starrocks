@@ -176,7 +176,7 @@ void StreamOperatorsTest::_generate_morse_queue(ConnectorScanNode* scan_node,
     std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
     auto morsel_queue_factory = scan_node->convert_scan_range_to_morsel_queue_factory(
             scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, true,
-            TTabletInternalParallelMode::type::AUTO);
+            TTabletInternalParallelMode::type::AUTO, false);
     DCHECK(morsel_queue_factory.ok());
     morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory).value());
 }

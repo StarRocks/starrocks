@@ -47,7 +47,10 @@ public:
 
     connector::DataSourceProvider* data_source_provider() { return _data_source_provider.get(); }
     connector::ConnectorType connector_type() { return _connector_type; }
-    bool always_shared_scan() const override;
+
+    bool allow_adaptive_disable_shared_scan() const override {
+        return _data_source_provider->allow_adaptive_disable_shared_scan();
+    }
 
 private:
     RuntimeState* _runtime_state = nullptr;

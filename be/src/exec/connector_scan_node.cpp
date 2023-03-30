@@ -579,8 +579,4 @@ void ConnectorScanNode::_init_counter() {
     _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
 }
 
-bool ConnectorScanNode::always_shared_scan() const {
-    return config::connector_scan_node_always_shared_scan;
-}
-
 } // namespace starrocks

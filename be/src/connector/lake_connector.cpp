@@ -162,6 +162,8 @@ public:
     Status init(ObjectPool* pool, RuntimeState* state) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
+    bool allow_adaptive_disable_shared_scan() const override { return true; }
+
 protected:
     ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;

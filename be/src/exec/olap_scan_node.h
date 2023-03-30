@@ -96,6 +96,8 @@ public:
 
     const std::vector<ExprContext*>& bucket_exprs() const { return _bucket_exprs; }
 
+    bool allow_adaptive_disable_shared_scan() const override { return true; }
+
 private:
     friend class TabletScanner;
 
