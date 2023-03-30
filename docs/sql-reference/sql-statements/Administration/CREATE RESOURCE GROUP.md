@@ -4,6 +4,8 @@
 
 Creates a resource group.
 
+For more information about resource group, see [Resource group](../../../administration/resource_group.md).
+
 ## Syntax
 
 ```SQL
