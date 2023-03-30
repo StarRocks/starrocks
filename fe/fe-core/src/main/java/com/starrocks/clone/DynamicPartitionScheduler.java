@@ -34,7 +34,11 @@
 
 package com.starrocks.clone;
 
+import com.google.api.client.util.Lists;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.BoundType;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -44,15 +48,18 @@ import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.RangeUtils;
@@ -68,7 +75,10 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.tools.ant.taskdefs.Local;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -458,7 +468,13 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
                 continue;
             }
 
-            ArrayList<DropPartitionClause> dropPartitionClauses = getDropPartitionClauseByTTL(olapTable, ttlNumber);
+            ArrayList<DropPartitionClause> dropPartitionClauses = null;
+            try {
+                dropPartitionClauses = getDropPartitionClauseByTTL(olapTable, ttlNumber);
+            } catch (AnalysisException e) {
+                LOG.warn("database={}, table={} Failed to generate drop statement.", dbId, tableId, e);
+            }
+
             String tableName = olapTable.getName();
             for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
                 db.writeLock();
@@ -475,20 +491,50 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         }
     }
 
-    private ArrayList<DropPartitionClause> getDropPartitionClauseByTTL(OlapTable olapTable, int ttlNumber) {
+    private ArrayList<DropPartitionClause> getDropPartitionClauseByTTL(OlapTable olapTable, int ttlNumber)
+            throws AnalysisException {
+
         ArrayList<DropPartitionClause> dropPartitionClauses = new ArrayList<>();
-        RangePartitionInfo info = (RangePartitionInfo) (olapTable.getPartitionInfo());
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) (olapTable.getPartitionInfo());
+        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
 
-        List<Map.Entry<Long, Range<PartitionKey>>> idToRanges = new ArrayList<>(info.getIdToRange(false).entrySet());
-        idToRanges.sort(Comparator.comparing(o -> o.getValue().upperEndpoint()));
+        LocalDateTime currentDateTime = LocalDateTime.now();
+        PartitionValue currentPartitionValue = new PartitionValue(currentDateTime.format(DateUtils.DATE_FORMATTER_UNIX));
+        PartitionKey currentPartitionKey = PartitionKey.createPartitionKey(
+                ImmutableList.of(currentPartitionValue), partitionColumns);
+        PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
 
-        int allPartitionNumber = idToRanges.size();
+        List<Map.Entry<Long, Range<PartitionKey>>> candidatePartitionList = Lists.newArrayList();
+        Map<Long, Range<PartitionKey>> idToRange = rangePartitionInfo.getIdToRange(false);
+        for (Map.Entry<Long, Range<PartitionKey>> partitionRange : idToRange.entrySet()) {
+            PartitionKey lowerPartitionKey = partitionRange.getValue().lowerEndpoint();
+            PartitionKey upperPartitionKey = partitionRange.getValue().upperEndpoint();
+
+            if (lowerPartitionKey.compareTo(shadowPartitionKey) == 0) {
+                continue;
+            }
+
+            // The current time is greater than the extent of the partition
+            if (lowerPartitionKey.compareTo(currentPartitionKey) < 0
+                    && upperPartitionKey.compareTo(currentPartitionKey) <= 0) {
+                candidatePartitionList.add(partitionRange);
+            }
+            // The current time is within the range of this partition.
+            if (lowerPartitionKey.compareTo(currentPartitionKey) <= 0
+                    && upperPartitionKey.compareTo(currentPartitionKey) > 0) {
+                candidatePartitionList.add(partitionRange);
+            }
+        }
+
+        candidatePartitionList.sort(Comparator.comparing(o -> o.getValue().upperEndpoint()));
+
+        int allPartitionNumber = candidatePartitionList.size();
         if (allPartitionNumber <= ttlNumber) {
             return dropPartitionClauses;
         } else {
             int dropSize = allPartitionNumber - ttlNumber;
             for (int i = 0; i < dropSize; i++) {
-                Long checkDropPartitionId = idToRanges.get(i).getKey();
+                Long checkDropPartitionId = candidatePartitionList.get(i).getKey();
                 String dropPartitionName = olapTable.getPartition(checkDropPartitionId).getName();
                 dropPartitionClauses.add(new DropPartitionClause(false, dropPartitionName, false, true));
             }
