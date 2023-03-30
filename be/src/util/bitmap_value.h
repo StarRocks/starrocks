@@ -939,11 +939,14 @@ public:
     // Construct an empty bitmap.
     BitmapValue() {}
 
-    BitmapValue(const BitmapValue& other)
-            : _bitmap(other._bitmap == nullptr ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap)),
-              _set(other._set),
-              _sv(other._sv),
-              _type(other._type) {}
+    BitmapValue(const BitmapValue& other, bool deep_copy = true)
+            : _set(other._set), _sv(other._sv), _type(other._type) {
+        if (deep_copy) {
+            _bitmap = (other._bitmap == nullptr) ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap);
+        } else {
+            _bitmap = (other._bitmap == nullptr) ? nullptr : other._bitmap;
+        }
+    }
 
     BitmapValue& operator=(const BitmapValue& other) {
         if (this != &other) {

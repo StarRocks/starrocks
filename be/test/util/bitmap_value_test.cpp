@@ -30,6 +30,17 @@
 
 namespace starrocks {
 
+TEST(BitmapValueTest, Constructor) {
+    BitmapValue bitmap;
+    for (size_t i = 0; i < 64; i++) {
+        bitmap.add(i);
+    }
+
+    BitmapValue shallow_bitmap(bitmap, false);
+    shallow_bitmap.add(64);
+    ASSERT_EQ(bitmap.cardinality(), 65);
+}
+
 TEST(BitmapValueTest, bitmap_union) {
     BitmapValue empty;
     BitmapValue single(1024);
