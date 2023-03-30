@@ -91,7 +91,7 @@ Classifiers support the following conditions:
 
 - `user`: the name of the user.
 - `role`: the role of the user.
-- `query_type`: the type of the query. `SELECT` and `INSERT` are supported. When INSERT tasks hit a resource group with `query_type` as `insert`, the BE node reserves the specified CPU resources for the tasks.
+- `query_type`: the type of the query. `SELECT` and `INSERT` (from v2.5) are supported. When INSERT tasks hit a resource group with `query_type` as `insert`, the BE node reserves the specified CPU resources for the tasks.
 - `source_ip`: the CIDR block from which the query is initiated.
 - `db`: the database which the query accesses. It can be specified by strings separated by commas `,`.
 
@@ -137,7 +137,7 @@ If multiple matching classifiers have the same number of conditions, the classif
 classifier A (user='Alice', source_ip = '192.168.1.0/16')
 classifier B (user='Alice', source_ip = '192.168.1.0/24')
 
--- Classifier C has fewer query types specified in it than Classifier D. Therefore, Classifier has a higher degree of matching than Classifier D.
+-- Classifier C has fewer query types specified in it than Classifier D. Therefore, Classifier C has a higher degree of matching than Classifier D.
 classifier C (user='Alice', query_type in ('select'))
 classifier D (user='Alice', query_type in ('insert','select')）
 ```
