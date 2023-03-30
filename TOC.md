@@ -65,6 +65,7 @@
     + [使用 HyperLogLog 实现近似去重](/using_starrocks/Using_HLL.md)
   + [使用 Lateral Join 实现列转行](/using_starrocks/Lateral_join.md)
   + [Query Cache](/using_starrocks/query_cache.md)
+  + [Sorted streaming aggregate](/using_starrocks/sorted_aggregate.md)
 + 外部系统集成
   + [概述](/integrations/intro.md)
   + [配置 AWS 认证方式](/integrations/authenticate_to_aws_resources.md)
