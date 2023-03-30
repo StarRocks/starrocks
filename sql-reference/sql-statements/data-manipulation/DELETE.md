@@ -2,7 +2,7 @@
 
 该语句用于从表中删除数据行。表可以是分区表或者非分区表。
 
-对于明细类型 (Duplicate Key)、聚合类型 (Aggregate Key)，以及更新类型表 (Unique Key)，支持删除表中**指定分区**的数据。主键类型表 (Primary Key) 目前还**不支持**删除指定分区中的数据。从 2.3 版本开始，主键类型表支持完整的 DELETE...WHERE 语义，即支持按主键、任意列、以及子查询结果删除数据。
+对于明细类型 (Duplicate Key)、聚合类型 (Aggregate Key)，以及更新类型表 (Unique Key)，支持删除表中**指定分区**的数据。主键类型表 (Primary Key) 目前还**不支持**删除指定分区中的数据。从 2.3 版本开始，主键类型表支持完整的 DELETE...WHERE 语义，即支持按主键、任意列、以及子查询结果删除数据。从 3.0 版本开始，主键类型表丰富了 DELETE...WHERE 语义，支持使用多表关联和公用表表达式（CTE）。
 
 ## 注意事项
 
@@ -144,20 +144,25 @@ select * from my_table order by date;
 
 ## DELETE 与主键类型表
 
-从 2.3 版本开始，主键类型表支持完整的 DELETE...WHERE 语义。支持按主键、任意列、以及子查询结果删除数据。
+从 2.3 版本开始，主键类型表支持完整的 DELETE...WHERE 语义。支持按主键、任意列、以及子查询结果删除数据。从 3.0 版本开始，StarRocks 丰富了 DELETE...WHERE 语义，支持使用多表关联和公用表表达式（CTE）。如果需要将待操作的表与数据库中其他表关联，则可以在 USING 子句或 CTE 中引用其他的表。
 
 ### 语法
 
 ```SQL
-DELETE FROM <table_name> WHERE <condition>;
+[ WITH <with_query> [, ...] ]
+DELETE FROM <table_name>
+[ USING <from_item> [, ...] ]
+[ WHERE <where_condition> ]
 ```
 
 ### 参数说明
 
-| **参数**     | **是否必选** | **描述**                                                     |
-| ------------ | ------------ | ------------------------------------------------------------ |
-| `table_name` | Yes          | 要操作的表名。                                               |
-| `condition`  | Yes          | 指定的删除条件，可以指定一个或多个条件。该参数为必选，防止误删整张表。 |
+| 参数            | 是否必选 | 描述                                                         |
+| --------------- | -------- | ------------------------------------------------------------ |
+| with_query      | No       | 一个或多个可以在 DELETE 语句中通过名字引用的 CTE。CTE 是一个临时结果集，可以提高复杂语句的易读性。 |
+| table_name      | Yes      | 要操作的表名。                                               |
+| from_item       | No       | 引用数据库中一个或者多个其他的表。该表与待操作的表进行连接，WHERE 子句指定连接条件，最终 StarRocks 基于连接查询的结果集删除待操作表中的匹配行。 例如 USING 子句为 `USING t1 WHERE t0.pk = t1.pk;`，StarRocks 实际执行 DELETE 语句时会将该 USING 子句的表表达式会转换为 `t0 JOIN t1 ON t0.pk=t1.pk;`。 |
+| where_condition | No       | 只有满足 WHERE 条件的行才会被删除。该参数为必选，防止误删整张表。如需删除表中的所有行，请使用 `WHERE true`。 |
 
 ### 注意事项
 
@@ -355,4 +360,25 @@ select * from score_board;
 |    3 | Sam  |    22 |
 +------+------+-------+
 2 rows in set (0.00 sec)
+```
+
+##### 按多表关联或者 CTE 的结果集删除数据
+
+删除制片人 foo 制作的所有电影，则可以执行以下语句：
+
+```SQL
+DELETE FROM films USING producers
+WHERE producer_id = producers.id
+    AND producers.name = 'foo';
+```
+
+您也可以使用 CTE 改写上述语句，增加易读性。
+
+```SQL
+WITH foo_producers as (
+    SELECT * from producers
+    where producers.name = 'foo'
+)
+DELETE FROM films USING foo_producers
+WHERE producer_id = foo_producers.id;
 ```
