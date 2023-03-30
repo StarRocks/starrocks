@@ -170,8 +170,8 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
-public class PseudoBackend {
-    private static final Logger LOG = LogManager.getLogger(PseudoBackend.class);
+public class PseudoDataNode {
+    private static final Logger LOG = LogManager.getLogger(PseudoDataNode.class);
     public static final long PATH_HASH = 123456;
 
     public static volatile long reportIntervalMs = 5000L;
@@ -223,7 +223,7 @@ public class PseudoBackend {
 
     private Random random;
 
-    private static ThreadLocal<PseudoBackend> currentBackend = new ThreadLocal<>();
+    private static ThreadLocal<PseudoDataNode> currentBackend = new ThreadLocal<>();
 
     static class QueryProgress {
         String queryId;
@@ -299,7 +299,7 @@ public class PseudoBackend {
     private static Map<String, QueryProgress> queryProgresses = new ConcurrentHashMap<>();
     private static Map<String, String> resultSinkInstanceToQueryId = new ConcurrentHashMap<>();
 
-    public static PseudoBackend getCurrentBackend() {
+    public static PseudoDataNode getCurrentBackend() {
         return currentBackend.get();
     }
 
@@ -308,7 +308,7 @@ public class PseudoBackend {
     }
 
     private void maintenanceWorker() {
-        currentBackend.set(PseudoBackend.this);
+        currentBackend.set(PseudoDataNode.this);
         while (!stopped) {
             try {
                 Runnable task = null;
@@ -345,9 +345,9 @@ public class PseudoBackend {
         return System.nanoTime() + intervalMs * 1000000 + randomMs;
     }
 
-    public PseudoBackend(PseudoCluster cluster, String runPath, long backendId, String host, int brpcPort, int heartBeatPort,
-                         int beThriftPort, int httpPort,
-                         FrontendService.Iface frontendService) {
+    public PseudoDataNode(PseudoCluster cluster, String runPath, long backendId, String host, int brpcPort, int heartBeatPort,
+                          int beThriftPort, int httpPort,
+                          FrontendService.Iface frontendService) {
         this.cluster = cluster;
         this.runPath = runPath;
         this.host = host;
@@ -362,8 +362,8 @@ public class PseudoBackend {
         this.tBackend = new TBackend(host, beThriftPort, httpPort);
 
         // TODO: maintain disk info with tablet/rowset count
-        setInitialCapacity(PseudoBackend.DEFAULT_TOTA_CAP_B, PseudoBackend.DEFAULT_AVAI_CAP_B,
-                PseudoBackend.DEFAULT_USED_CAP_B);
+        setInitialCapacity(PseudoDataNode.DEFAULT_TOTA_CAP_B, PseudoDataNode.DEFAULT_AVAI_CAP_B,
+                PseudoDataNode.DEFAULT_USED_CAP_B);
         be.setAlive(true);
         be.setBePort(beThriftPort);
         be.setBrpcPort(brpcPort);
@@ -576,7 +576,7 @@ public class PseudoBackend {
             throw new Exception("bad src backends size " + task.src_backends.size());
         }
         TBackend backend = task.src_backends.get(0);
-        PseudoBackend srcBackend = cluster.getBackendByHost(backend.host);
+        PseudoDataNode srcBackend = cluster.getBackendByHost(backend.host);
         if (srcBackend == null) {
             throw new Exception("clone failed src backend " + backend.host + " not found");
         }
@@ -717,7 +717,7 @@ public class PseudoBackend {
         BeThriftClient() {
             super(null);
             new Thread(() -> {
-                currentBackend.set(PseudoBackend.this);
+                currentBackend.set(PseudoDataNode.this);
                 while (true) {
                     try {
                         TAgentTaskRequest request = taskQueue.take();
@@ -852,7 +852,7 @@ public class PseudoBackend {
                 }
             });
             executor.submit(() -> {
-                currentBackend.set(PseudoBackend.this);
+                currentBackend.set(PseudoDataNode.this);
             });
         }
 

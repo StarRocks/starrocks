@@ -32,7 +32,7 @@ import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.QeProcessorImpl;
-import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.DataNodeServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.plan.ExecPlan;
@@ -346,7 +346,7 @@ public class MVMaintenanceJob implements Writable {
             try {
                 LOG.debug("[MV] try deploy task at {}: {}", address, task);
                 Future<PMVMaintenanceTaskResult> resultFuture =
-                        BackendServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request);
+                        DataNodeServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request);
                 results.add(resultFuture);
             } catch (Exception e) {
                 this.state.set(JobState.FAILED);
@@ -399,7 +399,7 @@ public class MVMaintenanceJob implements Writable {
             TNetworkAddress address = task.getBeRpcAddr();
 
             try {
-                results.add(BackendServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request));
+                results.add(DataNodeServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request));
             } catch (Exception e) {
                 this.state.set(JobState.FAILED);
                 LOG.warn("stop tasks of MV {} failed: ", view.getName());

@@ -66,7 +66,7 @@ public final class ProcService {
         root.register("transactions", new TransDbProcDir());
         root.register("monitor", new MonitorProcDir());
         root.register("current_queries", new CurrentQueryStatisticsProcDir());
-        root.register("current_backend_instances", new CurrentQueryBackendInstanceProcDir());
+        root.register("current_backend_instances", new CurrentQueryDataNodeInstanceProcDir());
         root.register("cluster_balance", new ClusterBalanceProcDir());
         root.register("routine_loads", new RoutineLoadsProcDir());
         root.register("stream_loads", new StreamLoadsProcDir());

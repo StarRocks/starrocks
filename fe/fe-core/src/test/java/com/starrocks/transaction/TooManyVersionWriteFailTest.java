@@ -15,8 +15,8 @@
 package com.starrocks.transaction;
 
 import com.starrocks.common.Config;
-import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
+import com.starrocks.pseudocluster.PseudoDataNode;
 import com.starrocks.pseudocluster.Tablet;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -60,7 +60,7 @@ public class TooManyVersionWriteFailTest {
             Assert.assertTrue(e.getMessage().contains("Too many versions"));
         }
         Tablet.compactionIntervalMs = 500;
-        PseudoBackend.tabletCheckIntervalMs = 1000;
+        PseudoDataNode.tabletCheckIntervalMs = 1000;
         while (Tablet.getTotalCompaction() < 9) {
             System.out.printf("sleep to wait compaction %d/9\n", Tablet.getTotalCompaction());
             Thread.sleep(1000);

@@ -27,13 +27,13 @@ import java.util.List;
 /*
  * show proc "/colocation_group/group_name";
  */
-public class ColocationGroupBackendSeqsProcNode implements ProcNodeInterface {
+public class ColocationGroupDataNodeSeqsProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("BucketIndex").add("BackendIds").build();
 
     private List<List<Long>> backendsSeq;
 
-    public ColocationGroupBackendSeqsProcNode(List<List<Long>> backendsSeq) {
+    public ColocationGroupDataNodeSeqsProcNode(List<List<Long>> backendsSeq) {
         this.backendsSeq = backendsSeq;
     }
 
