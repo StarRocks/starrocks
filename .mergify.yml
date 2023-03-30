@@ -3,6 +3,7 @@ commands_restrictions:
   backport:
     conditions:
       - sender-permission>=read
+      - check-success=DCO
   rebase:
     conditions:
       - sender-permission>=read
