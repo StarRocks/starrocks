@@ -439,7 +439,7 @@ Status TabletMetaManager::walk(
 Status TabletMetaManager::walk_until_timeout(
         KVStore* meta,
         std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func,
-        int64_t limit_time) {
+        int64_t timeout_sec) {
     auto traverse_header_func = [&func](std::string_view key, std::string_view value) -> bool {
         TTabletId tablet_id;
         TSchemaHash schema_hash;
@@ -449,7 +449,7 @@ Status TabletMetaManager::walk_until_timeout(
         }
         return func(tablet_id, schema_hash, value);
     };
-    return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func, limit_time);
+    return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func, timeout_sec);
 }
 
 std::string json_to_string(const rapidjson::Value& val_obj) {

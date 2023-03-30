@@ -227,7 +227,7 @@ static std::string get_iterate_upper_bound(const std::string& prefix) {
 }
 
 Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,
-                        std::function<bool(std::string_view, std::string_view)> const& func, int64_t limit_time) {
+                        std::function<bool(std::string_view, std::string_view)> const& func, int64_t timeout_sec) {
     int64_t t_start = MonotonicMillis();
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     auto opts = ReadOptions();
@@ -244,7 +244,7 @@ Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string
         it->Seek(prefix);
     }
     // if limit time is less than or equal to zero, it means no limit
-    if (limit_time <= 0) {
+    if (timeout_sec <= 0) {
         for (; it->Valid(); it->Next()) {
             if (!prefix.empty()) {
                 if (!it->key().starts_with(prefix)) {
@@ -271,9 +271,9 @@ Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string
             if (!ret) {
                 break;
             }
-            if (MonotonicMillis() - t_start > limit_time * 1000) {
+            if (MonotonicMillis() - t_start > timeout_secs * 1000) {
                 LOG(WARNING) << "rocksdb iterate timeout: " << MonotonicMillis() - t_start
-                             << ", limit: " << limit_time * 1000;
+                             << ", limit: " << timeout_sec * 1000;
                 return Status::TimedOut("rocksdb iterate timeout");
             }
         }
