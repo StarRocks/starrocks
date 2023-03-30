@@ -36,9 +36,7 @@ package com.starrocks.clone;
 
 import com.google.api.client.util.Lists;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.BoundType;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -48,12 +46,10 @@ import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -75,9 +71,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.tools.ant.taskdefs.Local;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -473,6 +467,9 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
                 dropPartitionClauses = getDropPartitionClauseByTTL(olapTable, ttlNumber);
             } catch (AnalysisException e) {
                 LOG.warn("database={}, table={} Failed to generate drop statement.", dbId, tableId, e);
+            }
+            if (dropPartitionClauses == null) {
+                continue;
             }
 
             String tableName = olapTable.getName();
