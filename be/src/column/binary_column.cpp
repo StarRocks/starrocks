@@ -73,7 +73,7 @@ void BinaryColumn::append_selective(const Column& src, const uint32_t* indexes, 
     _slices_cache = false;
 }
 
-void BinaryColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
+void BinaryColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
     auto& src_column = down_cast<const BinaryColumn&>(src);
     auto& src_offsets = src_column.get_offset();
     auto& src_bytes = src_column.get_bytes();
