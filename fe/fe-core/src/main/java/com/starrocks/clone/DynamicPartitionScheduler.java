@@ -35,6 +35,7 @@
 package com.starrocks.clone;
 
 import com.google.api.client.util.Lists;
+import com.google.api.client.util.Preconditions;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
@@ -50,6 +51,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -495,32 +497,43 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) (olapTable.getPartitionInfo());
         List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
 
-        LocalDateTime currentDateTime = LocalDateTime.now();
-        PartitionValue currentPartitionValue = new PartitionValue(currentDateTime.format(DateUtils.DATE_FORMATTER_UNIX));
-        PartitionKey currentPartitionKey = PartitionKey.createPartitionKey(
-                ImmutableList.of(currentPartitionValue), partitionColumns);
-        PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
-
+        // Currently, materialized views and automatically created partition tables
+        // only support single-column partitioning.
+        Preconditions.checkArgument(partitionColumns.size() == 1);
+        Type partitionType = partitionColumns.get(0).getType();
         List<Map.Entry<Long, Range<PartitionKey>>> candidatePartitionList = Lists.newArrayList();
-        Map<Long, Range<PartitionKey>> idToRange = rangePartitionInfo.getIdToRange(false);
-        for (Map.Entry<Long, Range<PartitionKey>> partitionRange : idToRange.entrySet()) {
-            PartitionKey lowerPartitionKey = partitionRange.getValue().lowerEndpoint();
-            PartitionKey upperPartitionKey = partitionRange.getValue().upperEndpoint();
 
-            if (lowerPartitionKey.compareTo(shadowPartitionKey) == 0) {
-                continue;
-            }
+        if (partitionType.isDateType()) {
+            LocalDateTime currentDateTime = LocalDateTime.now();
+            PartitionValue currentPartitionValue = new PartitionValue(currentDateTime.format(DateUtils.DATE_FORMATTER_UNIX));
+            PartitionKey currentPartitionKey = PartitionKey.createPartitionKey(
+                    ImmutableList.of(currentPartitionValue), partitionColumns);
+            PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
 
-            // The current time is greater than the extent of the partition
-            if (lowerPartitionKey.compareTo(currentPartitionKey) < 0
-                    && upperPartitionKey.compareTo(currentPartitionKey) <= 0) {
-                candidatePartitionList.add(partitionRange);
+            Map<Long, Range<PartitionKey>> idToRange = rangePartitionInfo.getIdToRange(false);
+            for (Map.Entry<Long, Range<PartitionKey>> partitionRange : idToRange.entrySet()) {
+                PartitionKey lowerPartitionKey = partitionRange.getValue().lowerEndpoint();
+                PartitionKey upperPartitionKey = partitionRange.getValue().upperEndpoint();
+
+                if (lowerPartitionKey.compareTo(shadowPartitionKey) == 0) {
+                    continue;
+                }
+
+                // The current time is greater than the extent of the partition
+                if (lowerPartitionKey.compareTo(currentPartitionKey) < 0
+                        && upperPartitionKey.compareTo(currentPartitionKey) <= 0) {
+                    candidatePartitionList.add(partitionRange);
+                }
+                // The current time is within the range of this partition.
+                if (lowerPartitionKey.compareTo(currentPartitionKey) <= 0
+                        && upperPartitionKey.compareTo(currentPartitionKey) > 0) {
+                    candidatePartitionList.add(partitionRange);
+                }
             }
-            // The current time is within the range of this partition.
-            if (lowerPartitionKey.compareTo(currentPartitionKey) <= 0
-                    && upperPartitionKey.compareTo(currentPartitionKey) > 0) {
-                candidatePartitionList.add(partitionRange);
-            }
+        } else if (partitionType.isNumericType()) {
+            candidatePartitionList = new ArrayList<>(rangePartitionInfo.getIdToRange(false).entrySet());
+        } else {
+            throw new AnalysisException("Partition ttl does not support:" + partitionType);
         }
 
         candidatePartitionList.sort(Comparator.comparing(o -> o.getValue().upperEndpoint()));
