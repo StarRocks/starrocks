@@ -228,7 +228,7 @@ struct HdfsScannerContext {
 
     std::string file_cache_key;
 
-    FooterCache* footer_cache;
+    FooterCache* footer_cache = nullptr;
 
     // set column names from file.
     // and to update not_existed slots and conjuncts.

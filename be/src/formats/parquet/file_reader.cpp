@@ -69,10 +69,12 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 Status FileReader::_parse_footer() {
     std::string footer_buffer;
     uint8_t* footer_buf = nullptr;
-    uint64_t to_read = 0;
     uint32_t footer_size = 0;
 
-    bool in_cache = _scanner_ctx->footer_cache->get(_scanner_ctx->file_cache_key, &footer_buffer);
+    bool in_cache = false;
+    if (_scanner_ctx->footer_cache != nullptr) {
+        in_cache = _scanner_ctx->footer_cache->get(_scanner_ctx->file_cache_key, &footer_buffer);
+    }
     if (!in_cache) {
         ASSIGN_OR_RETURN(auto footer_reader_size, _get_footer_read_size);
         to_read = std::min(_file_size, footer_reader_size);
@@ -107,13 +109,14 @@ Status FileReader::_parse_footer() {
             int64_t extra = to_read - footer_size - 8;
             memmove(footer_buf, footer_buf + extra, footer_size + 8);
             footer_buffer.resize(footer_size + 8);
+            footer_buf = (uint8_t*)footer_buffer.data();
         }
         _scanner_ctx->footer_cache->put(_scanner_ctx->file_cache_key, footer_buffer);
     } else {
         footer_buf = (uint8_t*)footer_buffer.data();
-        to_read = footer_buffer.size();
-        RETURN_IF_ERROR(_check_magic(footer_buf + to_read - 4));
-        footer_size = decode_fixed32_le(footer_buf + to_read - 8);
+        size_t size = footer_buffer.size();
+        RETURN_IF_ERROR(_check_magic(footer_buf + size - 4));
+        footer_size = decode_fixed32_le(footer_buf + size - 8);
     }
 
     _scanner_ctx->stats->request_bytes_read += footer_size + 8;
@@ -121,9 +124,7 @@ Status FileReader::_parse_footer() {
 
     tparquet::FileMetaData t_metadata;
     // deserialize footer
-    RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) + footer_buffer.size() -
-                                                   PARQUET_FOOTER_SIZE - metadata_length,
-                                           &metadata_length, TProtocolType::COMPACT, &t_metadata));
+    RETURN_IF_ERROR(deserialize_thrift_msg(footer_buf, &footer_size, TProtocolType::COMPACT, &t_metadata));
     _file_metadata.reset(new FileMetaData());
     RETURN_IF_ERROR(_file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
     return Status::OK();

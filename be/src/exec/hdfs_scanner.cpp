@@ -47,7 +47,7 @@ void FooterCache::put(const std::string& key, const std::string& value) {
     return;
 }
 
-static FooterCache global_footer_cache(128 * 1024 * 1024);
+static FooterCache _hdfs_footer_cache(config::hdfs_footer_cache_max_size);
 
 class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
 public:
@@ -166,7 +166,7 @@ Status HdfsScanner::_build_scanner_context() {
         memcpy(data, &hash_value, sizeof(hash_value));
         memcpy(data + 8, &file_size, sizeof(file_size));
     }
-    ctx.footer_cache = &global_footer_cache;
+    ctx.footer_cache = &_hdfs_footer_cache;
 
     return Status::OK();
 }
