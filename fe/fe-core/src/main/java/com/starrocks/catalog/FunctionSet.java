@@ -556,6 +556,7 @@ public class FunctionSet {
             .add(ARRAYS_OVERLAP)
             .add(ARRAY_AGG)
             .add(ARRAY_CONCAT)
+            .add(ARRAY_SLICE)
             .build();
 
     public FunctionSet() {
