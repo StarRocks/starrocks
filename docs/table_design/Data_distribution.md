@@ -200,9 +200,9 @@ If you need to create partitions in advance, you can use other partition creatio
     )
     ```
 
-  - Create multiple partitions at a time
+  - Create multiple partitions at a time.
 
-    Partition a table by specifying START, END, and EVERY. You can create multiple partitions at a time by using this method. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)
+    Partition a table by specifying START, END, and EVERY. You can create multiple partitions at a time by using this method. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
     ```SQL
     PARTITION BY RANGE (k1, k2, ...) 
