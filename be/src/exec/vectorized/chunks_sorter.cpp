@@ -205,8 +205,16 @@ StatusOr<vectorized::ChunkPtr> ChunksSorter::materialize_chunk_before_sort(
 }
 
 Status ChunksSorter::done(RuntimeState* state) {
+<<<<<<< HEAD:be/src/exec/vectorized/chunks_sorter.cpp
     TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(do_done(state)));
     return Status::OK();
 }
 
 } // namespace starrocks::vectorized
+=======
+    TRY_CATCH_BAD_ALLOC(do_done(state));
+    return Status::OK();
+}
+
+} // namespace starrocks
+>>>>>>> 3ffde536f ([BugFix] Fix Exception safe problem in aggregator (#19633)):be/src/exec/chunks_sorter.cpp

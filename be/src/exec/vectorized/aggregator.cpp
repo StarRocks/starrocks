@@ -62,9 +62,26 @@ Status Aggregator::open(RuntimeState* state) {
         _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
         RETURN_IF_UNLIKELY_NULL(_single_agg_state, Status::MemoryAllocFailed("alloc single agg state failed"));
         auto call_agg_create = [this]() {
+<<<<<<< HEAD:be/src/exec/vectorized/aggregator.cpp
             for (int i = 0; i < _agg_functions.size(); i++) {
                 _agg_functions[i]->create(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
+=======
+            size_t created = 0;
+            try {
+                for (int i = 0; i < _agg_functions.size(); i++) {
+                    _agg_functions[i]->create(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
+                    created++;
+                }
+            } catch (std::bad_alloc& e) {
+                tls_thread_status.set_is_catched(false);
+                for (int i = 0; i < created; i++) {
+                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
+                }
+                _single_agg_state = nullptr;
+                return Status::MemoryLimitExceeded("aggregate::create allocate failed");
+>>>>>>> 3ffde536f ([BugFix] Fix Exception safe problem in aggregator (#19633)):be/src/exec/aggregator.cpp
             }
+
             return Status::OK();
         };
         if (_has_udaf) {

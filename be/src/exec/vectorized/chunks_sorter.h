@@ -96,6 +96,11 @@ public:
 
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
+<<<<<<< HEAD:be/src/exec/vectorized/chunks_sorter.h
+=======
+    // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
+    virtual Status do_done(RuntimeState* state) = 0;
+>>>>>>> 3ffde536f ([BugFix] Fix Exception safe problem in aggregator (#19633)):be/src/exec/chunks_sorter.h
 
     Status done(RuntimeState* state);
 

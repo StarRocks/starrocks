@@ -238,7 +238,10 @@ ChunkPtr ChunksSorterFullSort::_late_materialize_tmpl(const ChunkPtr& sorted_eag
     }
     return final_chunk;
 }
+<<<<<<< HEAD:be/src/exec/vectorized/chunks_sorter_full_sort.cpp
 
+=======
+>>>>>>> 3ffde536f ([BugFix] Fix Exception safe problem in aggregator (#19633)):be/src/exec/chunks_sorter_full_sort.cpp
 Status ChunksSorterFullSort::do_done(RuntimeState* state) {
     RETURN_IF_ERROR(_partial_sort(state, true));
     {
