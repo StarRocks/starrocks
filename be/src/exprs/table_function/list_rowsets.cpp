@@ -21,11 +21,11 @@
 #include "column/fixed_length_column.h"
 #include "common/config.h"
 #include "gutil/casts.h"
+#include "json2pb/pb_to_json.h"
+#include "runtime/exec_env.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "types/logical_type.h"
-#include "storage/lake/tablet_manager.h"
-#include "runtime/exec_env.h"
-#include "json2pb/pb_to_json.h"
 
 namespace starrocks {
 
