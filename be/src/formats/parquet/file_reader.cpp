@@ -111,7 +111,9 @@ Status FileReader::_parse_footer() {
             footer_buffer.resize(footer_size + 8);
             footer_buf = (uint8_t*)footer_buffer.data();
         }
-        _scanner_ctx->footer_cache->put(_scanner_ctx->file_cache_key, footer_buffer);
+        if (_scanner_ctx->footer_cache != nullptr) {
+            _scanner_ctx->footer_cache->put(_scanner_ctx->file_cache_key, footer_buffer);
+        }
     } else {
         footer_buf = (uint8_t*)footer_buffer.data();
         size_t size = footer_buffer.size();
