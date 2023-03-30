@@ -3992,7 +3992,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitTableFunction(StarRocksParser.TableFunctionContext context) {
-        FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.tableFunctionCall());
+        QualifiedName functionName = getQualifiedName(context.qualifiedName());
+        List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
+        FunctionCallExpr functionCallExpr =
+                new FunctionCallExpr(FunctionName.createFnName(functionName.toString().toLowerCase()), parameters);
         TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(functionCallExpr);
 
         if (context.alias != null) {
@@ -4004,8 +4007,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitTableFunctionTable(StarRocksParser.TableFunctionTableContext context) {
-        TableFunctionRelation relation = new TableFunctionRelation((FunctionCallExpr) visit(context.tableFunctionCall()));
+    public ParseNode visitNormalizedTableFunction(StarRocksParser.NormalizedTableFunctionContext context) {
+        QualifiedName functionName = getQualifiedName(context.qualifiedName());
+        List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
+        FunctionCallExpr functionCallExpr =
+                new FunctionCallExpr(FunctionName.createFnName(functionName.toString().toLowerCase()), parameters);
+        TableFunctionRelation relation = new TableFunctionRelation(functionCallExpr);
 
         if (context.alias != null) {
             Identifier identifier = (Identifier) visit(context.alias);
@@ -4014,13 +4021,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         relation.setColumnOutputNames(getColumnNames(context.columnAliases()));
 
         return new NormalizedTableFunctionRelation(relation);
-    }
-
-    @Override
-    public ParseNode visitTableFunctionCall(StarRocksParser.TableFunctionCallContext context) {
-        QualifiedName functionName = getQualifiedName(context.qualifiedName());
-        List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
-        return new FunctionCallExpr(FunctionName.createFnName(functionName.toString().toLowerCase()), parameters);
     }
 
     @Override
