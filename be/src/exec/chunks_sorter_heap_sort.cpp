@@ -116,7 +116,7 @@ size_t ChunksSorterHeapSort::get_output_rows() const {
     return _merged_segment.chunk->num_rows();
 }
 
-Status ChunksSorterHeapSort::done(RuntimeState* state) {
+Status ChunksSorterHeapSort::do_done(RuntimeState* state) {
     ScopedTimer<MonotonicStopWatch> timer(_build_timer);
     if (_sort_heap) {
         auto sorted_values = _sort_heap->sorted_seq();
