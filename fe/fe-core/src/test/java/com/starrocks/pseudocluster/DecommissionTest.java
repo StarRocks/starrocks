@@ -64,7 +64,7 @@ public class DecommissionTest {
             insertSqls[i] = PseudoCluster.buildInsertSql("test", tableNames[i]);
             cluster.runSqls("test", createTableSqls[i], insertSqls[i], insertSqls[i], insertSqls[i]);
         }
-        final PseudoBackend decommissionBE = cluster.getBackend(10001);
+        final PseudoDataNode decommissionBE = cluster.getBackend(10001);
         int oldTabletNum = decommissionBE.getTabletManager().getNumTablet();
         cluster.runSql(null, String.format("ALTER SYSTEM DECOMMISSION BACKEND \"%s\"", decommissionBE.getHostHeartbeatPort()));
         Random rand = new Random(0);

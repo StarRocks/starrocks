@@ -68,9 +68,9 @@ public class BeRestartTest {
             tableVersions[i] = 4;
         }
         Random rand = new Random(0);
-        final PseudoBackend be10001 = cluster.getBackend(10001);
-        final PseudoBackend be10002 = cluster.getBackend(10002);
-        final PseudoBackend be10003 = cluster.getBackend(10003);
+        final PseudoDataNode be10001 = cluster.getBackend(10001);
+        final PseudoDataNode be10002 = cluster.getBackend(10002);
+        final PseudoDataNode be10003 = cluster.getBackend(10003);
         be10001.setShutdown(true);
         for (int i = 0; i < 10; i++) {
             int tableIdx = rand.nextInt(numTable);

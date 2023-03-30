@@ -100,7 +100,7 @@ public class Tablet {
         info.setPartition_id(partitionId);
         info.setSchema_hash(schemaHash);
         info.setStorage_medium(TStorageMedium.SSD);
-        info.setPath_hash(PseudoBackend.PATH_HASH);
+        info.setPath_hash(PseudoDataNode.PATH_HASH);
         info.setIs_in_memory(false);
         info.setVersion(maxContinuousVersion());
         info.setMin_readable_version(minVersion());
@@ -217,7 +217,7 @@ public class Tablet {
             totalReadFailed.incrementAndGet();
             lastFailedReadVersion = version;
             String msg = String.format("be:%d read tablet:%d version:%d > currentVersion:%d",
-                    PseudoBackend.getCurrentBackend().getId(), id, version, currentVersion);
+                    PseudoDataNode.getCurrentBackend().getId(), id, version, currentVersion);
             LOG.warn(msg);
             throw new Exception(msg);
         }
@@ -322,8 +322,8 @@ public class Tablet {
         LOG.info("txn: {} tablet:{} rowset commit, version:{} rowset:{} #version:{} #rowset:{}", rowset.txnId, id,
                 version,
                 rowset.id, versions.size(), ev.rowsets.size());
-        if (PseudoBackend.getCurrentBackend() != null) {
-            PseudoBackend.getCurrentBackend().updateDiskUsage(PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
+        if (PseudoDataNode.getCurrentBackend() != null) {
+            PseudoDataNode.getCurrentBackend().updateDiskUsage(PseudoDataNode.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
         }
     }
 
@@ -420,9 +420,9 @@ public class Tablet {
         destVersion.rowsets = srcVersion.rowsets.stream().map(Rowset::copy).collect(Collectors.toList());
         long oldRowsetCount = numRowsets();
         versions = Lists.newArrayList(destVersion);
-        if (PseudoBackend.getCurrentBackend() != null) {
-            PseudoBackend.getCurrentBackend()
-                    .updateDiskUsage((numRowsets() - oldRowsetCount) * PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
+        if (PseudoDataNode.getCurrentBackend() != null) {
+            PseudoDataNode.getCurrentBackend()
+                    .updateDiskUsage((numRowsets() - oldRowsetCount) * PseudoDataNode.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
         }
         nextRssId = destVersion.rowsets.stream().map(Rowset::getId).reduce(Integer::max).orElse(0);
         tryCommitPendingRowsets();

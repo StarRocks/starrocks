@@ -39,7 +39,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PUniqueId;
-import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.DataNodeServiceClient;
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TNetworkAddress;
@@ -86,7 +86,7 @@ public class ResultReceiver {
                 PFetchDataRequest request = new PFetchDataRequest(finstId);
 
                 currentThread = Thread.currentThread();
-                Future<PFetchDataResult> future = BackendServiceClient.getInstance().fetchDataAsync(address, request);
+                Future<PFetchDataResult> future = DataNodeServiceClient.getInstance().fetchDataAsync(address, request);
                 PFetchDataResult pResult = null;
                 while (pResult == null) {
                     long currentTs = System.currentTimeMillis();

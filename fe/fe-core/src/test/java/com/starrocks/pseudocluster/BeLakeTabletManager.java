@@ -21,11 +21,11 @@ import com.starrocks.proto.TabletMetadataPB;
 import com.starrocks.thrift.TCreateTabletReq;
 
 public class BeLakeTabletManager {
-    PseudoBackend backend;
+    PseudoDataNode backend;
     // TODO: update the data structure according to the later needs
     Table<Long, Long, TabletMetadataPB> tablets = HashBasedTable.create();
 
-    BeLakeTabletManager(PseudoBackend backend) {
+    BeLakeTabletManager(PseudoDataNode backend) {
         this.backend = backend;
     }
 
