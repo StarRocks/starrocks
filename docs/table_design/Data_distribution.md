@@ -170,7 +170,7 @@ If you intend to set the number of buckets, StarRocks 2.4 and later versions sup
 
 Since version 3.0, StarRocks supports [automatic partitioning](./automatic_partitioning.md) during data loading. You no longer need to create a large number of partitions in advance. This on-demand partition creation method can help you reduce the O&M costs.
 
-If you need to create partitions in advance, you can use other partition creation methods, such as enabling dynamic partitioning and  manually creating partitions.
+If you need to create partitions in advance, you can use other partition creation methods, such as enabling dynamic partitioning and manually creating partitions.
 
 - Dynamic partitioning
 
@@ -189,7 +189,7 @@ If you need to create partitions in advance, you can use other partition creatio
     )
     ```
 
-  - Partition a table by specifying values of a fixed range. For more information, see [CREATE TABLE].
+  - Partition a table by specifying values of a fixed range. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
     ```SQL
     PARTITION BY RANGE (k1, k2, k3, ...)
@@ -200,9 +200,9 @@ If you need to create partitions in advance, you can use other partition creatio
     )
     ```
 
-  - Create multiple partitions at a time/all at once
+  - Create multiple partitions at a time
 
-    Partition a table by specifying START, END, and EVERY. You can create multiple partitions at a time by using this method. For more information, see CREATE TABLE.
+    Partition a table by specifying START, END, and EVERY. You can create multiple partitions at a time by using this method. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)
 
     ```SQL
     PARTITION BY RANGE (k1, k2, ...) 
@@ -286,7 +286,7 @@ If you need to create partitions in advance, you can use other partition creatio
       ```
 
     - The data type of the partitioning column is INT and you specify the value range of partitioning by using START and END and define the incremental value via EVERY. Example:
-      > **Note**
+      > **NOTE**
       >
       > Do not double quote the incremental value defined by EVERY.
 
