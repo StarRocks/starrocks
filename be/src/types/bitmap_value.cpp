@@ -43,11 +43,18 @@ static void get_only_value_to_set_and_common_value_to_bitmap(const phmap::flat_h
     }
 }
 
-BitmapValue::BitmapValue(const BitmapValue& other)
-        : _bitmap(other._bitmap == nullptr ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap)),
-          _set(other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set)),
+BitmapValue::BitmapValue(const BitmapValue& other, bool deep_copy)
+        : _set(other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set)),
           _sv(other._sv),
-          _type(other._type) {}
+          _type(other._type) {
+    // TODO: _set is usually relatively small, and it needs system performance testing to decide
+    //  whether to change std::unique_ptr to std::shared_ptr and support shallow copy
+    if (deep_copy) {
+        _bitmap = (other._bitmap == nullptr) ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap);
+    } else {
+        _bitmap = (other._bitmap == nullptr) ? nullptr : other._bitmap;
+    }
+}
 
 BitmapValue& BitmapValue::operator=(const BitmapValue& other) {
     if (this != &other) {
