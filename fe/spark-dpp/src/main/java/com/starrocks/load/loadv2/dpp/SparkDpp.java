@@ -467,13 +467,18 @@ public final class SparkDpp implements java.io.Serializable {
         List<String> distributeColumns = partitionInfo.distributionColumnRefs;
         Partitioner partitioner = null;
         PartitionType partitionType = PartitionType.getByType(partitionInfo.partitionType);
-        if (partitionType == PartitionType.LIST) {
-            partitioner = new StarRocksListPartitioner(partitionInfo, partitionKeyIndex, partitionListKeys);
+        if (partitionType == null) {
+            throw new SparkDppException("partition type is illegal");
         }
-        if (partitionType == PartitionType.RANGE) {
-            partitioner = new StarRocksRangePartitioner(partitionInfo, partitionKeyIndex, partitionRangeKeys);
+        switch (partitionType) {
+            case LIST:
+                partitioner = new StarRocksListPartitioner(partitionInfo, partitionKeyIndex, partitionListKeys);
+                break;
+            case RANGE:
+            case UNPARTITIONED:
+                partitioner = new StarRocksRangePartitioner(partitionInfo, partitionKeyIndex, partitionRangeKeys);
+                break;
         }
-
         List<ColumnParser> parsers = new ArrayList<>();
         for (EtlJobConfig.EtlColumn column : baseIndex.columns) {
             parsers.add(ColumnParser.create(column));
@@ -943,6 +948,7 @@ public final class SparkDpp implements java.io.Serializable {
                     }
                     partitionListKey.inKeys.add(new DppColumns(inKeyColumns));
                 }
+                partitionListKeys.add(partitionListKey);
             }
         }
         return partitionListKeys;

@@ -18,14 +18,25 @@ public class StarRocksListPartitionerTest {
         inKeys1.add(Arrays.asList(arr1));
         EtlJobConfig.EtlPartition partition1 = new EtlJobConfig.EtlPartition(
                 10000, inKeys1, 3);
+
         List<List<Object>> inKeys2 = new ArrayList<>();
         String[] arr2 = {"2023-01-01", "cn"};
         inKeys2.add(Arrays.asList(arr2));
         EtlJobConfig.EtlPartition partition2 = new EtlJobConfig.EtlPartition(
                 10001, inKeys2, 3);
+
+        List<List<Object>> inKeys3 = new ArrayList<>();
+        String[] arr3_1 = {"2022-02-01", "cn"};
+        inKeys3.add(Arrays.asList(arr3_1));
+        String[] arr3_2 = {"2022-02-01", "us"};
+        inKeys3.add(Arrays.asList(arr3_2));
+        EtlJobConfig.EtlPartition partition3 = new EtlJobConfig.EtlPartition(
+                10002, inKeys3, 3);
+
         List<EtlJobConfig.EtlPartition> partitions = new ArrayList<>();
         partitions.add(partition1);
         partitions.add(partition2);
+        partitions.add(partition3);
         List<String> partitionColumns = new ArrayList<>();
         partitionColumns.add("dt");
         partitionColumns.add("country_code");
@@ -49,7 +60,7 @@ public class StarRocksListPartitionerTest {
         StarRocksListPartitioner listPartitioner =
                 new StarRocksListPartitioner(partitionInfo, partitionKeyIndexes, partitionListKeys);
         int num = listPartitioner.numPartitions();
-        Assert.assertEquals(2, num);
+        Assert.assertEquals(3, num);
 
         List<Object> fields1 = new ArrayList<>();
         fields1.add(-100);
@@ -61,8 +72,26 @@ public class StarRocksListPartitionerTest {
         List<Object> fields2 = new ArrayList<>();
         fields2.add("2023-01-01");
         fields2.add("cn");
+        fields2.add("123455");
         DppColumns record2 = new DppColumns(fields2);
         int id2 = listPartitioner.getPartition(record2);
         Assert.assertEquals(1, id2);
+
+        List<Object> fields3 = new ArrayList<>();
+        fields3.add("cn");
+        fields3.add("2023-01-01");
+        fields3.add("123455");
+        DppColumns record3 = new DppColumns(fields3);
+        int id3 = listPartitioner.getPartition(record3);
+        Assert.assertEquals(-1, id3);
+
+        List<Object> fields4 = new ArrayList<>();
+        fields4.add("2022-02-01");
+        fields4.add("cn");
+        fields4.add("123455");
+        DppColumns record4 = new DppColumns(fields4);
+        int id4 = listPartitioner.getPartition(record4);
+        Assert.assertEquals(2, id4);
+
     }
 }

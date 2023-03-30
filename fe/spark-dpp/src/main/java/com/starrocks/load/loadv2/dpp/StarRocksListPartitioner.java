@@ -17,13 +17,16 @@
 
 package com.starrocks.load.loadv2.dpp;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.common.PartitionType;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import org.apache.spark.Partitioner;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class StarRocksListPartitioner extends Partitioner {
     private EtlJobConfig.EtlPartitionInfo partitionInfo;
@@ -73,8 +76,15 @@ public class StarRocksListPartitioner extends Partitioner {
             this.inKeys = new ArrayList<>();
         }
 
-        public boolean isRowContained(DppColumns row) {
-            return inKeys.contains(row);
+        public boolean isRowContained(DppColumns other) {
+            for (int i = 0; i < inKeys.size(); i++) {
+                DppColumns currentColumns = inKeys.get(i);
+                Preconditions.checkState(currentColumns.columns.size() == other.columns.size());
+                if (currentColumns.equals(other)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         @Override
