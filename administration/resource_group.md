@@ -62,7 +62,7 @@
 
 - `user`：用户名。
 - `role`：用户所属的 Role。
-- `query_type`: 查询类型，目前支持 `SELECT` 与 `INSERT`。当 `query_type` 为 `insert` 的资源组有导入任务正在运行时，当前 BE 节点会为其预留相应的计算资源。
+- `query_type`: 查询类型，目前支持 `SELECT` 与 `INSERT` (2.5及以后)。当 `query_type` 为 `insert` 的资源组有导入任务正在运行时，当前 BE 节点会为其预留相应的计算资源。
 - `source_ip`：发起查询的 IP 地址，类型为 CIDR。
 - `db`：查询所访问的 Database，可以为 `,` 分割的字符串。
 
