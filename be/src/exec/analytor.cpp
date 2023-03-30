@@ -543,7 +543,7 @@ void Analytor::find_partition_end() {
         SCOPED_TIMER(_partition_search_timer);
         if (_use_hash_based_partition) {
             _found_partition_end.second =
-                    _find_first_not_equal_for_hash_baed_partition(_partition_end, start, _found_partition_end.second);
+                    _find_first_not_equal_for_hash_based_partition(_partition_end, start, _found_partition_end.second);
         } else {
             for (auto& column : _partition_columns) {
                 _found_partition_end.second =
@@ -766,7 +766,9 @@ int64_t Analytor::_find_first_not_equal(Column* column, int64_t target, int64_t 
     return end - 1;
 }
 
-int64_t Analytor::_find_first_not_equal_for_hash_baed_partition(int64_t target, int64_t start, int64_t end) {
+int64_t Analytor::_find_first_not_equal_for_hash_based_partition(int64_t target, int64_t start, int64_t end) {
+    // In this case, we cannot compare each column one by one like Analytor::_find_first_not_equal does,
+    // and we must compare all the partition columns for one comparation
     auto compare = [this](size_t left, size_t right) {
         for (auto& column : _partition_columns) {
             auto res = column->compare_at(left, right, *column, 1);
