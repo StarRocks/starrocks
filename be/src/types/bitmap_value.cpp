@@ -43,11 +43,57 @@ static void get_only_value_to_set_and_common_value_to_bitmap(const phmap::flat_h
     }
 }
 
+<<<<<<< HEAD
 BitmapValue::BitmapValue(const BitmapValue& other)
         : _bitmap(other._bitmap == nullptr ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap)),
           _set(other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set)),
+=======
+BitmapValue::BitmapValue() = default;
+
+BitmapValue::BitmapValue(BitmapValue&& other) noexcept
+        : _bitmap(std::move(other._bitmap)), _set(std::move(other._set)), _sv(other._sv), _type(other._type) {
+    other._sv = 0;
+    other._type = EMPTY;
+}
+
+BitmapValue& BitmapValue::operator=(BitmapValue&& other) noexcept {
+    if (this != &other) {
+        this->_bitmap = std::move(other._bitmap);
+        this->_set = std::move(other._set);
+        this->_sv = other._sv;
+        this->_type = other._type;
+        other._sv = 0;
+        other._type = EMPTY;
+    }
+    return *this;
+}
+
+// Construct a bitmap with one element.
+BitmapValue::BitmapValue(uint64_t value) : _sv(value), _type(SINGLE) {}
+
+// Construct a bitmap from serialized data.
+BitmapValue::BitmapValue(const char* src) {
+    bool res = deserialize(src);
+    DCHECK(res);
+}
+
+BitmapValue::BitmapValue(const Slice& src) {
+    deserialize(src.data);
+}
+
+BitmapValue::BitmapValue(const BitmapValue& other, bool deep_copy)
+        : _set(other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set)),
+>>>>>>> 410ff357c ([Enhancement] Constructor of BitmapValue support shallow copy (#20617))
           _sv(other._sv),
-          _type(other._type) {}
+          _type(other._type) {
+    // TODO: _set is usually relatively small, and it needs system performance testing to decide
+    //  whether to change std::unique_ptr to std::shared_ptr and support shallow copy
+    if (deep_copy) {
+        _bitmap = (other._bitmap == nullptr) ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap);
+    } else {
+        _bitmap = (other._bitmap == nullptr) ? nullptr : other._bitmap;
+    }
+}
 
 BitmapValue& BitmapValue::operator=(const BitmapValue& other) {
     if (this != &other) {
