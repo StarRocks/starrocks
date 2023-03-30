@@ -468,6 +468,10 @@ public class DecimalV3FunctionAnalyzer {
                 newFn.setArgsType(argumentTypes);
                 return newFn;
             }
+            case FunctionSet.ARRAY_SLICE: {
+                newFn.setRetType(argumentTypes[0]);
+                return newFn;
+            }
             default:
                 return fn;
         }
