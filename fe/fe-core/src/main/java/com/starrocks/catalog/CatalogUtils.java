@@ -91,7 +91,7 @@ public class CatalogUtils {
             if (table == null) {
                 return;
             }
-            if (table.isLakeTable()) {
+            if (table.isCloudNativeTable()) {
                 throw new AnalysisException(PARSER_ERROR_MSG.unsupportedOpWithInfo("lake table " + db + "." + tableName));
             }
         } finally {

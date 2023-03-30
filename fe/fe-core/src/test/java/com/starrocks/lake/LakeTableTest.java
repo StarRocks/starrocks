@@ -131,7 +131,7 @@ public class LakeTableTest {
         byteArrayOutputStream.close();
 
         // Check lake table and lake tablet
-        Assert.assertTrue(newTable.isLakeTable());
+        Assert.assertTrue(newTable.isCloudNativeTable());
         LakeTable newLakeTable = (LakeTable) newTable;
 
         Assert.assertEquals("s3://test-bucket/1/", newLakeTable.getStoragePath());

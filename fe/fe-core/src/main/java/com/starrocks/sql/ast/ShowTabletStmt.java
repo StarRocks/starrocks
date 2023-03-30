@@ -216,7 +216,7 @@ public class ShowTabletStmt extends ShowStmt {
                 return ImmutableList.of();
             }
 
-            if (table.isCloudNativeTable()) {
+            if (table.isCloudNativeTableOrMaterializedView()) {
                 return LakeTabletsProcNode.TITLE_NAMES;
             } else {
                 return LocalTabletsProcDir.TITLE_NAMES;

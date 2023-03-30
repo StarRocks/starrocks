@@ -123,7 +123,7 @@ public class TableTest {
     public void testGetMysqlType() {
         Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP).getMysqlType());
         Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP_EXTERNAL).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.LAKE).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.CLOUD_NATIVE).getMysqlType());
 
         Assert.assertEquals("BASE TABLE", new Table(TableType.MYSQL).getMysqlType());
         Assert.assertEquals("BASE TABLE", new Table(TableType.BROKER).getMysqlType());
@@ -138,7 +138,7 @@ public class TableTest {
         Assert.assertEquals("VIEW", new Table(TableType.INLINE_VIEW).getMysqlType());
         Assert.assertEquals("VIEW", new Table(TableType.VIEW).getMysqlType());
         Assert.assertEquals("VIEW", new Table(TableType.MATERIALIZED_VIEW).getMysqlType());
-        Assert.assertEquals("VIEW", new Table(TableType.LAKE_MATERIALIZED_VIEW).getMysqlType());
+        Assert.assertEquals("VIEW", new Table(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW).getMysqlType());
 
         Assert.assertEquals("SYSTEM VIEW", new Table(TableType.SCHEMA).getMysqlType());
     }

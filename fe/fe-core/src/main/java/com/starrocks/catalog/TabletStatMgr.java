@@ -186,7 +186,7 @@ public class TabletStatMgr extends LeaderDaemon {
             db.readLock();
             try {
                 for (Table table : db.getTables()) {
-                    if (table.isCloudNativeTable()) {
+                    if (table.isCloudNativeTableOrMaterializedView()) {
                         tables.add((OlapTable) table);
                     }
                 }

@@ -153,7 +153,7 @@ public class StatisticProcDir implements ProcDirInterface {
                             for (Tablet tablet : materializedIndex.getTablets()) {
                                 ++dbTabletNum;
 
-                                if (table.isCloudNativeTable()) {
+                                if (table.isCloudNativeTableOrMaterializedView()) {
                                     continue;
                                 }
 

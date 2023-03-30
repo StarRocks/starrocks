@@ -184,7 +184,7 @@ public class InformationSchemaDataSource {
         propsMap.put(PropertyAnalyzer.PROPERTIES_INMEMORY, String.valueOf(olapTable.isInMemory()));
 
         // enable storage cache && cache ttl
-        if (table.isLakeTable()) {
+        if (table.isCloudNativeTable()) {
             Map<String, String> storageProperties = olapTable.getProperties();
             propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
                     storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE));

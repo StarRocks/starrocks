@@ -347,7 +347,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
             // remove partition info of not-exist partition for snapshot table from version map
             Table snapshotTable = snapshotBaseTables.get(tableId).second;
-            if (snapshotTable.isOlapOrLakeTable()) {
+            if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapshotOlapTable = (OlapTable) snapshotTable;
                 currentTablePartitionInfo.keySet().removeIf(partitionName ->
                         !snapshotOlapTable.getPartitionNames().contains(partitionName));
@@ -520,7 +520,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private boolean supportRefreshByPartition(Table table) {
-        if (table.isLocalTable() || table.isHiveTable() || table.isLakeTable()) {
+        if (table.isLocalTable() || table.isHiveTable() || table.isCloudNativeTable()) {
             return true;
         }
         return false;
@@ -762,7 +762,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     return true;
                 }
 
-                if (snapshotTable.isOlapOrLakeTable()) {
+                if (snapshotTable.isOlapOrCloudNativeTable()) {
                     OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
                     if (snapShotOlapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
                         Set<String> partitionNames = ((OlapTable) table).getPartitionNames();
@@ -938,7 +938,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                         throw new DmlException("Failed to copy olap table: %s", table.getName());
                     }
                     tables.put(table.getId(), Pair.create(baseTableInfo, copied));
-                } else if (table.isLakeTable()) {
+                } else if (table.isCloudNativeTable()) {
                     LakeTable copied = DeepCopy.copyWithGson(table, LakeTable.class);
                     if (copied == null) {
                         throw new DmlException("Failed to copy lake table: %s", table.getName());
