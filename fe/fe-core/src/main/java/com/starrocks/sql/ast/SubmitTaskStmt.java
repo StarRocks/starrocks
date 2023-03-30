@@ -30,17 +30,10 @@ public class SubmitTaskStmt extends DdlStmt {
     private String sqlText;
 
     private CreateTableAsSelectStmt createTableAsSelectStmt;
-<<<<<<< HEAD
-
-    public SubmitTaskStmt(String dbName, String taskName, Map<String, String> properties, int sqlBeginIndex,
-                          CreateTableAsSelectStmt createTableAsSelectStmt) {
-=======
     private InsertStmt insertStmt;
 
     public SubmitTaskStmt(String dbName, String taskName, Map<String, String> properties, int sqlBeginIndex,
-                          CreateTableAsSelectStmt createTableAsSelectStmt, NodePosition pos) {
-        super(pos);
->>>>>>> 53b793751 ([Feature] support submit task as insert statement (#20610))
+                          CreateTableAsSelectStmt createTableAsSelectStmt) {
         this.dbName = dbName;
         this.taskName = taskName;
         this.properties = properties;
@@ -49,8 +42,7 @@ public class SubmitTaskStmt extends DdlStmt {
     }
 
     public SubmitTaskStmt(String dbName, String taskName, Map<String, String> properties, int sqlBeginIndex,
-                          InsertStmt insertStmt, NodePosition pos) {
-        super(pos);
+                          InsertStmt insertStmt) {
         this.dbName = dbName;
         this.taskName = taskName;
         this.properties = properties;

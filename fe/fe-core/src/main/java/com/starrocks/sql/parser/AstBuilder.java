@@ -1284,20 +1284,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
             }
         }
-<<<<<<< HEAD
-        CreateTableAsSelectStmt createTableAsSelectStmt =
-                (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
-        int startIndex = context.createTableAsSelectStatement().start.getStartIndex();
-        if (qualifiedName == null) {
-            return new SubmitTaskStmt(null, null,
-                    properties, startIndex, createTableAsSelectStmt);
-        } else if (qualifiedName.getParts().size() == 1) {
-            return new SubmitTaskStmt(null, qualifiedName.getParts().get(0),
-                    properties, startIndex, createTableAsSelectStmt);
-        } else if (qualifiedName.getParts().size() == 2) {
-            return new SubmitTaskStmt(qualifiedName.getParts().get(0),
-                    qualifiedName.getParts().get(1), properties, startIndex, createTableAsSelectStmt);
-=======
+
         CreateTableAsSelectStmt createTableAsSelectStmt = null;
         InsertStmt insertStmt = null;
         if (context.createTableAsSelectStatement() != null) {
@@ -1313,7 +1300,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             startIndex = context.insertStatement().start.getStartIndex();
         }
 
-        NodePosition pos = createPos(context);
         String dbName;
         String taskName;
         if (qualifiedName == null) {
@@ -1325,14 +1311,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (qualifiedName.getParts().size() == 2) {
             dbName = qualifiedName.getParts().get(0);
             taskName = qualifiedName.getParts().get(1);
->>>>>>> 53b793751 ([Feature] support submit task as insert statement (#20610))
         } else {
             throw new ParsingException("error task name ");
         }
         if (createTableAsSelectStmt != null) {
-            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, createTableAsSelectStmt, pos);
+            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, createTableAsSelectStmt);
         } else {
-            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, insertStmt, pos);
+            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, insertStmt);
         }
     }
 
