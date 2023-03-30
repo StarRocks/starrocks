@@ -73,8 +73,15 @@ void BinaryColumn::append_selective(const Column& src, const uint32_t* indexes, 
     _slices_cache = false;
 }
 
+<<<<<<< HEAD
 void BinaryColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     auto& src_column = down_cast<const BinaryColumn&>(src);
+=======
+template <typename T>
+void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size,
+                                                      bool deep_copy) {
+    auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
+>>>>>>> 52317c7eb (Optimize the performance of bitmap_contains on cross join for non-pipeline engine (#20653))
     auto& src_offsets = src_column.get_offset();
     auto& src_bytes = src_column.get_bytes();
 

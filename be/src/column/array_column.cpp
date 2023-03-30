@@ -98,7 +98,12 @@ void ArrayColumn::append_selective(const Column& src, const uint32_t* indexes, u
     }
 }
 
+<<<<<<< HEAD
 void ArrayColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
+=======
+// TODO(fzh): directly copy elements for un-nested arrays
+void ArrayColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
+>>>>>>> 52317c7eb (Optimize the performance of bitmap_contains on cross join for non-pipeline engine (#20653))
     for (uint32_t i = 0; i < size; i++) {
         append(src, index, 1);
     }

@@ -76,7 +76,13 @@ public:
 
     virtual bool is_array() const { return false; }
 
+<<<<<<< HEAD
     virtual bool low_cardinality() const { return false; }
+=======
+    virtual bool is_map() const { return false; }
+
+    virtual bool is_struct() const { return false; }
+>>>>>>> 52317c7eb (Optimize the performance of bitmap_contains on cross join for non-pipeline engine (#20653))
 
     virtual const uint8_t* raw_data() const = 0;
 
@@ -126,6 +132,26 @@ public:
 
     virtual void append(const Column& src) { append(src, 0, src.size()); }
 
+<<<<<<< HEAD
+=======
+    // replicate a column to align with an array's offset, used for captured columns in lambda functions
+    // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)
+    // FixedLengthColumn, BinaryColumn and ConstColumn override this function for better performance.
+    // TODO(fzh): optimize replicate() for ArrayColumn, ObjectColumn and others.
+    virtual ColumnPtr replicate(const std::vector<uint32_t>& offsets) {
+        auto dest = this->clone_empty();
+        auto dest_size = offsets.size() - 1;
+        DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";
+        dest->reserve(offsets.back());
+        for (int i = 0; i < dest_size; ++i) {
+            dest->append_value_multiple_times(*this, i, offsets[i + 1] - offsets[i], true);
+        }
+        return dest;
+    }
+    // Update elements to default value which hit by the filter
+    virtual void fill_default(const Filter& filter) = 0;
+
+>>>>>>> 52317c7eb (Optimize the performance of bitmap_contains on cross join for non-pipeline engine (#20653))
     // This function will update data from src according to the input indexes. 'indexes' contains
     // the row index will be update
     // For example:
@@ -151,7 +177,8 @@ public:
     }
 
     // This function will get row through 'from' index from src, and copy size elements to this column.
-    virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) = 0;
+    // Currently only `ObjectColumn<BitmapValue>` support shallow copy
+    virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) = 0;
 
     // Append multiple `null` values into this column.
     // Return false if this is a non-nullable column, i.e, if `is_nullable` return false.

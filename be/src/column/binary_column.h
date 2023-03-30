@@ -57,8 +57,13 @@ public:
         }
     }
 
+<<<<<<< HEAD
     bool low_cardinality() const override { return false; }
     bool is_binary() const override { return true; }
+=======
+    bool is_binary() const override { return std::is_same_v<T, uint32_t> != 0; }
+    bool is_large_binary() const override { return std::is_same_v<T, uint64_t> != 0; }
+>>>>>>> 52317c7eb (Optimize the performance of bitmap_contains on cross join for non-pipeline engine (#20653))
 
     const uint8_t* raw_data() const override {
         if (!_slices_cache) {
@@ -140,7 +145,7 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
     bool append_nulls(size_t count) override { return false; }
 
