@@ -29,7 +29,7 @@ TEST_F(BitmapTest, Constructor) {
 
     BitmapValue shallow_bitmap(bitmap, false);
     shallow_bitmap.add(64);
-    ASSERT_EQ(shallow_bitmap.cardinality(), 65);
+    ASSERT_EQ(bitmap.cardinality(), 65);
 }
 
 } // namespace starrocks
