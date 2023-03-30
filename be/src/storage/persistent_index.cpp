@@ -3553,10 +3553,10 @@ Status PersistentIndex::_merge_compaction_advance() {
         for (const auto& [key_size, shard_info] : _l1_vec[i]->_shard_info_by_length) {
             auto [l1_shard_offset, l1_shard_size] = shard_info;
             const auto size = std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
-                                              std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset + l1_shard_size),
+                                              std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size),
                                               0L, [](size_t s, const auto& e) { return s + e.size; });
             const auto usage = std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
-                                               std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset + l1_shard_size),
+                                               std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size),
                                                0L, [](size_t s, const auto& e) { return s + e.data_size; });
 
             auto iter = usage_and_size_stat.find(key_size);
