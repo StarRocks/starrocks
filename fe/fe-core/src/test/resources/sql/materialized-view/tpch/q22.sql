@@ -54,3 +54,4 @@ TOP-N (order by [[29: substring ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[21]
                             SCAN (table[orders] columns[21: o_custkey] predicate[null])
 [end]
+

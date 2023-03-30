@@ -40,6 +40,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv1.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv2.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv3.sql");
+       connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
     }
 
 
@@ -101,8 +102,8 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         runFileUnitTest("materialized-view/tpch/q7-1");
     }
     
+
     @Test
-    @Ignore
     public void testQuery8() {
         runFileUnitTest("materialized-view/tpch/q8");
     }
