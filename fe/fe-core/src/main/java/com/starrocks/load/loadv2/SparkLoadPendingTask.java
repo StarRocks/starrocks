@@ -398,7 +398,7 @@ public class SparkLoadPendingTask extends LoadTask {
             }
             List<String> valueList = idToValues.get(partitionId);
             if (valueList != null && !valueList.isEmpty()) {
-                for (String value: valueList) {
+                for (String value : valueList) {
                     inKeys.add(Lists.newArrayList(value));
                 }
             }
