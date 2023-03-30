@@ -626,6 +626,17 @@ public class ArrayTypeTest extends PlanTestBase {
         assertCContains(plan, "array_sortby[([4: d_1, ARRAY<DECIMAL128(26,2)>, false], " +
                 "[8: d_5, ARRAY<DECIMAL64(16,3)>, true]); " +
                 "args: INVALID_TYPE,INVALID_TYPE; result: ARRAY<DECIMAL128(26,2)>;");
+
+        sql = "select array_slice(d_1, 1) from adec;";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "array_slice[([4: d_1, ARRAY<DECIMAL128(26,2)>, false], 1); " +
+                "args: INVALID_TYPE,BIGINT; result: ARRAY<DECIMAL128(26,2)>;");
+
+        sql = "select array_slice(d_2, 1, 3) from adec;";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "array_slice[([5: d_2, ARRAY<DECIMAL64(4,3)>, true], 1, 3); " +
+                "args: INVALID_TYPE,BIGINT,BIGINT; result: ARRAY<DECIMAL64(4,3)>;");
+
     }
 
     @Test
