@@ -36,6 +36,9 @@ DECLARE_int32(fs_stream_buffer_size_bytes);
 
 namespace starrocks {
 
+std::shared_ptr<StarOSWorker> g_worker;
+std::unique_ptr<staros::starlet::Starlet> g_starlet;
+
 namespace fslib = staros::starlet::fslib;
 
 StarOSWorker::StarOSWorker() : _mtx(), _shards(), _fs_cache(new_lru_cache(1024)) {}
@@ -135,7 +138,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
                                                                                             const Configuration& conf) {
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
-    auto info_or = g_worker->get_shard_info(id);
+    auto info_or = g_starlet->get_shard_info(id);
     if (!info_or.ok()) {
         return info_or.status();
     }
@@ -287,9 +290,6 @@ Status to_status(absl::Status absl_status) {
         return Status::InternalError(fmt::format("starlet err {}", absl_status.message()));
     }
 }
-
-std::shared_ptr<StarOSWorker> g_worker;
-std::unique_ptr<staros::starlet::Starlet> g_starlet;
 
 void init_staros_worker() {
     if (g_starlet.get() != nullptr) {
