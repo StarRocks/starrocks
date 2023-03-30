@@ -135,7 +135,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
                                                                                             const Configuration& conf) {
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
-    auto info_or = g_worker->get_shard_info(id);
+    auto info_or = g_starlet->get_shard_info(id);
     if (!info_or.ok()) {
         return info_or.status();
     }
