@@ -95,8 +95,6 @@ public:
 
     virtual bool is_struct() const { return false; }
 
-    virtual bool low_cardinality() const { return false; }
-
     virtual const uint8_t* raw_data() const = 0;
 
     virtual uint8_t* mutable_raw_data() = 0;
@@ -175,7 +173,7 @@ public:
         DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";
         dest->reserve(offsets.back());
         for (int i = 0; i < dest_size; ++i) {
-            dest->append_value_multiple_times(*this, i, offsets[i + 1] - offsets[i]);
+            dest->append_value_multiple_times(*this, i, offsets[i + 1] - offsets[i], true);
         }
         return dest;
     }
@@ -208,7 +206,8 @@ public:
     }
 
     // This function will get row through 'from' index from src, and copy size elements to this column.
-    virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) = 0;
+    // Currently only `ObjectColumn<BitmapValue>` support shallow copy
+    virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) = 0;
 
     // Append multiple `null` values into this column.
     // Return false if this is a non-nullable column, i.e, if `is_nullable` return false.
