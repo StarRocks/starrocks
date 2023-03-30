@@ -113,7 +113,10 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | strict_mode               | 否           | 是否开启严格模式。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。开启后，如果源数据某列的值为 `NULL`，但是目标表中该列不允许为 `NULL`，则该行数据会被过滤掉。<br>关于该模式的介绍，参见[严格模式](../../../loading/load_concept/strict_mode.md)。|
 | timezone                  | 否           | 该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应[设置时区](../../../administration/timezone.md)中所述的会话级时区。 |
 | merge_condition           | 否           | 用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md)。指定的列必须为非主键列，且仅主键模型表支持条件更新。 |
-| format                    | 否           | 源数据的格式，取值范围：`CSV` 或者 `JSON`。默认值：`CSV`。 |
+| format                    | 否           | 源数据的格式，取值范围：`CSV` 或者 `JSON`。默认值：`CSV`。|
+| trim_space                | 否           | 用于指定是否去除 CSV 文件中列分隔符前后的空格。取值类型：BOOLEAN。默认值：`false`。<br>有些数据库在导出数据为 CSV 文件时，会在列分隔符的前后添加一些空格。根据位置的不同，这些空格可以称为“前导空格”或者“尾随空格”。通过设置该参数，可以使 StarRocks 在导入数据时删除这些不必要的空格。<br>需要注意的是，StarRocks 不会去除被 `enclose` 指定字符括起来的字段内的空格（包括字段的前导空格和尾随空格）。例如，列分隔符是竖线 (`\|`)，`enclose` 指定的字符是双引号 (`"`)：<br> `\| "Love StarRocks" \|`。如果设置 trim_space 为 true，则 StarRocks 处理后的结果数据为 `\|"Love StarRocks"\|`。|
+| enclose                   | 否           | 根据 [RFC4180](https://www.rfc-editor.org/rfc/rfc4180)，用于指定把 CSV 文件中的字段括起来的字符。取值类型：单字节字符。默认值：`NONE`。最常用 `enclose` 字符为单引号 (`'`) 或双引号 (`"`)。<br>被 `enclose` 指定字符括起来的字段内的所有特殊字符（包括行分隔符、列分隔符等）均看做是普通符号。比 RFC4180 标准更进一步的是，StarRocks 提供的 `enclose` 属性支持设置任意单个字节的字符。<br>如果一个字段内包含了 `enclose` 指定字符，则可以使用同样的字符对 `enclose` 指定字符进行转义。例如，在设置了`enclose` 为双引号 (`"`) 时，字段值 `a "quoted" c` 在 CSV 文件中应该写作 `"a ""quoted"" c"`。 |
+| escape                    | 否           | 指定用于转义的字符。用来转义各种特殊字符，比如行分隔符、列分隔符、转义符、`enclose` 指定字符等，使 StarRocks 把这些特殊字符当做普通字符而解析成字段值的一部分。取值类型：单字节字符。默认值：`NONE`。最常用的 `escape` 字符为斜杠 (`\`)，在 SQL 语句中应该写作双斜杠 (`\\`)。<br>`escape` 指定字符同时作用于 `enclose` 指定字符的内部和外部。<br>以下为两个示例：<br><ul><li>当设置 `enclose` 为双引号 (`"`) 、`escape` 为斜杠 (`\`) 时，StarRocks 会把 `"say \"Hello world\""` 解析成一个字段值 `say "Hello world"`。</li><li>假设列分隔符为逗号 (`,`) ，当设置 `escape` 为斜杠 (`\`) ，StarRocks 会把 `a, b\, c` 解析成 `a` 和 `b, c` 两个字段值。</li></ul> |
 | strip_outer_array         | 否           | 是否裁剪 JSON 数据最外层的数组结构。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。真实业务场景中，待导入的 JSON 数据可能在最外层有一对表示数组结构的中括号 `[]`。这种情况下，一般建议您指定该参数取值为 `true`，这样 StarRocks 会剪裁掉外层的中括号 `[]`，并把中括号 `[]` 里的每个内层数组都作为一行单独的数据导入。如果您指定该参数取值为 `false`，则 StarRocks 会把整个 JSON 数据解析成一个数组，并作为一行数据导入。例如，待导入的 JSON 数据为 `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`，如果指定该参数取值为 `true`，则 StarRocks 会把 `{"category" : 1, "author" : 2}` 和 `{"category" : 3, "author" : 4}` 解析成两行数据，并导入到目标表中对应的数据行。 |
 | jsonpaths                 | 否           | 用于指定待导入的字段的名称。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为 JSON 格式。参见[目标表存在基于 JSON 数据进行计算生成的衍生列](#目标表存在基于-json-数据进行计算生成的衍生列)。|
 | json_root                 | 否           | 如果不需要导入整个 JSON 数据，则指定实际待导入 JSON 数据的根节点。参数取值为合法的 JsonPath。默认值为空，表示会导入整个 JSON 数据。具体请参见本文提供的示例[指定实际待导入 JSON 数据的根节点](#指定实际待导入-json-数据的根节点)。 |
@@ -240,7 +243,7 @@ Routine Load 相关配置项，请参见[配置参数](../../../administration/C
 
 假设 Kafka 集群的 Topic `ordertest1` 存在如下 CSV 格式的数据，其中 CSV 数据中列的含义依次是订单编号、支付日期、顾客姓名、国籍、性别、支付金额。
 
-```Plain
+```Plaintext
 2020050802,2020-05-08,Johann Georg Faust,Deutschland,male,895
 2020050802,2020-05-08,Julien Sorel,France,male,893
 2020050803,2020-05-08,Dorian Grey,UK,male,1262
@@ -424,6 +427,39 @@ FROM KAFKA
 (
     "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
     "kafka_topic" = "ordertest1"
+);
+```
+
+#### 设置 `skip_header`、`trim_space`、`enclose` 和 `escape`
+
+假设 Kafka 集群的 Topic `test_csv` 存在如下 CSV 格式的数据，其中 CSV 数据中列的含义依次是订单编号、支付日期、顾客姓名、国籍、性别、支付金额。
+
+```Plain
+ "2020050802" , "2020-05-08" , "Johann Georg Faust" , "Deutschland" , "male" , "895"
+ "2020050802" , "2020-05-08" , "Julien Sorel" , "France" , "male" , "893"
+ "2020050803" , "2020-05-08" , "Dorian Grey\,Lord Henry" , "UK" , "male" , "1262"
+ "2020050901" , "2020-05-09" , "Anna Karenina" , "Russia" , "female" , "175"
+ "2020051001" , "2020-05-10" , "Tess Durbeyfield" , "US" , "female" , "986"
+ "2020051101" , "2020-05-11" , "Edogawa Conan" , "japan" , "male" , "8924"
+```
+
+如果要把 Topic `test_csv` 中所有的数据都导入到 `example_tbl1` 中，并且希望去除被 `enclose` 指定字符括起来的字段前后的空格、 指定 `enclose` 字符为双引号 (")、并且指定 `escape` 字符为斜杠 (`\`)，可以执行如下语句：
+
+```SQL
+CREATE ROUTINE LOAD example_db.example_tbl1_test_csv ON example_tbl1
+COLUMNS TERMINATED BY ",",
+COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
+PROPERTIES
+(
+    "trim_space"="true",
+    "enclose"="\"",
+    "escape"="\\",
+)
+FROM KAFKA
+(
+    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_topic"="test_csv",
+    "property.kafka_default_offsets"="OFFSET_BEGINNING"
 );
 ```
 
