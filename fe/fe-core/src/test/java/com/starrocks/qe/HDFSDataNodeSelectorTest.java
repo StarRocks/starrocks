@@ -36,7 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class HDFSBackendSelectorTest {
+public class HDFSDataNodeSelectorTest {
     @Mocked
     private HdfsScanNode hdfsScanNode;
     @Mocked
@@ -115,8 +115,8 @@ public class HDFSBackendSelectorTest {
         Set<Long> usedBackendIDs = new HashSet<>();
         List<ComputeNode> computeNodes = createComputeNodes(hostNumber);
 
-        HDFSBackendSelector selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
+        HDFSDataNodeSelector selector =
+                new HDFSDataNodeSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
                         ImmutableList.copyOf(computeNodes), false, false, false);
         selector.computeScanRangeAssignment();
 
@@ -164,8 +164,8 @@ public class HDFSBackendSelectorTest {
         Set<Long> usedBackendIDs = new HashSet<>();
         List<ComputeNode> computeNodes = createComputeNodes(hostNumber);
 
-        HDFSBackendSelector selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
+        HDFSDataNodeSelector selector =
+                new HDFSDataNodeSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
                         ImmutableList.copyOf(computeNodes), true, true, false);
         selector.computeScanRangeAssignment();
 

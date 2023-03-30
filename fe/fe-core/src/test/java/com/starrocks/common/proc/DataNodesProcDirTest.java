@@ -38,7 +38,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -47,9 +47,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-public class BackendsProcDirTest {
-    private Backend b1;
-    private Backend b2;
+public class DataNodesProcDirTest {
+    private DataNode b1;
+    private DataNode b2;
 
     @Mocked
     private SystemInfoService systemInfoService;
@@ -62,20 +62,20 @@ public class BackendsProcDirTest {
 
     @Before
     public void setUp() {
-        b1 = new Backend(1000, "host1", 10000);
+        b1 = new DataNode(1000, "host1", 10000);
         b1.updateOnce(10001, 10003, 10005);
-        b2 = new Backend(1001, "host2", 20000);
+        b2 = new DataNode(1001, "host2", 20000);
         b2.updateOnce(20001, 20003, 20005);
 
         new Expectations() {
             {
-                editLog.logAddBackend((Backend) any);
+                editLog.logAddBackend((DataNode) any);
                 minTimes = 0;
 
-                editLog.logDropBackend((Backend) any);
+                editLog.logDropBackend((DataNode) any);
                 minTimes = 0;
 
-                editLog.logBackendStateChange((Backend) any);
+                editLog.logBackendStateChange((DataNode) any);
                 minTimes = 0;
 
                 globalStateMgr.getNextId();
@@ -136,39 +136,39 @@ public class BackendsProcDirTest {
 
     @Test(expected = AnalysisException.class)
     public void testLookupNormal() throws AnalysisException {
-        BackendsProcDir dir;
+        DataNodesProcDir dir;
         ProcNodeInterface node;
 
-        dir = new BackendsProcDir(systemInfoService);
+        dir = new DataNodesProcDir(systemInfoService);
         try {
             node = dir.lookup("1000");
             Assert.assertNotNull(node);
-            Assert.assertTrue(node instanceof BackendProcNode);
+            Assert.assertTrue(node instanceof DataNodeProcNode);
         } catch (AnalysisException e) {
             e.printStackTrace();
             Assert.fail();
         }
 
-        dir = new BackendsProcDir(systemInfoService);
+        dir = new DataNodesProcDir(systemInfoService);
         try {
             node = dir.lookup("1001");
             Assert.assertNotNull(node);
-            Assert.assertTrue(node instanceof BackendProcNode);
+            Assert.assertTrue(node instanceof DataNodeProcNode);
         } catch (AnalysisException e) {
             Assert.fail();
         }
 
-        dir = new BackendsProcDir(systemInfoService);
+        dir = new DataNodesProcDir(systemInfoService);
         node = dir.lookup("1002");
         Assert.fail();
     }
 
     @Test
     public void testLookupInvalid() {
-        BackendsProcDir dir;
+        DataNodesProcDir dir;
         ProcNodeInterface node;
 
-        dir = new BackendsProcDir(systemInfoService);
+        dir = new DataNodesProcDir(systemInfoService);
         try {
             node = dir.lookup(null);
         } catch (AnalysisException e) {
@@ -184,10 +184,10 @@ public class BackendsProcDirTest {
 
     @Test
     public void testFetchResultNormal() throws AnalysisException {
-        BackendsProcDir dir;
+        DataNodesProcDir dir;
         ProcResult result;
 
-        dir = new BackendsProcDir(systemInfoService);
+        dir = new DataNodesProcDir(systemInfoService);
         result = dir.fetchResult();
         Assert.assertNotNull(result);
         Assert.assertTrue(result instanceof BaseProcResult);
@@ -195,6 +195,6 @@ public class BackendsProcDirTest {
 
     @Test    
     public void testIPTitle() {
-        Assert.assertTrue(BackendsProcDir.TITLE_NAMES.get(1).equals("IP"));
+        Assert.assertTrue(DataNodesProcDir.TITLE_NAMES.get(1).equals("IP"));
     }
 }

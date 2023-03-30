@@ -109,4 +109,23 @@ public class SubmitTaskStmtTest {
         ShowResultSet showResult = DDLStmtExecutor.execute(statement, ctx);
         Assert.assertNotNull(showResult);
     }
+
+    @Test
+    public void testSubmitInsert() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.test_insert\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+
+        String sql1 = "submit task task1 as insert into test.test_insert select * from test.test_insert";
+        UtFrameUtils.parseStmtWithNewParser(sql1, starRocksAssert.getCtx());
+
+        String sql2 = "submit task task1 as insert overwrite test.test_insert select * from test.test_insert";
+        UtFrameUtils.parseStmtWithNewParser(sql2, starRocksAssert.getCtx());
+    }
 }

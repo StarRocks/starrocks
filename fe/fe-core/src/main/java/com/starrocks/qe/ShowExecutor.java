@@ -85,8 +85,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
-import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.ComputeNodeProcDir;
+import com.starrocks.common.proc.DataNodesProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.common.proc.LakeTabletsProcNode;
 import com.starrocks.common.proc.LocalTabletsProcDir;
@@ -483,11 +483,15 @@ public class ShowExecutor {
                     }
                 }
             }
+
+            List<List<String>> rowSets = listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
+            resultSet = new ShowResultSet(stmt.getMetaData(), rowSets);
+        } catch (Exception e) {
+            LOG.warn("listMaterializedViews failed:", e);
+            throw e;
         } finally {
             db.readUnlock();
         }
-        List<List<String>> rowSets = listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
-        resultSet = new ShowResultSet(stmt.getMetaData(), rowSets);
     }
 
     public static List<List<String>> listMaterializedViewStatus(
@@ -502,10 +506,8 @@ public class ShowExecutor {
         //  2. Table's type is OLAP, this is the old MV type which the MV table is associated with the base
         //     table and only supports single table in MV definition.
         // TODO: Unify the two cases into one.
-        Map<String, TaskRunStatus> mvNameTaskMap;
-        if (materializedViews.isEmpty()) {
-            mvNameTaskMap = Maps.newHashMap();
-        } else {
+        Map<String, TaskRunStatus> mvNameTaskMap = Maps.newHashMap();
+        if (!materializedViews.isEmpty()) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             TaskManager taskManager = globalStateMgr.getTaskManager();
             mvNameTaskMap = taskManager.showMVLastRefreshTaskRunStatus(dbName);
@@ -1926,7 +1928,7 @@ public class ShowExecutor {
 
     private void handleShowBackends() {
         final ShowBackendsStmt showStmt = (ShowBackendsStmt) stmt;
-        List<List<String>> backendInfos = BackendsProcDir.getClusterBackendInfos();
+        List<List<String>> backendInfos = DataNodesProcDir.getClusterBackendInfos();
         resultSet = new ShowResultSet(showStmt.getMetaData(), backendInfos);
     }
 

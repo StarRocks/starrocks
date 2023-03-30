@@ -1503,6 +1503,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_update_interval_sec = 24L * 60L * 60L;
 
+    @ConfField(mutable = true)
+    public static long statistic_collect_too_many_version_sleep = 600000; // 10min
     /**
      * Enable full statistics collection
      */
@@ -1514,6 +1516,17 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static double statistic_auto_collect_ratio = 0.8;
+
+    // If the health in statistic_full_collect_interval is lower than this value,
+    // choose collect sample statistics first
+    @ConfField(mutable = true)
+    public static double statistic_auto_sample_ratio = 0.3;
+
+    @ConfField(mutable = true)
+    public static long statistic_auto_sample_data_size = 100L * 1024 * 1024 * 1024; // 100G
+
+    @ConfField(mutable = true)
+    public static long statistic_auto_collect_interval = 3600L * 12; // unit: second, default 12h
 
     /**
      * Full statistics collection max data size

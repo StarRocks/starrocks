@@ -48,8 +48,8 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.system.Backend;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.DataNode;
+import com.starrocks.system.DataNodeCoreStat;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -59,8 +59,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-public class BackendsProcDir implements ProcDirInterface {
-    private static final Logger LOG = LogManager.getLogger(BackendsProcDir.class);
+public class DataNodesProcDir implements ProcDirInterface {
+    private static final Logger LOG = LogManager.getLogger(DataNodesProcDir.class);
 
     public static final ImmutableList<String> TITLE_NAMES;
     static {
@@ -79,7 +79,7 @@ public class BackendsProcDir implements ProcDirInterface {
 
     private SystemInfoService clusterInfoService;
 
-    public BackendsProcDir(SystemInfoService clusterInfoService) {
+    public DataNodesProcDir(SystemInfoService clusterInfoService) {
         this.clusterInfoService = clusterInfoService;
     }
 
@@ -112,7 +112,7 @@ public class BackendsProcDir implements ProcDirInterface {
         Stopwatch watch = Stopwatch.createUnstarted();
         List<List<Comparable>> comparableBackendInfos = new LinkedList<>();
         for (long backendId : backendIds) {
-            Backend backend = clusterInfoService.getBackend(backendId);
+            DataNode backend = clusterInfoService.getBackend(backendId);
             if (backend == null) {
                 continue;
             }
@@ -187,7 +187,7 @@ public class BackendsProcDir implements ProcDirInterface {
             backendInfo.add(String.format("%.2f", dataUsed) + " %");
 
             // Num CPU cores
-            backendInfo.add(BackendCoreStat.getCoresOfBe(backendId));
+            backendInfo.add(DataNodeCoreStat.getCoresOfBe(backendId));
 
             backendInfo.add(backend.getNumRunningQueries());
             double memUsedPct = backend.getMemUsedPct();
@@ -240,12 +240,12 @@ public class BackendsProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid backend id format: " + beIdStr);
         }
 
-        Backend backend = clusterInfoService.getBackend(backendId);
+        DataNode backend = clusterInfoService.getBackend(backendId);
         if (backend == null) {
             throw new AnalysisException("Backend[" + backendId + "] does not exist.");
         }
 
-        return new BackendProcNode(backend);
+        return new DataNodeProcNode(backend);
     }
 
 }

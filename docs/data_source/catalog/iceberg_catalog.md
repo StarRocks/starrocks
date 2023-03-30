@@ -2,7 +2,7 @@
 
 An Iceberg catalog is a kind of external catalog that enables you to query data from Apache Iceberg without ingestion.
 
-Also, you can directly transform and load data from Iceberg based on this Iceberg catalog.
+Also, you can directly transform and load data from Iceberg by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Iceberg catalogs. StarRocks supports Iceberg catalogs from v2.4 onwards.
 
 To ensure successful SQL workloads on your Iceberg cluster, your StarRocks cluster needs to integrate with two important components:
 
@@ -343,6 +343,30 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
       "aws.glue.region" = "us-west-2"
   );
   ```
+
+### View Iceberg catalogs
+
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+
+```SQL
+SHOW CATALOGS;
+```
+
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation information of an external catalog. The following example queries the creation information of an Iceberg catalog named `iceberg_catalog_glue`:
+
+```SQL
+SHOW CREATE CATALOG iceberg_catalog_glue;
+```
+
+### Drop an Iceberg catalog
+
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop an Iceberg catalog.
+
+The following example drops an Iceberg catalog named `iceberg_catalog_glue`:
+
+```SQL
+DROP Catalog iceberg_catalog_glue;
+```
 
 ## View the schema of an Iceberg table
 

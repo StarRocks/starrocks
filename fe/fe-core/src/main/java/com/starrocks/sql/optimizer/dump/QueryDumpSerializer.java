@@ -31,7 +31,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.DataNodeCoreStat;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -134,9 +134,9 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         // backend core stat
         JsonObject backendCoreStat = new JsonObject();
         backendCoreStat.addProperty("numOfHardwareCoresPerBe",
-                GsonUtils.GSON.toJson(BackendCoreStat.getNumOfHardwareCoresPerBe()));
+                GsonUtils.GSON.toJson(DataNodeCoreStat.getNumOfHardwareCoresPerBe()));
         backendCoreStat.addProperty("cachedAvgNumOfHardwareCores",
-                BackendCoreStat.getCachedAvgNumOfHardwareCores());
+                DataNodeCoreStat.getCachedAvgNumOfHardwareCores());
         dumpJson.add("be_core_stat", backendCoreStat);
         // exception
         JsonArray exceptions = new JsonArray();

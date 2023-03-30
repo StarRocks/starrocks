@@ -256,12 +256,16 @@ public class Analyzer {
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
             CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
-            QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
-            Analyzer.analyze(queryStatement, context);
-            OriginStatement origStmt = statement.getOrigStmt();
-            String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
-            statement.setSqlText(sqlText);
-            TaskAnalyzer.analyzeSubmitTaskStmt(statement, context);
+            if (createTableAsSelectStmt != null) {
+                QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
+                Analyzer.analyze(queryStatement, context);
+                OriginStatement origStmt = statement.getOrigStmt();
+                String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
+                statement.setSqlText(sqlText);
+                TaskAnalyzer.analyzeSubmitTaskStmt(statement, context);
+            } else {
+                InsertAnalyzer.analyze(statement.getInsertStmt(), context);
+            }
             return null;
         }
 

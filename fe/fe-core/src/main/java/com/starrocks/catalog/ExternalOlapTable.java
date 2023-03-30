@@ -28,8 +28,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
-import com.starrocks.system.Backend;
-import com.starrocks.system.Backend.BackendState;
+import com.starrocks.system.DataNode;
+import com.starrocks.system.DataNode.DataNodeState;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBackendMeta;
 import com.starrocks.thrift.TColumnMeta;
@@ -520,16 +520,16 @@ public class ExternalOlapTable extends OlapTable {
 
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
             for (TBackendMeta backendMeta : backendMetas) {
-                Backend backend = systemInfoService.getBackend(backendMeta.getBackend_id());
+                DataNode backend = systemInfoService.getBackend(backendMeta.getBackend_id());
                 if (backend == null) {
-                    backend = new Backend();
+                    backend = new DataNode();
                     backend.setId(backendMeta.getBackend_id());
                     backend.setHost(backendMeta.getHost());
                     backend.setBePort(backendMeta.getBe_port());
                     backend.setHttpPort(backendMeta.getHttp_port());
                     backend.setBrpcPort(backendMeta.getRpc_port());
                     backend.setAlive(backendMeta.isAlive());
-                    backend.setBackendState(BackendState.values()[backendMeta.getState()]);
+                    backend.setBackendState(DataNodeState.values()[backendMeta.getState()]);
                     systemInfoService.addBackend(backend);
                 } else {
                     backend.setId(backendMeta.getBackend_id());
@@ -537,7 +537,7 @@ public class ExternalOlapTable extends OlapTable {
                     backend.setHttpPort(backendMeta.getHttp_port());
                     backend.setBrpcPort(backendMeta.getRpc_port());
                     backend.setAlive(backendMeta.isAlive());
-                    backend.setBackendState(BackendState.values()[backendMeta.getState()]);
+                    backend.setBackendState(DataNodeState.values()[backendMeta.getState()]);
                 }
             }
             LOG.info("TableMetaSyncer finish meta update. partition build cost: {}ms, " +

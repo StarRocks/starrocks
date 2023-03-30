@@ -42,21 +42,21 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TStorageMedium;
 
 import java.util.List;
 import java.util.Map;
 
-public class BackendProcNode implements ProcNodeInterface {
+public class DataNodeProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("RootPath").add("DataUsedCapacity").add("OtherUsedCapacity").add("AvailCapacity")
             .add("TotalCapacity").add("TotalUsedPct").add("State").add("PathHash").add("StorageMedium")
             .add("TabletNum").add("DataTotalCapacity").add("DataUsedPct").build();
 
-    private Backend backend;
+    private DataNode backend;
 
-    public BackendProcNode(Backend backend) {
+    public DataNodeProcNode(DataNode backend) {
         this.backend = backend;
     }
 

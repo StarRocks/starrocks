@@ -179,9 +179,9 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AuthUpgradeInfo;
-import com.starrocks.persist.BackendIdsUpdateInfo;
-import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.persist.DataNodeIdsUpdateInfo;
+import com.starrocks.persist.DataNodeTabletsInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -262,7 +262,7 @@ import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
@@ -513,7 +513,7 @@ public class GlobalStateMgr {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = getOrCreateSystemInfo(clusterId);
         for (Long id : systemInfoService.getBackendIds(false)) {
-            Backend backend = systemInfoService.getBackend(id);
+            DataNode backend = systemInfoService.getBackend(id);
             nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
         }
         return nodesInfo;
@@ -3446,7 +3446,7 @@ public class GlobalStateMgr {
         localMetastore.initDefaultCluster();
     }
 
-    public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
+    public void replayUpdateClusterAndBackends(DataNodeIdsUpdateInfo info) {
         localMetastore.replayUpdateClusterAndBackends(info);
     }
 
@@ -3517,7 +3517,7 @@ public class GlobalStateMgr {
         nodeMgr.setFrontendConfig(configs);
     }
 
-    public void replayBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
+    public void replayBackendTabletsInfo(DataNodeTabletsInfo backendTabletsInfo) {
         localMetastore.replayBackendTabletsInfo(backendTabletsInfo);
     }
 

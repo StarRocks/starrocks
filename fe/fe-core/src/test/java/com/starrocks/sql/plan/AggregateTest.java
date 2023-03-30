@@ -18,7 +18,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.DataNodeCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -202,7 +202,7 @@ public class AggregateTest extends PlanTestBase {
             int cpuCores = 8;
             int expectedTotalDop = cpuCores / 2;
             {
-                BackendCoreStat.setDefaultCoresOfBe(cpuCores);
+                DataNodeCoreStat.setDefaultCoresOfBe(cpuCores);
                 Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
                 String explainString = plan.second.getExplainString(TExplainLevel.NORMAL);
                 assertContains(explainString, "2:Project\n" +
@@ -253,7 +253,7 @@ public class AggregateTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setPipelineDop(originPipelineDop);
             connectContext.getSessionVariable().setPipelineDop(originInstanceNum);
-            BackendCoreStat.setDefaultCoresOfBe(1);
+            DataNodeCoreStat.setDefaultCoresOfBe(1);
         }
     }
 
@@ -1812,19 +1812,21 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
-    public void testSimpleMinMaxAggRewrite() throws Exception {
+    public void testSimpleAggRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
         // normal case
-        String sql = "select min(t1b),max(t1b),min(id_datetime) from test_all_type_not_null";
+        String sql = "select min(t1b),max(t1b),min(id_datetime),count(t1b),count(t1c) from test_all_type_not_null";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
-                "  |  output: min(min_t1b), max(max_t1b), min(min_id_datetime)\n" +
+                "  |  output: min(min_t1b), max(max_t1b), min(min_id_datetime), sum(count_t1b), sum(count_t1b)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:MetaScan\n" +
                 "     Table: test_all_type_not_null\n" +
-                "     <id 16> : min_id_datetime\n" +
-                "     <id 14> : min_t1b\n" +
-                "     <id 15> : max_t1b");
+                "     <id 16> : min_t1b\n" +
+                "     <id 17> : max_t1b\n" +
+                "     <id 18> : min_id_datetime\n" +
+                "     <id 19> : count_t1b");
 
         // The following cases will not use MetaScan because some conditions are not met
         // with group by key
@@ -1880,6 +1882,21 @@ public class AggregateTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: min(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        sql = "select count(t1b) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with count distinct, shouldn't apply RewriteSimpleAggToMetaScanRule
+        sql = "select count(distinct t1b) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: t1b)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
@@ -2198,5 +2215,28 @@ public class AggregateTest extends PlanTestBase {
 
         plan = getFragmentPlan(sql);
         assertNotContains(plan, "multi_distinct_count");
+    }
+
+
+    @Test
+    public void testRemoveExchange() throws Exception {
+        int oldValue = connectContext.getSessionVariable().getNewPlannerAggStage();
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "select sum(v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)");
+
+        sql = "select sum(v1 + v2) from t0 group by v3";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 5> : 5: sum\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(4: expr)");
+        connectContext.getSessionVariable().setNewPlanerAggStage(oldValue);
     }
 }

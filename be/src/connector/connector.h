@@ -62,6 +62,8 @@ public:
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     Status parse_runtime_filters(RuntimeState* state);
     void update_has_any_predicate();
+    // Called frequently, don't do heavy work
+    virtual const std::string get_custom_coredump_msg() const { return ""; }
 
 protected:
     int64_t _read_limit = -1; // no limit
@@ -116,6 +118,8 @@ public:
     virtual Status init(ObjectPool* pool, RuntimeState* state) { return Status::OK(); }
 
     const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
+
+    virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
 
 protected:
     std::vector<ExprContext*> _partition_exprs;

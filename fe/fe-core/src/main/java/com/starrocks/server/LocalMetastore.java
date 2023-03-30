@@ -44,6 +44,8 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -60,6 +62,8 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DynamicPartitionProperty;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InfoSchemaDb;
@@ -115,9 +119,9 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
-import com.starrocks.persist.BackendIdsUpdateInfo;
-import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.DataNodeIdsUpdateInfo;
+import com.starrocks.persist.DataNodeTabletsInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
@@ -195,7 +199,7 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.system.Backend;
+import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -797,27 +801,33 @@ public class LocalMetastore implements ConnectorMetadata {
     @Override
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
+        db.readLock();
+        Map<String, String> tableProperties;
+        OlapTable olapTable;
+        PartitionInfo partitionInfo;
+        try {
+            Table table = db.getTable(tableName);
+            CatalogUtils.checkTableExist(db, tableName);
+            CatalogUtils.checkNativeTable(db, table);
+            olapTable = (OlapTable) table;
+            tableProperties = olapTable.getTableProperty().getProperties();
+            partitionInfo = olapTable.getPartitionInfo();
+
+        } finally {
+            db.readUnlock();
+        }
         PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
         if (partitionDesc instanceof SingleItemListPartitionDesc
                 || partitionDesc instanceof MultiItemListPartitionDesc
                 || partitionDesc instanceof SingleRangePartitionDesc) {
-            addPartitions(db, tableName, ImmutableList.of(partitionDesc),
-                    addPartitionClause);
-        } else if (partitionDesc instanceof MultiRangePartitionDesc) {
-            db.readLock();
-            RangePartitionInfo rangePartitionInfo;
-            Map<String, String> tableProperties;
-            try {
-                Table table = db.getTable(tableName);
-                CatalogUtils.checkTableExist(db, tableName);
-                CatalogUtils.checkNativeTable(db, table);
-                OlapTable olapTable = (OlapTable) table;
-                tableProperties = olapTable.getTableProperty().getProperties();
-                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            } finally {
-                db.readUnlock();
+            if (partitionInfo.getType() == PartitionType.EXPR_RANGE && !partitionDesc.isSystem()) {
+                throw new DdlException("Automatically partitioned tables only support the syntax " +
+                        "for adding partitions in batches.");
             }
+            addPartitions(db, tableName, ImmutableList.of(partitionDesc), addPartitionClause);
+        } else if (partitionDesc instanceof MultiRangePartitionDesc) {
+            RangePartitionInfo rangePartitionInfo;
+            rangePartitionInfo = (RangePartitionInfo) partitionInfo;
 
             if (rangePartitionInfo == null) {
                 throw new DdlException("Alter batch get partition info failed.");
@@ -830,6 +840,16 @@ public class LocalMetastore implements ConnectorMetadata {
 
             Column firstPartitionColumn = partitionColumns.get(0);
             MultiRangePartitionDesc multiRangePartitionDesc = (MultiRangePartitionDesc) partitionDesc;
+            boolean isAutoPartitionTable = false;
+            if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
+                isAutoPartitionTable = true;
+                ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+                Expr expr = exprRangePartitionInfo.getPartitionExprs().get(0);
+                if (expr instanceof FunctionCallExpr) {
+                    FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                    checkAutoPartitionTableLimit(functionCallExpr, multiRangePartitionDesc);
+                }
+            }
             Map<String, String> properties = addPartitionClause.getProperties();
             if (properties == null) {
                 properties = Maps.newHashMap();
@@ -839,12 +859,30 @@ public class LocalMetastore implements ConnectorMetadata {
                         tableProperties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
             }
             List<SingleRangePartitionDesc> singleRangePartitionDescs = multiRangePartitionDesc
-                    .convertToSingle(firstPartitionColumn.getType(), properties);
-            List<PartitionDesc> partitionDescs = singleRangePartitionDescs.stream().map(item -> {
-                PartitionDesc desc = item;
-                return desc;
-            }).collect(Collectors.toList());
+                    .convertToSingle(isAutoPartitionTable, firstPartitionColumn.getType(), properties);
+            List<PartitionDesc> partitionDescs = singleRangePartitionDescs.stream()
+                    .map(item -> (PartitionDesc) item).collect(Collectors.toList());
             addPartitions(db, tableName, partitionDescs, addPartitionClause);
+        }
+    }
+
+    private void checkAutoPartitionTableLimit(FunctionCallExpr functionCallExpr,
+                                              MultiRangePartitionDesc multiRangePartitionDesc) throws DdlException {
+        String descGranularity = multiRangePartitionDesc.getTimeUnit();
+        String functionName = functionCallExpr.getFnName().getFunction();
+        if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)) {
+            Expr expr = functionCallExpr.getParams().exprs().get(0);
+            String functionGranularity = ((StringLiteral) expr).getStringValue();
+            if (!descGranularity.equalsIgnoreCase(functionGranularity)) {
+                throw new DdlException("The granularity of the auto-partitioned table granularity(" +
+                        functionGranularity + ") should be consistent with the increased partition granularity(" +
+                        descGranularity + ").");
+            }
+        } else if (FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName)) {
+            throw new DdlException("time_slice does not support pre-created partitions");
+        }
+        if (multiRangePartitionDesc.getStep() > 1) {
+            throw new DdlException("The step of the auto-partitioned table should be 1");
         }
     }
 
@@ -1855,7 +1893,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 for (Map.Entry<Long, Long> mark : firstThree) {
                     sb.append(mark.getValue()); // TabletId
                     sb.append('(');
-                    Backend backend = stateMgr.getClusterInfo().getBackend(mark.getKey());
+                    DataNode backend = stateMgr.getClusterInfo().getBackend(mark.getKey());
                     sb.append(backend != null ? backend.getHost() : "N/A");
                     sb.append(") ");
                 }
@@ -2044,15 +2082,26 @@ public class LocalMetastore implements ConnectorMetadata {
 
         List<List<Long>> backendsPerBucketSeq = null;
         ColocateTableIndex.GroupId groupId = null;
+        boolean initBucketSeqWithSameOrigNameGroup = false;
         if (colocateTableIndex.isColocateTable(tabletMeta.getTableId())) {
             // if this is a colocate table, try to get backend seqs from colocation index.
             Database db = getDb(tabletMeta.getDbId());
             groupId = colocateTableIndex.getGroup(tabletMeta.getTableId());
-            // Use db write lock here to make sure the backendsPerBucketSeq is consistent when the backendsPerBucketSeq is updating.
+            // Use db write lock here to make sure the backendsPerBucketSeq is
+            // consistent when the backendsPerBucketSeq is updating.
             // This lock will release very fast.
             db.writeLock();
             try {
                 backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+                if (backendsPerBucketSeq.isEmpty()) {
+                    List<ColocateTableIndex.GroupId> colocateWithGroupsInOtherDb =
+                            colocateTableIndex.getColocateWithGroupsInOtherDb(groupId, db.getId());
+                    if (!colocateWithGroupsInOtherDb.isEmpty()) {
+                        backendsPerBucketSeq =
+                                colocateTableIndex.getBackendsPerBucketSeq(colocateWithGroupsInOtherDb.get(0));
+                        initBucketSeqWithSameOrigNameGroup = true;
+                    }
+                }
             } finally {
                 db.writeUnlock();
             }
@@ -2101,7 +2150,13 @@ public class LocalMetastore implements ConnectorMetadata {
                     chosenBackendIds.size() + " vs. " + replicationNum);
         }
 
-        if (groupId != null && chooseBackendsArbitrary) {
+        // In the following two situations, we should set the bucket seq for colocate group and persist the info,
+        //   1. This is the first time we add a table to colocate group, and it doesn't have the same original name
+        //      with colocate group in other database.
+        //   2. It's indeed the first time, but it should colocate with group in other db
+        //      (because of having the same original name), we should use the bucket
+        //      seq of other group to initialize our own.
+        if ((groupId != null && chooseBackendsArbitrary) || initBucketSeqWithSameOrigNameGroup) {
             colocateTableIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
             ColocatePersistInfo info =
                     ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
@@ -2957,7 +3012,7 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.getAlterInstance().processAlterMaterializedView(stmt);
     }
 
-    private void executeRefreshMvTask(String dbName, MaterializedView materializedView, ExecuteOption executeOption)
+    private String executeRefreshMvTask(String dbName, MaterializedView materializedView, ExecuteOption executeOption)
             throws DdlException {
         MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
         if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
@@ -2970,8 +3025,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 TaskBuilder.updateTaskInfo(task, materializedView);
                 taskManager.createTask(task, false);
             }
-            taskManager.executeTask(mvTaskName, executeOption);
+            return taskManager.executeTask(mvTaskName, executeOption).getQueryId();
         }
+        return null;
     }
 
     private MaterializedView getMaterializedViewToRefresh(String dbName, String mvName)
@@ -2997,8 +3053,8 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
-                                        int priority, boolean mergeRedundant, boolean isManual)
+    public String refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
+                                          int priority, boolean mergeRedundant, boolean isManual)
             throws DdlException, MetaNotFoundException {
         MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
 
@@ -3011,11 +3067,12 @@ public class LocalMetastore implements ConnectorMetadata {
         if (isManual) {
             executeOption.setManual();
         }
-        executeRefreshMvTask(dbName, materializedView, executeOption);
+        return executeRefreshMvTask(dbName, materializedView, executeOption);
     }
 
     @Override
-    public void refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement, int priority)
+    public String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
+                                          int priority)
             throws DdlException, MetaNotFoundException {
         String dbName = refreshMaterializedViewStatement.getMvName().getDb();
         String mvName = refreshMaterializedViewStatement.getMvName().getTbl();
@@ -3023,7 +3080,7 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionRangeDesc range =
                 refreshMaterializedViewStatement.getPartitionRangeDesc();
 
-        refreshMaterializedView(dbName, mvName, force, range, priority, false, true);
+        return refreshMaterializedView(dbName, mvName, force, range, priority, false, true);
     }
 
     @Override
@@ -3751,8 +3808,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
-        final List<Backend> defaultClusterBackends = systemInfoService.getBackends();
-        for (Backend backend : defaultClusterBackends) {
+        final List<DataNode> defaultClusterBackends = systemInfoService.getBackends();
+        for (DataNode backend : defaultClusterBackends) {
             backendList.add(backend.getId());
         }
 
@@ -3761,7 +3818,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // make sure one host hold only one backend.
         Set<String> beHost = Sets.newHashSet();
-        for (Backend be : defaultClusterBackends) {
+        for (DataNode be : defaultClusterBackends) {
             if (beHost.contains(be.getHost())) {
                 // we can not handle this situation automatically.
                 LOG.error("found more than one backends in same host: {}", be.getHost());
@@ -3798,14 +3855,14 @@ public class LocalMetastore implements ConnectorMetadata {
         return checksum;
     }
 
-    public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
+    public void replayUpdateClusterAndBackends(DataNodeIdsUpdateInfo info) {
         for (long id : info.getBackendList()) {
-            final Backend backend = stateMgr.getClusterInfo().getBackend(id);
+            final DataNode backend = stateMgr.getClusterInfo().getBackend(id);
             final Cluster cluster = defaultCluster;
             cluster.removeBackend(id);
             backend.setDecommissioned(false);
             backend.clearClusterName();
-            backend.setBackendState(Backend.BackendState.free);
+            backend.setBackendState(DataNode.DataNodeState.free);
         }
     }
 
@@ -4063,7 +4120,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public void replayBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
+    public void replayBackendTabletsInfo(DataNodeTabletsInfo backendTabletsInfo) {
         List<Pair<Long, Integer>> tabletsWithSchemaHash = backendTabletsInfo.getTabletSchemaHash();
         if (!tabletsWithSchemaHash.isEmpty()) {
             // In previous version, we save replica info in `tabletsWithSchemaHash`,
@@ -4442,7 +4499,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public Long allocateAutoIncrementId(Long tableId, Long rows) {
-        Long oldId = tableIdToIncrementId.putIfAbsent(tableId, 0L);
+        Long oldId = tableIdToIncrementId.putIfAbsent(tableId, 1L);
         if (oldId == null) {
             oldId = tableIdToIncrementId.get(tableId);
         }

@@ -1306,14 +1306,14 @@ private:
     template <LogicalType ResultType, LogicalType ElementType, typename FUNC>
     static StatusOr<ColumnPtr> process(FunctionContext* context, const Columns& columns) {
         DCHECK_EQ(1, columns.size());
-        const ColumnPtr& array_column = columns[0]; // array
-        if (array_column->only_null()) {
-            return array_column;
+        if (columns[0]->only_null()) {
+            return columns[0];
         }
 
         NullColumnPtr array_null = nullptr;
         ArrayColumn* array_col = nullptr;
 
+        auto array_column = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
         if (array_column->is_nullable()) {
             auto nullable = down_cast<NullableColumn*>(array_column.get());
 

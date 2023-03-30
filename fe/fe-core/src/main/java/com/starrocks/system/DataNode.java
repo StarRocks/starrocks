@@ -63,15 +63,15 @@ import java.util.Set;
  * This class extends the primary identifier of a Backend with ephemeral state,
  * eg usage information, current administrative state etc.
  */
-public class Backend extends ComputeNode {
+public class DataNode extends ComputeNode {
 
-    public enum BackendState {
+    public enum DataNodeState {
         using, /* backend belongs to a cluster*/
         offline,
         free /* backend is not belong to any clusters */
     }
 
-    private static final Logger LOG = LogManager.getLogger(Backend.class);
+    private static final Logger LOG = LogManager.getLogger(DataNode.class);
 
     // rootPath -> DiskInfo
     private volatile ImmutableMap<String, DiskInfo> disksRef;
@@ -84,15 +84,15 @@ public class Backend extends ComputeNode {
     // this field is set by tablet report, and just for metric monitor, no need to persist.
     private volatile long tabletMaxCompactionScore = 0;
 
-    // additional backendStatus information for BE, display in JSON format
-    private final BackendStatus backendStatus = new BackendStatus();
+    // additional dataNodeStatus information for BE, display in JSON format
+    private final DataNodeStatus dataNodeStatus = new DataNodeStatus();
 
-    public Backend() {
+    public DataNode() {
         super();
         this.disksRef = ImmutableMap.of();
     }
 
-    public Backend(long id, String host, int heartbeatPort) {
+    public DataNode(long id, String host, int heartbeatPort) {
         super(id, host, heartbeatPort);
         this.disksRef = ImmutableMap.of();
     }
@@ -294,12 +294,12 @@ public class Backend extends ComputeNode {
         }
     }
 
-    public BackendStatus getBackendStatus() {
-        return backendStatus;
+    public DataNodeStatus getBackendStatus() {
+        return dataNodeStatus;
     }
 
-    public static Backend read(DataInput in) throws IOException {
-        Backend backend = new Backend();
+    public static DataNode read(DataInput in) throws IOException {
+        DataNode backend = new DataNode();
         backend.readFields(in);
         return backend;
     }
@@ -368,7 +368,7 @@ public class Backend extends ComputeNode {
             setBackendState(in.readInt());
             setDecommissionType(in.readInt());
         } else {
-            setBackendState(BackendState.using.ordinal());
+            setBackendState(DataNodeState.using.ordinal());
             setDecommissionType(DecommissionType.SystemDecommission.ordinal());
         }
 
@@ -387,11 +387,11 @@ public class Backend extends ComputeNode {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof Backend)) {
+        if (!(obj instanceof DataNode)) {
             return false;
         }
 
-        Backend backend = (Backend) obj;
+        DataNode backend = (DataNode) obj;
 
         return (getId() == backend.getId()) && (getHost().equals(backend.getHost()))
                 && (getHeartbeatPort() == backend.getHeartbeatPort())
@@ -437,11 +437,11 @@ public class Backend extends ComputeNode {
     /**
      * Note: This class must be a POJO in order to display in JSON format
      * Add additional information in the class to show in `show backends`
-     * if just change new added backendStatus, you can do like following
-     * BackendStatus status = Backend.getBackendStatus();
+     * if just change new added dataNodeStatus, you can do like following
+     * DataNodeStatus status = Backend.getBackendStatus();
      * status.newItem = xxx;
      */
-    public class BackendStatus {
+    public class DataNodeStatus {
         // this will be output as json, so not using FeConstants.null_string;
         public String lastSuccessReportTabletsTime = "N/A";
     }

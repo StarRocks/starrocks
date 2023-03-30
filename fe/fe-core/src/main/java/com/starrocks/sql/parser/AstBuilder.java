@@ -614,7 +614,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
             List<String> columnList = checkAndExtractPartitionCol(functionCallExpr, columnDefs);
-            checkGranularity(functionCallExpr, currentGranularity);
+            checkAutoPartitionTableLimit(functionCallExpr, currentGranularity);
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
             return new ExpressionPartitionDesc(rangePartitionDesc, functionCallExpr);
         }
@@ -638,7 +638,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return partitionDesc;
     }
 
-    private void checkGranularity(FunctionCallExpr functionCallExpr, String prePartitionGranularity) {
+    private void checkAutoPartitionTableLimit(FunctionCallExpr functionCallExpr, String prePartitionGranularity) {
         if (prePartitionGranularity == null) {
             return;
         }
@@ -651,12 +651,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         "batch creation in advance should be consistent", functionCallExpr.getPos());
             }
         } else if (FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName)) {
-            Expr expr = functionCallExpr.getParams().exprs().get(2);
-            String functionGranularity = ((StringLiteral) expr).getStringValue();
-            if (!prePartitionGranularity.equalsIgnoreCase(functionGranularity)) {
-                throw new ParsingException("The partition granularity of automatic partition table " +
-                        "batch creation in advance should be consistent", functionCallExpr.getPos());
-            }
+            throw new ParsingException("time_slice does not support pre-created partitions", functionCallExpr.getPos());
         }
     }
 
@@ -1331,23 +1326,41 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
             }
         }
-        CreateTableAsSelectStmt createTableAsSelectStmt =
-                (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
-        int startIndex = context.createTableAsSelectStatement().start.getStartIndex();
+        CreateTableAsSelectStmt createTableAsSelectStmt = null;
+        InsertStmt insertStmt = null;
+        if (context.createTableAsSelectStatement() != null) {
+            createTableAsSelectStmt = (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
+        } else if (context.insertStatement() != null) {
+            insertStmt = (InsertStmt) visit(context.insertStatement());
+        }
+
+        int startIndex = 0;
+        if (createTableAsSelectStmt != null) {
+            startIndex = context.createTableAsSelectStatement().start.getStartIndex();
+        } else {
+            startIndex = context.insertStatement().start.getStartIndex();
+        }
 
         NodePosition pos = createPos(context);
+        String dbName;
+        String taskName;
         if (qualifiedName == null) {
-            return new SubmitTaskStmt(null, null,
-                    properties, startIndex, createTableAsSelectStmt, pos);
+            dbName = null;
+            taskName = null;
         } else if (qualifiedName.getParts().size() == 1) {
-            return new SubmitTaskStmt(null, qualifiedName.getParts().get(0),
-                    properties, startIndex, createTableAsSelectStmt, pos);
+            dbName = null;
+            taskName = qualifiedName.getParts().get(0);
         } else if (qualifiedName.getParts().size() == 2) {
-            return new SubmitTaskStmt(qualifiedName.getParts().get(0),
-                    qualifiedName.getParts().get(1), properties, startIndex, createTableAsSelectStmt, pos);
+            dbName = qualifiedName.getParts().get(0);
+            taskName = qualifiedName.getParts().get(1);
         } else {
             throw new ParsingException(PARSER_ERROR_MSG.invalidTaskFormat(qualifiedName.toString()),
                     qualifiedName.getPos());
+        }
+        if (createTableAsSelectStmt != null) {
+            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, createTableAsSelectStmt, pos);
+        } else {
+            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, insertStmt, pos);
         }
     }
 

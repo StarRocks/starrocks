@@ -2,7 +2,7 @@
 
 A Delta Lake catalog is a kind of external catalog that enables you to query data from Apache Delta Lake without ingestion.
 
-Also, you can directly transform and load data from Delta Lake based on this Delta Lake catalog.
+Also, you can directly transform and load data from Delta Lake by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Delta Lake catalogs. StarRocks supports Delta Lake catalogs from v2.5 onwards.
 
 To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cluster needs to integrate with two important components:
 
@@ -326,6 +326,30 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
       "aws.glue.region" = "us-west-2"
   );
   ```
+
+### View Delta Lake catalogs
+
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+
+```SQL
+SHOW CATALOGS;
+```
+
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation information of an external catalog. The following example queries the creation information of a Delta Lake catalog named `deltalake_catalog_glue`:
+
+```SQL
+SHOW CREATE CATALOG deltalake_catalog_glue;
+```
+
+### Drop a Delta Lake catalog
+
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop a Delta Lake catalog.
+
+The following example drops a Delta Lake catalog named `deltalake_catalog_glue`:
+
+```SQL
+DROP Catalog deltalake_catalog_glue;
+```
 
 ## View the schema of a Delta Lake table
 
