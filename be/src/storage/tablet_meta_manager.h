@@ -181,7 +181,7 @@ public:
                                            const std::function<bool(uint32_t, int64_t, std::string_view)>& func);
 
     static Status del_vector_iterate(KVStore* meta, TTabletId tablet_id, uint32_t lower, uint32_t upper,
-                                           const std::function<bool(uint32_t, int64_t, std::string_view)>& func);
+                                     const std::function<bool(uint32_t, int64_t, std::string_view)>& func);
     // The first element of pair is segment id, the second element of pair is version.
     using DeleteVectorList = std::vector<std::pair<uint32_t, int64_t>>;
 

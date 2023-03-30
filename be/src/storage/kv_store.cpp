@@ -271,7 +271,7 @@ Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string
             if (!ret) {
                 break;
             }
-            if (MonotonicMillis() - t_start > timeout_secs * 1000) {
+            if (MonotonicMillis() - t_start > timeout_sec * 1000) {
                 LOG(WARNING) << "rocksdb iterate timeout: " << MonotonicMillis() - t_start
                              << ", limit: " << timeout_sec * 1000;
                 return Status::TimedOut("rocksdb iterate timeout");
