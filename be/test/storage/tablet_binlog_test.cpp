@@ -128,10 +128,10 @@ TEST_F(TabletBinlogTest, test_generate_binlog) {
     }
 
     BinlogManager* binlog_manager = _tablet->binlog_manager();
-    std::map<int128_t, BinlogFileMetaPBPtr>& lsn_map = binlog_manager->file_metas();
+    std::map<int128_t, BinlogFilePtr>& lsn_map = binlog_manager->alive_binlog_files();
     std::vector<BinlogFileMetaPBPtr> file_metas;
     for (auto it : lsn_map) {
-        file_metas.push_back(it.second);
+        file_metas.push_back(it.second->file_meta());
     }
     verify_dup_key_multiple_versions(version_infos, _tablet->schema_hash_path(), file_metas);
 }
@@ -159,10 +159,10 @@ TEST_F(TabletBinlogTest, test_publish_out_of_order) {
     }
 
     BinlogManager* binlog_manager = _tablet->binlog_manager();
-    std::map<int128_t, BinlogFileMetaPBPtr>& lsn_map = binlog_manager->file_metas();
+    std::map<int128_t, BinlogFilePtr>& lsn_map = binlog_manager->alive_binlog_files();
     std::vector<BinlogFileMetaPBPtr> file_metas;
     for (auto it : lsn_map) {
-        file_metas.push_back(it.second);
+        file_metas.push_back(it.second->file_meta());
     }
     verify_dup_key_multiple_versions(version_infos, _tablet->schema_hash_path(), file_metas);
 }
