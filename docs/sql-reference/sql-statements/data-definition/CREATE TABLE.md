@@ -80,7 +80,7 @@ This aggregation type applies ONLY to the aggregation model whose key_desc type 
 - **DEFAULT <default_value>**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
 - **DEFAULT (\<expr\>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
 
-- **AUTO_INCREMENT**：specifies an auto-increment column. The data types of the `AUTO_INCREMENT` columns' must be BIGINT.  The auto-incremented ID starts from 1 and increases by 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](../../sql-statements/auto_increment.md).
+- **AUTO_INCREMENT**：specifies an auto-increment column. The data types of the `AUTO_INCREMENT` columns' must be BIGINT. The auto-incremented ID starts from 1 and increases by 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](../../sql-statements/auto_increment.md).
 
 ### index_definition
 
