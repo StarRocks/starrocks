@@ -117,6 +117,7 @@ protected:
 };
 
 std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable);
+std::unique_ptr<Converter> get_default_value_converter();
 
 } // namespace csv
 } // namespace starrocks

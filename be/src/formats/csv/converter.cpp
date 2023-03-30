@@ -21,6 +21,7 @@
 #include "formats/csv/datetime_converter.h"
 #include "formats/csv/decimalv2_converter.h"
 #include "formats/csv/decimalv3_converter.h"
+#include "formats/csv/default_value_converter.h"
 #include "formats/csv/float_converter.h"
 #include "formats/csv/json_converter.h"
 #include "formats/csv/nullable_converter.h"
@@ -66,27 +67,7 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
         return std::make_unique<DecimalV3Converter<int128_t>>(t.precision, t.scale);
     case TYPE_JSON:
         return std::make_unique<JsonConverter>();
-    case TYPE_DECIMAL:
-    case TYPE_UNKNOWN:
-    case TYPE_NULL:
-    case TYPE_BINARY:
-    case TYPE_VARBINARY:
-    case TYPE_STRUCT:
-    case TYPE_MAP:
-    case TYPE_HLL:
-    case TYPE_PERCENTILE:
-    case TYPE_TIME:
-    case TYPE_OBJECT:
-    case TYPE_FUNCTION:
-    case TYPE_UNSIGNED_TINYINT:
-    case TYPE_UNSIGNED_SMALLINT:
-    case TYPE_UNSIGNED_INT:
-    case TYPE_UNSIGNED_BIGINT:
-    case TYPE_DISCRETE_DOUBLE:
-    case TYPE_DATE_V1:
-    case TYPE_DATETIME_V1:
-    case TYPE_NONE:
-    case TYPE_MAX_VALUE:
+    default:
         break;
     }
     return nullptr;
@@ -98,6 +79,10 @@ std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool n
         return nullptr;
     }
     return nullable ? std::make_unique<NullableConverter>(std::move(c)) : std::move(c);
+}
+
+std::unique_ptr<Converter> get_default_value_converter() {
+    return std::make_unique<DefaultValueConverter>();
 }
 
 } // namespace starrocks::csv

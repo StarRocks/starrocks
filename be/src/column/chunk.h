@@ -120,6 +120,8 @@ public:
 
     void append_tuple_column(const ColumnPtr& column, TupleId tuple_id);
 
+    void append_default();
+
     void remove_column_by_index(size_t idx);
 
     // Remove multiple columns by their indexes.
