@@ -91,7 +91,7 @@ Classifiers support the following conditions:
 
 - `user`: the name of the user.
 - `role`: the role of the user.
-- `query_type`: the type of the query. `SELECT` and `INSERT` are supported. When INSERT tasks hit a resource group with `query_type` as `insert`, the BE node reserves the specified CPU resources for the tasks.
+- `query_type`: the type of the query. `SELECT` and `INSERT` (from v2.5) are supported. When INSERT tasks hit a resource group with `query_type` as `insert`, the BE node reserves the specified CPU resources for the tasks.
 - `source_ip`: the CIDR block from which the query is initiated.
 - `db`: the database which the query accesses. It can be specified by strings separated by commas `,`.
 
