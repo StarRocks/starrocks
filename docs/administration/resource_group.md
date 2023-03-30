@@ -104,13 +104,9 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 If multiple matching classifiers have the same number of conditions, the classifier whose conditions are described more accurately has a higher degree of matching.
 
 ```Plain%20Text
--- The CIDR block that is specified in Classifier B is smaller in range than Classifier A. Therefore, Classifier B has a higher degree of matching than Classifier A.
+The CIDR block that is specified in Classifier B is smaller in range than Classifier A. Therefore, Classifier B has a higher degree of matching than Classifier A.
 classifier A (user='Alice', source_ip = '192.168.1.0/16')
 classifier B (user='Alice', source_ip = '192.168.1.0/24')
-
--- Classifier C has fewer query types specified in it than Classifier D. Therefore, Classifier has a higher degree of matching than Classifier D.
-classifier C (user='Alice', query_type in ('select'))
-classifier D (user='Alice', query_type in ('insert','select', 'ctas')）
 ```
 
 ## Isolate computing resources
