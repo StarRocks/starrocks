@@ -698,6 +698,19 @@ public class SchemaTable extends Table {
                                     .column("CLONE_DURATION", ScalarType.createType(PrimitiveType.DOUBLE))
                                     .column("MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .build()))
+                    .put("be_threads", new SchemaTable(
+                            SystemId.BE_THREADS_ID,
+                            "be_threads",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("GROUP", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PTHREAD_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("IDLE", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("FINISHED_TASKS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .build()))
                     .build();
 
     public static class Builder {
@@ -797,7 +810,8 @@ public class SchemaTable extends Table {
         SCH_BE_TXNS("BE_TXNS", "BE_TXNS",
                 TSchemaTableType.SCH_BE_TXNS),
         SCH_BE_CONFIGS("BE_CONFIGS", "BE_CONFIGS", TSchemaTableType.SCH_BE_CONFIGS),
-        SCH_FE_TABLET_SCHEDULES("FE_TABLET_SCHEDULES", "FE_TABLET_SCHEDULES", TSchemaTableType.SCH_FE_TABLET_SCHEDULES);
+        SCH_FE_TABLET_SCHEDULES("FE_TABLET_SCHEDULES", "FE_TABLET_SCHEDULES", TSchemaTableType.SCH_FE_TABLET_SCHEDULES),
+        SCH_BE_THREADS("BE_THREADS", "BE_THREADS", TSchemaTableType.SCH_BE_THREADS);
 
         private final String description;
         private final String tableName;

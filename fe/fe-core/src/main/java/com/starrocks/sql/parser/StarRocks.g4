@@ -512,7 +512,7 @@ dropViewStatement
 
 submitTaskStatement
     : SUBMIT setVarHint* TASK qualifiedName?
-    AS createTableAsSelectStatement
+    AS (createTableAsSelectStatement | insertStatement )
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------

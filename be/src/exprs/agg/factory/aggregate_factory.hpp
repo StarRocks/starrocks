@@ -105,8 +105,8 @@ public:
         return std::make_shared<ExchangePerfAggregateFunction<PerfType>>();
     }
 
-    static AggregateFunctionPtr MakeArrayAggAggregateFunction() {
-        return std::make_shared<ArrayAggAggregateFunction>();
+    static AggregateFunctionPtr MakeArrayAggAggregateFunctionV2() {
+        return std::make_shared<ArrayAggAggregateFunctionV2>();
     }
 
     template <LogicalType LT>

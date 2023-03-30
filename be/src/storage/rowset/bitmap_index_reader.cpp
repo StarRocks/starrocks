@@ -54,10 +54,9 @@ BitmapIndexReader::~BitmapIndexReader() {
     MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(), _mem_usage());
 }
 
-StatusOr<bool> BitmapIndexReader::load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta,
-                                       bool use_page_cache, bool kept_in_memory) {
+StatusOr<bool> BitmapIndexReader::load(const IndexReadOptions& opts, const BitmapIndexPB& meta) {
     return success_once(_load_once, [&]() {
-        Status st = _do_load(fs, filename, meta, use_page_cache, kept_in_memory);
+        Status st = _do_load(opts, meta);
         if (st.ok()) {
             MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
                                      _mem_usage() - sizeof(BitmapIndexReader));
@@ -75,16 +74,15 @@ void BitmapIndexReader::_reset() {
     _has_null = false;
 }
 
-Status BitmapIndexReader::_do_load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta,
-                                   bool use_page_cache, bool kept_in_memory) {
+Status BitmapIndexReader::_do_load(const IndexReadOptions& opts, const BitmapIndexPB& meta) {
     _typeinfo = get_type_info(TYPE_VARCHAR);
     const IndexedColumnMetaPB& dict_meta = meta.dict_column();
     const IndexedColumnMetaPB& bitmap_meta = meta.bitmap_column();
     _has_null = meta.has_null();
-    _dict_column_reader = std::make_unique<IndexedColumnReader>(fs, filename, dict_meta);
-    _bitmap_column_reader = std::make_unique<IndexedColumnReader>(fs, filename, bitmap_meta);
-    RETURN_IF_ERROR(_dict_column_reader->load(use_page_cache, kept_in_memory));
-    RETURN_IF_ERROR(_bitmap_column_reader->load(use_page_cache, kept_in_memory));
+    _dict_column_reader = std::make_unique<IndexedColumnReader>(opts, dict_meta);
+    _bitmap_column_reader = std::make_unique<IndexedColumnReader>(opts, bitmap_meta);
+    RETURN_IF_ERROR(_dict_column_reader->load());
+    RETURN_IF_ERROR(_bitmap_column_reader->load());
     return Status::OK();
 }
 

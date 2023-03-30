@@ -757,6 +757,7 @@ public class PlanFragmentBuilder {
                     new MetaScanNode(context.getNextNodeId(),
                             tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames());
             scanNode.computeRangeLocations();
+            scanNode.computeStatistics(optExpression.getStatistics());
 
             for (Map.Entry<ColumnRefOperator, Column> entry : scan.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
@@ -1135,6 +1136,7 @@ public class PlanFragmentBuilder {
                                     break;
                                 case "JOB_ID":
                                     scanNode.setJobId(constantOperator.getBigint());
+                                    break;
                                 case "TYPE":
                                     scanNode.setType(constantOperator.getVarchar());
                                     break;
