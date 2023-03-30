@@ -13,7 +13,15 @@
 `PARTITION BY` 子句中包含一个函数表达式，指定了自动创建分区时分区粒度和分区列。
 
 ```SQL
-PARTITION BY date_trunc|time_slice(<time_unit>,<partition_column_name>)
+PARTITION BY date_trunc(<time_unit>,<partition_column_name>)
+...
+[PROPERTIES("partition_live_number" = "xxx")];
+```
+
+或者
+
+```SQL
+PARTITION BY time_slice(<partition_column_name>,INTERVAL N <time_unit>[, boundary]))
 ...
 [PROPERTIES("partition_live_number" = "xxx")];
 ```
