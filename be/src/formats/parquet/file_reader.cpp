@@ -103,6 +103,7 @@ Status FileReader::_parse_footer() {
             int64_t extra = to_read - footer_size - 8;
             memmove(footer_buffer.data(), footer_buffer.data() + extra, footer_size + 8);
             footer_buffer.resize(footer_size + 8);
+            footer_buf = (uint8_t*)footer_buffer.data();
         }
         if (_scanner_ctx->footer_cache != nullptr) {
             _scanner_ctx->footer_cache->put(_scanner_ctx->file_cache_key, footer_buffer);
