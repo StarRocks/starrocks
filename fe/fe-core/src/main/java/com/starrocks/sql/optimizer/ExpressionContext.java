@@ -123,6 +123,10 @@ public class ExpressionContext {
         return statisticsForGroupExpression != null ? statisticsForGroupExpression : statistics;
     }
 
+    public boolean hasExtraStatistics() {
+        return groupExtraStatistics.containsKey(groupExpression);
+    }
+
     public void setStatistics(Statistics statistics) {
         this.statistics = statistics;
     }

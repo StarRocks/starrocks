@@ -129,9 +129,13 @@ public class CostModel {
         public CostEstimate visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
-            if (node.getTable().isMaterializedView()) {
+            if (node.getTable().isMaterializedView() && context.hasExtraStatistics()) {
+                return CostEstimate.zero();
+                /*
                 ColumnRefSet usedColumns = node.getUsedColumns();
                 return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
+
+                 */
             }
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
