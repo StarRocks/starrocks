@@ -26,6 +26,7 @@ add_library(Storage STATIC
     decimal_type_info.cpp
     delete_handler.cpp
     del_vector.cpp
+    delta_column_group.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp

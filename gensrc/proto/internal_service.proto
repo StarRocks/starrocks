@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-syntax="proto2";
+syntax = "proto2";
 
 package starrocks;
 option java_package = "com.starrocks.proto";
@@ -42,6 +42,7 @@ import "descriptors.proto";
 import "status.proto";
 import "types.proto";
 import "olap_common.proto";
+import "olap_file.proto";
 
 option cc_generic_services = true;
 
@@ -114,7 +115,7 @@ message PTransmitRuntimeFilterParams {
     // if this runtime filter is partial
     // if it's partial, then it's supposed to be merged.
     // otherwise it's supported to be consumed.
-    
+
     optional bool is_partial = 1;
     optional PUniqueId query_id = 3;
     optional int32 filter_id = 4;
@@ -173,6 +174,7 @@ message PTabletWriterOpenRequest {
     // When the data load in progress, the partition created by automatic partition needs incremental open
     optional bool is_incremental = 29 [default = false];
     optional int32 sender_id = 30;
+    optional PartialUpdateMode partial_update_mode = 31;
 };
 
 message PTabletWriterOpenResult {
@@ -209,7 +211,7 @@ message PTabletWriterAddChunkRequest {
     optional int64 packet_seq = 5;
     repeated int64 tablet_ids = 6;
     // Unset if and only if eos is true.
-    optional ChunkPB chunk  = 7;
+    optional ChunkPB chunk = 7;
     // only valid when eos is true
     // valid partition ids that would write in this writer
     repeated int64 partition_ids = 8;
@@ -509,7 +511,6 @@ message ExecuteCommandResultPB {
     optional string result = 2;
 };
 
-
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
 service PInternalService {
@@ -523,8 +524,8 @@ service PInternalService {
     rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns (PTabletWriterCancelResult);
     rpc trigger_profile_report(PTriggerProfileReportRequest) returns (PTriggerProfileReportResult);
     rpc collect_query_statistics(PCollectQueryStatisticsRequest) returns (PCollectQueryStatisticsResult);
-    rpc get_info(PProxyRequest) returns (PProxyResult); 
-    rpc get_pulsar_info(PPulsarProxyRequest) returns (PPulsarProxyResult); 
+    rpc get_info(PProxyRequest) returns (PProxyResult);
+    rpc get_pulsar_info(PPulsarProxyRequest) returns (PPulsarProxyResult);
 
     // Transmit vectorized data between backends.
     rpc transmit_chunk(PTransmitChunkParams) returns (PTransmitChunkResult);
@@ -545,4 +546,3 @@ service PInternalService {
 
     rpc execute_command(ExecuteCommandRequestPB) returns (ExecuteCommandResultPB);
 };
-
