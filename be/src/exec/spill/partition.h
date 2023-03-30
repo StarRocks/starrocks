@@ -42,6 +42,8 @@ struct SpillPartitionInfo {
     size_t bytes = 0;
     bool in_mem = true;
 
+    bool empty() const { return num_rows == 0; }
+
     int32_t level_elements() const { return 1 << level; }
 
     int32_t level_last_partition() const { return level_elements() * 2 - 1; }
