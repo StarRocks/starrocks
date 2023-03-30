@@ -270,26 +270,8 @@ void ParquetBuildHelper::build_compression_type(parquet::WriterProperties::Build
 void ParquetBuilder::_generate_rg_writer() {
     if (_rg_writer == nullptr) {
         _rg_writer = _file_writer->AppendBufferedRowGroup();
-        // TODO: how much column writer we have?
     }
 }
-
-//void ParquetBuilder::_write_varchar_chunk_column(size_t num_rows, const Column* data_column,
-//                                                 std::vector<int16_t>& def_level) {
-//    ParquetBuilder::_generate_rg_writer();
-//    auto col_writer = static_cast<parquet::ByteArrayWriter*>(_rg_writer->column(_col_idx));
-//    auto raw_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(data_column);
-//    auto vo = raw_col->get_offset();
-//    auto vb = raw_col->get_bytes();
-//    for (size_t j = 0; j < num_rows; j++) {
-//        parquet::ByteArray value;
-//        value.ptr = reinterpret_cast<const uint8_t*>(vb.data() + vo[j]);
-//        value.len = vo[j + 1] - vo[j];
-//        col_writer->WriteBatch(1, def_level.data() + j, nullptr, &value);
-//    }
-//    _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
-//    _col_idx++;
-//}
 
 #define DISPATCH_PARQUET_NUMERIC_WRITER(WRITER, COLUMN_TYPE, NATIVE_TYPE)                                         \
     ParquetBuilder::_generate_rg_writer();                                                                        \
@@ -300,26 +282,6 @@ void ParquetBuilder::_generate_rg_writer() {
     _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes(); \
     _col_idx++; \
 
-//void ParquetBuilder::_handle_array_column(size_t num_rows, size_t col_idx, const Column* col) {
-//
-//}
-//
-//void ParquetBuilder::_handle_map_column(size_t num_rows, size_t col_idx, const Column* col) {
-//
-//}
-//
-//void ParquetBuilder::_handle_struct_column(size_t num_rows, size_t col_idx, const Column* col) {
-//
-//}
-//
-//void ParquetBuilder::_handle_nested_column(size_t num_rows, size_t col_idx, const Column* col) {
-//
-//}
-//
-//
-//void ParquetBuilder::_handle_primitive_column(size_t num_rows, size_t col_idx, const Column* col) {
-//
-//}
 
 Status ParquetBuilder::add_chunk(Chunk* chunk) {
     if (!chunk->has_rows()) {
@@ -328,11 +290,13 @@ Status ParquetBuilder::add_chunk(Chunk* chunk) {
 
     _col_idx = 0; // reset index on writing
 
+    // TODO(letian-jiang): wrap into column chunk context
     auto chunk_size = chunk->num_rows();
     std::vector<int16_t> def_level(chunk_size, 0);
     std::vector<int16_t> rep_level(chunk_size, 0);
     std::vector<bool> is_null(chunk_size, false);
     std::map<int, int> mapping;
+    // TODO(letian-jiang): add shortcut for flat schema
     for (size_t i = 0; i < chunk_size; i++) {
         mapping[i] = i;
     }
@@ -340,262 +304,254 @@ Status ParquetBuilder::add_chunk(Chunk* chunk) {
     for (size_t i = 0; i < chunk->num_columns(); i++) {
         auto col = chunk->get_column_by_index(i);
         auto type_desc = _output_expr_ctxs[i]->root()->type();
-        _add_chunk_column(type_desc, col, def_level, rep_level, 0, is_null, mapping);
+        auto ret = _add_column_chunk(type_desc, col, def_level, rep_level, 0, is_null, mapping);
+        if (!ret.ok()) {
+            return ret;
+        }
     }
 
     _check_size();
     return Status::OK();
 }
 
-//    void ParquetBuilder::_add_entry(const TypeDescriptor& type_desc, const ColumnPtr col, size_t col_idx, int16_t def_level,
-//                                int16_t rep_level, bool is_null)
-
-void ParquetBuilder::_add_chunk_column(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                       std::vector<int16_t>& def_level, std::vector<int16_t>& rep_level,
-                                       int16_t max_rep_level, std::vector<bool>& is_null, std::map<int, int>& mapping) {
+// TODO(letian-jiang): traverse type_desc and schema simultaneously
+Status ParquetBuilder::_add_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                                       const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                       int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
     auto prev_level_size = def_level.size();
     DCHECK(rep_level.size() == prev_level_size);
     DCHECK(is_null.size() == prev_level_size);
-//    for (auto [k, v] : mapping) {
-//        DCHECK(!is_null[k]);
-//    }
-//    for (size_t i = 0; i < prev_level_size; i++) {
-//        if (is_null[i]) {
-//            DCHECK(mapping.count(i) == 0);
-//        }
-//    }
 
     switch (type_desc.type) {
+        // nested type
         case TYPE_STRUCT: {
-            const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
-            const auto nulls = null_column->get_data();
-            const auto data_column = ColumnHelper::get_data_column(col.get());
-            const auto struct_column = down_cast<StructColumn*>(data_column);
-
-            std::vector<int16_t> cur_def_level;
-            std::vector<int16_t> cur_rep_level;
-            std::vector<bool> cur_is_null;
-            std::map<int, int> cur_mapping;
-
-            int j = 0; // pointer to next not-null value, increment upon non-empty array
-            for (size_t i = 0; i < prev_level_size; i++) { // pointer to cur_def_level, cur_rep_level, cur_is_null
-                if (is_null[i]) { // Null from parent column
-                    cur_def_level.push_back(def_level[i]);
-                    cur_is_null.push_back(true);
-                    cur_rep_level.push_back(rep_level[i]);
-                    continue;
-                }
-                auto idx = mapping[i]; // idx is pointer to column, nulls, and offsets
-                if (nulls[idx]) { // Null in this column
-                    cur_def_level.push_back(def_level[i]);
-                    cur_is_null.push_back(true);
-                    cur_rep_level.push_back(rep_level[i]);
-                    // TODO: j++?
-                    cur_mapping[cur_def_level.size() - 1] = j++; // try
-                    continue;
-                }
-                // non-empty struct
-                cur_def_level.push_back(def_level[i] + 1); // assume fields are optional
-                cur_rep_level.push_back(rep_level[i]);
-                cur_is_null.push_back(false);
-                cur_mapping[cur_def_level.size() - 1] = j++;
-            }
-
-//            ++_col_idx;
-            for (size_t i = 0; i < type_desc.children.size(); i++) {
-                auto sub_col = struct_column->field_column(type_desc.field_names[i]);
-                _add_chunk_column(type_desc.children[i], sub_col, cur_def_level, cur_rep_level, max_rep_level, cur_is_null, cur_mapping);
-            }
-            return;
+            return _add_struct_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
         case TYPE_ARRAY: {
-            const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
-            const auto nulls = null_column->get_data();
-            const auto array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
-            const auto elements = array_column->elements_column();
-            const auto offsets = array_column->offsets_column()->get_data();
-
-            std::vector<int16_t> cur_def_level;
-            std::vector<int16_t> cur_rep_level;
-            std::vector<bool> cur_is_null;
-            std::map<int, int> cur_mapping;
-
-            max_rep_level++;
-
-            int j = 0; // pointer to next not-null value, increment upon non-empty array
-            for (size_t i = 0; i < prev_level_size; i++) { // pointer to cur_def_level, cur_rep_level, cur_is_null
-                if (is_null[i]) { // Null from parent column
-                    cur_def_level.push_back(def_level[i]);
-                    cur_is_null.push_back(true);
-                    cur_rep_level.push_back(rep_level[i]);
-                    continue;
-                }
-                auto idx = mapping[i]; // idx is pointer to column, nulls, and offsets
-                if (nulls[idx]) { // Null in this column
-                    cur_def_level.push_back(def_level[i]);
-                    cur_is_null.push_back(true);
-                    cur_rep_level.push_back(rep_level[i]);
-                    continue;
-                }
-                if (offsets[idx + 1] == offsets[idx]) { // []
-                    cur_def_level.push_back(def_level[i] + 1);
-                    cur_is_null.push_back(true);
-                    cur_rep_level.push_back(rep_level[i]);
-                    continue;
-                }
-                // non-empty array (e.g. [Null, ...])
-                cur_def_level.push_back(def_level[i] + 2);
-                cur_rep_level.push_back(rep_level[i]);
-                cur_is_null.push_back(false);
-                cur_mapping[cur_def_level.size() - 1] = j++;
-                for (auto k = 1; k < offsets[idx + 1] - offsets[idx]; k++) {
-                    cur_def_level.push_back(def_level[idx] + 2);
-                    cur_rep_level.push_back(max_rep_level); // rep_level is different from rep_level
-                    cur_is_null.push_back(false);
-                    cur_mapping[cur_def_level.size() - 1] = j++;
-                }
-            }
-
-//            ++_col_idx;
-            _add_chunk_column(type_desc.children[0], elements, cur_def_level, cur_rep_level, max_rep_level, cur_is_null, cur_mapping);
-            return;
+            return _add_array_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
         case TYPE_MAP: {
-//            const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
-//            const auto data_column = ColumnHelper::get_data_column(col.get());
-//            const auto map_column = down_cast<MapColumn*>(data_column);
-//
-//            auto nulls = null_column->get_data();
-//
-//            auto keys_col = map_column->keys_column();
-//            auto values_col = map_column->values_column();
-//            _add_column(type_desc.children[0], keys_col);
-//            _add_column(type_desc.children[1], values_col);
-//            return;
-            const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
-            const auto nulls = null_column->get_data();
-            const auto map_column = down_cast<MapColumn*>(ColumnHelper::get_data_column(col.get()));
-            const auto keys = map_column->keys_column();
-            const auto values = map_column->values_column();
-            const auto offsets = map_column->offsets_column()->get_data();
-
-            std::vector<int16_t> cur_def_level_key;
-            std::vector<int16_t> cur_def_level_value;
-            std::vector<int16_t> cur_rep_level;
-            std::vector<bool> cur_is_null;
-            std::map<int, int> cur_mapping;
-
-            max_rep_level++;
-
-            int j = 0; // pointer to next not-null value, increment upon non-empty array
-            for (size_t i = 0; i < prev_level_size; i++) { // pointer to cur_def_level, cur_rep_level, cur_is_null
-                if (is_null[i]) { // Null from parent column
-                    cur_def_level_key.push_back(def_level[i]);
-                    cur_def_level_value.push_back(def_level[i]);
-                    cur_is_null.push_back(true);
-                    cur_rep_level.push_back(rep_level[i]);
-                    continue;
-                }
-                auto idx = mapping[i]; // idx is pointer to column, nulls, and offsets
-                if (nulls[idx]) { // Null in this column
-                    cur_def_level_key.push_back(def_level[i]);
-                    cur_def_level_value.push_back(def_level[i]);
-                    cur_is_null.push_back(true);
-                    cur_rep_level.push_back(rep_level[i]);
-                    continue;
-                }
-                if (offsets[idx + 1] == offsets[idx]) { // []
-                    cur_def_level_key.push_back(def_level[i]);
-                    cur_def_level_value.push_back(def_level[i] + 1);
-                    cur_is_null.push_back(true);
-                    cur_rep_level.push_back(rep_level[i]);
-                    continue;
-                }
-                // non-empty array (e.g. [Null, ...])
-                cur_def_level_key.push_back(def_level[i] + 1);
-                cur_def_level_value.push_back(def_level[i] + 2);
-                cur_rep_level.push_back(rep_level[i]);
-                cur_is_null.push_back(false);
-                cur_mapping[cur_def_level_key.size() - 1] = j++;
-                for (auto k = 1; k < offsets[idx + 1] - offsets[idx]; k++) {
-                    cur_def_level_key.push_back(def_level[i] + 1);
-                    cur_def_level_value.push_back(def_level[i] + 2);
-                    cur_rep_level.push_back(max_rep_level); // rep_level is different from rep_level
-                    cur_is_null.push_back(false);
-                    cur_mapping[cur_def_level_key.size() - 1] = j++;
-                }
-            }
-
-            _add_chunk_column(type_desc.children[0], keys, cur_def_level_key, cur_rep_level, max_rep_level, cur_is_null, cur_mapping);
-            _add_chunk_column(type_desc.children[1], values, cur_def_level_value, cur_rep_level, max_rep_level, cur_is_null, cur_mapping);
-            return;
+            return _add_map_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
-        // primitive column
+        // primitive type
         case TYPE_INT: {
-//            const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
-//            const auto nulls = null_column->get_data();
-//            const auto array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
-//            const auto elements = array_column->elements_column();
-//            const auto offsets = array_column->offsets_column()->get_data();
-//
-//            std::vector<int16_t> cur_def_level;
-//            std::vector<int16_t> cur_rep_level;
-//            std::vector<bool> cur_is_null;
-//            std::map<int, int> cur_mapping;
-//
-//            ParquetBuilder::_generate_rg_writer();
-//            auto col_writer = static_cast<parquet::Int32Writer*>(_rg_writer->column(_col_idx));
-//            col_writer->WriteBatch(
-//                    num_rows, def_levels.data(), nullptr,
-//                    reinterpret_cast<const NATIVE_TYPE*>(down_cast<const COLUMN_TYPE*>(data_column)->get_data().data()));
-//            _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
-//            _col_idx++;
+//            _add_int_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
         case TYPE_VARCHAR: {
-            const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
-            auto nulls = null_column->get_data();
-
-            const auto data_column = ColumnHelper::get_data_column(col.get());
-            auto raw_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(data_column);
-            auto vo = raw_col->get_offset();
-            auto vb = raw_col->get_bytes();
-
-            ParquetBuilder::_generate_rg_writer();
-            auto col_writer = static_cast<parquet::ByteArrayWriter*>(_rg_writer->column(_col_idx));
-            DCHECK(col_writer != nullptr);
-
-            auto write = [&](int16_t def_level, int16_t rep_level, unsigned char* ptr, auto len) {
-                parquet::ByteArray value;
-                value.ptr = reinterpret_cast<const uint8_t*>(ptr);
-                value.len = len;
-//                // TODO: validate value
-//                if (ptr != nullptr) {
-//                    std::cout << value.ptr + len - 1 << std::endl;
-//                }
-                col_writer->WriteBatch(1, &def_level, &rep_level, &value);
-            };
-
-            for (size_t i = 0; i < prev_level_size; i++) {
-                if (is_null[i]) {
-                    write(def_level[i], rep_level[i], nullptr, 0);
-                    continue;
-                }
-                auto idx = mapping[i];
-                if (nulls[idx]) {
-                    write(def_level[i], rep_level[i], nullptr, 0);
-                    continue;
-                }
-                write(def_level[i] + 1 /* increment if optional */, rep_level[i], vb.data() + vo[idx], vo[idx + 1] - vo[idx]);
-            }
-
-            _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
-            _col_idx++;
-            return;
+            return _add_varchar_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
         default: {
-            return; // TODO: return non-ok status
+            return Status::InvalidArgument(fmt::format("Type {} is not supported", type_to_string_v2(type_desc.type)));
         }
     }
+}
+
+Status ParquetBuilder::_add_struct_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                                              const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                              int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+    const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
+    const auto nulls = null_column->get_data();
+    const auto data_column = ColumnHelper::get_data_column(col.get());
+    const auto struct_column = down_cast<StructColumn*>(data_column);
+
+    std::vector<int16_t> cur_def_level;
+    std::vector<int16_t> cur_rep_level;
+    std::vector<bool> cur_is_null;
+    std::map<int, int> cur_mapping;
+
+    int j = 0; // pointer to next not-null value, increment upon non-empty array
+    for (size_t i = 0; i < def_level.size(); i++) { // pointer to cur_def_level, cur_rep_level, cur_is_null
+        if (is_null[i]) { // Null from parent column
+            cur_def_level.push_back(def_level[i]);
+            cur_is_null.push_back(true);
+            cur_rep_level.push_back(rep_level[i]);
+            continue;
+        }
+        int idx = mapping.at(i); // idx is pointer to column, nulls, and offsets
+        if (nulls[idx]) { // Null in this column
+            cur_def_level.push_back(def_level[i]);
+            cur_is_null.push_back(true);
+            cur_rep_level.push_back(rep_level[i]);
+            cur_mapping[cur_def_level.size() - 1] = j++; // try
+            continue;
+        }
+        // non-empty struct
+        cur_def_level.push_back(def_level[i] + 1); // assume fields are optional
+        cur_rep_level.push_back(rep_level[i]);
+        cur_is_null.push_back(false);
+        cur_mapping[cur_def_level.size() - 1] = j++;
+    }
+
+    for (size_t i = 0; i < type_desc.children.size(); i++) {
+        auto sub_col = struct_column->field_column(type_desc.field_names[i]);
+        auto ret = _add_column_chunk(type_desc.children[i], sub_col, cur_def_level, cur_rep_level, max_rep_level,
+                          cur_is_null, cur_mapping);
+        if (!ret.ok()) {
+            return ret;
+        }
+    }
+    return Status::OK();
+}
+
+
+Status ParquetBuilder::_add_array_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                                              const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                              int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+    const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
+    const auto nulls = null_column->get_data();
+    const auto array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
+    const auto elements = array_column->elements_column();
+    const auto offsets = array_column->offsets_column()->get_data();
+
+    std::vector<int16_t> cur_def_level;
+    std::vector<int16_t> cur_rep_level;
+    std::vector<bool> cur_is_null;
+    std::map<int, int> cur_mapping;
+
+    max_rep_level++;
+
+    int j = 0; // pointer to next not-null value, increment upon non-empty array
+    for (size_t i = 0; i < def_level.size(); i++) { // pointer to cur_def_level, cur_rep_level, cur_is_null
+        if (is_null[i]) { // Null from parent column
+            cur_def_level.push_back(def_level[i]);
+            cur_is_null.push_back(true);
+            cur_rep_level.push_back(rep_level[i]);
+            continue;
+        }
+        int idx = mapping.at(i); // idx is pointer to column, nulls, and offsets
+        if (nulls[idx]) { // Null in this column
+            cur_def_level.push_back(def_level[i]);
+            cur_is_null.push_back(true);
+            cur_rep_level.push_back(rep_level[i]);
+            continue;
+        }
+        if (offsets[idx + 1] == offsets[idx]) { // []
+            cur_def_level.push_back(def_level[i] + 1);
+            cur_is_null.push_back(true);
+            cur_rep_level.push_back(rep_level[i]);
+            continue;
+        }
+        // non-empty array (e.g. [Null, ...])
+        cur_def_level.push_back(def_level[i] + 2);
+        cur_rep_level.push_back(rep_level[i]);
+        cur_is_null.push_back(false);
+        cur_mapping[cur_def_level.size() - 1] = j++;
+        for (auto k = 1; k < offsets[idx + 1] - offsets[idx]; k++) {
+            cur_def_level.push_back(def_level[idx] + 2);
+            cur_rep_level.push_back(max_rep_level);
+            cur_is_null.push_back(false);
+            cur_mapping[cur_def_level.size() - 1] = j++;
+        }
+    }
+
+    return _add_column_chunk(type_desc.children[0], elements, cur_def_level, cur_rep_level, max_rep_level, cur_is_null,
+                      cur_mapping);
+}
+
+Status ParquetBuilder::_add_map_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                                              const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                              int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+    const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
+    const auto nulls = null_column->get_data();
+    const auto map_column = down_cast<MapColumn*>(ColumnHelper::get_data_column(col.get()));
+    const auto keys = map_column->keys_column();
+    const auto values = map_column->values_column();
+    const auto offsets = map_column->offsets_column()->get_data();
+
+    std::vector<int16_t> cur_def_level_key;
+    std::vector<int16_t> cur_def_level_value;
+    std::vector<int16_t> cur_rep_level;
+    std::vector<bool> cur_is_null;
+    std::map<int, int> cur_mapping;
+
+    max_rep_level++;
+
+    int j = 0; // pointer to next not-null value, increment upon non-empty array
+    for (size_t i = 0; i < def_level.size(); i++) { // pointer to cur_def_level, cur_rep_level, cur_is_null
+        if (is_null[i]) { // Null from parent column
+            cur_def_level_key.push_back(def_level[i]);
+            cur_def_level_value.push_back(def_level[i]);
+            cur_is_null.push_back(true);
+            cur_rep_level.push_back(rep_level[i]);
+            continue;
+        }
+        int idx = mapping.at(i); // idx is pointer to column, nulls, and offsets
+        if (nulls[idx]) { // Null in this column
+            cur_def_level_key.push_back(def_level[i]);
+            cur_def_level_value.push_back(def_level[i]);
+            cur_is_null.push_back(true);
+            cur_rep_level.push_back(rep_level[i]);
+            continue;
+        }
+        if (offsets[idx + 1] == offsets[idx]) { // []
+            cur_def_level_key.push_back(def_level[i]);
+            cur_def_level_value.push_back(def_level[i] + 1);
+            cur_is_null.push_back(true);
+            cur_rep_level.push_back(rep_level[i]);
+            continue;
+        }
+        // non-empty array (e.g. [Null, ...])
+        cur_def_level_key.push_back(def_level[i] + 1);
+        cur_def_level_value.push_back(def_level[i] + 2);
+        cur_rep_level.push_back(rep_level[i]);
+        cur_is_null.push_back(false);
+        cur_mapping[cur_def_level_key.size() - 1] = j++;
+        for (auto k = 1; k < offsets[idx + 1] - offsets[idx]; k++) {
+            cur_def_level_key.push_back(def_level[i] + 1);
+            cur_def_level_value.push_back(def_level[i] + 2);
+            cur_rep_level.push_back(max_rep_level);
+            cur_is_null.push_back(false);
+            cur_mapping[cur_def_level_key.size() - 1] = j++;
+        }
+    }
+
+    auto ret = _add_column_chunk(type_desc.children[0], keys, cur_def_level_key, cur_rep_level, max_rep_level, cur_is_null,
+                      cur_mapping);
+    if (!ret.ok()) {
+        return ret;
+    }
+    return _add_column_chunk(type_desc.children[1], values, cur_def_level_value, cur_rep_level, max_rep_level,
+                      cur_is_null, cur_mapping);
+}
+
+Status ParquetBuilder::_add_varchar_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                                              const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                              int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+    const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
+    auto nulls = null_column->get_data();
+
+    const auto data_column = ColumnHelper::get_data_column(col.get());
+    auto raw_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(data_column);
+    auto vo = raw_col->get_offset();
+    auto vb = raw_col->get_bytes();
+
+    _generate_rg_writer();
+    auto col_writer = static_cast<parquet::ByteArrayWriter*>(_rg_writer->column(_col_idx));
+    DCHECK(col_writer != nullptr);
+
+    auto write = [&](int16_t def_level, int16_t rep_level, unsigned char* ptr, auto len) {
+        parquet::ByteArray value;
+        value.ptr = reinterpret_cast<const uint8_t*>(ptr);
+        value.len = len;
+        col_writer->WriteBatch(1, &def_level, &rep_level, &value);
+    };
+
+    for (size_t i = 0; i < def_level.size(); i++) {
+        if (is_null[i]) {
+            write(def_level[i], rep_level[i], nullptr, 0);
+            continue;
+        }
+        auto idx = mapping.at(i);
+        if (nulls[idx]) {
+            write(def_level[i], rep_level[i], nullptr, 0);
+            continue;
+        }
+        write(def_level[i] + 1 /* increment if optional */, rep_level[i], vb.data() + vo[idx], vo[idx + 1] - vo[idx]);
+    }
+
+    _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+    _col_idx++;
+    return Status::OK();
 }
 
 // The current row group written bytes = total_bytes_written + total_compressed_bytes + estimated_bytes.

@@ -96,8 +96,26 @@ private:
     void _check_size();
     void _write_varchar_chunk_column(size_t num_rows, const Column* data_column,
                                      std::vector<int16_t>& def_level) ;
-    void _add_chunk_column(const TypeDescriptor& type_desc, const ColumnPtr col, std::vector<int16_t>& def_level,
-                           std::vector<int16_t>& rep_level, int16_t max_rep_level,  std::vector<bool>& is_null, std::map<int, int>& mapping);
+    Status _add_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                           const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                           int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+
+    Status _add_struct_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                                  const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                  int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+
+    Status _add_array_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                           const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                           int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+
+    Status _add_map_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                               const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                               int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+
+    Status _add_varchar_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                                   const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                   int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+
 
     std::unique_ptr<WritableFile> _writable_file;
     std::shared_ptr<ParquetOutputStream> _output_stream;
