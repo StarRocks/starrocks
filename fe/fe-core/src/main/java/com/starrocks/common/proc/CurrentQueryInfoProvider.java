@@ -44,7 +44,7 @@ import com.starrocks.proto.PCollectQueryStatistics;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.qe.QueryStatisticsItem;
-import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.DataNodeServiceClient;
 import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -174,7 +174,7 @@ public class CurrentQueryInfoProvider {
             final PCollectQueryStatisticsRequest pbRequest = new PCollectQueryStatisticsRequest(queryIds);
             try {
                 futures.add(Pair.create(
-                        request, BackendServiceClient.getInstance().collectQueryStatisticsAsync(address, pbRequest)));
+                        request, DataNodeServiceClient.getInstance().collectQueryStatisticsAsync(address, pbRequest)));
             } catch (RpcException e) {
                 throw new AnalysisException("Sending collect query statistics request fails.");
             }
