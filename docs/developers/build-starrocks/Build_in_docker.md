@@ -1,13 +1,16 @@
-# Introduction of the dev-ubuntu image
+# Introduction of the dev-env-ubuntu image
 
 ## Image
 
-| branch-name      | image-name                       |
-| ---------------- | -------------------------------- |
-| main             | starrocks/dev-ubuntu:main        |
-| branch-2.5       | starrocks/dev-ubuntu:branch-2.5  |
-| branch-2.4       | starrocks/dev-ubuntu:branch-2.4  |
-| branch-2.3       | starrocks/dev-ubuntu:branch-2.3  |
+The dev environment image was named as `dev-env`, and was a CentOS7 based image, since branch-2.5, Ubuntu-22.04 is recommended over CentOS7 distribution, the image is renamed to `dev-env-ubuntu` accordingly.
+
+| branch-name      | image-name                          |
+| ---------------- | ----------------------------------- |
+| main             | starrocks/dev-env-ubuntu:latest     |
+| branch-3.0       | starrocks/dev-env-ubuntu:3.0-latest |
+| branch-2.5       | starrocks/dev-env-ubuntu:2.5-latest |
+| branch-2.4       | starrocks/dev-env:branch-2.4        |
+| branch-2.3       | starrocks/dev-env:branch-2.3        |
 
 ## Download the image
 
@@ -69,6 +72,5 @@ g++: fatal error: Killed signal terminated program cc1plus
 compilation terminated.
 ```
 
-When you met above error message, it may be caused by lacking of memory.
-You should give more memory to the container.
-8GB is enough.
+When above error message is encounted, it may be caused by insufficient of memory.
+Either give more memory to the container or reduce the parallism when running `./build.sh` by provideing a `-j <number_of_parallel_tasks>` option. Usually 8GB RAM is a good start.

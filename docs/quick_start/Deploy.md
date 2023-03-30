@@ -348,8 +348,8 @@ Having deployed StarRocks, you can continue the QuickStart tutorials on [creatin
 
 You can also:
 
-- [Compile StarRocks from source code](../administration/Build_in_docker.md)
-- [Deploy StarRocks in Docker container](../administration/deploy_with_docker.md)
+- [Compile StarRocks from source code in Docker](../developers/build-starrocks/Build_in_docker.md)
+- [Deploy StarRocks in Docker](../quick_start/deploy_in_docker.md)
 - [Deploy StarRocks with StarGo](../administration/stargo.md), a StarRocks cluster management tool
 - [Scale your StarRocks cluster](../administration/Scale_up_down.md)
 - [Upgrade your StarRocks cluster](../administration/Cluster_administration.md)
