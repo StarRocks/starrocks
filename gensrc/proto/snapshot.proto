@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-syntax="proto2";
+syntax = "proto2";
 
 package starrocks;
 option java_package = "com.starrocks.proto";
@@ -36,5 +36,9 @@ message SnapshotMetaFooterPB {
     // delvec_versions[i] is the version of i'th delete vector.
     repeated int64 delvec_versions = 7;
     optional int64 tablet_meta_offset = 8;
+    // 'dcg' means Delta Column Group
+    // dcg_segids[i] is the segment id of the i'th delta column group list
+    repeated int64 dcg_segids = 9;
+    // dcg_offsets[i] is the file offset of the i'th delta column group list.
+    repeated int64 dcg_offsets = 10;
 }
-

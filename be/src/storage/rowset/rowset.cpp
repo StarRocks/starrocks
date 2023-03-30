@@ -54,6 +54,8 @@
 #include "storage/projection_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
+#include "storage/tablet_meta_manager.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
@@ -135,6 +137,15 @@ std::string Rowset::segment_temp_file_path(const std::string& dir, const RowsetI
 
 std::string Rowset::segment_del_file_path(const std::string& dir, const RowsetId& rowset_id, int segment_id) {
     return strings::Substitute("$0/$1_$2.del", dir, rowset_id.to_string(), segment_id);
+}
+
+std::string Rowset::segment_upt_file_path(const std::string& dir, const RowsetId& rowset_id, int segment_id) {
+    return strings::Substitute("$0/$1_$2.upt", dir, rowset_id.to_string(), segment_id);
+}
+
+std::string Rowset::delta_column_group_path(const std::string& dir, const RowsetId& rowset_id, int segment_id,
+                                            int64_t version) {
+    return strings::Substitute("$0/$1_$2_$3.cols", dir, rowset_id.to_string(), segment_id, version);
 }
 
 Status Rowset::init() {
@@ -245,19 +256,56 @@ Status Rowset::remove() {
 
     for (int i = 0, sz = num_segments(); i < sz; ++i) {
         std::string path = segment_file_path(_rowset_path, rowset_id(), i);
-        VLOG(1) << "Deleting " << path;
         auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
     for (int i = 0, sz = num_delete_files(); i < sz; ++i) {
         std::string path = segment_del_file_path(_rowset_path, rowset_id(), i);
-        VLOG(1) << "Deleting " << path;
         auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
+    for (int i = 0, sz = num_update_files(); i < sz; ++i) {
+        std::string path = segment_upt_file_path(_rowset_path, rowset_id(), i);
+        auto st = fs->delete_file(path);
+        LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
+        merge_status(st);
+    }
+    auto st = _remove_delta_column_group_files(fs);
+    merge_status(st);
     return result;
+}
+
+Status Rowset::_remove_delta_column_group_files(std::shared_ptr<FileSystem> fs) {
+    if (num_segments() > 0) {
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_rowset_meta->tablet_id());
+        if (tablet == nullptr) {
+            // when tablet not exist, skip this step
+            LOG(WARNING) << "remove delta column group, and tablet not exist, tid: " << _rowset_meta->tablet_id();
+            return Status::OK();
+        }
+        // 1. remove dcg files
+        for (int i = 0; i < num_segments(); i++) {
+            DeltaColumnGroupList list;
+            RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
+                    tablet->data_dir()->get_meta(), _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id() + i, 0,
+                    INT64_MAX, &list));
+            for (const auto& dcg : list) {
+                auto st = fs->delete_file(dcg->column_file());
+                if (st.ok() || st.is_not_found()) {
+                    LOG(INFO) << "Deleting delta column group's file: " << dcg->debug_string() << " st: " << st;
+                } else {
+                    return st;
+                }
+            }
+        }
+        // 2. remove dcg from rocksdb
+        RETURN_IF_ERROR(
+                TabletMetaManager::delete_delta_column_group(tablet->data_dir()->get_meta(), _rowset_meta->tablet_id(),
+                                                             _rowset_meta->get_rowset_seg_id(), num_segments()));
+    }
+    return Status::OK();
 }
 
 Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id) {
@@ -277,6 +325,48 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id) {
             return Status::RuntimeError("Fail to link segment delete file");
         }
     }
+    for (int i = 0; i < num_update_files(); ++i) {
+        std::string src_file_path = segment_upt_file_path(_rowset_path, rowset_id(), i);
+        std::string dst_link_path = segment_upt_file_path(dir, new_rowset_id, i);
+        if (link(src_file_path.c_str(), dst_link_path.c_str()) != 0) {
+            PLOG(WARNING) << "Fail to link " << src_file_path << " to " << dst_link_path;
+            return Status::RuntimeError(
+                    fmt::format("Fail to link segment update file, src: {}, dst {}", src_file_path, dst_link_path));
+        } else {
+            LOG(INFO) << "success to link " << src_file_path << " to " << dst_link_path;
+        }
+    }
+    RETURN_IF_ERROR(_link_delta_column_group_files(dir, new_rowset_id));
+    return Status::OK();
+}
+
+Status Rowset::_link_delta_column_group_files(const std::string& dir, RowsetId new_rowset_id) {
+    if (num_segments() > 0) {
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_rowset_meta->tablet_id());
+        if (tablet == nullptr) {
+            // when tablet not exist, skip this step
+            LOG(WARNING) << "link delta column group, and tablet not exist, tid: " << _rowset_meta->tablet_id();
+            return Status::OK();
+        }
+        // link dcg files
+        for (int i = 0; i < num_segments(); i++) {
+            DeltaColumnGroupList list;
+            RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
+                    tablet->data_dir()->get_meta(), _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id() + i, 0,
+                    INT64_MAX, &list));
+            for (const auto& dcg : list) {
+                std::string src_file_path = dcg->column_file();
+                std::string dst_link_path = delta_column_group_path(dir, new_rowset_id, i, dcg->version());
+                if (link(src_file_path.c_str(), dst_link_path.c_str()) != 0) {
+                    PLOG(WARNING) << "Fail to link " << src_file_path << " to " << dst_link_path;
+                    return Status::RuntimeError(fmt::format("Fail to link segment update file, src: {}, dst {}",
+                                                            src_file_path, dst_link_path));
+                } else {
+                    LOG(INFO) << "success to link " << src_file_path << " to " << dst_link_path;
+                }
+            }
+        }
+    }
     return Status::OK();
 }
 
@@ -289,7 +379,8 @@ Status Rowset::copy_files_to(const std::string& dir) {
         }
         std::string src_path = segment_file_path(_rowset_path, rowset_id(), i);
         if (!fs::copy_file(src_path, dst_path).ok()) {
-            LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path << ", errno=" << Errno::no();
+            LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
+                         << ", errno=" << std::strerror(Errno::no());
             return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path, dst_path,
                                                std::strerror(Errno::no())));
         }
@@ -304,7 +395,23 @@ Status Rowset::copy_files_to(const std::string& dir) {
             }
             if (!fs::copy_file(src_path, dst_path).ok()) {
                 LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
-                             << ", errno=" << Errno::no();
+                             << ", errno=" << std::strerror(Errno::no());
+                return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path,
+                                                   dst_path, std::strerror(Errno::no())));
+            }
+        }
+    }
+    for (int i = 0; i < num_update_files(); ++i) {
+        std::string src_path = segment_upt_file_path(_rowset_path, rowset_id(), i);
+        if (fs::path_exist(src_path)) {
+            std::string dst_path = segment_upt_file_path(dir, rowset_id(), i);
+            if (fs::path_exist(dst_path)) {
+                LOG(WARNING) << "Path already exist: " << dst_path;
+                return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
+            }
+            if (!fs::copy_file(src_path, dst_path).ok()) {
+                LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
+                             << ", errno=" << std::strerror(Errno::no());
                 return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path,
                                                    dst_path, std::strerror(Errno::no())));
             }
@@ -470,6 +577,39 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
             seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
             continue;
         }
+        auto res = seg_ptr->new_iterator(schema, seg_options);
+        if (res.status().is_end_of_file()) {
+            seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
+            continue;
+        }
+        if (!res.ok()) {
+            return res.status();
+        }
+        seg_iterators[i] = std::move(res).value();
+    }
+    return seg_iterators;
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const Schema& schema,
+                                                                          OlapReaderStatistics* stats) {
+    SegmentReadOptions seg_options;
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
+    seg_options.stats = stats;
+    seg_options.tablet_id = rowset_meta()->tablet_id();
+    seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+
+    std::vector<ChunkIteratorPtr> seg_iterators(num_update_files());
+    TabletSegmentId tsid;
+    tsid.tablet_id = rowset_meta()->tablet_id();
+    for (int64_t i = 0; i < num_update_files(); i++) {
+        // open update file
+        std::string seg_path = segment_upt_file_path(_rowset_path, rowset_id(), i);
+        ASSIGN_OR_RETURN(auto seg_ptr, Segment::open(seg_options.fs, seg_path, i, _schema));
+        if (seg_ptr->num_rows() == 0) {
+            seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
+            continue;
+        }
+        // create iterator
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
