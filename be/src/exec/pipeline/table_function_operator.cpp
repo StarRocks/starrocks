@@ -14,6 +14,8 @@
 
 #include "table_function_operator.h"
 
+#include <fmt/format.h>
+
 namespace starrocks::pipeline {
 
 void TableFunctionOperator::close(RuntimeState* state) {
@@ -174,7 +176,14 @@ Status TableFunctionOperator::_process_table_function() {
     _next_output_row_offset = 0;
 
     _table_function_result = _table_function->process(_table_function_state);
-    return _table_function_state->status();
+    RETURN_IF_ERROR(_table_function_state->status());
+    if (UNLIKELY(_table_function_result.first.size() != _fn_result_slots.size())) {
+        // This should only happen during cluster upgrade that the BE and FE have different function
+        // signatures, which should be rarely.
+        auto fn_name = _tnode.table_function_node.table_function.nodes[0].fn.name.function_name;
+        return Status::InternalError(fmt::format("unexpected column count of table function \"{}\"", fn_name));
+    }
+    return Status::OK();
 }
 
 Status TableFunctionOperator::reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
