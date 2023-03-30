@@ -53,7 +53,7 @@ PROPERTIES(
 );
 ```
 
-When the following two data rows are inserted, StarRocks automatically create two partitions, `p20230226` and `p20230227`, whose ranges are [2023-02-26 00:00:00, 2023-02-27 00:00:00) and [2023-02-27 00:00:00, 2023-02-28 00:00:00) respectively.
+When the following two data rows are inserted, StarRocks automatically creates two partitions, `p20230226` and `p20230227`, whose ranges are [2023-02-26 00:00:00, 2023-02-27 00:00:00) and [2023-02-27 00:00:00, 2023-02-28 00:00:00) respectively.
 
 ```SQL
 -- insert two data rows
@@ -150,11 +150,11 @@ PROPERTIES("replication_num" = "1");
 ## Limits
 
 - Only the range partitioning type is supported, whereas the list partitioning type is not supported.
-- When a table that supports automatic partitioning is created, it is generally not recommended to create partitions in advance. If you need to create partitions in advance, you can create multiple partitions all at once, as shown in the preceding Example 2. The statement in Example 2 has the following limits:
+- When a table that supports automatic partitioning is created, it is generally not recommended to create partitions in advance. If you need to create partitions in advance, you can create multiple partitions all at a time, as shown in the preceding Example 2. The statement in Example 2 has the following limits:
   - The granularity of the partitions created in advance must be consistent with that of the automatically created partitions.
   - When you configure automatic partitioning, you can only use the function `date_trunc` rather than `time_slice`.
-  - The syntax for creating multiple partitions all at once only supports an interval of `1`.
-  - After the table that supports automatic partitioning is created, you can use `ALTER TABLE ADD PARTITION` to add partitions. And the statement `ALTER TABLE ADD PARTITION` also has the above limits.
+  - The syntax for creating multiple partitions all at a time only supports an interval of `1`.
+  - After a table that supports automatic partitioning is created, you can use `ALTER TABLE ADD PARTITION` to add partitions for that table. And the statement `ALTER TABLE ADD PARTITION` also has the above limits.
 - Currently, StarRocks's shared-data mode does not support this feature.
 - Currently, using CTAS to create a table that supports automatic partitioning is not supported.
 - Currently, using Spark Load to load data to tables that support automatic partitioning is not supported.
