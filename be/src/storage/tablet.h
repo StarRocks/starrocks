@@ -55,6 +55,7 @@
 #include "storage/tuple.h"
 #include "storage/utils.h"
 #include "storage/version_graph.h"
+#include "util/assert_mutex.h"
 #include "util/once.h"
 
 namespace starrocks {
@@ -74,6 +75,12 @@ using TabletSharedPtr = std::shared_ptr<Tablet>;
 class ChunkIterator;
 
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
+
+#if !defined(BE_TEST) && !defined(NDEBUG)
+using TabletMetaMutex = AssertHeldSharedMutex;
+#else
+using TabletMetaMutex = std::shared_mutex;
+#endif
 
 class Tablet : public BaseTablet {
 public:
@@ -173,7 +180,7 @@ public:
     void obtain_header_rdlock() { _meta_lock.lock_shared(); }
     void obtain_header_wrlock() { _meta_lock.lock(); }
     void release_header_lock() { _meta_lock.unlock(); }
-    std::shared_mutex& get_header_lock() { return _meta_lock; }
+    TabletMetaMutex& get_header_lock() { return _meta_lock; }
 
     // ingest lock
     void obtain_push_lock() { _ingest_lock.lock(); }
@@ -331,7 +338,7 @@ private:
     std::atomic<bool> _is_migrating{false};
 
     // explain how these two locks work together.
-    mutable std::shared_mutex _meta_lock;
+    mutable TabletMetaMutex _meta_lock;
     // A new load job will produce a new rowset, which will be inserted into both _rs_version_map
     // and _inc_rs_version_map. Only the most recent rowsets are kept in _inc_rs_version_map to
     // reduce the amount of data that needs to be copied during the clone task.
