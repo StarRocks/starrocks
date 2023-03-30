@@ -465,10 +465,13 @@ public final class SparkDpp implements java.io.Serializable {
             StructType dstTableSchema,
             EtlJobConfig.EtlIndex baseIndex) throws SparkDppException {
         List<String> distributeColumns = partitionInfo.distributionColumnRefs;
-        Partitioner partitioner = new StarRocksRangePartitioner(partitionInfo, partitionKeyIndex, partitionRangeKeys);;
+        Partitioner partitioner = null;
         PartitionType partitionType = PartitionType.getByType(partitionInfo.partitionType);
         if (partitionType == PartitionType.LIST) {
             partitioner = new StarRocksListPartitioner(partitionInfo, partitionKeyIndex, partitionListKeys);
+        }
+        if (partitionType == PartitionType.RANGE) {
+            partitioner = new StarRocksRangePartitioner(partitionInfo, partitionKeyIndex, partitionRangeKeys);
         }
 
         List<ColumnParser> parsers = new ArrayList<>();

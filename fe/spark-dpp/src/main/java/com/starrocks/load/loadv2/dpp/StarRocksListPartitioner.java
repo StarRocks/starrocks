@@ -43,13 +43,6 @@ public class StarRocksListPartitioner extends Partitioner {
         if (partitionInfo == null) {
             return 0;
         }
-        PartitionType partitionType = PartitionType.getByType(partitionInfo.partitionType);
-        if (partitionType == PartitionType.UNPARTITIONED) {
-            return 0;
-        }
-        if (partitionType == PartitionType.RANGE) {
-            return 0;
-        }
         return  partitionInfo.partitions.size();
     }
 

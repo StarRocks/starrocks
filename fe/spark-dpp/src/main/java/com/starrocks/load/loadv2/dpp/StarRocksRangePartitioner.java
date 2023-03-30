@@ -45,9 +45,6 @@ public class StarRocksRangePartitioner extends Partitioner {
         if (partitionType == PartitionType.UNPARTITIONED) {
             return 1;
         }
-        if (partitionType == PartitionType.LIST) {
-            return 0;
-        }
         return partitionInfo.partitions.size();
     }
 
