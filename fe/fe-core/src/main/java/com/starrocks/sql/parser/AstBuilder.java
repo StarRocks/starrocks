@@ -1284,20 +1284,40 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
             }
         }
-        CreateTableAsSelectStmt createTableAsSelectStmt =
-                (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
-        int startIndex = context.createTableAsSelectStatement().start.getStartIndex();
+
+        CreateTableAsSelectStmt createTableAsSelectStmt = null;
+        InsertStmt insertStmt = null;
+        if (context.createTableAsSelectStatement() != null) {
+            createTableAsSelectStmt = (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
+        } else if (context.insertStatement() != null) {
+            insertStmt = (InsertStmt) visit(context.insertStatement());
+        }
+
+        int startIndex = 0;
+        if (createTableAsSelectStmt != null) {
+            startIndex = context.createTableAsSelectStatement().start.getStartIndex();
+        } else {
+            startIndex = context.insertStatement().start.getStartIndex();
+        }
+
+        String dbName;
+        String taskName;
         if (qualifiedName == null) {
-            return new SubmitTaskStmt(null, null,
-                    properties, startIndex, createTableAsSelectStmt);
+            dbName = null;
+            taskName = null;
         } else if (qualifiedName.getParts().size() == 1) {
-            return new SubmitTaskStmt(null, qualifiedName.getParts().get(0),
-                    properties, startIndex, createTableAsSelectStmt);
+            dbName = null;
+            taskName = qualifiedName.getParts().get(0);
         } else if (qualifiedName.getParts().size() == 2) {
-            return new SubmitTaskStmt(qualifiedName.getParts().get(0),
-                    qualifiedName.getParts().get(1), properties, startIndex, createTableAsSelectStmt);
+            dbName = qualifiedName.getParts().get(0);
+            taskName = qualifiedName.getParts().get(1);
         } else {
             throw new ParsingException("error task name ");
+        }
+        if (createTableAsSelectStmt != null) {
+            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, createTableAsSelectStmt);
+        } else {
+            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, insertStmt);
         }
     }
 
