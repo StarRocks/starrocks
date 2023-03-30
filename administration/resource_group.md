@@ -96,13 +96,9 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 如果分类器的条件数量相等，则分类器的条件描述越精确，其匹配度越高。
 
 ```Plain%20Text
--- 因为分类器 B 限定的 `source_ip` 地址范围更小，所以 B 的匹配度比 A 高。
+因为分类器 B 限定的 `source_ip` 地址范围更小，所以 B 的匹配度比 A 高。
 classifier A (user='Alice', source_ip = '192.168.1.0/16')
 classifier B (user='Alice', source_ip = '192.168.1.0/24')
-
--- 因为分类器 C 限定的查询类型数量更少，所以 C 的匹配度比 D 高。
-classifier C (user='Alice', query_type in ('select'))
-classifier D (user='Alice', query_type in ('insert','select', 'ctas')）
 ```
 
 ## 隔离计算资源
