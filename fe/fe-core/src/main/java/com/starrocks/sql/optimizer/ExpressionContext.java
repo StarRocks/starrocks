@@ -124,7 +124,7 @@ public class ExpressionContext {
     }
 
     public boolean hasExtraStatistics() {
-        return groupExtraStatistics.containsKey(groupExpression);
+        return groupExtraStatistics != null && groupExtraStatistics.containsKey(groupExpression);
     }
 
     public void setStatistics(Statistics statistics) {
