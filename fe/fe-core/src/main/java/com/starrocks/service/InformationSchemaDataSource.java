@@ -130,7 +130,7 @@ public class InformationSchemaDataSource {
                         tableConfigInfo.setTable_schema(dbName);
                         tableConfigInfo.setTable_name(table.getName());
 
-                        if (table.isNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+                        if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
                             // OLAP (done)
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
@@ -311,7 +311,7 @@ public class InformationSchemaDataSource {
                         info.setChecksum(DEFAULT_EMPTY_NUM);
                         info.setTable_comment(table.getComment());
 
-                        if (table.isNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+                        if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
                             // OLAP (done)
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)

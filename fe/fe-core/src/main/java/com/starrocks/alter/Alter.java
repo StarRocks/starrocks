@@ -558,7 +558,7 @@ public class Alter {
             }
 
             if (!table.isOlapOrCloudNativeTable()) {
-                throw new DdlException("Do not support alter non-OLAP or non-LAKE table[" + tableName + "]");
+                throw new DdlException("Do not support alter non-native table[" + tableName + "]");
             }
             olapTable = (OlapTable) table;
 

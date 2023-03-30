@@ -23,7 +23,7 @@ public class TransactionStateListenerFactory {
         if (table.isCloudNativeTableOrMaterializedView()) {
             return new LakeTableTxnStateListener(dbTxnMgr, (OlapTable) table);
         }
-        if (table.isLocalTable()) {
+        if (table.isOlapTableOrMaterializedView()) {
             return new OlapTableTxnStateListener(dbTxnMgr, (OlapTable) table);
         }
         return null;

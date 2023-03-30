@@ -94,7 +94,7 @@ public class TabletStatMgr extends LeaderDaemon {
             db.writeLock();
             try {
                 for (Table table : db.getTables()) {
-                    if (!table.isNativeTable()) {
+                    if (!table.isNativeTableOrMaterializedView()) {
                         continue;
                     }
 

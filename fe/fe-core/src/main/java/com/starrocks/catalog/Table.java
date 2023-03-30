@@ -260,7 +260,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.VIEW;
     }
 
-    public boolean isLocalTable() {
+    public boolean isOlapTableOrMaterializedView() {
         return isOlapTable() || isOlapMaterializedView();
     }
 
@@ -280,8 +280,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return isOlapMaterializedView() || isCloudNativeMaterializedView();
     }
 
-    public boolean isNativeTable() {
-        return isLocalTable() || isCloudNativeTableOrMaterializedView();
+    public boolean isNativeTableOrMaterializedView() {
+        return isOlapTableOrMaterializedView() || isCloudNativeTableOrMaterializedView();
     }
 
     public boolean isHiveTable() {
@@ -560,7 +560,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
      * 5. PRIMARY_KEYS table does not support local balance.
      */
     public boolean needSchedule(boolean isLocalBalance) {
-        if (!isLocalTable()) {
+        if (!isOlapTableOrMaterializedView()) {
             return false;
         }
 

@@ -298,7 +298,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             BaseTableInfo baseTableInfo = tablePair.first;
             Table table = tablePair.second;
-            if (!table.isNativeTable()) {
+            if (!table.isNativeTableOrMaterializedView()) {
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
                         baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
             }
@@ -520,7 +520,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private boolean supportRefreshByPartition(Table table) {
-        if (table.isLocalTable() || table.isHiveTable() || table.isCloudNativeTable()) {
+        if (table.isOlapTableOrMaterializedView() || table.isHiveTable() || table.isCloudNativeTable()) {
             return true;
         }
         return false;
@@ -662,7 +662,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 }
                 tableNamePartitionNames.put(table.getName(), needRefreshTablePartitionNames);
             } else {
-                if (table.isNativeTable()) {
+                if (table.isNativeTableOrMaterializedView()) {
                     tableNamePartitionNames.put(table.getName(), ((OlapTable) table).getPartitionNames());
                 }
             }
@@ -707,7 +707,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             // generate partition predicate for external table because it can not use partition names
             // to scan partial partitions
             Table table = tableRelation.getTable();
-            if (tablePartitionNames != null && !table.isNativeTable()) {
+            if (tablePartitionNames != null && !table.isNativeTableOrMaterializedView()) {
                 generatePartitionPredicate(tablePartitionNames, queryStatement, tableRelation);
             }
         }

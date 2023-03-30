@@ -23,7 +23,7 @@ public class TransactionLogApplierFactory {
         if (table.isCloudNativeTableOrMaterializedView()) {
             return new LakeTableTxnLogApplier((OlapTable) table);
         }
-        if (table.isLocalTable()) {
+        if (table.isOlapTableOrMaterializedView()) {
             return new OlapTableTxnLogApplier((OlapTable) table);
         }
         return null;

@@ -269,7 +269,7 @@ public class PartitionsProcDir implements ProcDirInterface {
     private List<List<Comparable>> getOlapPartitionInfos() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
-        Preconditions.checkState(table.isLocalTable());
+        Preconditions.checkState(table.isOlapTableOrMaterializedView());
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();

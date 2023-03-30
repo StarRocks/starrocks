@@ -137,7 +137,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 int dbReplicaNum = 0;
 
                 for (Table table : db.getTables()) {
-                    if (!table.isNativeTable()) {
+                    if (!table.isNativeTableOrMaterializedView()) {
                         continue;
                     }
 

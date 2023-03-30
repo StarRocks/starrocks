@@ -293,7 +293,7 @@ public class LocalMetastore implements ConnectorMetadata {
         for (Database db : this.fullNameToDb.values()) {
             long dbId = db.getId();
             for (Table table : db.getTables()) {
-                if (!table.isNativeTable()) {
+                if (!table.isNativeTableOrMaterializedView()) {
                     continue;
                 }
 
@@ -313,7 +313,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         for (Tablet tablet : index.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            if (table.isLocalTable()) {
+                            if (table.isOlapTableOrMaterializedView()) {
                                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     invertedIndex.addReplica(tabletId, replica);
                                     if (MetaContext.get().getMetaVersion() < FeMetaVersion.VERSION_48) {
@@ -2487,7 +2487,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readLock();
             try {
                 for (Table table : db.getTables()) {
-                    if (!table.isLocalTable()) {
+                    if (!table.isOlapTableOrMaterializedView()) {
                         continue;
                     }
 
@@ -2664,7 +2664,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (asyncRefreshContext.getTimeUnit() == null) {
                 // asyncRefreshContext's timeUnit is null means this task's type is EVENT_TRIGGERED
                 Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(stmt.getQueryStatement());
-                if (tableNameTableMap.values().stream().anyMatch(table -> !table.isNativeTable())) {
+                if (tableNameTableMap.values().stream().anyMatch(table -> !table.isNativeTableOrMaterializedView())) {
                     throw new DdlException(
                             "Materialized view which type is ASYNC need to specify refresh interval for " +
                                     "external table");
@@ -2985,7 +2985,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     Table baseTable = baseTableInfo.getTable();
                     if (baseTable != null) {
                         baseTable.removeRelatedMaterializedView(mvId);
-                        if (!baseTable.isNativeTable()) {
+                        if (!baseTable.isNativeTableOrMaterializedView()) {
                             // remove relatedMaterializedViews for connector table
                             GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
                                     removeConnectorTableInfo(baseTableInfo.getCatalogName(),

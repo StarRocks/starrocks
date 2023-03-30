@@ -690,7 +690,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         // idToTable
         for (RecycleTableInfo tableInfo : idToTableInfo.values()) {
             Table table = tableInfo.getTable();
-            if (!table.isNativeTable()) {
+            if (!table.isNativeTableOrMaterializedView()) {
                 continue;
             }
 
@@ -708,7 +708,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        if (table.isLocalTable()) {
+                        if (table.isOlapTableOrMaterializedView()) {
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                             }
@@ -763,7 +763,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                 for (Tablet tablet : index.getTablets()) {
                     long tabletId = tablet.getId();
                     invertedIndex.addTablet(tabletId, tabletMeta);
-                    if (olapTable.isLocalTable()) {
+                    if (olapTable.isOlapTableOrMaterializedView()) {
                         for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             invertedIndex.addReplica(tabletId, replica);
                         }

@@ -1443,7 +1443,7 @@ public class GlobalStateMgr {
                     }
                     MvId mvId = new MvId(db.getId(), mv.getId());
                     table.addRelatedMaterializedView(mvId);
-                    if (!table.isNativeTable()) {
+                    if (!table.isNativeTableOrMaterializedView()) {
                         connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
                                 ConnectorTableInfo.builder().setRelatedMaterializedViews(

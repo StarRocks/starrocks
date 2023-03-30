@@ -212,7 +212,7 @@ public class ShowTabletStmt extends ShowStmt {
         db.readLock();
         try {
             Table table = db.getTable(tableName);
-            if (table == null || !table.isNativeTable()) {
+            if (table == null || !table.isNativeTableOrMaterializedView()) {
                 return ImmutableList.of();
             }
 
