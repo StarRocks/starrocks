@@ -55,7 +55,7 @@ set(EXEC_FILES
         ./exec/chunks_sorter_test.cpp
         ./exec/csv_scanner_test.cpp
         ./exec/file_scan_node_test.cpp
-        ./exec/hdfs_scanner_test.cpp        
+        ./exec/hdfs_scanner_test.cpp
         ./exec/hdfs_scan_node_test.cpp
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
@@ -166,6 +166,7 @@ set(EXEC_FILES
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
         ./storage/delete_handler_test.cpp
+        ./storage/delta_column_group_test.cpp
         ./storage/file_utils_test.cpp
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
@@ -291,6 +292,7 @@ set(EXEC_FILES
         ./runtime/command_executor_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
+        ./types/bitmap_value_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
