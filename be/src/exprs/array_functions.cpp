@@ -1242,7 +1242,8 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
 
     phmap::flat_hash_set<uint32_t> sets;
 
-    uint32_t hash[elements->size()]{0};
+    uint32_t hash[elements->size()];
+    memset(hash, 0, elements->size() * sizeof(uint32_t));
     elements->fnv_hash(hash, 0, elements->size());
 
     size_t rows = columns[0]->size();
