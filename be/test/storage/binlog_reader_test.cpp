@@ -168,7 +168,7 @@ void BinlogReaderTest::ingestion_rowsets(std::vector<std::vector<RowsetInfo>>& r
         }
         binlog_manager->close_active_writer();
     }
-    ASSERT_EQ(rowsets_per_binlog_file.size(), binlog_manager->file_metas().size());
+    ASSERT_EQ(rowsets_per_binlog_file.size(), binlog_manager->alive_binlog_files().size());
 }
 
 class OutputVerifier {
