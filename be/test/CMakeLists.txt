@@ -54,8 +54,37 @@ set(EXEC_FILES
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+<<<<<<< HEAD
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
+=======
+        ./exec/query_cache/query_cache_test.cpp
+        ./exec/query_cache/transform_operator.cpp
+        ./exec/schema_columns_scanner_test.cpp
+        ./exec/stream/mem_state_table_test.cpp
+        ./exec/stream/stream_aggregator_test.cpp
+        ./exec/stream/stream_operators_test.cpp
+        ./exec/stream/stream_pipeline_test.cpp
+        ./exec/tablet_info_test.cpp
+        ./exec/agg_hash_map_test.cpp
+        ./exec/analytor_test.cpp
+        ./exec/analytor_test.cpp
+        ./exec/arrow_converter_test.cpp
+        ./exec/chunks_sorter_heap_sort_test.cpp
+        ./exec/chunks_sorter_test.cpp
+        ./exec/csv_scanner_test.cpp
+        ./exec/file_scan_node_test.cpp
+        ./exec/hdfs_scanner_test.cpp
+        ./exec/hdfs_scan_node_test.cpp
+        ./exec/join_hash_map_test.cpp
+        ./exec/json_parser_test.cpp
+        ./exec/json_scanner_test.cpp
+        ./exec/avro_scanner_test.cpp
+        ./exec/parquet_scanner_test.cpp
+        ./exec/repeat_node_test.cpp
+        ./exec/sorting_test.cpp
+        ./exec/table_function_node_test.cpp
+>>>>>>> 410ff357c ([Enhancement] Constructor of BitmapValue support shallow copy (#20617))
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
@@ -248,6 +277,7 @@ set(EXEC_FILES
         ./runtime/memory_scratch_sink_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
+        ./types/bitmap_value_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
