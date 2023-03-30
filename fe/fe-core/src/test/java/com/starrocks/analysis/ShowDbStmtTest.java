@@ -31,11 +31,13 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.platform.commons.util.Preconditions;
 
 public class ShowDbStmtTest {
     private ConnectContext ctx;
@@ -108,8 +110,7 @@ public class ShowDbStmtTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
-        final Analyzer analyzer = AccessTestUtil.fetchBlockAnalyzer();
+    public void testNormal() throws Exception {
         ShowDbStmt stmt = new ShowDbStmt(null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertNull(stmt.getPattern());
@@ -127,6 +128,11 @@ public class ShowDbStmtTest {
         ShowResultSet resultSet = executor.execute();
         ShowResultSetMetaData metaData = resultSet.getMetaData();
         Assert.assertEquals(metaData.getColumn(0).getName(), "Database");
+
+        String sql = "show databases where `database` = 't1'";
+        stmt = (ShowDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Preconditions.notNull(stmt.toSelectStmt().getOrigStmt(), "stmt's original stmt should not be null");
+
     }
 
     @Test
