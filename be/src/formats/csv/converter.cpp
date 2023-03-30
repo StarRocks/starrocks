@@ -57,8 +57,13 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
         return std::make_unique<DateConverter>();
     case TYPE_DATETIME:
         return std::make_unique<DatetimeConverter>();
-    case TYPE_ARRAY:
-        return std::make_unique<ArrayConverter>(get_converter(t.children[0], true));
+    case TYPE_ARRAY: {
+        auto c = get_converter(t.children[0], true);
+        if (c == nullptr) {
+            return nullptr;
+        }
+        return std::make_unique<ArrayConverter>(std::move(c));
+    }
     case TYPE_DECIMAL32:
         return std::make_unique<DecimalV3Converter<int32_t>>(t.precision, t.scale);
     case TYPE_DECIMAL64:
