@@ -119,6 +119,9 @@ Status LogBlockContainer::open() {
     std::string file_path = path();
     WritableFileOptions opt;
     opt.mode = FileSystem::CREATE_OR_OPEN;
+    if (config::experimental_spill_skip_sync) {
+        opt.sync_on_close = false;
+    }
     ASSIGN_OR_RETURN(_writable_file, _dir->fs()->new_writable_file(opt, file_path));
     TRACE_SPILL_LOG << "create new container file: " << file_path;
     _has_open = true;

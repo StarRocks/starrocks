@@ -56,6 +56,7 @@ bool SpillableAggregateBlockingSourceOperator::is_finished() const {
 Status SpillableAggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
     _is_finished = true;
     RETURN_IF_ERROR(AggregateBlockingSourceOperator::set_finished(state));
+    _aggregator->spiller()->set_finished();
     return Status::OK();
 }
 
