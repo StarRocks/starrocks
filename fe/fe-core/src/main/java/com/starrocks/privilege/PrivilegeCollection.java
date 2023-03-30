@@ -20,6 +20,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -71,7 +72,15 @@ public class PrivilegeCollection {
         }
 
         @Override
-        public int compareTo(PrivilegeEntry o) {
+        public int compareTo(@NotNull PrivilegeEntry o) {
+            //object is null when objectType is SYSTEM
+            if (this.object == null && o.object == null) {
+                return 0;
+            } else if (this.object == null) {
+                return -1;
+            } else if (o.object == null) {
+                return 1;
+            }
             return this.object.compareTo(o.object);
         }
     }
@@ -96,9 +105,7 @@ public class PrivilegeCollection {
             }
         } else {
             for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-                if (privilegeEntry.object != null
-                        && object.equals(privilegeEntry.object)
-                        && withGrantOption == privilegeEntry.withGrantOption) {
+                if (object.equals(privilegeEntry.object) && withGrantOption == privilegeEntry.withGrantOption) {
                     return privilegeEntry;
                 }
             }
