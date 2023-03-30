@@ -243,7 +243,9 @@ public class InformationSchemaDataSource {
         
         // SORT KEYS
         MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
-        if (index.getSortKeyIdxes() != null) {
+        if (index.getSortKeyIdxes() == null) {
+            tableConfigInfo.setSort_key(pkSb);
+        } else {
             List<String> sortKeysColumnNames = Lists.newArrayList();
             for (Integer i : index.getSortKeyIdxes()) {
                 sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
