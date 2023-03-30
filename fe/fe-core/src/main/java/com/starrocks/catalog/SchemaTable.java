@@ -615,6 +615,20 @@ public class SchemaTable extends Table {
                                             .column("SORT_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("PROPERTIES", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .build()))
+                    .put("be_compactions", new SchemaTable(
+                            SystemId.BE_COMPACTIONS_ID,
+                            "be_compactions",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CANDIDATES_NUM", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("BASE_COMPACTION_CONCURRENCY", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CUMULATIVE_COMPACTION_CONCURRENCY", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("LATEST_COMPACTION_SCORE", ScalarType.createType(PrimitiveType.DOUBLE))
+                                    .column("CANDIDATE_MAX_SCORE", ScalarType.createType(PrimitiveType.DOUBLE))
+                                    .column("MANUAL_COMPACTION_CONCURRENCY", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("MANUAL_COMPACTION_CANDIDATES_NUM", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .build()))
                     .put("be_tablets", new SchemaTable(
                             SystemId.BE_TABLETS_ID,
                             "be_tablets",
@@ -811,6 +825,7 @@ public class SchemaTable extends Table {
                 TSchemaTableType.SCH_BE_TXNS),
         SCH_BE_CONFIGS("BE_CONFIGS", "BE_CONFIGS", TSchemaTableType.SCH_BE_CONFIGS),
         SCH_FE_TABLET_SCHEDULES("FE_TABLET_SCHEDULES", "FE_TABLET_SCHEDULES", TSchemaTableType.SCH_FE_TABLET_SCHEDULES),
+        SCH_BE_COMPACTIONS("BE_COMPACTIONS", "BE_COMPACTIONS", TSchemaTableType.SCH_BE_COMPACTIONS),
         SCH_BE_THREADS("BE_THREADS", "BE_THREADS", TSchemaTableType.SCH_BE_THREADS);
 
         private final String description;
