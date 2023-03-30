@@ -460,7 +460,7 @@ void ParquetBuilder::_add_chunk_column(const TypeDescriptor& type_desc, const Co
             _add_chunk_column(type_desc.children[0], elements, cur_def_level, cur_rep_level, max_rep_level, cur_is_null, cur_mapping);
             return;
         }
-//        case TYPE_MAP: {
+        case TYPE_MAP: {
 //            const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
 //            const auto data_column = ColumnHelper::get_data_column(col.get());
 //            const auto map_column = down_cast<MapColumn*>(data_column);
@@ -472,7 +472,64 @@ void ParquetBuilder::_add_chunk_column(const TypeDescriptor& type_desc, const Co
 //            _add_column(type_desc.children[0], keys_col);
 //            _add_column(type_desc.children[1], values_col);
 //            return;
-//        }
+            const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
+            const auto nulls = null_column->get_data();
+            const auto map_column = down_cast<MapColumn*>(ColumnHelper::get_data_column(col.get()));
+            const auto keys = map_column->keys_column();
+            const auto values = map_column->values_column();
+            const auto offsets = map_column->offsets_column()->get_data();
+
+            std::vector<int16_t> cur_def_level_key;
+            std::vector<int16_t> cur_def_level_value;
+            std::vector<int16_t> cur_rep_level;
+            std::vector<bool> cur_is_null;
+            std::map<int, int> cur_mapping;
+
+            max_rep_level++;
+
+            int j = 0; // pointer to next not-null value, increment upon non-empty array
+            for (size_t i = 0; i < prev_level_size; i++) { // pointer to cur_def_level, cur_rep_level, cur_is_null
+                if (is_null[i]) { // Null from parent column
+                    cur_def_level_key.push_back(def_level[i]);
+                    cur_def_level_value.push_back(def_level[i]);
+                    cur_is_null.push_back(true);
+                    cur_rep_level.push_back(rep_level[i]);
+                    continue;
+                }
+                auto idx = mapping[i]; // idx is pointer to column, nulls, and offsets
+                if (nulls[idx]) { // Null in this column
+                    cur_def_level_key.push_back(def_level[i]);
+                    cur_def_level_value.push_back(def_level[i]);
+                    cur_is_null.push_back(true);
+                    cur_rep_level.push_back(rep_level[i]);
+                    continue;
+                }
+                if (offsets[idx + 1] == offsets[idx]) { // []
+                    cur_def_level_key.push_back(def_level[i]);
+                    cur_def_level_value.push_back(def_level[i] + 1);
+                    cur_is_null.push_back(true);
+                    cur_rep_level.push_back(rep_level[i]);
+                    continue;
+                }
+                // non-empty array (e.g. [Null, ...])
+                cur_def_level_key.push_back(def_level[i] + 1);
+                cur_def_level_value.push_back(def_level[i] + 2);
+                cur_rep_level.push_back(rep_level[i]);
+                cur_is_null.push_back(false);
+                cur_mapping[cur_def_level_key.size() - 1] = j++;
+                for (auto k = 1; k < offsets[idx + 1] - offsets[idx]; k++) {
+                    cur_def_level_key.push_back(def_level[i] + 1);
+                    cur_def_level_value.push_back(def_level[i] + 2);
+                    cur_rep_level.push_back(max_rep_level); // rep_level is different from rep_level
+                    cur_is_null.push_back(false);
+                    cur_mapping[cur_def_level_key.size() - 1] = j++;
+                }
+            }
+
+            _add_chunk_column(type_desc.children[0], keys, cur_def_level_key, cur_rep_level, max_rep_level, cur_is_null, cur_mapping);
+            _add_chunk_column(type_desc.children[1], values, cur_def_level_value, cur_rep_level, max_rep_level, cur_is_null, cur_mapping);
+            return;
+        }
         // primitive column
         case TYPE_INT: {
 //            const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
