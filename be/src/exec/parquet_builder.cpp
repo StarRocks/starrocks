@@ -374,10 +374,14 @@ Status ParquetBuilder::_add_column_chunk(const TypeDescriptor& type_desc, const 
         case TYPE_MAP: {
             return _add_map_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
-        // TODO: use template of logic type and physical writer type
-        case TYPE_INT: {
-            return _add_int_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
+        case TYPE_TINYINT:
+            return _add_int_column_chunk<TYPE_TINYINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+        case TYPE_SMALLINT:
+            return _add_int_column_chunk<TYPE_SMALLINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+        case TYPE_INT:
+            return _add_int_column_chunk<TYPE_INT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+        case TYPE_BIGINT:
+            return _add_int_column_chunk<TYPE_BIGINT, parquet::Type::INT64>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         case TYPE_VARCHAR: {
             return _add_varchar_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
@@ -596,6 +600,7 @@ Status ParquetBuilder::_add_varchar_column_chunk(const TypeDescriptor& type_desc
     return Status::OK();
 }
 
+template <LogicalType lt, ::parquet::Type::type pt>
 Status ParquetBuilder::_add_int_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
                                                  const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
                                                  int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
@@ -603,14 +608,13 @@ Status ParquetBuilder::_add_int_column_chunk(const TypeDescriptor& type_desc, co
     auto nulls = null_column->get_data();
 
     const auto data_column = ColumnHelper::get_data_column(col.get());
-    auto raw_col = down_cast<const RunTimeColumnType<TYPE_INT>*>(data_column)->get_data().data();
+    const auto raw_col = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
 
     _generate_rg_writer();
-    // TODO: use type trait to get the correct writer
-    auto col_writer = static_cast<parquet::Int32Writer*>(_rg_writer->column(_col_idx));
+    auto col_writer = static_cast<parquet::TypedColumnWriter<parquet::PhysicalType<pt>>*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
-    auto write = [&](int16_t def_level, int16_t rep_level, int32_t value) {
+    auto write = [&](int16_t def_level, int16_t rep_level, typename parquet::type_traits<pt>::value_type value) {
         col_writer->WriteBatch(1, &def_level, &rep_level, &value);
     };
 
