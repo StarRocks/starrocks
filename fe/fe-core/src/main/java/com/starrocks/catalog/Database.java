@@ -367,7 +367,7 @@ public class Database extends MetaObject implements Writable {
         readLock();
         try {
             for (Table table : this.idToTable.values()) {
-                if (!table.isLocalTable()) {
+                if (!table.isOlapTableOrMaterializedView()) {
                     continue;
                 }
 
@@ -385,7 +385,7 @@ public class Database extends MetaObject implements Writable {
         readLock();
         try {
             for (Table table : this.idToTable.values()) {
-                if (!table.isLocalTable()) {
+                if (!table.isOlapTableOrMaterializedView()) {
                     continue;
                 }
 
