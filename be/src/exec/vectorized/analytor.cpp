@@ -28,8 +28,11 @@ Status window_init_jvm_context(int64_t fid, const std::string& url, const std::s
 } // namespace vectorized
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
-                   const TupleDescriptor* result_tuple_desc)
-        : _tnode(tnode), _child_row_desc(child_row_desc), _result_tuple_desc(result_tuple_desc) {
+                   const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
+        : _tnode(tnode),
+          _child_row_desc(child_row_desc),
+          _result_tuple_desc(result_tuple_desc),
+          _use_hash_based_partition(use_hash_based_partition) {
     if (tnode.analytic_node.__isset.buffered_tuple_id) {
         _buffered_tuple_id = tnode.analytic_node.buffered_tuple_id;
     }
@@ -535,9 +538,14 @@ void Analytor::find_partition_end() {
     _found_partition_end.second = static_cast<int64_t>(_partition_columns[0]->size());
     {
         SCOPED_TIMER(_partition_search_timer);
-        for (auto& column : _partition_columns) {
+        if (_use_hash_based_partition) {
             _found_partition_end.second =
-                    _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end.second);
+                    _find_first_not_equal_for_hash_based_partition(_partition_end, start, _found_partition_end.second);
+        } else {
+            for (auto& column : _partition_columns) {
+                _found_partition_end.second =
+                        _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end.second);
+            }
         }
     }
 
@@ -755,6 +763,32 @@ int64_t Analytor::_find_first_not_equal(vectorized::Column* column, int64_t targ
     return end - 1;
 }
 
+int64_t Analytor::_find_first_not_equal_for_hash_based_partition(int64_t target, int64_t start, int64_t end) {
+    // In this case, we cannot compare each column one by one like Analytor::_find_first_not_equal does,
+    // and we must compare all the partition columns for one comparation
+    auto compare = [this](size_t left, size_t right) {
+        for (auto& column : _partition_columns) {
+            auto res = column->compare_at(left, right, *column, 1);
+            if (res != 0) {
+                return res;
+            }
+        }
+        return 0;
+    };
+    while (start + 1 < end) {
+        int64_t mid = start + (end - start) / 2;
+        if (compare(target, mid) == 0) {
+            start = mid;
+        } else {
+            end = mid;
+        }
+    }
+    if (compare(target, end - 1) == 0) {
+        return end;
+    }
+    return end - 1;
+}
+
 void Analytor::_find_candidate_partition_ends() {
     if (!_partition_statistics.is_high_cardinality()) {
         return;
@@ -791,7 +825,8 @@ void Analytor::_find_candidate_peer_group_ends() {
 
 AnalytorPtr AnalytorFactory::create(int i) {
     if (!_analytors[i]) {
-        _analytors[i] = std::make_shared<Analytor>(_tnode, _child_row_desc, _result_tuple_desc);
+        _analytors[i] =
+                std::make_shared<Analytor>(_tnode, _child_row_desc, _result_tuple_desc, _use_hash_based_partition);
     }
     return _analytors[i];
 }
