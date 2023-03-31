@@ -16,6 +16,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [partition_desc]
 distribution_desc
 [rollup_index]
+[ORDER BY (column_definition1,...)]
 [PROPERTIES ("key"="value", ...)]
 [BROKER PROPERTIES ("key"="value", ...)]
 ```
@@ -421,6 +422,13 @@ DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 * 作为分桶键的列，该列的值不支持更新。
 * 分桶键指定后不支持修改。
 * 自 2.5.0 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+
+### **ORDER BY**
+
+自 3.0 版本起，主键模型解耦了主键和排序键，排序键通过 `ORDER BY` 指定，可以为任意列的排列组合。
+> **注意**
+>
+> 如果指定了排序键，就根据排序键构建前缀索引；如果没指定排序键，就根据主键构建前缀索引。
 
 ### **PROPERTIES**
 
@@ -851,5 +859,32 @@ PROPERTIES
     "resource" = "hive0",
     "database" = "hive_db_name",
     "table" = "hive_table_name"
+);
+```
+
+### 创建一张主键模型的表并且指定排序键
+
+假设需要按地域、最近活跃时间实时分析用户情况，则可以将表示用户 ID 的 `user_id` 列作为主键，表示地域的 `address` 列和表示最近活跃时间的 `last_active` 列作为排序键。建表语句如下：
+
+```SQL
+create table users (
+    user_id bigint NOT NULL,
+    name string NOT NULL,
+    email string NULL,
+    address string NULL,
+    age tinyint NULL,
+    sex tinyint NULL,
+    last_active datetime,
+    property0 tinyint NOT NULL,
+    property1 tinyint NOT NULL,
+    property2 tinyint NOT NULL,
+    property3 tinyint NOT NULL
+) 
+PRIMARY KEY (`user_id`)
+DISTRIBUTED BY HASH(`user_id`) BUCKETS 4
+ORDER BY(`address`,`last_active`)
+PROPERTIES(
+    "replication_num" = "3",
+    "enable_persistent_index" = "true"
 );
 ```
