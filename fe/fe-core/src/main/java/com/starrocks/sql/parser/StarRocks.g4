@@ -131,6 +131,7 @@ statement
     | adminCheckTabletsStatement
     | killStatement
     | syncStatement
+    | executeScriptStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -1516,6 +1517,17 @@ roleList
     : identifierOrString (',' identifierOrString)*
     ;
 
+<<<<<<< HEAD
+=======
+setWarehouseStatement
+    : SET WAREHOUSE identifierOrString
+    ;
+
+executeScriptStatement
+    : ADMIN EXECUTE ON INTEGER_VALUE string
+    ;
+
+>>>>>>> 8d83da4fd ([Enhancement] Add scripting ability to BE (#20351))
 unsupportedStatement
     : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
     | BEGIN WORK?

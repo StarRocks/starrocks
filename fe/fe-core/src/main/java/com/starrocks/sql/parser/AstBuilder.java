@@ -201,6 +201,7 @@ import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.EmptyStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.FunctionArgsDef;
@@ -3127,6 +3128,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public ParseNode visitSetWarehouseStatement(StarRocksParser.SetWarehouseStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String warehouseName = identifier.getValue();
+        return new SetWarehouseStmt(warehouseName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitExecuteScriptStatement(StarRocksParser.ExecuteScriptStatementContext context) {
+        long beId = Long.parseLong(context.INTEGER_VALUE().getText());
+        StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+        String script = stringLiteral.getStringValue();
+        return new ExecuteScriptStmt(beId, script, createPos(context));
+    }
+
+>>>>>>> 8d83da4fd ([Enhancement] Add scripting ability to BE (#20351))
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------
 
     @Override
