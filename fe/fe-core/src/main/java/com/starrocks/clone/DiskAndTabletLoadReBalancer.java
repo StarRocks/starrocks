@@ -1228,7 +1228,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             if (table == null) {
                 return result;
             }
-            if (table.isCloudNativeTable()) {
+            if (table.isCloudNativeTableOrMaterializedView()) {
                 // replicas are managed by StarOS and cloud storage.
                 return result;
             }
@@ -1408,7 +1408,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     if (!table.needSchedule(isLocalBalance)) {
                         continue;
                     }
-                    if (table.isCloudNativeTable()) {
+                    if (table.isCloudNativeTableOrMaterializedView()) {
                         // replicas are managed by StarOS and cloud storage.
                         continue;
                     }

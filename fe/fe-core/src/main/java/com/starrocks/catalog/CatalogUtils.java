@@ -47,7 +47,7 @@ public class CatalogUtils {
 
     // check table type is OLAP
     public static void checkNativeTable(Database db, Table table) throws DdlException {
-        if (!table.isNativeTable()) {
+        if (!table.isNativeTableOrMaterializedView()) {
             throw new DdlException("Table[" + table.getName() + "] is not OLAP table or LAKE table");
         }
     }
@@ -89,8 +89,13 @@ public class CatalogUtils {
             if (table == null) {
                 return;
             }
+<<<<<<< HEAD
             if (table.isLakeTable()) {
                 throw new AnalysisException("Unsupported operation on lake table [" + dbName + "." + tableName + "]");
+=======
+            if (table.isCloudNativeTable()) {
+                throw new AnalysisException(PARSER_ERROR_MSG.unsupportedOpWithInfo("lake table " + db + "." + tableName));
+>>>>>>> aa194215c ([Refactor] Rename enum TableType.LAKE to TableType.CLOUD_NATIVE (#20655))
             }
         } finally {
             db.readUnlock();

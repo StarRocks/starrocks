@@ -1079,7 +1079,7 @@ public class PrivilegeChecker {
                     }
 
                     for (Table table : sortedTables) {
-                        if (!table.isNativeTable()) {
+                        if (!table.isNativeTableOrMaterializedView()) {
                             continue;
                         }
 
@@ -1137,7 +1137,7 @@ public class PrivilegeChecker {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                     }
 
-                    if (!table.isNativeTable()) {
+                    if (!table.isNativeTableOrMaterializedView()) {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
                     }
 

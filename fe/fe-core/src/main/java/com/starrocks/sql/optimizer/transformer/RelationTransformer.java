@@ -446,7 +446,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         }
 
         LogicalScanOperator scanOperator;
-        if (node.getTable().isNativeTable()) {
+        if (node.getTable().isNativeTableOrMaterializedView()) {
             DistributionInfo distributionInfo = ((OlapTable) node.getTable()).getDefaultDistributionInfo();
             Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;

@@ -956,7 +956,7 @@ public class OlapTable extends Table {
                             rangePartitionInfo.getReplicationNum(partition.getId()),
                             rangePartitionInfo.getIsInMemory(partition.getId()),
                             rangePartitionInfo.getStorageCacheInfo(partition.getId()),
-                            isLakeTable());
+                            isCloudNativeTable());
                 } else if (!reserveTablets) {
                     GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 }
@@ -1601,7 +1601,7 @@ public class OlapTable extends Table {
                 partition.setState(PartitionState.NORMAL);
                 for (MaterializedIndex idx : partition.getMaterializedIndices(extState)) {
                     idx.setState(IndexState.NORMAL);
-                    if (copied.isCloudNativeTable()) {
+                    if (copied.isCloudNativeTableOrMaterializedView()) {
                         continue;
                     }
                     for (Tablet tablet : idx.getTablets()) {

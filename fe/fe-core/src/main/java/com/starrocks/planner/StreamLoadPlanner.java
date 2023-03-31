@@ -228,7 +228,7 @@ public class StreamLoadPlanner {
 
         // Disable load_dop for LakeTable temporary, because BE's `LakeTabletsChannel` does not support
         // parallel send from a single sender.
-        if (streamLoadInfo.getLoadParallelRequestNum() != 0 && !destTable.isCloudNativeTable()) {
+        if (streamLoadInfo.getLoadParallelRequestNum() != 0 && !destTable.isCloudNativeTableOrMaterializedView()) {
             // only dup_keys can use parallel write since other table's the order of write is important
             if (destTable.getKeysType() == KeysType.DUP_KEYS) {
                 queryOptions.setLoad_dop(streamLoadInfo.getLoadParallelRequestNum());

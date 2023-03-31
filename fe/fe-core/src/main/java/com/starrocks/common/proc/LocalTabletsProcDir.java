@@ -94,8 +94,13 @@ public class LocalTabletsProcDir implements ProcDirInterface {
     public List<List<Comparable>> fetchComparableResult(long version, long backendId, Replica.ReplicaState state) {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(index);
+<<<<<<< HEAD
         Preconditions.checkState(table.isLocalTable());
         ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+=======
+        Preconditions.checkState(table.isOlapTableOrMaterializedView());
+        ImmutableMap<Long, DataNode> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+>>>>>>> aa194215c ([Refactor] Rename enum TableType.LAKE to TableType.CLOUD_NATIVE (#20655))
 
         List<List<Comparable>> tabletInfos = new ArrayList<List<Comparable>>();
         db.readLock();
