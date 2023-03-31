@@ -380,6 +380,11 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         Column oriColumn = schemaForFinding.get(modColIndex);
+
+        if (oriColumn.isAutoIncrement()) {
+            throw new DdlException("Can't not modify a AUTO_INCREMENT column");
+        }
+    
         // retain old column name
         modColumn.setName(oriColumn.getName());
 

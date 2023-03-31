@@ -262,9 +262,9 @@ public class InsertPlanner {
                         }
                         if (row.get(idx) instanceof DefaultValueExpr) {
                             if (isAutoIncrement) {
-                                row.set(columnIdx, new NullLiteral());
+                                row.set(idx, new NullLiteral());
                             } else {
-                                row.set(columnIdx, new StringLiteral(targetColumn.calculatedDefaultValue()));
+                                row.set(idx, new StringLiteral(targetColumn.calculatedDefaultValue()));
                             }
                         }
                         row.set(idx, TypeManager.addCastExpr(row.get(idx), targetColumn.getType()));
