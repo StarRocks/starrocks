@@ -319,6 +319,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
             continue;
         }
 
+        TRY_CATCH_ALLOC_SCOPE_START()
         if ((*chunk) == nullptr) {
             // we need a valid probe chunk to initialize the new chunk.
             _init_chunk(chunk);
@@ -413,6 +414,12 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
             continue;
         }
 
+<<<<<<< HEAD:be/src/exec/vectorized/cross_join_node.cpp
+=======
+        TRY_CATCH_ALLOC_SCOPE_END()
+
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_join_conjuncts, (*chunk).get()));
+>>>>>>> e435b2ae9 (CrossJoinNode try catch chunk memory alloc (#20706)):be/src/exec/cross_join_node.cpp
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
 
         // we get result chunk.
