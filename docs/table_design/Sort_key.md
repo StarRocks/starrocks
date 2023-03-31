@@ -12,9 +12,9 @@ In the Aggregate Key model, sort key columns are defined by using the `AGGREGATE
 
 In the Unique Key model, sort key columns are defined by using the `UNIQUE KEY` keyword.
 
-In the Primary Key model, sort key columns are primary key columns, which are defined by using the `PRIMARY KEY` keyword.
+In versions earlier than v3.0, the primary key and sort key are decoupled in the Primary Key model. The sort key columns are defined by using the `ORDER BY` keyword. The primary key columns are defined by using the `PRIMARY KEY` keyword.
 
-When you define sort key columns for a table at table creation, take note of the following points:
+When you define sort key columns for a Duplicate Key, Aggregate Key, or Unique Key table, take note of the following points:
 
 - Sort key columns must be continuously defined columns, of which the first defined column must be the beginning sort key column.
 
@@ -95,7 +95,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 ### Primary Key
 
-Create a table named `site_access_primary`. The table consists of four columns: `site_id`, `city_code`, `user_id`, and `pv`, of which `site_id` and `city_code` are selected as sort key columns.
+Create a table named `site_access_primary`. The table consists of four columns: `site_id`, `city_code`, `user_id`, and `pv`, of which `site_id` is selected as the primary key column, `site_id` and `city_code` are selected as sort key columns.
 
 The statement for creating the table is as follows:
 
@@ -107,8 +107,9 @@ CREATE TABLE site_access_primary
     user_id INT,
     pv BIGINT DEFAULT '0'
 )
-PRIMARY KEY(site_id, city_code)
-DISTRIBUTED BY HASH(site_id) BUCKETS 10;
+PRIMARY KEY(site_id)
+DISTRIBUTED BY HASH(site_id) BUCKETS 10
+ORDER BY(site_id,city_code);
 ```
 
 ## Sorting effect

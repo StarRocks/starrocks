@@ -10,17 +10,17 @@ StarRocks provides four data models: Duplicate Key, Aggregate Key, Unique Key, a
 
 ### Sort keys
 
-When you create a table, you can specify one or more columns based on which StarRocks sorts, processes, and stores the data loaded in to that table. The one or more columns that you specified comprise the sort key. These columns are referred to as sort key columns. The sort key is usually created on dimension columns that are frequently used as filter conditions for queries, because this can accelerate queries. In the Duplicate Key model, the sort key is created on columns that are used to sort data, and is defined by using the `DUPLICATE KEY` keyword. In the Aggregate Key model, the sort key is created on columns that are used to aggregate data, and is defined by using the `AGGREGATE KEY` keyword. In the Unique Key model or Primary Key model, the sort key is created on columns on which unique constraints are enforced, and is defined by using the `PRIMARY KEY` or `UNIQUE KEY` keyword.
+When data is loaded into a table created by using a certain data model, data is sorted and stored according to one or more columns defined as the sort key when the table is created. The sort key is usually one or more columns that are frequently used as filter conditions in queries, thereby accelerating queries.
 
-Compared with traditional primary keys, sort keys in StarRocks have the following characteristics:
+In the Duplicate Key model, the sort key specified by `DUPLICATE KEY` is used to sort data and is not assigned a UNIQUE constraint.
+In the Aggregate Key model, the sort key specified by `AGGRAGATE KEY` is used to sort data and is assigned a UNIQUE constraint.
+In the Unique Key model, the sort key specified by `UNIQUE KEY` is used to sort data and is assigned a UNIQUE constraint.
+In the Primary Key model, the primary key and sort key are decoupled. The primary key specified by `PRIMARY KEY` is assigned UNIQUE and NOT NULL constraints. The sort key specified by `ORDER BY` is used for sorting data.
 
-- Sort keys are usually created on dimension columns that are frequently used as filter conditions for queries.
-
-- In the Duplicate Key model, sort keys do not need to be created on columns on which unique constraints are enforced. In the Aggregate Key model, Unique Key model, and Primary Key model, however, sort keys must be created on columns on which unique constraints are enforced.
-
-- StarRocks tables use clustered storage. This means that the values in each column of a table are stored in sorted order based on the sort key that you specified for the table.
-
-- Prefix indexes can be generated based on sort keys.
+> **NOTE**
+>
+> - In versions earlier than v3.0, the Primary Key model does not support defining the primary key and sort key separately.
+> - For more descriptions of sort keys, see [Sort keys and prefix indexes](./Sort_key.md).
 
 ## Precautions
 
@@ -257,7 +257,11 @@ After a table is created, you can use various data ingestion methods to load dat
 
 ## Primary Key model
 
-StarRocks has started to support the Primary Key model since v1.19. When you create a table that uses the Primary Key model, you can define primary key columns and metric columns. Queries return the most recent record among a group of records that have the same primary key. Unlike the Unique Key model, the Primary Key model does not require aggregate operations during queries and supports the pushdown of predicates and indexes. As such, the Primary Key model can deliver high query performance despite real-time and frequent data updates.
+When a table is created, you can define the primary key and sort key separately. When data is loaded into a Primary Key table, StarRocks sorts the data according to the sort key before it stores the data. Queries return the most recent record among a group of records that have the same primary key. Unlike the Unique Key model, the Primary Key model does not require aggregate operations during queries and supports the pushdown of predicates and indexes. As such, the Primary Key model can deliver high query performance despite real-time and frequent data updates.
+
+> NOTE
+>
+> In versions earlier than v3.0, the Primary Key model does not support decoupling the primary key and sort key.
 
 ### Scenarios
 
@@ -324,7 +328,7 @@ PROPERTIES("replication_num" = "3",
 "enable_persistent_index" = "true");
 ```
 
-Example 2: Suppose that you need to analyze user behavior in real time. In this example, create a table named `users`, define `user_id` as the primary key, and define the other columns as metric columns.
+Example 2: Suppose that you need to analyze user behavior in real time from dimensions such as users' address and last active time. When you create a table, you can define the `user_id` column as the primary key and define the combination of the `address` and `last_active` columns as the sort key.
 
 ```SQL
 create table users (
@@ -342,6 +346,7 @@ create table users (
     ....
 ) PRIMARY KEY (user_id)
 DISTRIBUTED BY HASH(user_id) BUCKETS 4
+ORDER BY(`address`,`last_active`)
 PROPERTIES("replication_num" = "3",
 "enable_persistent_index" = "true");
 ```
@@ -376,15 +381,22 @@ PROPERTIES("replication_num" = "3",
   > - It is recommended to set this property to true if the disk is SSD.
   > - As of version 2.3.0, StarRocks supports to set this property.
 
-- Since version 2.3.0, the indicator column now supports BITMAP, HLL data types.
+- You can specify the sort key as the permutation and combination of any columns by using the `ORDER BY` keyword.
 
-- When you create a table, you cannot create BITMAP indexes or Bloom Filter indexes on the metric columns of the table.
+  > **NOTICE**
+  >
+  > If the sort key is specified, the prefix index is built according to the sort key; if the sort key is not specified, the prefix index is built according to the primary key.
 
-- Since version 2.4.0, the Primary Key model supports to build a materialized view for a one table or multiple tables.
+- ALTER TABLE can be used to change table schema, but the following limits exist:
+  - Modifying the primary key is not supported.
+  - Reassigning the sort key by using ALTER TABLE ... ORDER BY .... is supported. Deleting the sort key is not supported. Modifying the data types of columns in the sort key is not supported.
+  - Adjusting the column order is not supported.
 
-- The Primary Key model does not support materialized views.
+- Since version 2.3.0, the columns except for the primary key columns now support the BITMAP and HLL data types.
 
-- You cannot use the ALTER TABLE statement to change the data types of the primary key columns and reorder metric columns. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
+- When you create a table, you can create BITMAP indexes or Bloom Filter indexes on the columns except for primary key columns.
+
+- Since version 2.4.0, the Primary Key model supports synchronous and asynchronous materialized views.
 
 ### What to do next
 
