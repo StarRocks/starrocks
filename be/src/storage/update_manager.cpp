@@ -35,6 +35,10 @@ Status LocalDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, Del
     return StorageEngine::instance()->update_manager()->get_del_vec(_meta, tsid, version, pdelvec);
 }
 
+Status LocalDeltaColumnGroupLoader::load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs) {
+    return StorageEngine::instance()->update_manager()->get_delta_column_group(_meta, tsid, version, pdcgs);
+}
+
 UpdateManager::UpdateManager(MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()), _update_state_cache(std::numeric_limits<size_t>::max()) {
     _update_mem_tracker = mem_tracker;
@@ -86,6 +90,11 @@ Status UpdateManager::get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& 
 Status UpdateManager::set_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, const DelVector& delvec) {
     // TODO: support batch transaction with tablet/rowset meta save
     return TabletMetaManager::set_del_vector(meta, tsid.tablet_id, tsid.segment_id, delvec);
+}
+
+Status UpdateManager::get_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
+                                             DeltaColumnGroupList* dcgs) {
+    return TabletMetaManager::get_delta_column_group(meta, tsid.tablet_id, tsid.segment_id, version, dcgs);
 }
 
 Status UpdateManager::get_del_vec(KVStore* meta, const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {

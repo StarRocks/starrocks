@@ -43,6 +43,7 @@ add_library(Storage STATIC
     primary_key_encoder.cpp
     protobuf_file.cpp
     rowset_update_state.cpp
+    rowset_column_update_state.cpp
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp
