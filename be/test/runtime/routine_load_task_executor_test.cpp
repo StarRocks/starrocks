@@ -70,6 +70,7 @@ public:
 
         config::routine_load_thread_pool_size = 5;
         config::max_consumer_num_per_group = 3;
+        config::routine_load_kafka_timeout_second = 3;
     }
 
     void TearDown() override {
