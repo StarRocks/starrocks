@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.transaction;
 
 import com.google.common.base.Preconditions;
@@ -49,7 +48,6 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     // olap table or olap materialized view
     private final OlapTable table;
 
-    private Set<Long> totalInvolvedBackends;
     private Set<Long> errorReplicaIds;
     private Set<Long> dirtyPartitionSet;
     private Set<String> invalidDictCacheColumns;
@@ -62,12 +60,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> tabletCommitInfos,
-            List<TabletFailInfo> failedTablets) throws TransactionException {
+                          List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
         if (table.getState() == OlapTable.OlapTableState.RESTORE) {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
         }
-        totalInvolvedBackends = Sets.newHashSet();
         errorReplicaIds = Sets.newHashSet();
         dirtyPartitionSet = Sets.newHashSet();
         invalidDictCacheColumns = Sets.newHashSet();
@@ -143,6 +140,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             }
         }
 
+        Set<Long> totalInvolvedBackends = Sets.newHashSet();
         for (Partition partition : table.getAllPartitions()) {
             if (!dirtyPartitionSet.contains(partition.getId())) {
                 continue;
@@ -212,6 +210,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                 }
             }
         }
+        // add publish version tasks. set task to null as a placeholder.
+        // tasks will be created when publishing version.
+        for (long backendId : totalInvolvedBackends) {
+            txnState.addPublishVersionTask(backendId, null);
+        }
     }
 
     @Override
@@ -247,11 +250,6 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void postWriteCommitLog(TransactionState txnState) {
-        // add publish version tasks. set task to null as a placeholder.
-        // tasks will be created when publishing version.
-        for (long backendId : totalInvolvedBackends) {
-            txnState.addPublishVersionTask(backendId, null);
-        }
     }
 
     @Override
