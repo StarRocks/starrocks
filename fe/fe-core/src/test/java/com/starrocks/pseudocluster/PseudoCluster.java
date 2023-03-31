@@ -82,7 +82,7 @@ public class PseudoCluster {
     int queryPort;
 
     PseudoFrontend frontend;
-    Map<String, PseudoDataNode> backends;
+    Map<String, PseudoBackend> backends;
     Map<Long, String> backendIdToHost = new HashMap<>();
     HeatBeatPool heartBeatPool = new HeatBeatPool("heartbeat");
     BackendThriftPool backendThriftPool = new BackendThriftPool("backend");
@@ -261,7 +261,7 @@ public class PseudoCluster {
         return config;
     }
 
-    public PseudoDataNode getBackend(long beId) {
+    public PseudoBackend getBackend(long beId) {
         String host = backendIdToHost.get(beId);
         if (host == null) {
             return null;
@@ -269,8 +269,8 @@ public class PseudoCluster {
         return backends.get(host);
     }
 
-    public PseudoDataNode getBackendByHost(String host) {
-        PseudoDataNode be = backends.get(host);
+    public PseudoBackend getBackendByHost(String host) {
+        PseudoBackend be = backends.get(host);
         if (be == null) {
             LOG.warn("no backend found for host {} hosts:{}", host, backends.keySet());
         }
@@ -435,7 +435,7 @@ public class PseudoCluster {
             String host = genBackendHost();
             long beId = backendIdStart++;
             String beRunPath = runDir + "/be" + beId;
-            PseudoDataNode backend = new PseudoDataNode(cluster, beRunPath, beId, host,
+            PseudoBackend backend = new PseudoBackend(cluster, beRunPath, beId, host,
                     backendPortStart++, backendPortStart++, backendPortStart++, backendPortStart++,
                     cluster.frontend.getFrontendService());
             cluster.backends.put(backend.getHost(), backend);
@@ -443,7 +443,7 @@ public class PseudoCluster {
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
             GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1));
-            LOG.info("add PseudoDataNode {} {}", beId, host);
+            LOG.info("add PseudoBackend {} {}", beId, host);
         }
         int retry = 0;
         while (GlobalStateMgr.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
@@ -460,7 +460,7 @@ public class PseudoCluster {
             String host = genBackendHost();
             long beId = backendIdStart++;
             String beRunPath = runDir + "/be" + beId;
-            PseudoDataNode backend = new PseudoDataNode(this, beRunPath, beId, host,
+            PseudoBackend backend = new PseudoBackend(this, beRunPath, beId, host,
                     backendPortStart++, backendPortStart++, backendPortStart++, backendPortStart++,
                     this.frontend.getFrontendService());
             this.backends.put(backend.getHost(), backend);
@@ -468,7 +468,7 @@ public class PseudoCluster {
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
             GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1));
-            LOG.info("add PseudoDataNode {} {}", beId, host);
+            LOG.info("add PseudoBackend {} {}", beId, host);
             beIds.add(beId);
         }
         int retry = 0;

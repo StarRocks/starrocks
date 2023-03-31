@@ -41,12 +41,12 @@ public class CoordinatorMonitor {
 
     private final BlockingQueue<Long> comingDeadBackendIDQueue;
     private final AtomicBoolean started;
-    private final DeadDataNodeAndComputeNodeChecker checker;
+    private final DeadBackendAndComputeNodeChecker checker;
 
     public CoordinatorMonitor() {
         comingDeadBackendIDQueue = Queues.newLinkedBlockingDeque(COMING_DEAD_BACKEND_QUEUE_CAPACITY);
         started = new AtomicBoolean(false);
-        checker = new DeadDataNodeAndComputeNodeChecker();
+        checker = new DeadBackendAndComputeNodeChecker();
     }
 
     public static CoordinatorMonitor getInstance() {
@@ -67,7 +67,7 @@ public class CoordinatorMonitor {
         }
     }
 
-    private class DeadDataNodeAndComputeNodeChecker extends Thread {
+    private class DeadBackendAndComputeNodeChecker extends Thread {
         @Override
         public void run() {
             List<Long> deadBackendIDs = Lists.newArrayList();
