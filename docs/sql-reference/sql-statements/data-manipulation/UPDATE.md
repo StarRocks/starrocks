@@ -1,6 +1,6 @@
 # UPDATE
 
-Modifies rows in a Primary Key table. In versions earlier than version 3.0, the UPDATE statement only supports simple syntax, such as `UPDATE <table_name> SET <column_name>=<expression> WHERE <where_condition>`. Starting from version 3.0, StarRocks enriches the syntax, to do multiple table joins and common table expressions (CTEs). If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE.
+Modifies rows in a Primary Key table. In versions earlier than version 3.0, the UPDATE statement only supports simple syntax, such as `UPDATE <table_name> SET <column_name>=<expression> WHERE <where_condition>`. Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and common table expressions (CTEs). If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE.
 
 ## Usage notes
 
@@ -36,7 +36,7 @@ One or more other tables in the database. These tables can be joined with the ta
 
 `where_condition`
 
-Only rows that meet the WHERE condition can be updated. This parameter is required, because it helps prevent you from accidentally updating the entire table. If you want to update the entire table, you can use 'WHERE true'.
+The condition based on which you want to delete rows. Only rows that meet the WHERE condition can be updated. This parameter is required, because it helps prevent you from accidentally updating the entire table. If you want to update the entire table, you can use 'WHERE true'.
 
 ## Examples
 
