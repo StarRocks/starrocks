@@ -40,6 +40,13 @@ public class TaskRunHistory {
         return historyTaskRunMap.get(queryId);
     }
 
+    public void removeTask(String queryId) {
+        if (queryId == null) {
+            return;
+        }
+        historyTaskRunMap.remove(queryId);
+    }
+
     // Reserve historyTaskRunMap values to keep the last insert at the first.
     public List<TaskRunStatus> getAllHistory() {
         List<TaskRunStatus> historyRunStatus =

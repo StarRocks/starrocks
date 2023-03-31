@@ -730,6 +730,7 @@ public class TaskManager {
                 long expireTime = taskRunStatus.getExpireTime();
                 if (currentTimeMs > expireTime) {
                     historyToDelete.add(taskRunStatus.getQueryId());
+                    taskRunManager.getTaskRunHistory().removeTask(taskRunStatus.getQueryId());
                     iterator.remove();
                 }
             }
