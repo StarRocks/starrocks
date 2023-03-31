@@ -1583,8 +1583,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                                                        request) throws TException {
         TAllocateAutoIncrementIdResult result = new TAllocateAutoIncrementIdResult();
         long rows = Math.max(request.rows, Config.auto_increment_cache_size);
-        Long nextId = GlobalStateMgr.getCurrentState().allocateAutoIncrementId(request.table_id, rows);
+        Long nextId = null;
         try {
+            nextId = GlobalStateMgr.getCurrentState().allocateAutoIncrementId(request.table_id, rows);
             // log the delta result.
             ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
             deltaMap.put(request.table_id, nextId + rows);
@@ -1595,6 +1596,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setAllocated_rows(0);
 
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            result.setStatus(status);
+            return result;
+        }
+
+        if (nextId == null) {
+            result.setAuto_increment_id(0);
+            result.setAllocated_rows(0);
+
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("No ids have been allocated"));
             result.setStatus(status);
             return result;
         }
