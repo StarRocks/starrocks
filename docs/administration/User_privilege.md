@@ -35,9 +35,9 @@ The default role of a user is automatically activated when the user connects to 
 
 #### Alter the default role of a user
 
-You can set the default role of a user using SET DEFAULT ROLE or [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md).
+You can set the default role of a user using [SET DEFAULT ROLE]((../sql-reference/sql-statements/account-management/SET%20DEFAULT%20ROLE.md).) or [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md).
 
-Both the following examples set the default role of `jack` to `db1_admin`:
+Both of the following examples set the default role of `jack` to `db1_admin`. Note that `db1_admin` must have been assigned to `jack`.
 
 - Set the default role using SET DEFAULT ROLE:
 
@@ -55,10 +55,12 @@ Both the following examples set the default role of `jack` to `db1_admin`:
 
 You can set the property of a user using [SET PROPERTY](../sql-reference/sql-statements/account-management/SET%20PROPERTY.md).
 
-The following example sets the maximum number of connections of the user `jack` to `1000`:
+The following example sets the maximum number of connections for user `jack` to `1000`. User identities that have the same user name share the same property.
+
+Therefore, you only need to set the property for `jack` and this setting takes effect for all the user identities with the user name `jack`.
 
 ```SQL
-SET PROPERTY FOR jack@'172.10.1.10' 'max_user_connections' = '1000';
+SET PROPERTY FOR jack 'max_user_connections' = '1000';
 ```
 
 #### Reset password for a user
@@ -217,11 +219,15 @@ DROP ROLE example_role;
 
 The default roles of a user are roles that are automatically activated each time the user connects to the StarRocks cluster. 
 
-Executing the following statement to enable all (default and granted) roles of users in the cluster:
+If you want to enable all the roles (default and granted roles) for all StarRocks users when they connect to the StarRocks cluster, you can perform the following operation. 
+
+This operation requires the system privilige OPERATE.
 
 ```SQL
 SET GLOBAL activate_all_roles_on_login = TRUE;
 ```
+
+You can also use SET ROLE to activate the roles assigned to you. For example, user `jack@'172.10.1.10'` has roles `db_admin` and `user_admin` but they are not default roles of the user and are not automatically activated when the user connects to StarRocks. If jack@'172.10.1.10' needs to activate `db_admin` and `user_admin`, he can run `SET ROLE db_admin, user_admin;`. Note that SET ROLE overwrites original roles. If you want to enable all your roles, run SET ROLE ALL.
 
 ## Manage privileges
 
@@ -253,10 +259,10 @@ You can revoke privileges from a user or a role using [REVOKE](../sql-reference/
 
 - Revoke a privilege from a user.
 
-  The following example revokes the SELECT privilege on the table `sr_member` from the user `jack`, and disallows `jack` to grant this privilege to other users or roles (by specifying WITH GRANT OPTION in the SQL):
+  The following example revokes the SELECT privilege on the table `sr_member` from the user `jack`, and disallows `jack` to grant this privilege to other users or roles):
 
   ```SQL
-  REVOKE SELECT ON TABLE sr_member FROM USER jack@'172.10.1.10' WITH GRANT OPTION;
+  REVOKE SELECT ON TABLE sr_member FROM USER jack@'172.10.1.10';
   ```
 
 - Revoke a privilege from a role.
@@ -362,8 +368,8 @@ Because different members perform different operations on different databases an
    Example:
 
    ```SQL
-   GRANT SELECT, ALTER, INSERT, UPDATE, DELETE ON ALL TABLES IN DATABASE DB_A TO ROLE linea_admin;
-   GRANT SELECT, ALTER, INSERT, UPDATE, DELETE ON TABLE TABLE_C1, TABLE_C2, TABLE_C3 TO ROLE linea_admin;
+   GRANT SELECT, ALTER, INSERT, UPDATE, DELETE ON ALL TABLES IN DATABASE DB_A TO ROLE linea_admin WITH GRANT OPTION;
+   GRANT SELECT, ALTER, INSERT, UPDATE, DELETE ON TABLE TABLE_C1, TABLE_C2, TABLE_C3 TO ROLE linea_admin WITH GRANT OPTION;
    GRANT linea_admin TO USER user_linea_admin;
    ALTER USER user_linea_admin DEFAULT ROLE linea_admin;
    ```
@@ -381,12 +387,12 @@ Because different members perform different operations on different databases an
    ALTER USER user_linea_salesb DEFAULT ROLE linea_query;
    ```
 
-4. For the database `DB_PUBLIC`, which can be accessed by all cluster users, grant the SELECT privilege on `DB_PUBLIC` to the system-defined role `PUBLIC`.
+4. For the database `DB_PUBLIC`, which can be accessed by all cluster users, grant the SELECT privilege on `DB_PUBLIC` to the system-defined role `public`.
 
    Example:
 
    ```SQL
-   GRANT SELECT ON ALL TABLES IN DATABASE DB_PUBLIC TO ROLE line;
+   GRANT SELECT ON ALL TABLES IN DATABASE DB_PUBLIC TO ROLE public;
    ```
 
 You can assign roles to others to achieve role inheritance in complicated scenarios.
@@ -413,15 +419,15 @@ We recommend you customize roles to manage privileges and users. The following e
 1. Grant global read-only privilege:
 
    ```SQL
-   --Create a role.
+   -- Create a role.
    CREATE ROLE read_only;
-   --Grant USAGE privileges on all catalogs to the role.
+   -- Grant USAGE privileges on all catalogs to the role.
    GRANT USAGE ON ALL CATALOGS TO ROLE read_only;
-   --Grant SELECT privileges on all tables to the role.
+   -- Grant SELECT privileges on all tables to the role.
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_only;
-   --Grant SELECT privileges on all views to the role.
+   -- Grant SELECT privileges on all views to the role.
    GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_only;
-   --Grant SELECT privileges on all materialized views and the privilege to accelerate queries with them to the role.
+   -- Grant SELECT privileges on all materialized views and the privilege to accelerate queries with them to the role.
    GRANT SELECT ON ALL MATERIALIZED VIEWS IN ALL DATABASES TO ROLE read_only;
    ```
 
@@ -454,17 +460,17 @@ We recommend you customize roles to manage privileges and users. The following e
      The privileges to perform global backup and restore operations allow the role to back up and restore any database, table, or partition. It requires the REPOSITORY privilege on the system level, the privileges to create databases in the default catalog, to create tables in any database, and to load data into any table.
 
      ```SQL
-     --Create a role
+     -- Create a role
      CREATE ROLE recover;
-     --Grant the repository privilege on the system level
+     -- Grant the repository privilege on the system level
      GRANT REPOSITORY ON SYSTEM TO ROLE recover;
-     --Grant the privilege to create databases in the default catalog
+     -- Grant the privilege to create databases in the default catalog
      GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover;
-     --Grant the privilege to create tables in any database
-     --Before executing the following statements, you must use the default catalog.
-     --Execute `USE 'CATALOG default_catalog'` to switch back to the default catalog.
+     -- Grant the privilege to create tables in any database
+     -- Before executing the following statements, you must use the default catalog.
+     -- Execute `SET CATALOG` to switch back to the default catalog.
      GRANT CREATE TABLE ON ALL DATABASE TO ROLE recover;
-     --Grant the privilege to load data into any table
+     -- Grant the privilege to load data into any table
      GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE recover;
      ```
 
