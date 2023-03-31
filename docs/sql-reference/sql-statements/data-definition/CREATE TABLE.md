@@ -442,9 +442,35 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 [PROPERTIES ("key"="value", ...)],...)
 ```
 
+#### Define Foreign Key constraints for View Delta Join query rewrite
+
+To enable query rewrite in the View Delta Join scenario, you must define the Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/Materialized_view.md#rewrite-queries-in-view-delta-join-scenario) for further information.
+
+```SQL
+PROPERTIES (
+    "foreign_key_constraints" = "
+    (<child_column>[, ...]) 
+    REFERENCES 
+    [catalog_name].[database_name].<parent_table_name>(<parent_column>[, ...])
+    [;...]
+    "
+)
+```
+
+- `child_column`: the Foreign Key of the table. You can define multiple `child_column`.
+- `catalog_name`: the name of the catalog where the table to join resides. The default catalog is used if this parameter is not specified.
+- `database_name`: the name of the database where the table to join resides. The current database is used if this parameter is not specified.
+- `parent_table_name`: the name of the table to join.
+- `parent_column`: the column to be joined. They must be the Primary Keys or Unique Keys of the corresponding tables.
+
+> **CAUTION**
+>
+> - The number of `child_column` and `parent_column` must agree.
+> - The data types of the `child_column` and the corresponding `parent_column` must match.
+
 ## Examples
 
-### Create an Aggregate Key table that uses Hash bucketing and column-based storage
+### Create an Aggregate Key table that uses Hash bucketing and columnar storage
 
 ```SQL
 CREATE TABLE example_db.table_hash
