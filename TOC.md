@@ -427,10 +427,14 @@
         + [json_query](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Map 函数
+      + [map_apply](/sql-reference/sql-functions/map-functions/map_apply.md)
+      + [map_filter](/sql-reference/sql-functions/map-functions/map_filter.md)
       + [map_from_arrays](/sql-reference/sql-functions/map-functions/map_from_arrays.md)
       + [map_keys](/sql-reference/sql-functions/map-functions/map_keys.md)
       + [map_size](/sql-reference/sql-functions/map-functions/map_size.md)
       + [map_values](/sql-reference/sql-functions/map-functions/map_values.md)
+      + [transform_keys](/sql-reference/sql-functions/map-functions/transform_keys.md)
+      + [transform_values](/sql-reference/sql-functions/map-functions/transform_values.md)
     + 模糊/正则匹配函数
       + [like](/sql-reference/sql-functions/like_predicate-functions/like.md)
       + [regexp](/sql-reference/sql-functions/like_predicate-functions/regexp.md)

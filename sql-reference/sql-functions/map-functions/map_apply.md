@@ -8,7 +8,6 @@ StarRocks 从 2.5 版本开始支持查询数据湖中的复杂数据类型 MAP 
 
 想了解如何使用 external catalog 查询外部数据源，参见 [Catalog 概述](../../../data_source/catalog/catalog_overview.md) 和对应的 catalog 文档。
 
-
 ## 语法
 
 ```Haskell
