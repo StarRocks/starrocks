@@ -21,6 +21,7 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_be_configs_scanner.h
 class SchemaBeConfigsScanner : public vectorized::SchemaScanner {
 public:
     SchemaBeConfigsScanner();
@@ -37,5 +38,11 @@ private:
     size_t _cur_idx{0};
     static SchemaScanner::ColumnDesc _s_columns[];
 };
+=======
+TEST(CommandExecutorTest, not_support) {
+    std::string result;
+    EXPECT_TRUE(execute_command("set_config_11", "{}", &result).is_not_supported());
+}
+>>>>>>> 8d83da4fd ([Enhancement] Add scripting ability to BE (#20351)):be/test/runtime/command_executor_test.cpp
 
 } // namespace starrocks

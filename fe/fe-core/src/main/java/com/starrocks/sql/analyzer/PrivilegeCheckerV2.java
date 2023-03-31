@@ -34,6 +34,12 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.ExecuteScriptStmt;
+import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.ast.GrantRoleStmt;
+>>>>>>> 8d83da4fd ([Enhancement] Add scripting ability to BE (#20351))
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.JoinRelation;
@@ -371,8 +377,127 @@ public class PrivilegeCheckerV2 {
         }
 
         @Override
+<<<<<<< HEAD
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, ConnectContext context) {
             if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
+=======
+        public Void visitDropUserStatement(DropUserStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowUserStatement(ShowUserStmt statement, ConnectContext context) {
+            if (statement.isAll() && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdent();
+            if ((user != null && !user.equals(context.getCurrentUserIdentity()) || statement.isAll())
+                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitExecuteAsStatement(ExecuteAsStmt statement, ConnectContext context) {
+            AuthorizationManager authorizationManager = context.getGlobalStateMgr().getAuthorizationManager();
+            if (!authorizationManager.canExecuteAs(context, statement.getToUser())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "IMPERSONATE");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitExecuteScriptStatement(ExecuteScriptStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRoleStatement(CreateRoleStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropRoleStatement(DropRoleStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowRolesStatement(ShowRolesStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRoleStatement(GrantRoleStmt statement, ConnectContext context) {
+            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
+                    || r.equalsIgnoreCase(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
+                UserIdentity userIdentity = context.getCurrentUserIdentity();
+                if (!userIdentity.equals(UserIdentity.ROOT)) {
+                    throw new SemanticException("Can not grant root or cluster_admin role except root user");
+                }
+            }
+
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitRevokeRoleStatement(RevokeRoleStmt statement, ConnectContext context) {
+            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
+                    || r.equalsIgnoreCase(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
+                UserIdentity userIdentity = context.getCurrentUserIdentity();
+                if (!userIdentity.equals(UserIdentity.ROOT)) {
+                    throw new SemanticException("Can not grant root or cluster_admin role except root user");
+                }
+            }
+
+            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME))) {
+                if (statement.getUserIdentity() != null && statement.getUserIdentity().equals(UserIdentity.ROOT)) {
+                    throw new SemanticException("Can not revoke root role from root user");
+                }
+            }
+
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdentity();
+            if (user != null && !user.equals(context.getCurrentUserIdentity())
+                    && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext context) {
+            AuthorizationManager authorizationManager = context.getGlobalStateMgr().getAuthorizationManager();
+            if (!authorizationManager.allowGrant(context, stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList())) {
+>>>>>>> 8d83da4fd ([Enhancement] Add scripting ability to BE (#20351))
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
             return null;

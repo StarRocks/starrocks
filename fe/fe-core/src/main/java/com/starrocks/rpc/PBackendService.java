@@ -41,5 +41,15 @@ public interface PBackendService {
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "get_pulsar_info", onceTalkTimeout = 10000)
     Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request);
+<<<<<<< HEAD
+=======
+
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "submit_mv_maintenance_task", onceTalkTimeout = 60000,
+            attachmentHandler = ThriftClientAttachmentHandler.class)
+    Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request);
+
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "execute_command", onceTalkTimeout = 60000)
+    Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
+>>>>>>> 8d83da4fd ([Enhancement] Add scripting ability to BE (#20351))
 }
 

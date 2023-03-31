@@ -108,6 +108,7 @@ statement
     | adminCheckTabletsStatement
     | killStatement
     | syncStatement
+    | executeScriptStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -1455,6 +1456,10 @@ roleList
 setRoleStatement
     : SET ROLE roleList                #setRole
     | SET ROLE ALL (EXCEPT roleList)?  #setRoleAll
+    ;
+
+executeScriptStatement
+    : ADMIN EXECUTE ON INTEGER_VALUE string
     ;
 
 unsupportedStatement

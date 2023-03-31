@@ -181,6 +181,7 @@ import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.EmptyStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.FunctionArgsDef;
@@ -2760,6 +2761,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     x -> ((StringLiteral) visit(x)).getStringValue()).collect(toList());
         }
         return new SetRoleStmt(roles, true);
+    }
+
+    @Override
+    public ParseNode visitExecuteScriptStatement(StarRocksParser.ExecuteScriptStatementContext context) {
+        long beId = Long.parseLong(context.INTEGER_VALUE().getText());
+        StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+        String script = stringLiteral.getStringValue();
+        return new ExecuteScriptStmt(beId, script, createPos(context));
     }
 
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------

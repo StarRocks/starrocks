@@ -23,6 +23,8 @@ package com.starrocks.rpc;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
+import com.starrocks.proto.ExecuteCommandRequestPB;
+import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
@@ -203,6 +205,55 @@ public class BackendServiceClient {
         }
     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/rpc/BackendServiceClient.java
+=======
+    public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(
+            TNetworkAddress address, TMVMaintenanceTasks tRequest)
+            throws TException, RpcException {
+        PMVMaintenanceTaskRequest pRequest = new PMVMaintenanceTaskRequest();
+        pRequest.setRequest(tRequest);
+
+        Future<PMVMaintenanceTaskResult> resultFuture = null;
+        for (int i = 1; i <= Config.max_query_retry_time && resultFuture == null; ++i) {
+            try {
+                final PBackendService service = BrpcProxy.getBackendService(address);
+                resultFuture = service.submitMVMaintenanceTaskAsync(pRequest);
+            } catch (NoSuchElementException e) {
+                // Retry `RETRY_TIMES`, when NoSuchElementException occurs.
+                if (i >= Config.max_query_retry_time) {
+                    LOG.warn("Submit MV Maintenance Task failed, address={}:{}",
+                            address.getHostname(), address.getPort(), e);
+                    throw new RpcException(address.hostname, e.getMessage());
+                }
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+            } catch (Throwable e) {
+                LOG.warn("Submit MV Maintenance Task got an exception, address={}:{}",
+                        address.getHostname(), address.getPort(), e);
+                throw new RpcException(address.hostname, e.getMessage());
+            }
+        }
+
+        Preconditions.checkState(resultFuture != null);
+        return resultFuture;
+    }
+
+    public Future<ExecuteCommandResultPB> executeCommand(TNetworkAddress address, ExecuteCommandRequestPB request)
+            throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.executeCommandAsync(request);
+        } catch (Throwable e) {
+            LOG.warn("execute command exception, address={}:{} command:{}",
+                    address.getHostname(), address.getPort(), request.command, e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+>>>>>>> 8d83da4fd ([Enhancement] Add scripting ability to BE (#20351)):fe/fe-core/src/main/java/com/starrocks/rpc/DataNodeServiceClient.java
     private static class SingletonHolder {
         private static final BackendServiceClient INSTANCE = new BackendServiceClient();
     }

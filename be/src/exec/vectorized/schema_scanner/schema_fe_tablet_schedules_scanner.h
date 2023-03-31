@@ -21,10 +21,14 @@
 
 namespace starrocks::vectorized {
 
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_fe_tablet_schedules_scanner.h
 class SchemaFeTabletSchedulesScanner : public SchemaScanner {
 public:
     SchemaFeTabletSchedulesScanner();
     ~SchemaFeTabletSchedulesScanner() override;
+=======
+Status execute_command(const std::string& command, const std::string& params, std::string* result);
+>>>>>>> 8d83da4fd ([Enhancement] Add scripting ability to BE (#20351)):be/src/runtime/command_executor.h
 
     Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
