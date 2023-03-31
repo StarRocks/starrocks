@@ -777,7 +777,7 @@ public class OlapScanNode extends ScanNode {
             if (!bucketExprs.isEmpty()) {
                 msg.lake_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
-        } else { // If you find yourself changing this code block, see also the above code block, i.e, if (olapTable.isLakeTable) { ... }.
+        } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
                     new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);

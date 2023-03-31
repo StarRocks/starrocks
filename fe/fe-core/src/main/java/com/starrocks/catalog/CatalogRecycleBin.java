@@ -188,7 +188,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                                                  short replicationNum,
                                                  boolean isInMemory,
                                                  StorageCacheInfo storageCacheInfo,
-                                                 boolean isLakeTable) {
+                                                 boolean isCloudNativeTable) {
         if (idToPartition.containsKey(partition.getId())) {
             LOG.error("partition[{}-{}] already in recycle bin.", partition.getId(), partition.getName());
             return false;
@@ -199,7 +199,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
         // recycle partition
         RecyclePartitionInfo partitionInfo = null;
-        if (isLakeTable) {
+        if (isCloudNativeTable) {
             // lake table
             partitionInfo = new RecycleRangePartitionInfo(dbId, tableId, partition,
                     range, dataProperty, replicationNum, isInMemory, storageCacheInfo);
