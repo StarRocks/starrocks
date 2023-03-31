@@ -372,6 +372,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             for (RecycleTableInfo tableInfo : tableToRemove) {
                 Table table = tableInfo.getTable();
                 long tableId = table.getId();
+                GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, false);
                 removeRecycleMarkers(tableId);
                 nameToTableInfo.remove(tableInfo.dbId, table.getName());
                 idToTableInfo.remove(tableInfo.dbId, tableId);
@@ -407,6 +408,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             if (tableInfo != null) {
                 Runnable runnable = null;
                 Table table = tableInfo.getTable();
+                GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, true);
                 nameToTableInfo.remove(dbId, table.getName());
                 runnable = table.delete(true);
                 if (!isCheckpointThread() && runnable != null) {

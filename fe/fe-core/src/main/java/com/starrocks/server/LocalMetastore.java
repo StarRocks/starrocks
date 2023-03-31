@@ -4510,6 +4510,11 @@ public class LocalMetastore implements ConnectorMetadata {
             newId = oldId + rows;
         }
 
+        // AUTO_INCREMENT counter overflow
+        if (newId < oldId) {
+            throw new RuntimeException("AUTO_INCREMENT counter overflow");
+        }
+
         return oldId;
     }
 
