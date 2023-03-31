@@ -377,7 +377,7 @@ Parameters:
 * `offset`: the offset. It must be a **positive integer**. If this parameter is not specified, 1 is the default.
 * `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
 
-`IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the value of the destination row is NULL. If you specify IGNORE NULLS, the most recent non-null value that precedes the current row is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
+`IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the value of the destination row is NULL. If you specify IGNORE NULLS, the most recent non-null value that precedes the current row is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
 
 Example 1: lag function without specifying IGNORE NULLS
 
@@ -500,7 +500,7 @@ Parameters：
 * `offset`: the offset. It must be a positive integer. If this parameter is not specified, 1 is the default.
 * `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
 
-`IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the value of the destination row is NULL. If you specify IGNORE NULLS, the most recent non-null value that follows the current row is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
+`IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the value of the destination row is NULL. If you specify IGNORE NULLS, the most recent non-null value that follows the current row is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
 
 Example 1：
 
