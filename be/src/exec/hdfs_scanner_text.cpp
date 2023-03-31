@@ -186,7 +186,8 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_build_hive_column_name_2_index());
     for (const auto slot : _scanner_params.materialize_slots) {
         DCHECK(slot != nullptr);
-        // We don't care about options.invalid_field_as_null here, converte failed
+        // We don't care about _invalid_field_as_null here, if get converter failed,
+        // we use DefaultValueConverter instead.
         auto converter = csv::get_hive_converter(slot->type(), true);
         DCHECK(converter != nullptr);
         _converters.emplace_back(std::move(converter));
