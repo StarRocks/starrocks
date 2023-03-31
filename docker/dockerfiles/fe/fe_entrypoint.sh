@@ -13,7 +13,7 @@ FE_LEADER=
 # probe interval: 2 seconds
 PROBE_INTERVAL=2
 # timeout for probe leader: 120 seconds
-PROBE_LEADER_POD0_TIMEOUT=60 # at most 15 attempts, no less than the times needed for an election
+PROBE_LEADER_POD0_TIMEOUT=30 # at most 15 attempts, no less than the times needed for an election
 PROBE_LEADER_PODX_TIMEOUT=120 # at most 60 attempts
 
 # myself as IP or FQDN
@@ -70,7 +70,6 @@ collect_env_info()
         QUERY_PORT=$query_port
     fi
 }
-
 
 show_frontends()
 {
@@ -167,65 +166,6 @@ probe_leader()
     fi
 }
 
-# Drop myself from FE cluster, temp cancel
-exit_fe_handler()
-{
-    if $EXIT_IN_PROGRESS ; then
-        log_stderr "Exit in progress ..."
-        return
-    fi
-    EXIT_IN_PROGRESS=true
-    local reason=$1
-    local svc=$svc_name
-    local start=`date +%s`
-    while true
-    do
-        log_stderr "Try to remove myself:$MYSELF from FE cluster ..."
-        timeout 30 mysql --connect-timeout 2 -h $svc -P $QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM DROP FOLLOWER \"$MYSELF:$EDIT_LOG_PORT\";"
-        local memlist=`show_frontends $svc`
-        if [[ -n "$memlist" ]] ; then
-            if ! echo "$memlist" | grep -q -w "$MYSELF" &>/dev/null ; then
-                # can't find myself from `show_frontends` any more
-                log_stderr "Done clean up myself from FE cluster!"
-                break;
-            fi
-        fi
-        # It is possible that this POD is the last one of the FE cluster, the check will never success, so be it!
-        local now=`date +%s`
-        let "expire=start+PROBE_LEADER_PODX_TIMEOUT"
-        if [[ $expire -le $now ]] ; then
-            log_stderr "Timed out, abort!"
-            exit 1
-        fi
-        log_stderr "Can still find myself from 'show_frontends' output ..."
-        sleep $PROBE_INTERVAL
-    done
-
-    mv_meta
-    EXIT_IN_PROGRESS=false
-
-}
-
-exit_fe_exit()
-{
-    log_stderr "Exit clean up for EXIT ..."
-    exit_fe_handler
-}
-
-mv_meta()
-{
-  temp=$STARROCKS_HOME/meta/`date +%s`
-  mkdir -p $temp
-  mv $STARROCKS_HOME/meta/bdb $temp/
-  mv $STARROCKS_HOME/meta/image $temp/
-}
-
-exit_fe_term()
-{
-    log_stderr "Exit clean up for SIGTERM ..."
-    exit_fe_handler
-}
-
 update_conf_from_configmap()
 {
     if [[ "x$CONFIGMAP_MOUNT_PATH" == "x" ]] ; then
@@ -249,7 +189,7 @@ update_conf_from_configmap()
     done
 }
 
-start_fe()
+start_fe_no_meta()
 {
     # apply --host_type and --helper option
     local svc=$1
@@ -283,10 +223,18 @@ start_fe()
         done
     fi
 
-    log_stderr "run start_fe.sh with additional options: '$opts'"
-    # register EXIT trap handler to do clean up work
-    #trap exit_fe_exit EXIT
-    #trap exit_fe_term SIGTERM
+    log_stderr "first start with no meta run start_fe.sh with additional options: '$opts'"
+    $STARROCKS_HOME/bin/start_fe.sh $opts
+}
+
+start_fe_with_meta()
+{
+    local opts=""
+    if [[ "x$HOST_TYPE" != "x" ]] ; then
+        opts+=" --host_type $HOST_TYPE"
+    fi
+
+    log_stderr "start with meta run start_fe.sh with additional options: '$opts'"
     $STARROCKS_HOME/bin/start_fe.sh $opts
 }
 
@@ -298,6 +246,12 @@ if [[ "x$svc_name" == "x" ]] ; then
 fi
 
 update_conf_from_configmap
-collect_env_info
-probe_leader $svc_name
-start_fe $svc_name
+if [[ -f "/opt/starrocks/fe/meta/image/ROLE" ]];then
+    log_stderr "start fe with exist meta."
+    start_fe_with_meta
+else
+    log_stderr "first start fe with meta not exist."
+    collect_env_info
+    probe_leader $svc_name
+    start_fe_no_meta $svc_name
+fi
