@@ -1,8 +1,8 @@
 # [Preview] Java UDFs
 
-From v2.2.0 onwards, you can compile user-defined functions (UDFs) to suit your specific business needs by using the Java programming language.
+From v2.2.0 onwards, you can compile user-defined functions (UDFs) to suit your specific business needs by using the Java programming language. From v3.0 onwards, StarRocks supports global UDFs, and you only need to add the `GLOBAL` keyword in the related SQL statements.
 
-This topic describes the types of UDFs supported by StarRocks, how to develop UDFs, and how to use the UDFs you have developed.
+This topic how to develop and use various UDFs.
 
 Currently, StarRocks supports scalar UDFs, user-defined aggregate functions (UDAFs), user-defined window functions (UDWFs), and user-defined table functions (UDTFs).
 
@@ -347,14 +347,23 @@ You can set up a simple HTTP server by using Python and upload the JAR file to t
 
 ### Step 6: Create the UDF in StarRocks
 
-After you upload the JAR file mentioned above, you can create the UDF you have compiled in StarRocks.
+StarRocks allows you to create UDFs in two types of namespaces: database namespaces and global namespaces.
+
+- If you do not have visibility or isolation requirements for a UDF, you can create it as a global UDF. Then, you can reference the global UDF by using the function name without including the catalog and database names as prefixes to the function name.
+- If you have visibility or isolation requirements for a UDF, or if you need to create the same UDF in different databases, you can create it in each individual database. As such, if your session is connected to the target database, you can reference the UDF by using the function name. If your session is connected to a different catalog or database other than the target database, you need to reference the UDF by including the catalog and database names as prefixes to the function name, for example, `catalog.database.function`.
+
+> **NOTICE**
+>
+> Before you create and use a global UDF, you must contact the system administrator to grant you the required permissions. For more information, see [GRANT](../../../docs/sql-reference/sql-statements/account-management/GRANT.md).
+
+After you upload the JAR package, you can create UDFs in StarRocks. For a global UDF, you must include the `GLOBAL` keyword in the creation statement.
 
 #### Create a scalar UDF
 
 Run the following command to create the scalar UDF you have compiled in the preceding example:
 
 ```SQL
-CREATE FUNCTION MY_UDF_JSON_GET(string, string) 
+CREATE [GLOBAL] FUNCTION MY_UDF_JSON_GET(string, string) 
 RETURNS string
 properties (
     "symbol" = "com.starrocks.udf.sample.UDFJsonGet", 
@@ -374,7 +383,7 @@ properties (
 Run the following command to create the UDAF you have compiled in the preceding example:
 
 ```SQL
-CREATE AGGREGATE FUNCTION MY_SUM_INT(INT) 
+CREATE [GLOBAL] AGGREGATE FUNCTION MY_SUM_INT(INT) 
 RETURNS INT
 PROPERTIES 
 ( 
@@ -395,7 +404,7 @@ PROPERTIES
 Run the following command to create the UDWF you have compiled in the preceding example:
 
 ```SQL
-CREATE AGGREGATE FUNCTION MY_WINDOW_SUM_INT(Int)
+CREATE [GLOBAL] AGGREGATE FUNCTION MY_WINDOW_SUM_INT(Int)
 RETURNS Int
 properties 
 (
@@ -418,7 +427,7 @@ properties
 Run the following command to create the UDTF you have compiled in the preceding example:
 
 ```SQL
-CREATE TABLE FUNCTION MY_UDF_SPLIT(string)
+CREATE [GLOBAL] TABLE FUNCTION MY_UDF_SPLIT(string)
 RETURNS string
 properties 
 (
@@ -496,7 +505,7 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 Run the following command to query UDFs:
 
 ```SQL
-SHOW FUNCTIONS;
+SHOW [GLOBAL] FUNCTIONS;
 ```
 
 For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/show-functions.md).
@@ -506,7 +515,7 @@ For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/sho
 Run the following command to drop a UDF:
 
 ```SQL
-DROP FUNCTION <function_name>(arg_type [, ...]);
+DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 ```
 
 For more information, see [DROP FUNCTION](../sql-statements/data-definition/drop-function.md).
