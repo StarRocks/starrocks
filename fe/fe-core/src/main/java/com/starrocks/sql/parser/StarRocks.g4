@@ -129,6 +129,7 @@ statement
     | adminCheckTabletsStatement
     | killStatement
     | syncStatement
+    | executeScriptStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -1513,6 +1514,10 @@ roleList
 
 setWarehouseStatement
     : SET WAREHOUSE identifierOrString
+    ;
+
+executeScriptStatement
+    : ADMIN EXECUTE ON INTEGER_VALUE string
     ;
 
 unsupportedStatement
