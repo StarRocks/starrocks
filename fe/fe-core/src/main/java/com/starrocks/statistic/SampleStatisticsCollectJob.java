@@ -35,7 +35,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                     + "       $maxFunction, $minFunction, NOW() "
                     + "FROM ( "
                     + "    SELECT t0.`$columnName` as column_key, COUNT(1) as count "
-                    + "    FROM (SELECT `$columnName` FROM $tableName $hints) as t0 "
+                    + "    FROM (SELECT `$columnName` FROM `$dbName`.`$tableName` $hints) as t0 "
                     + "    GROUP BY t0.column_key "
                     + ") as t1 ";
 
