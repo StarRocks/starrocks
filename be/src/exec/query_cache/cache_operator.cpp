@@ -67,15 +67,15 @@ struct PerLaneBuffer {
         }
         // CRITICAL!!!: we should append last empty chunk to the empty buffer to guarantee that pull_chunk method
         // would fetch a chunk and reset_lane.
-        if (!chunk->is_empty() || (chunks.empty() && chunk->owner_info().is_last_chunk())) {
+        // We must guarantee happen-before invariant as follows:
+        // append EOS chunk[PLBS_TOTAL] -> propulate_cache[PLBS_POPULATE] -> pull last EOS chunk -> release_lane
+        if (!chunk->is_empty() || chunk->owner_info().is_last_chunk()) {
             chunks.push_back(chunk);
             num_rows += chunk->num_rows();
             num_bytes += chunk->bytes_usage();
         }
 
-        if (chunk->owner_info().is_last_chunk()) {
-            state = chunk->owner_info().is_last_chunk() ? PLBS_TOTAL : PLBS_PARTIAL;
-        }
+        state = chunk->owner_info().is_last_chunk() ? PLBS_TOTAL : PLBS_PARTIAL;
     }
 
     bool has_chunks() const { return next_chunk_idx < chunks.size(); }
@@ -86,7 +86,7 @@ struct PerLaneBuffer {
         }
     }
 
-    bool can_release() {
+    bool can_release() const {
         return (state == PLBS_POPULATE || state == PLBS_PASSTHROUGH || state == PLBS_HIT_TOTAL) && !has_chunks();
     }
 
@@ -452,7 +452,7 @@ bool CacheOperator::is_finished() const {
 bool CacheOperator::has_output() const {
     for (const auto& [_, lane_id] : _owner_to_lanes) {
         auto& buffer = _per_lane_buffers[lane_id];
-        if (buffer->has_chunks()) {
+        if (buffer->has_chunks() || buffer->can_release()) {
             return true;
         }
     }
@@ -510,11 +510,19 @@ Status CacheOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr
     return Status::OK();
 }
 
+<<<<<<< HEAD
 vectorized::ChunkPtr CacheOperator::_pull_chunk_from_per_lane_buffer(PerLaneBufferPtr& buffer) {
     if (buffer->has_chunks()) {
+=======
+ChunkPtr CacheOperator::_pull_chunk_from_per_lane_buffer(PerLaneBufferPtr& buffer) {
+    if (buffer->can_release()) {
+        _lane_arbiter->release_lane(buffer->lane_owner);
+        buffer->reset();
+    } else if (buffer->has_chunks()) {
+>>>>>>> 6d90b2191 ([Bugfix] Missing last empty EOS chunk caused query cache hangs (#20699))
         auto chunk = buffer->get_next_chunk();
         if (buffer->can_release()) {
-            _lane_arbiter->release_lane(chunk->owner_info().owner_id());
+            _lane_arbiter->release_lane(buffer->lane_owner);
             buffer->reset();
         }
         return chunk;
