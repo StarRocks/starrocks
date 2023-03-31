@@ -32,6 +32,7 @@ public class StarRocksListPartitioner extends Partitioner {
     private EtlJobConfig.EtlPartitionInfo partitionInfo;
     private List<PartitionListKey> partitionListKeys;
     List<Integer> partitionKeyIndexes;
+    Map<DppColumns, Integer> partitionsMap;
 
     public StarRocksListPartitioner(EtlJobConfig.EtlPartitionInfo partitionInfo,
                                     List<Integer> partitionKeyIndexes,
@@ -39,6 +40,13 @@ public class StarRocksListPartitioner extends Partitioner {
         this.partitionInfo = partitionInfo;
         this.partitionListKeys = partitionListKeys;
         this.partitionKeyIndexes = partitionKeyIndexes;
+        this.partitionsMap = new HashMap<>();
+        for (int i = 0; i < partitionListKeys.size(); ++i) {
+            PartitionListKey partitionListKey = partitionListKeys.get(i);
+            for (DppColumns dppColumns: partitionListKey.inKeys) {
+                partitionsMap.put(dppColumns, i);
+            }
+        }
     }
 
     @Override
@@ -61,11 +69,9 @@ public class StarRocksListPartitioner extends Partitioner {
         DppColumns key = (DppColumns) var1;
         // get the partition columns from key as partition key
         DppColumns partitionKey = new DppColumns(key, partitionKeyIndexes);
-        for (int i = 0; i < partitionListKeys.size(); ++i) {
-            if (partitionListKeys.get(i).isRowContained(partitionKey)) {
-                return i;
-            }
-        }
+       if (partitionsMap.containsKey(partitionKey)) {
+           return partitionsMap.get(partitionKey);
+       }
         return -1;
     }
 
@@ -74,17 +80,6 @@ public class StarRocksListPartitioner extends Partitioner {
 
         public PartitionListKey() {
             this.inKeys = new ArrayList<>();
-        }
-
-        public boolean isRowContained(DppColumns other) {
-            for (int i = 0; i < inKeys.size(); i++) {
-                DppColumns currentColumns = inKeys.get(i);
-                Preconditions.checkState(currentColumns.columns.size() == other.columns.size());
-                if (currentColumns.equals(other)) {
-                    return true;
-                }
-            }
-            return false;
         }
 
         @Override
