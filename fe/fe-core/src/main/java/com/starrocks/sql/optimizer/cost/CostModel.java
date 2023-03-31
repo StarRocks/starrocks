@@ -130,7 +130,7 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
             if (node.getTable().isMaterializedView() && context.hasExtraStatistics()) {
-                return CostEstimate.of(1, 0, 0);
+                return CostEstimate.of(0, 0, 0);
                 /*
                 ColumnRefSet usedColumns = node.getUsedColumns();
                 return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
