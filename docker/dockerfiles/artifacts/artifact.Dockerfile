@@ -24,7 +24,7 @@ ARG RELEASE_VERSION
 ARG BUILD_TYPE=Release
 COPY . /build/starrocks
 WORKDIR /build/starrocks
-RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} ./build.sh --be --use-staros --clean -j `nproc`
+RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} ./build.sh --be --clean -j `nproc`
 
 
 FROM busybox:latest

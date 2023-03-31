@@ -1,13 +1,11 @@
 # This docker file build the StarRocks development environment with all the tooling, dependencies libraries and
 # maven dependencies pre-installed.
 # Please run this command from the git repo root directory to build:
-#    # load STARLET_ARTIFACTS_TAG env
-#    . thirdparty/starlet-artifacts-version.sh
-#    DOCKER_BUILDKIT=1 docker build --rm=true --build-arg starlet_tag=$STARLET_ARTIFACTS_TAG -f docker/dockerfiles/dev-env/dev-env.Dockerfile -t starrocks/dev-env-ubuntu:<tag> .
+#    DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/dev-env/dev-env.Dockerfile -t starrocks/dev-env-ubuntu:<tag> .
 #
 #  `distro` argument can be specified to build for a different linux distribution other than default `ubuntu`.
 #  For example, build centos7 dev-env with following commands
-#    DOCKER_BUILDKIT=1 docker build --rm=true --build-arg distro=centos7 --build-arg starlet_tag=$STARLET_ARTIFACTS_TAG -f docker/dockerfiles/dev-env/dev-env.Dockerfile -t starrocks/dev-env-centos7:<tag> .
+#    DOCKER_BUILDKIT=1 docker build --rm=true --build-arg distro=centos7 -f docker/dockerfiles/dev-env/dev-env.Dockerfile -t starrocks/dev-env-centos7:<tag> .
 #
 #  Supported linux distribution are: centos7, ubuntu
 
@@ -21,8 +19,6 @@ ARG prebuild_maven=true
 ARG predownload_thirdparty=false
 ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20230317.tar
 ARG commit_id
-# check thirdparty/starlet-artifacts-version.sh, to get the right tag
-ARG starlet_tag=v0.2.7rc1
 # build for which linux distro: centos7|ubuntu
 ARG distro=ubuntu
 
@@ -51,21 +47,13 @@ RUN if test "x$prebuild_maven" = "xtrue" ; then \
         mkdir -p /root/.m2  ;   \
     fi
 
-FROM starrocks/starlet-artifacts-ubuntu22:${starlet_tag} as starlet-ubuntu
-FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet-centos7
-# determine which artifacts to use
-FROM starlet-${distro} as starlet
-
 
 FROM base as dev-env
 ARG commit_id
 LABEL org.opencontainers.image.source="https://github.com/StarRocks/starrocks"
 LABEL com.starrocks.commit=${commit_id:-"UNKNOWN"}
-ENV STARLET_INSTALL_DIR=$STARROCKS_THIRDPARTY/installed/starlet
 
 # Copy third-party dependencies
 COPY --from=builder $STARROCKS_THIRDPARTY $STARROCKS_THIRDPARTY
 # Copy maven dependencies
 COPY --from=builder /root/.m2 /root/.m2
-# Copy starlet dependencies
-COPY --from=starlet /release $STARLET_INSTALL_DIR
