@@ -341,12 +341,15 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         double maxUsedPercent = Double.MIN_VALUE;
         double minUsedPercent = Double.MAX_VALUE;
         for (DataNodeLoadStatistic beStat : beStats) {
-            double usedPercent = beStat.getUsedPercent(medium);
-            if (usedPercent > maxUsedPercent) {
-                maxUsedPercent = usedPercent;
+            Pair<Double, Double> maxMinUsedPercent = beStat.getMaxMinPathUsedPercent(medium);
+            if (maxMinUsedPercent == null) {
+                continue;
             }
-            if (usedPercent < minUsedPercent) {
-                minUsedPercent = usedPercent;
+            if (maxMinUsedPercent.first > maxUsedPercent) {
+                maxUsedPercent = maxMinUsedPercent.first;
+            }
+            if (maxMinUsedPercent.second < minUsedPercent) {
+                minUsedPercent = maxMinUsedPercent.second;
             }
         }
 
@@ -408,8 +411,6 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         Map<String, List<Long>> hostGroups = getHostGroups(aliveBeIds);
         int srcBEIndex = beStats.size() - 1;
         int destBEIndex = 0;
-        long srcBEUsedCap = beStats.get(srcBEIndex).getTotalUsedCapacityB(medium);
-        long destBEUsedCap = beStats.get(destBEIndex).getTotalUsedCapacityB(medium);
         // (partition, index) => tabletIds
         Map<Pair<Long, Long>, Set<Long>> srcBEPartitionTablets =
                 getPartitionTablets(beStats.get(srcBEIndex).getBeId(), medium, -1);
@@ -424,11 +425,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             DataNodeLoadStatistic srcBEStat = beStats.get(srcBEIndex);
             DataNodeLoadStatistic destBEStat = beStats.get(destBEIndex);
             if (srcBEChanged) {
-                srcBEUsedCap = srcBEStat.getTotalUsedCapacityB(medium);
                 srcBEPartitionTablets = getPartitionTablets(srcBEStat.getBeId(), medium, -1);
             }
             if (destBEChanged) {
-                destBEUsedCap = destBEStat.getTotalUsedCapacityB(medium);
                 destBEPartitionTablets = getPartitionTablets(destBEStat.getBeId(), medium, -1);
             }
 
@@ -449,19 +448,27 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     .filter(v -> !selectedTablets.contains(v) && !isTabletExistsInBackends(v, destBeHostGroup))
                     .collect(Collectors.toList());
 
-            // copy tablets from srcBE high load paths to destBE low load paths
-            Set<Long> srcBEPaths =
-                    srcBEStat.getPathStatisticForMIDAndClazz(DataNodeLoadStatistic.Classification.HIGH, medium);
-            List<Long> destBEPaths = new ArrayList<>(
-                    destBEStat.getPathStatisticForMIDAndClazz(DataNodeLoadStatistic.Classification.LOW, medium));
-            if (destBEPaths.size() <= 0) {
+            // copy tablets from srcBE most load paths to destBE least load paths
+            Long srcBEPath = srcBEStat.getMostUsedPath(medium);
+            Long destBEPath = destBEStat.getLeastUsedPath(medium);
+            if (destBEPath == -1) {
                 destBEIndex++;
                 destBEChanged = true;
                 continue;
             }
-            int destBEPathsIndex = 0;  // round robin to select dest be path
-            long srcBETotalCap = srcBEStat.getTotalCapacityB(medium);
-            long destBETotalCap = destBEStat.getTotalCapacityB(medium);
+
+            RootPathLoadStatistic srcBEPathStat = srcBEStat.getPathStatistic(srcBEPath);
+            RootPathLoadStatistic destBEPathStat = destBEStat.getPathStatistic(destBEPath);
+
+            long srcBEUsedCap = srcBEPathStat.getUsedCapacityB();
+            long destBEUsedCap = destBEPathStat.getUsedCapacityB();
+            long srcBETotalCap = srcBEPathStat.getCapacityB();
+            long destBETotalCap = destBEPathStat.getCapacityB();
+            if (((double) srcBEUsedCap / srcBETotalCap < avgUsedPercent)
+                    || ((double) destBEUsedCap / destBETotalCap > avgUsedPercent)) {
+                // it will fail all check about avg percent followed
+                return alternativeTablets;
+            }
             for (Long tabletId : tablets) {
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
                 if (tabletMeta == null) {
@@ -472,8 +479,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     continue;
                 }
 
-                // only move tablet on high load disk
-                if (!srcBEPaths.contains(replica.getPathHash())) {
+                // only move tablet on most load disk
+                if (replica.getPathHash() != srcBEPath) {
                     continue;
                 }
 
@@ -481,11 +488,15 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 double destBEUsedPercent = (double) (destBEUsedCap + replica.getDataSize()) / destBETotalCap;
                 double srcBEUsedPercent = (double) (srcBEUsedCap - replica.getDataSize()) / srcBETotalCap;
                 if (Math.abs(destBEUsedPercent - avgUsedPercent) > 1e-6 && (destBEUsedPercent > avgUsedPercent)) {
+                    LOG.debug("dest be {} usedPercent {} above avgPercent {}, skip it", destBEStat.getBeId(), destBEUsedPercent,
+                            avgUsedPercent);
                     destBEIndex++;
                     destBEChanged = true;
                     continue OUT;
                 }
                 if (Math.abs(srcBEUsedPercent - avgUsedPercent) > 1e-6 && (srcBEUsedPercent < avgUsedPercent)) {
+                    LOG.debug("src be {} usedPercent {} below avgPercent {}, skip it", srcBEStat.getBeId(), srcBEUsedPercent,
+                            avgUsedPercent);
                     srcBEIndex--;
                     srcBEChanged = true;
                     continue OUT;
@@ -515,16 +526,13 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     }
                     return Sets.newHashSet(tabletId);
                 });
-                // round robin to select dest be path
-                Long destPathHash = destBEPaths.get(destBEPathsIndex);
-                destBEPathsIndex = (destBEPathsIndex + 1) % destBEPaths.size();
 
                 TabletSchedCtx schedCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE,
                         tabletMeta.getDbId(), tabletMeta.getTableId(), tabletMeta.getPartitionId(),
                         tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
                 schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
                 schedCtx.setSrc(replica);
-                schedCtx.setDest(destBEStat.getBeId(), destPathHash);
+                schedCtx.setDest(destBEStat.getBeId(), destBEPath);
                 schedCtx.setBalanceType(BalanceType.DISK);
                 selectedTablets.add(tabletId);
                 alternativeTablets.add(schedCtx);
