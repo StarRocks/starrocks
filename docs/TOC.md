@@ -87,6 +87,7 @@
     + [Enable FQDN access](./administration/enable_fqdn.md)
     + [Configure a time zone](./administration/timezone.md)
     + [Information Schema](./administration/information_schema.md)
+    + [Monitor and manage big queries](./administration/monitor_manage_big_queries.md)
     + Resource Management
       + [Resource group](./administration/resource_group.md)
       + [Query queue](./administration/query_queues.md)
