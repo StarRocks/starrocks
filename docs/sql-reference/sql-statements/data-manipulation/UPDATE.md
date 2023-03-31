@@ -36,7 +36,7 @@ One or more other tables in the database. These tables can be joined with the ta
 
 `where_condition`
 
-The condition based on which you want to delete rows. Only rows that meet the WHERE condition can be updated. This parameter is required, because it helps prevent you from accidentally updating the entire table. If you want to update the entire table, you can use 'WHERE true'.
+The condition based on which you want to update rows. Only rows that meet the WHERE condition can be updated. This parameter is required, because it helps prevent you from accidentally updating the entire table. If you want to update the entire table, you can use 'WHERE true'.
 
 ## Examples
 
