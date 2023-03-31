@@ -71,7 +71,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
-import com.starrocks.system.DataNode.DataNodeState;
+import com.starrocks.system.DataNode.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -174,7 +174,7 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
         cluster.addComputeNode(computeNode.getId());
-        computeNode.setBackendState(DataNodeState.using);
+        computeNode.setBackendState(BackendState.using);
     }
 
     public boolean isSingleBackendAndComputeNode() {
@@ -223,7 +223,7 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
         cluster.addBackend(backend.getId());
-        backend.setBackendState(DataNodeState.using);
+        backend.setBackendState(BackendState.using);
     }
 
     // Final entry of adding backend
@@ -948,13 +948,13 @@ public class SystemInfoService {
 
     public void replayAddComputeNode(ComputeNode newComputeNode) {
         // update idToComputeNode
-        newComputeNode.setBackendState(DataNode.DataNodeState.using);
+        newComputeNode.setBackendState(BackendState.using);
         Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
         copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
 
         // to add compute to DEFAULT_CLUSTER
-        if (newComputeNode.getBackendState() == DataNodeState.using) {
+        if (newComputeNode.getBackendState() == BackendState.using) {
             final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
             if (null != cluster) {
                 // replay log
@@ -969,7 +969,7 @@ public class SystemInfoService {
     public void replayAddBackend(DataNode newBackend) {
         // update idToBackend
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            newBackend.setBackendState(DataNodeState.using);
+            newBackend.setBackendState(BackendState.using);
         }
         Map<Long, DataNode> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.put(newBackend.getId(), newBackend);
@@ -981,7 +981,7 @@ public class SystemInfoService {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
 
         // to add be to DEFAULT_CLUSTER
-        if (newBackend.getBackendState() == DataNodeState.using) {
+        if (newBackend.getBackendState() == BackendState.using) {
             final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
             if (null != cluster) {
                 // replay log
