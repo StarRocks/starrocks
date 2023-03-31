@@ -58,22 +58,14 @@ static std::unique_ptr<Converter> create_converter(const TypeDescriptor& t, cons
     case TYPE_DATETIME:
         return std::make_unique<DatetimeConverter>();
     case TYPE_ARRAY: {
-        // For hive, if array's element converter is nullptr, we use DefaultValueConverter instead
-        if (is_hive) {
-            auto c = get_converter(t.children[0], true);
-            if (c == nullptr) {
-                c = std::make_unique<DefaultValueConverter>();
-            }
-            return std::make_unique<ArrayConverter>(std::move(c));
-        } else {
+        auto c = get_converter(t.children[0], true);
+        if (c == nullptr) {
+            // For hive, if array's element converter is nullptr, we use DefaultValueConverter instead
             // For broker load, if array's element converter is nullptr, we return nullptr directly, to avoid NPE
             // problem when reading array's element.
-            auto c = get_converter(t.children[0], true);
-            if (c == nullptr) {
-                return nullptr;
-            }
-            return std::make_unique<ArrayConverter>(std::move(c));
+            return is_hive ? std::make_unique<ArrayConverter>(std::make_unique<DefaultValueConverter>()) : nullptr;
         }
+        return std::make_unique<ArrayConverter>(std::move(c));
     }
     case TYPE_DECIMAL32:
         return std::make_unique<DecimalV3Converter<int32_t>>(t.precision, t.scale);
