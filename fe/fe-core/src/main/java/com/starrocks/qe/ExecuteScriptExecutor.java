@@ -17,7 +17,7 @@ package com.starrocks.qe;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
-import com.starrocks.rpc.DataNodeServiceClient;
+import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.system.DataNode;
@@ -39,7 +39,7 @@ public class ExecuteScriptExecutor {
         request.command = "execute_script";
         request.params = stmt.getScript();
         try {
-            Future<ExecuteCommandResultPB> future = DataNodeServiceClient.getInstance().executeCommand(address, request);
+            Future<ExecuteCommandResultPB> future = BackendServiceClient.getInstance().executeCommand(address, request);
             ExecuteCommandResultPB result = future.get(stmt.getTimeoutSec(), TimeUnit.SECONDS);
             if (result.status.statusCode != 0) {
                 LOG.warn("execute script error BE: {} script:{} result: {}", stmt.getBeId(),
