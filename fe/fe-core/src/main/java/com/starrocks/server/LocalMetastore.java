@@ -176,6 +176,7 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
+import com.starrocks.sql.ast.PartitionConvertContext;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
@@ -858,8 +859,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 properties.put(DynamicPartitionProperty.START_DAY_OF_WEEK,
                         tableProperties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
             }
-            List<SingleRangePartitionDesc> singleRangePartitionDescs = multiRangePartitionDesc
-                    .convertToSingle(isAutoPartitionTable, firstPartitionColumn.getType(), properties);
+            PartitionConvertContext context = new PartitionConvertContext();
+            context.setAutoPartitionTable(isAutoPartitionTable);
+            context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+            context.setProperties(properties);
+            context.setTempPartition(addPartitionClause.isTempPartition());
+
+            List<SingleRangePartitionDesc> singleRangePartitionDescs = multiRangePartitionDesc.convertToSingle(context);
             List<PartitionDesc> partitionDescs = singleRangePartitionDescs.stream()
                     .map(item -> (PartitionDesc) item).collect(Collectors.toList());
             addPartitions(db, tableName, partitionDescs, addPartitionClause);
