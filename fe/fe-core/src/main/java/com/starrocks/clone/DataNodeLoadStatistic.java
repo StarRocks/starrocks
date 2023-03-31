@@ -97,9 +97,9 @@ public class DataNodeLoadStatistic {
 
         @Override
         public int compare(DataNodeLoadStatistic o1, DataNodeLoadStatistic o2) {
-            double percent1 = o1.getUsedPercent(medium);
-            double percent2 = o2.getUsedPercent(medium);
-            return Double.compare(percent1, percent2);
+            Pair<Double, Double> maxMinUsedPercent1 = o1.getMaxMinPathUsedPercent(medium);
+            Pair<Double, Double> maxMinUsedPercent2 = o2.getMaxMinPathUsedPercent(medium);
+            return Double.compare(maxMinUsedPercent1.first, maxMinUsedPercent2.first);
         }
     }
 
@@ -424,6 +424,40 @@ public class DataNodeLoadStatistic {
             }
         }
         return paths;
+    }
+
+    public Long getMostUsedPath(TStorageMedium storageMedium) {
+        Long path = -1L;
+        double usedPercent = 0;
+        for (RootPathLoadStatistic pathStat : pathStatistics) {
+            if (pathStat.getDiskState() == DiskState.OFFLINE
+                    || (storageMedium != null && pathStat.getStorageMedium() != storageMedium)) {
+                continue;
+            }
+
+            if (pathStat.getUsedPercent() > usedPercent) {
+                usedPercent = pathStat.getUsedPercent();
+                path = pathStat.getPathHash();
+            }
+        }
+        return path;
+    }
+
+    public Long getLeastUsedPath(TStorageMedium storageMedium) {
+        Long path = -1L;
+        double usedPercent = 100;
+        for (RootPathLoadStatistic pathStat : pathStatistics) {
+            if (pathStat.getDiskState() == DiskState.OFFLINE
+                    || (storageMedium != null && pathStat.getStorageMedium() != storageMedium)) {
+                continue;
+            }
+
+            if (pathStat.getUsedPercent() < usedPercent) {
+                usedPercent = pathStat.getUsedPercent();
+                path = pathStat.getPathHash();
+            }
+        }
+        return path;
     }
 
     public List<RootPathLoadStatistic> getPathStatistics() {
