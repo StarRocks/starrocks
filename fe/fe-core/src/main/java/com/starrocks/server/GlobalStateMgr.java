@@ -179,9 +179,9 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AuthUpgradeInfo;
+import com.starrocks.persist.BackendIdsUpdateInfo;
+import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
-import com.starrocks.persist.DataNodeIdsUpdateInfo;
-import com.starrocks.persist.DataNodeTabletsInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -3446,7 +3446,7 @@ public class GlobalStateMgr {
         localMetastore.initDefaultCluster();
     }
 
-    public void replayUpdateClusterAndBackends(DataNodeIdsUpdateInfo info) {
+    public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
         localMetastore.replayUpdateClusterAndBackends(info);
     }
 
@@ -3517,7 +3517,7 @@ public class GlobalStateMgr {
         nodeMgr.setFrontendConfig(configs);
     }
 
-    public void replayBackendTabletsInfo(DataNodeTabletsInfo backendTabletsInfo) {
+    public void replayBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
         localMetastore.replayBackendTabletsInfo(backendTabletsInfo);
     }
 

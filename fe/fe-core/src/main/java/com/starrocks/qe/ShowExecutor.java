@@ -85,8 +85,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.ComputeNodeProcDir;
-import com.starrocks.common.proc.DataNodesProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.common.proc.LakeTabletsProcNode;
 import com.starrocks.common.proc.LocalTabletsProcDir;
@@ -1928,7 +1928,7 @@ public class ShowExecutor {
 
     private void handleShowBackends() {
         final ShowBackendsStmt showStmt = (ShowBackendsStmt) stmt;
-        List<List<String>> backendInfos = DataNodesProcDir.getClusterBackendInfos();
+        List<List<String>> backendInfos = BackendsProcDir.getClusterBackendInfos();
         resultSet = new ShowResultSet(showStmt.getMetaData(), backendInfos);
     }
 

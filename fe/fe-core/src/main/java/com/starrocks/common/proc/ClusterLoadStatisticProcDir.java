@@ -84,7 +84,7 @@ public class ClusterLoadStatisticProcDir implements ProcDirInterface {
         if (be == null) {
             throw new AnalysisException("backend " + beId + " does not exist");
         }
-        return new DataNodeProcNode(be);
+        return new BackendProcNode(be);
     }
 
 }
