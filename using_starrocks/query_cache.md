@@ -2,15 +2,17 @@
 
 Query Cache 可以保存查询的中间计算结果。后续发起的语义等价的查询，能够复用先前缓存的结果，加速计算，从而提升高并发场景下简单聚合查询的 QPS 并降低平均时延。
 
-您可以通过 FE 会话变量 `enable_query_cache` 开启 Query Cache。参见本文“[FE 会话变量](../using_starrocks/query_cache.md#fe-会话变量)”小节。
+您可以通过 FE 会话变量 `enable_query_cache` 开启 Query Cache。参见本文“[FE 会话变量](../using_starrocks/query_cache.md#fe-会话变量)”小节。当某个查询无法通过 Query Cache 获得加速时，Query Cache 会进行自适应调整、并动态地跳过该查询，从而避免由于启用 Query Cache 而可能带来的性能损失。
 
 该特性从 2.5 版本开始支持。
+
+在 2.5 版本，Query Cache 仅支持宽表模型下的单表聚合查询。自 3.0 版本起，除宽表模型下的单表聚合查询外，Query Cache 还支持星型模型下简单多表 JOIN 的聚合查询。
 
 ## 应用场景
 
 Query Cache 可以生效的典型应用场景有如下特点：
 
-- 查询多为宽表模型下的单表聚合查询。
+- 查询多为宽表模型下的单表聚合查询或星型模型下简单多表 JOIN 的聚合查询。
 - 聚合查询以非 GROUP BY 聚合和低基数 GROUP BY 聚合为主。
 - 查询的数据以按时间分区追加的形式导入，并且在不同时间分区上的访问表现出冷热性。
 
@@ -22,13 +24,14 @@ Query Cache 可以生效的典型应用场景有如下特点：
   >
   > 除 Pipeline 以外的其他执行引擎不支持 Query Cache。
 
-- 查询的表为原生 OLAP 表。不支持外表上的查询。查询计划中，实际访问的是同步物化视图时，Query Cache 也可以生效。异步物化视图暂不支持。
+- 查询的表为原生 OLAP 表（自 2.5 版本起支持）或 Lake 表（自 3.0 版本起支持）。不支持外表上的查询。查询计划中，实际访问的是同步物化视图时，Query Cache 也可以生效。异步物化视图暂不支持。
 
-- 查询为单表聚合查询。
+- 查询为单表聚合查询或多表 JOIN 的聚合查询。
 
   > **说明**
   >
-  > 后续会支持多表做 Colocate Join、Broadcast Join、Bucket Shuffle Join 之后再聚合的查询。
+  > - Query Cache 支持多表做 Broadcast Join、Bucket Shuffle Join 之后再聚合的查询。
+  > - Query Cache 支持含 Join 算子的两种树形：先聚合后 Join 和 先 Join 后聚合。在先聚合后 Join 的树形结构中，不支持 Shuffle Join。在先 Join 后聚合的树形结构中，不支持 Hash Join。
 
 - 查询不包含 `rand`、`random`、`uuid` 和 `sleep` 等不确定性 (Nondeterminstic) 函数。
 
@@ -40,6 +43,36 @@ Query Cache 支持全部数据分区策略，包括 Unpartitioned、Multi-Column
 - 在 StarRocks 中，一个聚合查询至少包含四个阶段的聚合。在一阶段聚合中，只有当 OlapScanNode 和 AggregateNode 位于同一个 Fragment 时，AggregateNode 产生的 Per-Tablet 计算结果才会缓存。在其他阶段聚合中，AggregateNode 产生的Per-Tablet 计算结果不会缓存。部分 DISTINCT 聚合查询，受会话变量 `cbo_cte_reuse` 为 `true` 影响，当执行计划中生产数据的 OlapScanNode 和消费数据的一阶段 AggregateNode 位于不同的 Fragment、并且中间通过 ExchangeNode 传输数据时，也不启用 Query Cache。比如如下两个场景里，采用 CTE 优化，不启用 Query Cache：
   - 查询的输出列包含聚合函数 `avg(distinct)`。
   - 查询的输出列含多个 DISTINCT 聚合函数。
+- 如果在聚合之前对数据进行了 Shuffle 操作，则 Query Cache 无法加速对该数据的查询。
+- 如果表的分组列或去重列是高基数列 (High-Cardinality Column)，则对该表执行聚合查询生成的结果会很大。这类查询会在运行时绕过 Query Cache。
+
+## 原理介绍
+
+启用 Query Cache 时，BE 会把查询的本地聚合拆分为以下两个阶段：
+
+1. Per-tablet 聚合
+
+   BE 逐个处理查询所涉及的每个 Tablet。在处理某一个 Tablet 时，BE 首先会检查 Query Cache 中是否存在该 Tablet 的中间计算结果。如果存在（缓存命中），则 BE 直接取用该结果；如果不存在（缓存未命中），则 BE 从磁盘上读取该 Tablet 的数据并进行本地聚合，然后将聚合得到的中间计算结果填充到 Query Cache，以供后续类似查询使用。
+
+2. Inter-tablet 聚合
+
+   BE 收集查询所涉及的所有 Tablet 的中间计算结果，并将这些结果合并成最终结果。
+
+   ![Query cache - How it works - 1](/assets/query_cache_principle-1.png)
+
+后续发起的类似查询，就可以复用之前缓存的查询结果。比如下图所示的查询，一共涉及三个 Tablet（编号 0 到 2），Query Cache 中缓存了第一个Tablet（即 Tablet 0）的中间结果。此时，BE 可以从 Query Cache 直接获取 Tablet 0 的中间计算结果，而不必访问磁盘上的数据。如果 Query Cache 完全预热，就会包含所有三个 Tablet 的中间计算结果，此时，BE 不需要访问磁盘上的任何数据。
+
+![Query cache - How it works - 2](/assets/query_cache_principle-2.png)
+
+为释放额外占用的内存，Query Cache 采用基于“最近最少使用” (Least Recently Used，简称 LRU) 算法的移出策略对缓存条目进行管理。当 Query Cache 占用的内存超过 `query_cache_capacity` 参数中设置的缓存大小时，最近最少使用的缓存条目会移出 Query Cache。
+
+> **说明**
+>
+> 未来 Query Cache 还将支持基于 Time to Live (TTL) 的移出策略。
+
+FE 判定各个查询是否需要通过 Query Cache 进行加速，并对查询进行规范化处理，以消除对查询语义没有影响的一些细微的文字细节。
+
+为了防止在某些不适用的场景下由于开启 Query Cache 而导致性能损失，BE 会采用自适应策略在运行时绕过 Query Cache。
 
 ## 参数配置
 
@@ -852,3 +885,13 @@ Q2 查询 CacheProbe 类指标的统计结果如下图所示。
   ```
 
 ![Query Cache - CTE - 3](../assets/query_cache_distinct_with_cte_Q3_zh.png)
+
+## 最佳实践
+
+建表时，设置合理的分区策略，并选择合适的数据分布方式，包括：
+
+- 选择一个只包含 DATE 类型数据的列作为分区列。如果表里有多个包含 DATE 类型数据的列，请选择满足以下两个条件的列作为分区列：
+  - 列值随数据插入而向前滚动。
+  - 该列用于定义查询的时间范围。
+- 选择合适的分区宽度。最新插入的数据可能会修改表的最新分区，导致涉及最新分区的缓存条目不稳定、并且容易失效。
+- 确保分桶数量在数十个左右。如果分桶数量过小，那么当 BE 需要处理的 Tablet 数量小于 `pipeline_dop` 参数的取值时，Query Cache 无法生效。

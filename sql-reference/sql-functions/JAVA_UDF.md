@@ -1,8 +1,8 @@
 # Java UDF【公测中】
 
-本文介绍如何使用 Java 语言编写用户定义函数（User Defined Function，UDF）。
+自 2.2.0 版本起，StarRocks 支持使用 Java 语言编写用户定义函数（User Defined Function，简称 UDF）。自 3.0 版本起，StarRocks 支持 Global UDF，您只需要在相关的 SQL 语句中加上 `GLOBAL` 即可。您可以根据业务场景开发自定义函数，扩展 StarRocks 的函数能力。
 
-自 2.2.0 版本起，StarRocks 支持使用 Java 语言编写用户定义函数 UDF。您可以根据业务场景开发自定义函数，扩展 StarRocks 的函数能力。本文介绍 StarRocks 支持的 UDF 类型，开发流程和使用方式。
+本文介绍如何编写和使用 UDF。
 
 目前 StarRocks 支持的 UDF 包括用户自定义标量函数（Scalar UDF）、用户自定义聚合函数（User Defined Aggregation Function，UDAF）、用户自定义窗口函数（User Defined Window Function，UDWF）、用户自定义表格函数（User Defined Table Function，UDTF）。
 
@@ -138,7 +138,7 @@ public class UDFJsonGet {
 
 用户自定义类必须实现如下方法：
 
-> 说明
+> **说明**
 > 方法中请求参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
 
 | 方法                        | 含义                                                   |
@@ -190,7 +190,7 @@ public class SumInt {
 
 用户自定义类必须实现如下方法：
 
-> 说明
+> **说明**
 > 方法中传入参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
 |               **方法**             |                    **含义**                                 |
 | --------------------------------- | ------------------------------------------------------------ |
@@ -208,7 +208,7 @@ public class SumInt {
 | java.nio.ByteBuffer() | 缓冲区类，用于保存中间结果。 并且，由于中间结果在不同执行节点间传输时，会进行序列化和反序列化，因此还需要使用 serializeLength 指定中间结果序列化后的长度。 |
 | serializeLength()     | 中间结果序列化后的长度，单位为 Byte。 serializeLength 的数据类型固定为 INT。 例如，示例中 `State { int counter = 0; public int serializeLength() { return 4; }}` 包含对中间结果序列化后的说明，即，中间结果的数据类型为 INT，序列化长度为 4 Byte。您也可以按照业务需求进行调整，例如中间结果序列化后的数据类型 LONG，序列化长度为 8 Byte，则需要传入 `State { long counter = 0; public int serializeLength() { return 8; }}`。 |
 
-> 注意
+> **注意**
 >
 > `java.nio.ByteBuffer` 序列化相关事项：
 >
@@ -281,7 +281,7 @@ public class WindowSumInt {
 
 用户自定义类必须实现 UDAF 所需要的方法（窗口函数是特殊聚合函数)，以及方法 `windowUpdate()`。
 
-> 说明
+> **说明**
 > 方法中请求参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
 
 <table>
@@ -307,7 +307,7 @@ public class WindowSumInt {
 
 UDTF，即用户自定义表值函数，读入一行数据，输出多个值可视为一张表。表值函数常用于实现行转列。
 
-> 说明
+> **说明**
 > 目前 UDTF 只支持返回多行单列。
 
 以下示例以 `MY_UDF_SPLIT` 函数为例进行说明。`MY_UDF_SPLIT` 函数支持分隔符为空格，传入参数和返回参数的类型为 STRING。
@@ -325,7 +325,7 @@ public class UDFSplit{
 
 用户自定义类必须实现如下方法：
 
-> 说明
+> **说明**
 > 方法中请求参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
 
 | 方法                | 含义                                      |
@@ -352,19 +352,28 @@ mvn deploy
 
 您可以通过 Python 创建一个简易的 HTTP 服务器，并将文件上传至该服务器中。详细步骤参考 [通过 Python 搭建简易 http 服务器](https://blog.csdn.net/whatday/article/details/106550650)。
 
-> 说明
+> **说明**
 > 步骤六中， FE 会对 UDF 所在 Jar 包进行校验并计算校验值，BE 会下载 UDF 所在 Jar 包并执行。
 
 ### 步骤六：在 StarRocks 中创建 UDF
 
-上传完成后，您需要在 StarRocks 中创建相对应的 UDF。
+StarRocks 内提供了两种 Namespace 的 UDF：一种是 Database 级 Namespace，一种是 Global 级 Namespace。
+
+- 如果您没有特殊的 UDF 可见性隔离需求，您可以直接选择创建 Global UDF。在引用 Global UDF 时，直接调用Function Name 即可，无需任何 Catalog 和 Database 作为前缀，访问更加便捷。
+- 如果您有特殊的 UDF 可见性隔离需求，或者需要在不同 Database下创建同名 UDF，那么你可以选择在 Database 内创建 UDF。此时，如果您的会话在某个 Database 内，您可以直接调用 Function Name 即可；如果您的会话在其他 Catalog 和 Database 下，那么您需要带上 Catalog 和 Database 前缀，例如: `catalog.database.function`。
+
+> **注意**
+>
+> 在创建和使用 Global UDF 前，需要联系系统管理员进行赋权。有关更多 Global UDF 权限相关信息，参见 [GRANT](/sql-reference/sql-statements/account-management/GRANT.md)。
+
+JAR 包上传完成后，您需要在 StarRocks 中，按需创建相对应的 UDF。如果创建 Global UDF，只需要在 SQL 语句中带上 `GLOBAL` 关键字即可。
 
 #### 创建 Scalar UDF
 
 执行如下命令，在 StarRocks 中创建先前示例中的 Scalar UDF。
 
 ```SQL
-CREATE FUNCTION MY_UDF_JSON_GET(string, string) 
+CREATE [GLOBAL] FUNCTION MY_UDF_JSON_GET(string, string) 
 RETURNS string
 properties (
     "symbol" = "com.starrocks.udf.sample.UDFJsonGet", 
@@ -384,7 +393,7 @@ properties (
 执行如下命令，在 StarRocks 中创建先前示例中的 UDAF。
 
 ```SQL
-CREATE AGGREGATE FUNCTION MY_SUM_INT(INT) 
+CREATE [GLOBAL] AGGREGATE FUNCTION MY_SUM_INT(INT) 
 RETURNS INT
 PROPERTIES 
 ( 
@@ -405,7 +414,7 @@ PROPERTIES
 执行如下命令，在 StarRocks 中创建先前示例中的 UDWF。
 
 ```SQL
-CREATE AGGREGATE FUNCTION MY_WINDOW_SUM_INT(Int)
+CREATE [GLOBAL] AGGREGATE FUNCTION MY_WINDOW_SUM_INT(Int)
 RETURNS Int
 properties 
 (
@@ -428,7 +437,7 @@ properties
 执行如下命令，在 StarRocks 中创建先前示例中的 UDTF。
 
 ```SQL
-CREATE TABLE FUNCTION MY_UDF_SPLIT(string)
+CREATE [GLOBAL] TABLE FUNCTION MY_UDF_SPLIT(string)
 RETURNS string
 properties 
 (
@@ -496,7 +505,7 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 2,2.2,"UDTF."
 ```
 
-> 说明
+> **说明**
 >
 > - 第一个 `MY_UDF_SPLIT` 为调用 `MY_UDF_SPLIT` 后生成的列别名。
 > - 暂不支持使用 `AS t2(f1)` 的方式指定表格函数返回表的表别名和列别名。
@@ -506,7 +515,7 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 运行以下命令查看 UDF 信息。
 
 ```sql
-SHOW FUNCTIONS;
+SHOW [GLOBAL] FUNCTIONS;
 ```
 
 更多信息，请参见[SHOW FUNCTIONS](../sql-statements/data-definition/show-functions.md)。
@@ -516,7 +525,7 @@ SHOW FUNCTIONS;
 运行以下命令删除指定的 UDF。
 
 ```sql
-DROP FUNCTION <function_name>(arg_type [, ...]);
+DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 ```
 
 更多信息，请参见[DROP FUNCTION](../sql-statements/data-definition/drop-function.md)。
