@@ -55,7 +55,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * HDFS dataNode selector for hive table.
+ * Hybrid dataNode selector for hive table.
  * dataNode is for starrocks, not hdfs dataNode
  * Support hybrid and independent deployment with datanode.
  * <p>
@@ -63,7 +63,7 @@ import java.util.Set;
  * 1. local dataNode first,
  * 2. and smallest assigned scan ranges num or scan bytes.
  * <p>
- * If force_schedule_local variable is set, HDFSDataNodeSelector will force to
+ * If force_schedule_local variable is set, HybridDataNodeSelector will force to
  * assign scan ranges to local dataNode if there has one.
  */
 
