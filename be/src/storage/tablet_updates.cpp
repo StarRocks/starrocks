@@ -240,7 +240,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     for (auto& [rsid, rowset] : _rowsets) {
         if (unapplied_rowsets.find(rsid) == unapplied_rowsets.end()) {
             std::vector<std::pair<int32_t, DelVectorPtr>> del_vectors;
-            del_vectors.resize(rowset->num_segments());
+            del_vectors.resize(rowset->num_segments(), {0, nullptr});
             del_vector_by_rsid[rsid] = del_vectors;
             if (max_rsid <= rsid) {
                 max_rsid = rsid + rowset->num_segments();
@@ -257,9 +257,8 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
                 auto iter = del_vector_by_rsid.lower_bound(segment_id);
                 if (iter == del_vector_by_rsid.end()) {
                     std::string msg = strings::Substitute("found delete vector of non exist rowset");
-                    _set_error(msg);
                     LOG(ERROR) << msg;
-                    return false;
+                    return true;
                 }
                 uint32_t rsid = iter->first;
                 uint32_t idx = segment_id - rsid;
