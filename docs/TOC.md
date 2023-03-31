@@ -247,6 +247,7 @@
       + [SPARK LOAD](./sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)
       + [STOP ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
       + [STREAM LOAD](./sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)
+      + [UPDATE](./sql-reference/sql-statements/data-manipulation/UPDATE.md)
     + Auxiliary Commands
       + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
     + Data Types
