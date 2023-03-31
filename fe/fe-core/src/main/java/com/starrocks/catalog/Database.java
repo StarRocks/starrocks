@@ -514,7 +514,6 @@ public class Database extends MetaObject implements Writable {
         }
 
         if (table instanceof OlapTable && table.hasAutoIncrementColumn()) {
-            GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, isReplay);
             if (!isReplay) {
                 ((OlapTable) table).sendDropAutoIncrementMapTask();
             }
@@ -528,6 +527,7 @@ public class Database extends MetaObject implements Writable {
             Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
             runnable = (oldTable != null) ? oldTable.delete(isReplay) : null;
         } else {
+            GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, isReplay);
             runnable = table.delete(isReplay);
         }
 
