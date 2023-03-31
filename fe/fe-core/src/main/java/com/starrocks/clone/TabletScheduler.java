@@ -513,6 +513,7 @@ public class TabletScheduler extends LeaderDaemon {
                         tabletCtx.getTabletId(), e);
                 stat.counterTabletScheduledFailed.incrementAndGet();
                 finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
+                continue;
             }
 
             Preconditions.checkState(tabletCtx.getState() == TabletSchedCtx.State.RUNNING);
