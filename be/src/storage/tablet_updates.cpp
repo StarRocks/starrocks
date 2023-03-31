@@ -1770,7 +1770,16 @@ int64_t TabletUpdates::get_compaction_score() {
         }
         if (_apply_version_idx + 2 < _edit_version_infos.size() || _pending_commits.size() >= 2) {
             // has too many pending tasks, skip compaction
-            return -1;
+            size_t version_count = _edit_version_infos.back()->rowsets.size() + _pending_commits.size();
+            if (version_count > config::tablet_max_versions) {
+                LOG(INFO) << strings::Substitute(
+                        "Try to do compaction because of too many versions. tablet_id:$0 "
+                        "version_count:$1 limit:$2 applied_version_idx:$3 edit_version_infos:$4 pending:$5",
+                        _tablet.tablet_id(), version_count, config::tablet_max_versions, _apply_version_idx,
+                        _edit_version_infos.size(), _pending_commits.size());
+            } else {
+                return -1;
+            }
         }
         for (size_t i = _apply_version_idx + 1; i < _edit_version_infos.size(); i++) {
             if (_edit_version_infos[i]->compaction) {
