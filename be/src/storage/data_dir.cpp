@@ -283,7 +283,7 @@ Status DataDir::load() {
                                                                     std::string_view value) -> bool {
         Status st =
                 _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value, false, false, false, false);
-        if (!st.ok() && !st.is_not_found()) {
+        if (!st.ok() && !st.is_not_found() && !st.is_already_exist()) {
             // load_tablet_from_meta() may return NotFound which means the tablet status is DELETED
             // This may happen when the tablet was just deleted before the BE restarted,
             // but it has not been cleared from rocksdb. At this time, restarting the BE
