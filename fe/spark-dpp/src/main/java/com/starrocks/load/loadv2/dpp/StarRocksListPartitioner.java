@@ -60,11 +60,8 @@ public class StarRocksListPartitioner extends Partitioner {
     @Override
     public int getPartition(Object var1) {
         PartitionType partitionType = PartitionType.getByType(partitionInfo.partitionType);
-        if (partitionType == PartitionType.UNPARTITIONED) {
-            return 0;
-        }
-        if (partitionType == PartitionType.RANGE) {
-            return 0;
+        if (partitionType != PartitionType.LIST) {
+            return -1;
         }
         DppColumns key = (DppColumns) var1;
         // get the partition columns from key as partition key

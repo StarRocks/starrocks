@@ -53,8 +53,8 @@ public class StarRocksRangePartitioner extends Partitioner {
         if (partitionType == PartitionType.UNPARTITIONED) {
             return 0;
         }
-        if (partitionType == PartitionType.LIST) {
-            return 0;
+        if (partitionType != PartitionType.RANGE) {
+            return -1;
         }
         DppColumns key = (DppColumns) var1;
         // get the partition columns from key as partition key
