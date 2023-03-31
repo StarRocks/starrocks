@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <utility>
 
 #include "common/config.h"
 #include "exec/spill/common.h"
@@ -57,7 +58,8 @@ private:
 
 class LogBlockContainer {
 public:
-    LogBlockContainer(Dir* dir, TUniqueId query_id, int32_t plan_node_id, std::string plan_node_name, uint64_t id)
+    LogBlockContainer(Dir* dir, const TUniqueId& query_id, int32_t plan_node_id, std::string plan_node_name,
+                      uint64_t id)
             : _dir(dir),
               _query_id(query_id),
               _plan_node_id(plan_node_id),
@@ -117,6 +119,9 @@ Status LogBlockContainer::open() {
     std::string file_path = path();
     WritableFileOptions opt;
     opt.mode = FileSystem::CREATE_OR_OPEN;
+    if (config::experimental_spill_skip_sync) {
+        opt.sync_on_close = false;
+    }
     ASSIGN_OR_RETURN(_writable_file, _dir->fs()->new_writable_file(opt, file_path));
     TRACE_SPILL_LOG << "create new container file: " << file_path;
     _has_open = true;
@@ -156,16 +161,11 @@ StatusOr<LogBlockContainerPtr> LogBlockContainer::create(Dir* dir, TUniqueId que
 
 class LogBlock : public Block {
 public:
-    LogBlock(LogBlockContainerPtr container, size_t offset) : _container(container), _offset(offset) {}
+    LogBlock(LogBlockContainerPtr container, size_t offset) : _container(std::move(container)), _offset(offset) {}
 
-    virtual ~LogBlock() override {
-        if (_reader != nullptr) {
-            _reader.reset();
-        }
-    }
+    ~LogBlock() override = default;
 
     size_t offset() const { return _offset; }
-    size_t length() const { return _length; }
 
     LogBlockContainerPtr container() const { return _container; }
 
@@ -174,7 +174,7 @@ public:
         std::for_each(data.begin(), data.end(), [&](const Slice& slice) { total_size += slice.size; });
         RETURN_IF_ERROR(_container->ensure_preallocate(total_size));
         RETURN_IF_ERROR(_container->append_data(data));
-        _length += total_size;
+        _size += total_size;
         return Status::OK();
     }
 
@@ -182,23 +182,22 @@ public:
 
     Status read_fully(void* data, int64_t count) override {
         if (_reader == nullptr) {
-            ASSIGN_OR_RETURN(_reader, _container->get_block_reader(_offset, _length));
+            ASSIGN_OR_RETURN(_reader, _container->get_block_reader(_offset, _size));
         }
         return _reader->read_fully(data, count);
     }
 
     std::string debug_string() override {
-        return fmt::format("LogBlock[container={}, offset={}, len={}]", _container->path(), _offset, _length);
+        return fmt::format("LogBlock[container={}, offset={}, len={}]", _container->path(), _offset, _size);
     }
 
 private:
     LogBlockContainerPtr _container;
-    size_t _offset;
-    size_t _length = 0;
+    size_t _offset{};
     std::unique_ptr<LogBlockReader> _reader;
 };
 
-LogBlockManager::LogBlockManager(TUniqueId query_id) : _query_id(query_id) {
+LogBlockManager::LogBlockManager(TUniqueId query_id) : _query_id(std::move(query_id)) {
     _max_container_bytes = config::spill_max_log_block_container_bytes > 0 ? config::spill_max_log_block_container_bytes
                                                                            : kDefaultMaxContainerBytes;
 }
