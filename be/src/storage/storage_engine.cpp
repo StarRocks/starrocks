@@ -1210,7 +1210,12 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
         auto st = _get_remote_next_increment_id_interval(alloc_params, &alloc_result);
 
         if (!st.ok() || alloc_result.status.status_code != TStatusCode::OK) {
-            return Status::InternalError("auto increment allocate failed");
+            std::stringstream err_msg;
+            for (auto& msg : alloc_result.status.error_msgs) {
+                err_msg << msg;
+            }
+
+            return Status::InternalError("auto increment allocate failed, err msg: " + err_msg.str());
         }
 
         if (cur_avaliable_rows > 0) {
