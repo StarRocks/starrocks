@@ -31,6 +31,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/logging.h"
+#include "util/stack_util.h"
 
 namespace starrocks {
 

@@ -20,10 +20,13 @@
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
+#include "util/stack_util.h"
 #include "wrenbind17/wrenbind17.hpp"
 
 using namespace wrenbind17;
@@ -96,6 +99,40 @@ static void bind_common(ForeignModule& m) {
         auto& cls = m.klass<Status>("Status");
         cls.func<&Status::to_string>("toString");
         REG_METHOD(Status, ok);
+    }
+}
+
+std::string memtracker_debug_string(MemTracker& self) {
+    return self.debug_string();
+}
+
+void bind_exec_env(ForeignModule& m) {
+    {
+        auto& cls = m.klass<MemTracker>("MemTracker");
+        REG_METHOD(MemTracker, label);
+        REG_METHOD(MemTracker, limit);
+        REG_METHOD(MemTracker, consumption);
+        REG_METHOD(MemTracker, peak_consumption);
+        REG_METHOD(MemTracker, parent);
+        cls.funcExt<&memtracker_debug_string>("toString");
+    }
+    {
+        auto& cls = m.klass<ExecEnv>("ExecEnv");
+        REG_STATIC_METHOD(ExecEnv, GetInstance);
+        cls.funcStaticExt<&get_thread_id_list>("get_thread_id_list");
+        cls.funcStaticExt<&get_stack_trace_for_thread>("get_stack_trace_for_thread");
+        cls.funcStaticExt<&get_stack_trace_for_threads>("get_stack_trace_for_threads");
+        cls.funcStaticExt<&get_stack_trace_for_all_threads>("get_stack_trace_for_all_threads");
+        REG_METHOD(ExecEnv, process_mem_tracker);
+        REG_METHOD(ExecEnv, query_pool_mem_tracker);
+        REG_METHOD(ExecEnv, load_mem_tracker);
+        REG_METHOD(ExecEnv, metadata_mem_tracker);
+        REG_METHOD(ExecEnv, tablet_metadata_mem_tracker);
+        REG_METHOD(ExecEnv, rowset_metadata_mem_tracker);
+        REG_METHOD(ExecEnv, segment_metadata_mem_tracker);
+        REG_METHOD(ExecEnv, compaction_mem_tracker);
+        REG_METHOD(ExecEnv, update_mem_tracker);
+        REG_METHOD(ExecEnv, clone_mem_tracker);
     }
 }
 
@@ -294,8 +331,9 @@ Status execute_script(const std::string& script, std::string& output) {
     vm.setPrintFunc([&](const char* text) { output.append(text); });
     auto& m = vm.module("starrocks");
     bind_common(m);
+    bind_exec_env(m);
     StorageEngineRef::bind(m);
-    vm.runFromSource("main", R"(import "starrocks" for StorageEngine)");
+    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, StorageEngine)");
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {
