@@ -199,7 +199,7 @@ public class SystemInfoService {
     }
 
     // for test
-    public void dropBackend(DataNode backend) {
+    public void dropDataNode(DataNode backend) {
         Map<Long, DataNode> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.remove(backend.getId());
         idToBackendRef = ImmutableMap.copyOf(copiedBackends);
@@ -341,18 +341,18 @@ public class SystemInfoService {
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            dropBackend(pair.first, pair.second, needCheckUnforce);
+            dropDataNode(pair.first, pair.second, needCheckUnforce);
         }
     }
 
     // for decommission
-    public void dropBackend(long backendId) throws DdlException {
+    public void dropDataNode(long backendId) throws DdlException {
         DataNode backend = getBackend(backendId);
         if (backend == null) {
             throw new DdlException("Backend[" + backendId + "] does not exist");
         }
 
-        dropBackend(backend.getHost(), backend.getHeartbeatPort(), false);
+        dropDataNode(backend.getHost(), backend.getHeartbeatPort(), false);
     }
 
     private void checkUnforce(DataNode droppedBackend) {
@@ -395,7 +395,7 @@ public class SystemInfoService {
     }
 
     // final entry of dropping backend
-    public void dropBackend(String host, int heartbeatPort, boolean needCheckUnforce) throws DdlException {
+    public void dropDataNode(String host, int heartbeatPort, boolean needCheckUnforce) throws DdlException {
         if (getBackendWithHeartbeatPort(host, heartbeatPort) == null) {
             throw new DdlException("backend does not exists[" + host + ":" + heartbeatPort + "]");
         }

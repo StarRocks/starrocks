@@ -162,7 +162,7 @@ public class SystemInfoServiceTest {
         
         service.addBackend(be);
         be.setStarletPort(1001);
-        service.dropBackend("newHost", 1000, false);
+        service.dropDataNode("newHost", 1000, false);
         DataNode beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assert.assertTrue(beIP == null);
     }
