@@ -36,6 +36,8 @@ package com.starrocks.rpc;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
+import com.starrocks.proto.ExecuteCommandRequestPB;
+import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
@@ -62,14 +64,14 @@ import org.apache.thrift.TException;
 import java.util.NoSuchElementException;
 import java.util.concurrent.Future;
 
-public class BackendServiceClient {
-    private static final Logger LOG = LogManager.getLogger(BackendServiceClient.class);
+public class DataNodeServiceClient {
+    private static final Logger LOG = LogManager.getLogger(DataNodeServiceClient.class);
 
-    private BackendServiceClient() {
+    private DataNodeServiceClient() {
     }
 
-    public static BackendServiceClient getInstance() {
-        return BackendServiceClient.SingletonHolder.INSTANCE;
+    public static DataNodeServiceClient getInstance() {
+        return DataNodeServiceClient.SingletonHolder.INSTANCE;
     }
 
     public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
@@ -265,7 +267,19 @@ public class BackendServiceClient {
         return resultFuture;
     }
 
+    public Future<ExecuteCommandResultPB> executeCommand(TNetworkAddress address, ExecuteCommandRequestPB request)
+            throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.executeCommandAsync(request);
+        } catch (Throwable e) {
+            LOG.warn("execute command exception, address={}:{} command:{}",
+                    address.getHostname(), address.getPort(), request.command, e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
     private static class SingletonHolder {
-        private static final BackendServiceClient INSTANCE = new BackendServiceClient();
+        private static final DataNodeServiceClient INSTANCE = new DataNodeServiceClient();
     }
 }

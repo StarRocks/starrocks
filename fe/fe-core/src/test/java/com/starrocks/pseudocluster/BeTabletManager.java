@@ -33,11 +33,11 @@ import java.util.stream.Collectors;
 
 public class BeTabletManager {
     private static final Logger LOG = LogManager.getLogger(BeTabletManager.class);
-    PseudoBackend backend;
+    PseudoDataNode backend;
     Map<Long, Tablet> tablets;
     Map<Long, Set<Long>> tabletIdsByPartition;
 
-    public BeTabletManager(PseudoBackend backend) {
+    public BeTabletManager(PseudoDataNode backend) {
         this.backend = backend;
         tablets = Maps.newHashMap();
         tabletIdsByPartition = Maps.newHashMap();
@@ -79,9 +79,9 @@ public class BeTabletManager {
             }
             LOG.info("Dropped tablet {} force:{}", removed.id, force);
             // TODO: if tablet trash feature is simulated, we should consider not updating disk usage.
-            if (PseudoBackend.getCurrentBackend() != null) {
-                PseudoBackend.getCurrentBackend().updateDiskUsage(
-                        0 - removed.numRowsets() * PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
+            if (PseudoDataNode.getCurrentBackend() != null) {
+                PseudoDataNode.getCurrentBackend().updateDiskUsage(
+                        0 - removed.numRowsets() * PseudoDataNode.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
             }
         } else {
             LOG.warn("Drop Tablet {} not found", tabletId);

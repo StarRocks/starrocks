@@ -629,7 +629,7 @@ template <bool keep_order>
 Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
                                                         ::google::protobuf::Closure** done) {
     if (keep_order) {
-        DCHECK(!request.has_is_pipeline_level_shuffle() || !request.is_pipeline_level_shuffle());
+        DCHECK(!request.has_is_pipeline_level_shuffle() && !request.is_pipeline_level_shuffle());
     }
     bool use_pass_through = request.use_pass_through();
     DCHECK(request.chunks_size() > 0 || use_pass_through);
@@ -646,18 +646,33 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     // there is no chance to handle deserialize error, so the lazy deserialization is not supported now,
     // we can change related interface's defination to do this later.
     ChunkList chunks;
-    ASSIGN_OR_RETURN(chunks, use_pass_through
-                                     ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes)
-                                     : (keep_order ? get_chunks_from_request<true>(request, total_chunk_bytes)
-                                                   : get_chunks_from_request<false>(request, total_chunk_bytes)));
-    COUNTER_UPDATE(use_pass_through ? _recvr->_bytes_pass_through_counter : _recvr->_bytes_received_counter,
-                   total_chunk_bytes);
+    if (!(keep_order && use_pass_through)) {
+        ASSIGN_OR_RETURN(chunks, use_pass_through
+                                         ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes)
+                                         : (keep_order ? get_chunks_from_request<true>(request, total_chunk_bytes)
+                                                       : get_chunks_from_request<false>(request, total_chunk_bytes)));
+        COUNTER_UPDATE(use_pass_through ? _recvr->_bytes_pass_through_counter : _recvr->_bytes_received_counter,
+                       total_chunk_bytes);
+    }
 
     if (_is_cancelled) {
         return Status::OK();
     }
 
-    if (keep_order) {
+    // Things have been a little weird while pass_through is enabled
+    // Consider such a situation:
+    //      time1: ChunkA is added to pass_through context, now context has only ChunkA. And related RequestA(sequence=1) is sent.
+    //      time2: ChunkB is added to pass_through context, now context has ChunkA and ChunkB. And related RequestB(sequence=2) is sent.
+    //      time3: RequestB is received, and all the chunks(ChunkA and ChunkB) have been fetched, and they are considered belonging to RequestB.
+    //      time4: ChunkC is added to pass_through context, now context has only ChunkC. And related RequestC(sequence=3) is sent.
+    //      tiem5: RequestA is received, and all the chunks(ChunkC) have been fetched, and they are considered belonging to RequestA.
+    //      time6: RequestC is received, nothing can be fetched.
+    // And here comes the funny thing, RequestA received the ChunkC, and RequestB received the ChunkA and ChunkB, so with the help of the
+    // keep_order mechanism, which is not compatible with local pass through, the output order will be ChunkC, ChunkA, ChunkB,
+    // but the expected order is ChunkA, ChunkB, ChunkC.
+    //
+    // So the solution is simple, if pass_through is enabled, simply treat it as un-ordered request, and the order will be kept naturally.
+    if (keep_order && !use_pass_through) {
         const int32_t be_number = request.be_number();
         const int32_t sequence = request.sequence();
         ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
@@ -712,16 +727,24 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             ++max_processed_sequence;
         }
     } else {
-        // remove the short-circuited chunks
         ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
         std::lock_guard<Mutex> l(_lock);
         wait_timer.stop();
+
+        // In order to keep the order of pass through chunks, we need to guarantee that
+        // the chunk which is taken out first from pass_throush_context must be enqueued first.
+        // So here we put these two steps under the same lock.
+        if (keep_order && use_pass_through) {
+            ASSIGN_OR_RETURN(chunks, get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes))
+            COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
+        }
 
         if (_is_cancelled) {
             LOG(ERROR) << "Cancelled receiver cannot add_chunk!";
             return Status::OK();
         }
 
+        // remove the short-circuited chunks
         for (auto iter = chunks.begin(); iter != chunks.end();) {
             if (_is_pipeline_level_shuffle && _chunk_queue_states[iter->driver_sequence].is_short_circuited) {
                 total_chunk_bytes -= iter->chunk_bytes;
@@ -730,17 +753,23 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             }
             iter++;
         }
+
         if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             chunks.back().closure = *done;
             chunks.back().queue_enter_time = MonotonicNanos();
             COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
             *done = nullptr;
         }
+
         for (auto& chunk : chunks) {
             int index = _is_pipeline_level_shuffle ? chunk.driver_sequence : 0;
             size_t chunk_bytes = chunk.chunk_bytes;
             auto* closure = chunk.closure;
-            _chunk_queues[index].enqueue(std::move(chunk));
+            if (keep_order && use_pass_through) {
+                _chunk_queues[index].enqueue(*_producer_token, std::move(chunk));
+            } else {
+                _chunk_queues[index].enqueue(std::move(chunk));
+            }
             _chunk_queue_states[index].blocked_closure_num += closure != nullptr;
             _total_chunks++;
             _recvr->_num_buffered_bytes += chunk_bytes;

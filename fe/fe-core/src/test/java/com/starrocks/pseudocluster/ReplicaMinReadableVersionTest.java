@@ -53,7 +53,7 @@ public class ReplicaMinReadableVersionTest {
     public void testReplicaMinReadableVersionReported() throws Exception {
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable(tableName);
         long tableId = olapTable.getId();
-        PseudoBackend be = cluster.getBackend(10001);
+        PseudoDataNode be = cluster.getBackend(10001);
         Tablet tablet = be.getTabletsByTable(tableId).get(0);
         String insert = PseudoCluster.buildInsertSql("test", tableName);
         for (int i = 0; i < 10; i++) {

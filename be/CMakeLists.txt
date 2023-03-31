@@ -614,6 +614,7 @@ set(STARROCKS_LINK_LIBS
     Types
     Udf
     Util
+    Script
     StarRocksGen
     Webserver
     TestUtil
@@ -861,6 +862,7 @@ add_subdirectory(${SRC_DIR}/udf)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
+add_subdirectory(${SRC_DIR}/script)
 
 if (WITH_BENCH STREQUAL "ON")
      message(STATUS "Build binary with bench")
